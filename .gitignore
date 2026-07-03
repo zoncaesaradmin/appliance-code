@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local run artifacts (each service module has its own bin/.run/data under it)
+bin/
+.run/
+data/

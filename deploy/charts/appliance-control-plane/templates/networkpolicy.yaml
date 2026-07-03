@@ -1,0 +1,61 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}-default-deny
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}-allow
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "appliance-control-plane.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.traefikNamespaceLabel }}
+    # Only Traefik may reach the public port; the internal listener is never
+    # granted an ingress rule reaching outside this namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.traefikNamespaceLabel | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.publicPort }}
+    {{- end }}
+    # Same-namespace access to the internal listener, for future
+    # in-namespace diagnostics/support-bundle jobs.
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.internalPort }}
+  egress:
+    # DNS is the only egress this policy grants; the control plane makes no
+    # other outbound calls yet. Phase 5/6 add narrowly scoped egress to zot
+    # and the Kubernetes API when those integrations land.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

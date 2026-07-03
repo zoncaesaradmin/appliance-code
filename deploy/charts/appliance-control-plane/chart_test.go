@@ -1,0 +1,245 @@
+// Package chart holds structural policy tests for the
+// appliance-control-plane Helm chart. These tests shell out to a locally
+// installed `helm` to lint and render the chart, then assert the rendered
+// manifests satisfy the plan's Kubernetes hardening requirements. They do
+// not require a live cluster: rendering and static policy checks are all
+// that's possible in this development environment, per the corrected
+// Phase 0 scope note in docs/control-plane-v1-plan.md. Real install/
+// restart/air-gap evidence is separate, cluster-dependent validation.
+package chart
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
+
+func requireHelm(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("helm"); err != nil {
+		t.Skip("helm not installed on PATH; skipping chart tests")
+	}
+}
+
+func chartDir(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed to resolve this file's path")
+	}
+	return filepath.Dir(file)
+}
+
+func renderChart(t *testing.T, extraArgs ...string) []map[string]any {
+	t.Helper()
+	requireHelm(t)
+
+	args := append([]string{"template", "appliance", chartDir(t), "--namespace", "appliance"}, extraArgs...)
+	cmd := exec.Command("helm", args...)
+	var out, errOut bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("helm template failed: %v\n%s", err, errOut.String())
+	}
+
+	var docs []map[string]any
+	dec := yaml.NewDecoder(bytes.NewReader(out.Bytes()))
+	for {
+		var doc map[string]any
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decoding rendered YAML: %v", err)
+		}
+		if doc == nil {
+			continue
+		}
+		docs = append(docs, doc)
+	}
+	return docs
+}
+
+func findByKind(docs []map[string]any, kind string) []map[string]any {
+	var out []map[string]any
+	for _, d := range docs {
+		if k, _ := d["kind"].(string); k == kind {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// at walks nested maps by key, returning nil if any step is missing or not
+// a map, so callers can write a single assertion without a chain of ok
+// checks.
+func at(doc map[string]any, path ...string) any {
+	var cur any = doc
+	for _, p := range path {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = m[p]
+	}
+	return cur
+}
+
+func TestHelmLint(t *testing.T) {
+	requireHelm(t)
+	cmd := exec.Command("helm", "lint", chartDir(t))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helm lint failed: %v\n%s", err, out)
+	}
+}
+
+func defaultRenderArgs() []string {
+	return []string{"--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=traefik"}
+}
+
+func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	deployments := findByKind(docs, "Deployment")
+	if len(deployments) != 1 {
+		t.Fatalf("expected exactly one Deployment, got %d", len(deployments))
+	}
+	dep := deployments[0]
+
+	replicas, _ := at(dep, "spec", "replicas").(int)
+	if replicas != 1 {
+		t.Errorf("replicas = %v, want 1 (ADR 0004 fixes exactly one replica while SQLite is active)", at(dep, "spec", "replicas"))
+	}
+	if strategyType, _ := at(dep, "spec", "strategy", "type").(string); strategyType != "Recreate" {
+		t.Errorf("strategy.type = %q, want Recreate (a rolling update would run two replicas against one SQLite file)", strategyType)
+	}
+}
+
+func TestPodAndContainerSecurityHardening(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	deployments := findByKind(docs, "Deployment")
+	if len(deployments) != 1 {
+		t.Fatalf("expected exactly one Deployment, got %d", len(deployments))
+	}
+	podSpec, ok := at(deployments[0], "spec", "template", "spec").(map[string]any)
+	if !ok {
+		t.Fatal("could not find spec.template.spec on the Deployment")
+	}
+
+	if automount, _ := podSpec["automountServiceAccountToken"].(bool); automount {
+		t.Error("automountServiceAccountToken should be false: the control plane does not call the Kubernetes API yet")
+	}
+
+	podSecCtx, _ := podSpec["securityContext"].(map[string]any)
+	if runAsNonRoot, _ := podSecCtx["runAsNonRoot"].(bool); !runAsNonRoot {
+		t.Error("pod securityContext.runAsNonRoot should be true")
+	}
+	seccomp, _ := podSecCtx["seccompProfile"].(map[string]any)
+	if seccompType, _ := seccomp["type"].(string); seccompType != "RuntimeDefault" {
+		t.Errorf("pod seccompProfile.type = %q, want RuntimeDefault", seccompType)
+	}
+
+	containers, _ := podSpec["containers"].([]any)
+	if len(containers) != 1 {
+		t.Fatalf("expected exactly one container, got %d", len(containers))
+	}
+	container, _ := containers[0].(map[string]any)
+
+	containerSecCtx, _ := container["securityContext"].(map[string]any)
+	if ro, _ := containerSecCtx["readOnlyRootFilesystem"].(bool); !ro {
+		t.Error("container securityContext.readOnlyRootFilesystem should be true")
+	}
+	if allowEsc, _ := containerSecCtx["allowPrivilegeEscalation"].(bool); allowEsc {
+		t.Error("container securityContext.allowPrivilegeEscalation should be false")
+	}
+	capabilities, _ := containerSecCtx["capabilities"].(map[string]any)
+	dropped, _ := capabilities["drop"].([]any)
+	if len(dropped) != 1 || dropped[0] != "ALL" {
+		t.Errorf("container securityContext.capabilities.drop = %v, want [ALL]", dropped)
+	}
+
+	resources, _ := container["resources"].(map[string]any)
+	if resources["requests"] == nil || resources["limits"] == nil {
+		t.Error("container should declare both resource requests and limits")
+	}
+
+	for _, probeName := range []string{"livenessProbe", "readinessProbe", "startupProbe"} {
+		if container[probeName] == nil {
+			t.Errorf("container should declare %s", probeName)
+		}
+	}
+}
+
+func TestNetworkPolicyDefaultDenyPresent(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	policies := findByKind(docs, "NetworkPolicy")
+	if len(policies) < 2 {
+		t.Fatalf("expected at least a default-deny and an allow NetworkPolicy, got %d", len(policies))
+	}
+
+	var foundDefaultDeny bool
+	for _, p := range policies {
+		podSelector, _ := at(p, "spec", "podSelector").(map[string]any)
+		policyTypes, _ := at(p, "spec", "policyTypes").([]any)
+		if len(podSelector) == 0 && len(policyTypes) == 2 {
+			foundDefaultDeny = true
+		}
+	}
+	if !foundDefaultDeny {
+		t.Error("expected one NetworkPolicy with an empty podSelector (applies to all pods) and both Ingress and Egress policyTypes")
+	}
+}
+
+func TestIngressRouteOnlyReferencesPublicService(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	routes := findByKind(docs, "IngressRoute")
+	if len(routes) != 1 {
+		t.Fatalf("expected exactly one IngressRoute, got %d", len(routes))
+	}
+
+	services, _ := at(routes[0], "spec", "routes").([]any)
+	if len(services) == 0 {
+		t.Fatal("IngressRoute should declare at least one route")
+	}
+	for _, route := range services {
+		routeMap, _ := route.(map[string]any)
+		svcList, _ := routeMap["services"].([]any)
+		for _, svc := range svcList {
+			svcMap, _ := svc.(map[string]any)
+			name, _ := svcMap["name"].(string)
+			if name == "" {
+				t.Error("IngressRoute service entry missing a name")
+				continue
+			}
+			if len(name) >= len("-internal") && name[len(name)-len("-internal"):] == "-internal" {
+				t.Errorf("IngressRoute must never reference the internal service, found %q", name)
+			}
+		}
+	}
+}
+
+func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
+	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "ingress.enabled=false")
+	if len(findByKind(docs, "Namespace")) != 0 {
+		t.Error("namespace.create=false should omit the Namespace object")
+	}
+	if len(findByKind(docs, "PersistentVolumeClaim")) != 0 {
+		t.Error("persistence.enabled=false should omit the PersistentVolumeClaim")
+	}
+	if len(findByKind(docs, "IngressRoute")) != 0 {
+		t.Error("ingress.enabled=false should omit the IngressRoute")
+	}
+	// The Deployment must still render without a dangling volume/mount
+	// reference to the now-absent PVC.
+	if len(findByKind(docs, "Deployment")) != 1 {
+		t.Error("Deployment should still render with persistence disabled")
+	}
+}

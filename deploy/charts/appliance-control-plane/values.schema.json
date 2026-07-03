@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "appliance-control-plane values",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["replicaCount", "image", "config", "secrets", "persistence", "service"],
+  "properties": {
+    "replicaCount": { "type": "integer", "const": 1 },
+    "image": {
+      "type": "object",
+      "required": ["repository", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "digest": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" }
+      }
+    },
+    "config": {
+      "type": "object",
+      "required": ["environment", "canonicalOrigin", "logLevel"],
+      "properties": {
+        "environment": { "type": "string", "enum": ["development", "production"] },
+        "canonicalOrigin": { "type": "string", "minLength": 1 },
+        "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+        "trustedProxyCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "required": ["keysSecretName"],
+      "properties": {
+        "keysSecretName": { "type": "string", "minLength": 1 }
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "required": ["enabled", "accessMode", "size", "dataDir"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "storageClassName": { "type": "string" },
+        "accessMode": { "type": "string", "enum": ["ReadWriteOnce"] },
+        "size": { "type": "string", "minLength": 1 },
+        "dataDir": { "type": "string", "minLength": 1 }
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["publicPort", "internalPort"],
+      "properties": {
+        "publicPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "internalPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "entryPoints": { "type": "array", "items": { "type": "string" } },
+        "host": { "type": "string" },
+        "tlsSecretName": { "type": "string" }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "automountServiceAccountToken": { "type": "boolean" }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "traefikNamespaceLabel": { "type": "object" }
+      }
+    }
+  }
+}

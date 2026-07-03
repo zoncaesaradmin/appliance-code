@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "appliance-control-plane.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: public
+      port: {{ .Values.service.publicPort }}
+      targetPort: public
+---
+# The internal listener (health probes today; metrics later) is a separate
+# Service so it can never be reached through the IngressRoute below, which
+# only ever references the public Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}-internal
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "appliance-control-plane.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: internal
+      port: {{ .Values.service.internalPort }}
+      targetPort: internal

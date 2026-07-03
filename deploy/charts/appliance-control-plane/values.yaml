@@ -1,0 +1,103 @@
+# Default values for appliance-control-plane.
+# ADR 0004 fixes exactly one replica while SQLite is the persistence
+# backend; do not scale this chart.
+replicaCount: 1
+
+image:
+  repository: appliance-control-plane
+  tag: "" # defaults to .Chart.AppVersion; the release pins by digest instead
+  digest: "" # e.g. sha256:...; when set, takes precedence over tag
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  # The installer may pre-create the namespace with its own Pod Security
+  # Admission labels instead; set this to false in that case.
+  create: true
+  name: ""
+
+# Non-secret runtime configuration, rendered into a ConfigMap and consumed
+# as APPLIANCE_* environment variables by internal/config. Secrets (signing
+# keys, TLS, etc.) are never templated by this chart; the installer/lifecycle
+# CLI creates them out of band and the chart only references their names,
+# per ADR 0005.
+config:
+  environment: production
+  canonicalOrigin: "https://appliance.example.internal"
+  logLevel: info
+  trustedProxyCount: 1
+
+secrets:
+  # Secret holding the purpose-separated key material internal/keys expects
+  # (session_ed25519_private.key, api_token_pepper.key, refresh_pepper.key),
+  # mounted read-only at dataDir/keys.
+  keysSecretName: "appliance-keys"
+
+persistence:
+  enabled: true
+  storageClassName: "" # cluster default if empty; must be a local ext4-backed RWO class per ADR 0004
+  size: 10Gi
+  accessMode: ReadWriteOnce
+  dataDir: /var/lib/appliance/data
+
+service:
+  publicPort: 8080
+  internalPort: 8081
+
+ingress:
+  enabled: true
+  # Traefik IngressRoute (CRD). The CRD itself is provided by the K3s-bundled
+  # Traefik, not this chart; rendering does not require it to be installed.
+  entryPoints:
+    - websecure
+  host: ""
+  tlsSecretName: "appliance-tls"
+
+serviceAccount:
+  create: true
+  name: ""
+  # No Kubernetes API access is needed by the control plane yet; Phase 6
+  # (build vertical slice) adds a narrowly scoped Role for Argo Workflow
+  # submission, at which point this is revisited.
+  automountServiceAccountToken: false
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+networkPolicy:
+  enabled: true
+  # Namespace selector label for Traefik's namespace, used to scope the
+  # explicit public-port allow rule. Left empty, the policy still
+  # default-denies but grants no ingress at all, which is safe-by-default
+  # but non-functional until configured for the target cluster.
+  traefikNamespaceLabel: {}
+
+probes:
+  livenessPath: /health/live
+  readinessPath: /health/ready
+  startupPath: /health/startup
+  startupFailureThreshold: 30
+  startupPeriodSeconds: 2
+
+priorityClassName: ""

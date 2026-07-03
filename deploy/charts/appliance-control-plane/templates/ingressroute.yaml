@@ -1,0 +1,24 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.ingress.entryPoints | nindent 4 }}
+  routes:
+    {{- $hostMatch := "" }}
+    {{- if .Values.ingress.host }}
+    {{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
+    {{- end }}
+    - match: {{ printf "%s(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" $hostMatch }}
+      kind: Rule
+      services:
+        - name: {{ include "appliance-control-plane.fullname" . }}
+          port: {{ .Values.service.publicPort }}
+  tls:
+    secretName: {{ .Values.ingress.tlsSecretName }}
+{{- end }}

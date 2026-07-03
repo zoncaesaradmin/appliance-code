@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  # Fixed at 1 while SQLite is the persistence backend (ADR 0004); this
+  # chart intentionally does not expose a replicas value to override.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "appliance-control-plane.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: appliance-server
+          image: {{ include "appliance-control-plane.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # No args: the binary runs the server by default when given no
+          # bootstrap/recovery subcommand.
+          ports:
+            - name: public
+              containerPort: {{ .Values.service.publicPort }}
+            - name: internal
+              containerPort: {{ .Values.service.internalPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "appliance-control-plane.fullname" . }}-config
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessPath }}
+              port: internal
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readinessPath }}
+              port: internal
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startupPath }}
+              port: internal
+            periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
+            failureThreshold: {{ .Values.probes.startupFailureThreshold }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.dataDir }}
+            {{- end }}
+            - name: keys
+              mountPath: {{ .Values.persistence.dataDir }}/keys
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "appliance-control-plane.fullname" . }}-data
+        {{- end }}
+        - name: keys
+          secret:
+            secretName: {{ .Values.secrets.keysSecretName }}
+            defaultMode: 0400

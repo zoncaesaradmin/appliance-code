@@ -1,0 +1,15 @@
+apiVersion: v2
+name: appliance-control-plane
+description: >-
+  The appliance control plane: REST APIs, the MCP endpoint, and OCI registry
+  token/lifecycle APIs behind one shared authn/authz stack. This chart
+  deploys only the control-plane service and its directly-coupled Kubernetes
+  objects; zot and Argo Workflows are separate chart concerns added in later
+  phases.
+type: application
+version: 0.1.0
+appVersion: "0.0.0-dev"
+keywords:
+  - appliance
+  - control-plane
+home: https://github.com/zoncaesaradmin/appliance-code
