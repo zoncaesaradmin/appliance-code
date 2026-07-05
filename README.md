@@ -12,10 +12,12 @@ client SDKs, not as a single-service codebase:
 
 Each has its own `go.mod` and `Makefile`; the root has neither a `go.mod`
 nor detailed targets — its `Makefile` only delegates (`make verify`, `make
-build`, `make test`, ...) to each module. A `go.work` at the root ties the
-modules together, including the shared `../platformkit` module, for local
-development. Future services (and their SDKs) are added as new top-level
-siblings of `server/backend`.
+build`, `make test`, ...) to each module, with one deliberate exception:
+`make dev-shell`/`make dev-run` (see [docs/dev-container.md](docs/dev-container.md))
+are root-level since they're about the repo as a whole, not any one
+module. A `go.work` at the root ties the modules together, including the
+shared `../platformkit` module, for local development. Future services
+(and their SDKs) are added as new top-level siblings of `server/backend`.
 
 V1 is an offline-first appliance: its sole production distribution is a complete signed air-gap bundle that installs and operates without public internet access.
 

@@ -13,7 +13,20 @@ VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
 GO_MODULE_DIRS := $(BACKEND_DIR) $(SDK_DIR) $(CHART_DIR) $(E2E_DIR)
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean
+# Per-developer overrides (dev-container image/tag, engine, cache paths).
+# See dev-container/env.example. Included early so its plain `=`
+# assignments win over the `?=` defaults below.
+-include dev-container/env
+
+CONTAINER_ENGINE ?= podman
+DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
+DEV_IMAGE_NAME   ?= automation-dev
+DEV_IMAGE_TAG    ?= latest
+DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
+DEV_VOLUME_OPTS  ?=
+
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run
 
 ## build: compile the local server binary (server/backend/bin/appliance-server)
 build:
@@ -133,3 +146,56 @@ clean:
 	@for module in $(GO_MODULE_DIRS); do \
 		$(MAKE) -C "$$module" clean; \
 	done
+
+# --- Developer Container ----------------------------------------------
+# This is where the product actually gets built and containerized, so
+# the shared dev toolchain (Go, Buildah, Skopeo, etc. — see the image's
+# own repo) belongs here, not in appliance-release (which only consumes
+# already-built, signed release artifacts — see docs/repository-boundary.md).
+#
+# `make dev-shell` drops you into an interactive shell in the shared
+# automation-dev image with this repo mounted at /workspace, so you can
+# build, test, build/push the control-plane image, etc. against a known
+# toolchain instead of whatever's on the host. `make dev-run SCRIPT=...`
+# is the non-interactive counterpart for automation: it runs one script
+# inside the same container and exits.
+#
+# Both are ephemeral (--rm): `exit` inside `make dev-shell` just tears
+# the container down, nothing to clean up afterward. See
+# docs/dev-container.md and dev-container/env.example for how to point
+# this at a different registry/tag/engine.
+
+# Installs vim on first use if the image doesn't already have one; a
+# no-op if it does. Tried in package-manager order; harmless if none
+# match. The dev-container image runs as a non-root user (e.g. "vscode")
+# with passwordless sudo, not as root, so package-manager calls need a
+# `sudo` prefix when not already root.
+DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
+	if [ "$$(id -u)" = 0 ]; then AS_ROOT=""; else AS_ROOT="sudo"; fi; \
+	if command -v apt-get >/dev/null 2>&1; then $$AS_ROOT apt-get update -qq && $$AS_ROOT apt-get install -y -qq vim; \
+	elif command -v apk >/dev/null 2>&1; then $$AS_ROOT apk add --no-cache vim; \
+	elif command -v dnf >/dev/null 2>&1; then $$AS_ROOT dnf install -y -q vim; \
+	elif command -v yum >/dev/null 2>&1; then $$AS_ROOT yum install -y -q vim; \
+	else echo "warning: no supported package manager found; vim not installed" >&2; fi; }
+
+# Every run flag must precede $(DEV_IMAGE) — anything after the image
+# name is passed to the container's entrypoint, not to the engine.
+DEV_RUN = $(CONTAINER_ENGINE) run --rm \
+	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
+	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
+	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \
+	-w /workspace
+
+## dev-shell: interactive shell in the shared dev-container image, this repo mounted at /workspace
+dev-shell:
+	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod"
+	$(DEV_RUN) -it $(DEV_IMAGE) bash -c '$(DEV_ENSURE_VIM); exec bash'
+
+## dev-run: run one script (SCRIPT=path) inside the dev container, then exit — the automation counterpart to dev-shell
+dev-run:
+	@if [ -z "$(SCRIPT)" ]; then \
+		echo "dev-run: pass SCRIPT=<path-to-script-under-the-repo>, e.g. make dev-run SCRIPT=scripts/build-and-push.sh" >&2; \
+		exit 2; \
+	fi
+	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod"
+	$(DEV_RUN) $(DEV_IMAGE) bash "$(SCRIPT)"

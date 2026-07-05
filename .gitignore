@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# per-developer dev-container overrides (see dev-container/env.example)
+dev-container/env
+
 # Editor/IDE
 # .idea/
 # .vscode/
