@@ -32,10 +32,18 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
 # no host-safety guard here because the build server has no other place
 # this would run from; macOS is kept out by never installing container
 # tooling there, not by a runtime check.
-CONTAINER_ENGINE ?= podman
-IMAGE_NAME       ?= appliance-control-plane
-IMAGE_TAG        ?= $(VERSION)
-IMAGE_REF        := $(IMAGE_NAME):$(IMAGE_TAG)
+#
+# Uses Buildah directly (not `podman build`): inside an already-rootless
+# `make dev-shell` container, `podman build` tries to create a second,
+# independent nested user namespace (via newuidmap) for its own build
+# step, which the kernel refuses (rootless-in-rootless is not supported
+# this way). Buildah with chroot isolation (BUILDAH_ISOLATION=chroot,
+# already set by the dev-container image) avoids that nested-namespace
+# creation entirely — see docs/dev-container.md.
+BUILD_ENGINE ?= buildah bud
+IMAGE_NAME   ?= appliance-control-plane
+IMAGE_TAG    ?= $(VERSION)
+IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
 
 .PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image vendor
 
@@ -183,7 +191,7 @@ stop:
 ## container — see docs/dev-container.md. Builds from vendor/, so this
 ## needs no network access; run `make vendor` first if it's stale.
 image:
-	$(CONTAINER_ENGINE) build \
+	$(BUILD_ENGINE) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \

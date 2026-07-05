@@ -135,13 +135,20 @@ make dev-shell          # drops into automation-dev, this repo mounted
 
 # now inside the container:
 cd server/backend
-make image              # builds appliance-control-plane:<version> via Buildah/Podman, from vendor/
+make image              # builds appliance-control-plane:<version> via `buildah bud`, from vendor/
 exit                     # tears the container down (--rm); the built image stays
                          # in the build server's local container storage
 ```
 
-`--privileged --device /dev/fuse` on `DEV_RUN` are what let Buildah/Podman
-build a nested image from inside this already-containerized shell.
+`--privileged --device /dev/fuse` on `DEV_RUN` are what let Buildah build
+a nested image from inside this already-containerized shell. `make
+image` uses `buildah bud`, not `podman build`: since `make dev-shell`'s
+outer container is itself rootless Podman, `podman build` would try to
+create a second, independent nested user namespace (via `newuidmap`) for
+its own build step — which the kernel refuses (rootless-in-rootless
+isn't supported that way). Buildah with chroot isolation
+(`BUILDAH_ISOLATION=chroot`, already set by the dev-container image)
+avoids that nested-namespace creation entirely.
 
 If `platformkit` (or any other dependency) gets bumped, refresh the
 vendored tree once — this does need network access and read access to

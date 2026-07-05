@@ -162,10 +162,11 @@ clean:
 # is the non-interactive counterpart for automation: it runs one script
 # inside the same container and exits.
 #
-# --privileged and --device /dev/fuse are required for Buildah/Podman
-# inside this container to build the control-plane image (nested
-# containers) — see development-container's own shell-dev target for
-# the same requirement.
+# --privileged and --device /dev/fuse are required for Buildah inside
+# this container to build the control-plane image (nested containers;
+# see development-container's own shell-dev target for the same
+# requirement). The image build itself uses `buildah bud`, not `podman
+# build` — see server/backend/Makefile's `image` target for why.
 #
 # Both are ephemeral (--rm): `exit` inside `make dev-shell` just tears
 # the container down, nothing to clean up afterward. See
