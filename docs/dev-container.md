@@ -142,20 +142,25 @@ git clone <appliance-code-remote> appliance-code
 cd appliance-code
 
 export REGISTRY_USER=<github-username>
-export REGISTRY_TOKEN=<PAT with read:packages>
+export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
 podman login --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"   # once, for the dev-container image itself (rootless)
 make dev-shell          # first run only: may prompt once for your sudo password — see below
 
 # now inside the container:
 cd server/backend
-make image                        # builds appliance-control-plane:<version> via `buildah bud`, from vendor/
+make image                        # builds, then tags and pushes appliance-control-plane:<version>
+                                    # to ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane
 make image IMAGE_TAG=v0.1.0       # optional: override the tag (defaults to `git describe`, i.e. VERSION)
-make push IMAGE_TAG=v0.1.0        # builds (if needed), then tags and pushes to
-                                    # ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane:v0.1.0
-                                    # — needs REGISTRY_TOKEN scoped to write:packages, not just read:packages
 exit                     # tears the container down (--rm); the built image stays
                          # in the build server's local container storage
 ```
+
+`make image` requires `REGISTRY_USER`/`REGISTRY_TOKEN` (the same
+non-interactive pattern as everything else — fails fast if either is
+unset, never prompts) since it always builds *and* pushes in one step;
+retarget with `REGISTRY`/`IMAGE_OWNER`/`IMAGE_REPO`/`IMAGE_NAME` (e.g.
+`make image REGISTRY=registry.zon.local` for a future internal
+registry).
 
 `make push` reuses the same `REGISTRY_USER`/`REGISTRY_TOKEN` as
 everything else (non-interactive `--password-stdin`, fails fast if

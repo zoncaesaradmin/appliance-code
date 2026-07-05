@@ -55,7 +55,7 @@ IMAGE_OWNER ?= zoncaesaradmin
 IMAGE_REPO  ?= appliance-code
 REMOTE_IMAGE := $(REGISTRY)/$(IMAGE_OWNER)/$(IMAGE_REPO)/$(IMAGE_NAME)
 
-.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image push vendor
+.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image vendor
 
 ## build: compile the local server binary into bin/
 build:
@@ -196,11 +196,20 @@ stop:
 		echo "no pid file at $(PID_FILE); nothing to stop"; \
 	fi
 
-## image: build the release-engineering control-plane container image;
-## run only on the Linux build server/CI, inside the shared dev
-## container — see docs/dev-container.md. Builds from vendor/, so this
-## needs no network access; run `make vendor` first if it's stale.
+## image: build the release-engineering control-plane container image
+## and push it to REMOTE_IMAGE (REGISTRY/IMAGE_OWNER/IMAGE_REPO/
+## IMAGE_NAME); run only on the Linux build server/CI, inside the shared
+## dev container — see docs/dev-container.md. Builds from vendor/, so
+## the build itself needs no network access; run `make vendor` first if
+## it's stale. Pushing requires REGISTRY_USER/REGISTRY_TOKEN (scoped to
+## write:packages) — never interactive, fails fast if either is unset.
 image:
+	@if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
+		echo "image: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
+		echo "  export REGISTRY_USER=<github-username>" >&2; \
+		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
+		exit 1; \
+	fi
 	$(BUILD_ENGINE) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
@@ -208,21 +217,10 @@ image:
 		-f Containerfile \
 		-t $(IMAGE_REF) \
 		.
-
-## push: build (if needed), tag, and push the image to REMOTE_IMAGE
-## (REGISTRY/IMAGE_OWNER/IMAGE_REPO/IMAGE_NAME); requires
-## REGISTRY_USER/REGISTRY_TOKEN — never interactive, fails fast if unset
-push: image
-	@if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
-		echo "push: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
-		echo "  export REGISTRY_USER=<github-username>" >&2; \
-		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
-		exit 1; \
-	fi
 	echo "$(REGISTRY_TOKEN)" | $(ENGINE_BIN) login --username "$(REGISTRY_USER)" --password-stdin $(REGISTRY)
 	$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):$(IMAGE_TAG)
 	$(ENGINE_BIN) push $(REMOTE_IMAGE):$(IMAGE_TAG)
-	@echo "push: pushed $(REMOTE_IMAGE):$(IMAGE_TAG)"
+	@echo "image: pushed $(REMOTE_IMAGE):$(IMAGE_TAG)"
 
 ## clean: remove local build, run, and coverage artifacts
 clean: stop
