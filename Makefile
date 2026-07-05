@@ -25,6 +25,13 @@ DEV_IMAGE_TAG    ?= latest
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
+# Rootful Podman is required for `make -C server/backend image` to work
+# from inside dev-shell: a rootless outer container has only one, fully
+# consumed user-namespace mapping, so a nested Buildah build inside it
+# can't create the additional mapping a real image layer needs (see
+# docs/dev-container.md). Set SUDO=sudo (or copy dev-container/env.example)
+# on hosts where $(CONTAINER_ENGINE) itself runs rootless.
+SUDO ?=
 
 .PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run
 
@@ -188,7 +195,8 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 
 # Every run flag must precede $(DEV_IMAGE) — anything after the image
 # name is passed to the container's entrypoint, not to the engine.
-DEV_RUN = $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
+# $(SUDO) (empty by default) goes first so rootful Podman is used when set.
+DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \

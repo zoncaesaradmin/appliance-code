@@ -78,6 +78,7 @@ Every setting below is a Makefile variable — override per-invocation
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CONTAINER_ENGINE` | `podman` | Container engine binary (`docker` also works for `dev-shell`/`dev-run`). |
+| `SUDO` | *(empty)* | Set to `sudo` on hosts where `CONTAINER_ENGINE` runs rootless (needed for `make image` to work — see "Building the Control-Plane Image" below). |
 | `DEV_REGISTRY` | `ghcr.io/zoncaesaradmin/development-container` | Registry + repo path for the dev-container image. |
 | `DEV_IMAGE_NAME` | `automation-dev` | Image name within the registry. |
 | `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
@@ -130,8 +131,9 @@ touches the network:
 git clone <appliance-code-remote> appliance-code
 cd appliance-code
 
-podman login ghcr.io   # once, for the dev-container image itself
-make dev-shell          # drops into automation-dev, this repo mounted
+podman login ghcr.io    # once, for the dev-container image itself
+make dev-shell SUDO=sudo   # drops into automation-dev, this repo mounted
+                            # (or set SUDO=sudo permanently, see below)
 
 # now inside the container:
 cd server/backend
@@ -140,15 +142,22 @@ exit                     # tears the container down (--rm); the built image stay
                          # in the build server's local container storage
 ```
 
-`--privileged --device /dev/fuse` on `DEV_RUN` are what let Buildah build
-a nested image from inside this already-containerized shell. `make
-image` uses `buildah bud`, not `podman build`: since `make dev-shell`'s
-outer container is itself rootless Podman, `podman build` would try to
-create a second, independent nested user namespace (via `newuidmap`) for
-its own build step — which the kernel refuses (rootless-in-rootless
-isn't supported that way). Buildah with chroot isolation
-(`BUILDAH_ISOLATION=chroot`, already set by the dev-container image)
-avoids that nested-namespace creation entirely.
+**`SUDO=sudo` is required** (or set permanently via `dev-container/env`,
+see `dev-container/env.example`) whenever `CONTAINER_ENGINE` itself runs
+rootless — the normal case for a developer/build-server account. Here's
+why: a rootless outer container only gets a single, fully-consumed
+user-namespace mapping. Buildah building the control-plane image inside
+that container needs to create *another*, independent mapping (for the
+image layers it extracts, which need real multi-UID/GID ownership, e.g.
+`/etc/gshadow` owned by `gid 42`) — and the kernel refuses that second
+nested mapping no matter which build tool is used (`podman build` and
+`buildah bud` both hit the same wall; `buildah bud` is still preferred
+over `podman build` once running rootful, since Buildah's chroot
+isolation, `BUILDAH_ISOLATION=chroot`, needs no build-time namespace at
+all). `sudo podman run` (rootful) gives the outer container a real,
+unrestricted namespace, so the nested build inside it just works — this
+requires passwordless `sudo` for `podman` (or a rootful Podman service)
+configured once on the build server.
 
 If `platformkit` (or any other dependency) gets bumped, refresh the
 vendored tree once — this does need network access and read access to
