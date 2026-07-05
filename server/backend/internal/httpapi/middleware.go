@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"platformkit/ctxutil"
+	"github.com/zoncaesaradmin/platformkit/ctxutil"
 
 	"appliance-code/server/backend/internal/logging"
 )

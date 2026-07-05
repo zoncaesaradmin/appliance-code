@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	platformlogging "platformkit/logging"
+	platformlogging "github.com/zoncaesaradmin/platformkit/logging"
 )
 
 // Logger is the shared logging.Logger interface every appliance-code

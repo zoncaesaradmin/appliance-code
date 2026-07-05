@@ -15,9 +15,15 @@ nor detailed targets — its `Makefile` only delegates (`make verify`, `make
 build`, `make test`, ...) to each module, with one deliberate exception:
 `make dev-shell`/`make dev-run` (see [docs/dev-container.md](docs/dev-container.md))
 are root-level since they're about the repo as a whole, not any one
-module. A `go.work` at the root ties the modules together, including the
-shared `../platformkit` module, for local development. Future services
-(and their SDKs) are added as new top-level siblings of `server/backend`.
+module. A `go.work` at the root ties the modules together for local
+development. Future services (and their SDKs) are added as new
+top-level siblings of `server/backend`.
+
+`server/backend` depends on the shared `github.com/zoncaesaradmin/platformkit`
+module (logging, context utilities) as a normal versioned `go.mod`
+dependency, vendored into `server/backend/vendor/` — no sibling checkout
+needed, and builds never require network access. Run `make -C
+server/backend vendor` after bumping it.
 
 V1 is an offline-first appliance: its sole production distribution is a complete signed air-gap bundle that installs and operates without public internet access.
 
@@ -35,4 +41,4 @@ The local-first end-to-end testing strategy is captured in [docs/e2e-testing-pla
 
 The accepted ownership and artifact handoff between this private product repo and the public release repo is defined in the [repository boundary](docs/repository-boundary.md).
 
-The control-plane's release container image is built, signed, and scanned only on the Linux build server/CI — never from a developer laptop, and never from macOS regardless of what container tooling is installed there. There is no `make image` target and no Containerfile for the control-plane image in this repo for that reason (see [docs/dev-container.md](docs/dev-container.md)). Day to day, `make build`/`make run`/`make test` work directly against the plain Go binary, no containers involved; `make dev-shell`/`make dev-run` are Linux-only, for interactive debugging in the same toolchain CI uses, not for producing a release artifact.
+The control-plane's release container image (`server/backend/Containerfile`, built via `make -C server/backend image`) is built, signed, and scanned only on the Linux build server/CI, inside the shared dev container (`make dev-shell`) — never from a developer laptop, and never from macOS at all regardless of what container tooling is installed there (see [docs/dev-container.md](docs/dev-container.md) for the exact steps). Day to day, `make build`/`make run`/`make test` work directly against the plain Go binary, no containers involved.

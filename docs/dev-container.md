@@ -1,25 +1,24 @@
 # Developer Container
 
 Two Makefile targets (`make dev-shell`, `make dev-run`) give you a
-container with a known, shared toolchain (Go, Buildah, Skopeo, etc.) for
-interactive debugging and ad hoc reproduction — most commonly,
-investigating a CI build failure in the same environment CI actually
-runs in. **They require a Linux host with Podman or Docker installed**
-(the Linux build server itself, or a Linux dev machine) — see
-"Supported Hosts" below.
+container with a known, shared toolchain (Go, Buildah, Skopeo, etc.).
+This is where the control-plane's release container image actually gets
+built (`make -C server/backend image`, run from inside `make
+dev-shell`), and it's also useful for reproducing a CI build failure
+interactively in the exact same environment CI runs in. **It requires a
+Linux host with Podman or Docker installed** (the Linux build server
+itself, or a Linux dev machine) — see "Supported Hosts" below.
 
 **The control-plane container image is built only on the Linux build
-server/CI.** This repo intentionally has no `make image` target and no
-Containerfile for the control-plane image: building it is entirely the
-build server's responsibility, never a developer machine's, and never
-macOS specifically, regardless of what container tooling happens to be
-installed locally. Doing it locally — even inside this shared container
-— would make that machine a release-capable machine with none of the
-guarantees a build server gives you: a consistent, audited environment;
-controlled access to signing keys; and one fixed architecture, rather
-than whatever the laptop happens to be. Day to day, a laptop only needs
-`make build`/`make run`/`make test` against the plain Go binary (see the
-root README) — no containers, no Podman, nothing beyond a Go toolchain.
+server/CI, inside this shared container — never directly on a developer
+machine's host, and never on macOS at all**, regardless of what
+container tooling happens to be installed there. Building it straight
+on a bare host (even a Linux one) would lose the point of a known,
+audited, reproducible toolchain; building it from macOS would additionally
+mean no architecture or environment guarantees at all. Day to day, a
+laptop only needs `make build`/`make run`/`make test` against the plain
+Go binary (see the root README) — no containers, no Podman, nothing
+beyond a Go toolchain.
 
 ## Supported Hosts
 
@@ -105,11 +104,11 @@ there's no VM/machine step to manage.
 ### macOS
 
 **Not supported.** Do not install Podman/Docker on macOS for this repo
-— there is no Containerfile or image-build target here for it to run,
-and `make dev-shell`/`make dev-run` are Linux-only. Use `make
-build`/`make run`/`make test` directly against the Go toolchain instead
-(see the root README); for anything needing the shared container
-toolchain, use a Linux dev machine or the build server itself.
+— `make dev-shell`/`make dev-run` are Linux-only, and the control-plane
+image is only ever built on the Linux build server, never here. Use
+`make build`/`make run`/`make test` directly against the Go toolchain
+instead (see the root README); for anything needing the shared
+container toolchain, use a Linux dev machine or the build server itself.
 
 ### Windows (untested)
 
@@ -117,6 +116,56 @@ Podman Desktop for Windows manages a WSL2-backed machine. The gap is
 `make`/`bash` themselves — run these commands from inside a WSL2 distro
 (where both are native) with Podman Desktop's WSL2 integration enabled,
 rather than from PowerShell directly.
+
+## Building the Control-Plane Image
+
+On the Linux build server (or a Linux dev machine), this repo alone is
+enough — no sibling checkout of `platformkit` is needed. `platformkit`
+is a normal versioned `go.mod` dependency
+(`github.com/zoncaesaradmin/platformkit`), and `server/backend/vendor/`
+already carries its exact pinned source, so the image build never
+touches the network:
+
+```bash
+git clone <appliance-code-remote> appliance-code
+cd appliance-code
+
+podman login ghcr.io   # once, for the dev-container image itself
+make dev-shell          # drops into automation-dev, this repo mounted
+
+# now inside the container:
+cd server/backend
+make image              # builds appliance-control-plane:<version> via Buildah/Podman, from vendor/
+exit                     # tears the container down (--rm); the built image stays
+                         # in the build server's local container storage
+```
+
+`--privileged --device /dev/fuse` on `DEV_RUN` are what let Buildah/Podman
+build a nested image from inside this already-containerized shell.
+
+If `platformkit` (or any other dependency) gets bumped, refresh the
+vendored tree once — this does need network access and read access to
+the private `platformkit` repo, one-time per machine:
+
+```bash
+git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+go env -w 'GOPRIVATE=github.com/zoncaesaradmin/*'
+```
+
+Then, whenever a dependency actually changes:
+
+```bash
+cd server/backend
+make vendor    # go mod tidy && go mod vendor
+git add go.mod go.sum vendor
+```
+
+From here, the remaining release-engineering steps (SBOM via Syft,
+vulnerability scan via Grype, signing via Cosign, `skopeo copy` export
+to `control-plane.oci.tar.zst`) are the build server's CI pipeline's job,
+not something this repo's Makefile automates — see
+[docs/repository-boundary.md](repository-boundary.md) for the full
+release-input artifact contract.
 
 ## Why Ephemeral (`--rm`) Instead of a Persistent Container
 

@@ -149,19 +149,23 @@ clean:
 
 # --- Developer Container (Linux only — see docs/dev-container.md) -----
 # A shared toolchain image (Go, Buildah, Skopeo, etc. — see the image's
-# own repo) for interactive debugging and ad hoc reproduction, e.g.
-# investigating a CI build failure in the same environment CI runs in.
-# Requires a Linux host (the build server or a Linux dev machine);
-# macOS is not a supported host for this or any container tooling in
-# this repo. It is NOT how the control-plane release image gets built:
-# that only ever happens on the Linux build server/CI, never from a
-# developer laptop — this repo has no `make image` target or
-# Containerfile for the control-plane image on purpose.
+# own repo). This is where the control-plane's release container image
+# actually gets built (`make -C server/backend image`, run from inside
+# `make dev-shell`) and also where CI build failures get reproduced
+# interactively. Requires a Linux host — the build server or a Linux dev
+# machine; macOS is not a supported host for this or any container
+# tooling in this repo, so there is no `make image` target at the repo
+# root, only inside server/backend, meant to be invoked from in here.
 #
 # `make dev-shell` drops you into an interactive shell in the shared
-# automation-dev image with this repo mounted at /workspace. `make
-# dev-run SCRIPT=...` is the non-interactive counterpart for automation:
-# it runs one script inside the same container and exits.
+# automation-dev image with this repo mounted. `make dev-run SCRIPT=...`
+# is the non-interactive counterpart for automation: it runs one script
+# inside the same container and exits.
+#
+# --privileged and --device /dev/fuse are required for Buildah/Podman
+# inside this container to build the control-plane image (nested
+# containers) — see development-container's own shell-dev target for
+# the same requirement.
 #
 # Both are ephemeral (--rm): `exit` inside `make dev-shell` just tears
 # the container down, nothing to clean up afterward. See
@@ -183,7 +187,7 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 
 # Every run flag must precede $(DEV_IMAGE) — anything after the image
 # name is passed to the container's entrypoint, not to the engine.
-DEV_RUN = $(CONTAINER_ENGINE) run --rm \
+DEV_RUN = $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \

@@ -27,7 +27,17 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
            -X '$(MODULE)/internal/version.Commit=$(COMMIT)' \
            -X '$(MODULE)/internal/version.BuildTime=$(BUILD_TIME)'
 
-.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean
+# Release-engineering image build. Run only on the Linux build server/CI,
+# inside the shared dev container (see docs/dev-container.md) — there is
+# no host-safety guard here because the build server has no other place
+# this would run from; macOS is kept out by never installing container
+# tooling there, not by a runtime check.
+CONTAINER_ENGINE ?= podman
+IMAGE_NAME       ?= appliance-control-plane
+IMAGE_TAG        ?= $(VERSION)
+IMAGE_REF        := $(IMAGE_NAME):$(IMAGE_TAG)
+
+.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image vendor
 
 ## build: compile the local server binary into bin/
 build:
@@ -37,6 +47,12 @@ build:
 ## test: run local unit tests with the race detector
 test:
 	go test -race ./...
+
+## vendor: refresh the vendored dependency tree (needed after bumping any
+## require, e.g. github.com/zoncaesaradmin/platformkit); commit the result
+vendor:
+	GOWORK=off go mod tidy
+	GOWORK=off go mod vendor
 
 ## test-curl: start the real local server and exercise a curl-based HTTP reference flow
 test-curl: build
@@ -123,7 +139,7 @@ lint:
 	else \
 		echo "staticcheck not found on PATH, skipping (install: go install honnef.co/go/tools/cmd/staticcheck@latest)"; \
 	fi
-	@fmt_files="$$(gofmt -l .)"; \
+	@fmt_files="$$(gofmt -l . | grep -v '^vendor/')"; \
 	if [ -n "$$fmt_files" ]; then \
 		echo "gofmt found unformatted files:"; echo "$$fmt_files"; exit 1; \
 	fi
@@ -161,6 +177,19 @@ stop:
 	else \
 		echo "no pid file at $(PID_FILE); nothing to stop"; \
 	fi
+
+## image: build the release-engineering control-plane container image;
+## run only on the Linux build server/CI, inside the shared dev
+## container — see docs/dev-container.md. Builds from vendor/, so this
+## needs no network access; run `make vendor` first if it's stale.
+image:
+	$(CONTAINER_ENGINE) build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		-f Containerfile \
+		-t $(IMAGE_REF) \
+		.
 
 ## clean: remove local build, run, and coverage artifacts
 clean: stop
