@@ -40,12 +40,24 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
 # this way). Buildah with chroot isolation (BUILDAH_ISOLATION=chroot,
 # already set by the dev-container image) avoids that nested-namespace
 # creation entirely — see docs/dev-container.md.
-BUILD_ENGINE ?= buildah bud
+ENGINE_BIN   ?= buildah
+BUILD_ENGINE ?= $(ENGINE_BIN) bud
 IMAGE_NAME   ?= appliance-control-plane
-IMAGE_TAG    ?= $(VERSION)
+# TAG is a short alias for IMAGE_TAG (e.g. `make image TAG=v0.1.0`),
+# matching development-container's own convention; IMAGE_TAG still wins
+# if both are set. Defaults to VERSION (git describe) if neither is set.
+TAG          ?=
+IMAGE_TAG    ?= $(if $(TAG),$(TAG),$(VERSION))
 IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
 
-.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image vendor
+# Push destination for `make push`. Only REGISTRY needs to change to
+# retarget a different registry (e.g. a future internal Zot server).
+REGISTRY    ?= ghcr.io
+IMAGE_OWNER ?= zoncaesaradmin
+IMAGE_REPO  ?= appliance-code
+REMOTE_IMAGE := $(REGISTRY)/$(IMAGE_OWNER)/$(IMAGE_REPO)/$(IMAGE_NAME)
+
+.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image push vendor
 
 ## build: compile the local server binary into bin/
 build:
@@ -198,6 +210,21 @@ image:
 		-f Containerfile \
 		-t $(IMAGE_REF) \
 		.
+
+## push: build (if needed), tag, and push the image to REMOTE_IMAGE
+## (REGISTRY/IMAGE_OWNER/IMAGE_REPO/IMAGE_NAME); requires
+## REGISTRY_USER/REGISTRY_TOKEN — never interactive, fails fast if unset
+push: image
+	@if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
+		echo "push: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
+		echo "  export REGISTRY_USER=<github-username>" >&2; \
+		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
+		exit 1; \
+	fi
+	echo "$(REGISTRY_TOKEN)" | $(ENGINE_BIN) login --username "$(REGISTRY_USER)" --password-stdin $(REGISTRY)
+	$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):$(IMAGE_TAG)
+	$(ENGINE_BIN) push $(REMOTE_IMAGE):$(IMAGE_TAG)
+	@echo "push: pushed $(REMOTE_IMAGE):$(IMAGE_TAG)"
 
 ## clean: remove local build, run, and coverage artifacts
 clean: stop
