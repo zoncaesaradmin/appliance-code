@@ -29,11 +29,21 @@ DEV_VOLUME_OPTS  ?=
 # from inside dev-shell: a rootless outer container has only one, fully
 # consumed user-namespace mapping, so a nested Buildah build inside it
 # can't create the additional mapping a real image layer needs (see
-# docs/dev-container.md). Set SUDO=sudo (or copy dev-container/env.example)
-# on hosts where $(CONTAINER_ENGINE) itself runs rootless.
-SUDO ?=
+# docs/dev-container.md). Defaults to non-interactive sudo so this works
+# out of the box on any host with the one-time NOPASSWD sudoers rule +
+# `sudo podman login` set up (see docs/dev-container.md); "-n" is
+# deliberate — it must never prompt in automation, so a missing/wrong
+# sudoers rule fails fast and loud instead of hanging. Override to empty
+# (`SUDO=`) via dev-container/env on a host that's already rootful, or
+# that only ever uses dev-shell/dev-run for plain interactive debugging
+# and hasn't set up the sudoers rule.
+SUDO ?= sudo -n
+# Registry host portion of DEV_REGISTRY (e.g. "ghcr.io"), for the rootful
+# login dev-sudo-setup performs below.
+DEV_REGISTRY_HOST := $(firstword $(subst /, ,$(DEV_REGISTRY)))
+SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-sudo-setup
 
 ## build: compile the local server binary (server/backend/bin/appliance-server)
 build:
@@ -202,13 +212,49 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \
 	-w /workspace
 
+## dev-sudo-setup: one-time, idempotent host bootstrap for rootful nested
+## Buildah builds — a prerequisite of dev-shell/dev-run, not meant to be
+## run directly. Only acts when CONTAINER_ENGINE is podman and SUDO is
+## non-empty (the defaults); a no-op otherwise. Two things happen, both
+## skipped automatically once already in place:
+##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
+##      (never a blanket sudo grant) — writing this needs one interactive
+##      sudo authentication, unavoidably, the very first time
+##   2. `sudo podman login` against the dev-container registry — rootful
+##      podman keeps its own credential store, separate from a regular
+##      (rootless) `podman login`; prompts for credentials only if not
+##      already logged in
+## After both are in place, no future make dev-shell/dev-run/image ever
+## prompts for anything again on this host.
+dev-sudo-setup:
+	@if [ "$(CONTAINER_ENGINE)" != "podman" ] || [ -z "$(SUDO)" ]; then exit 0; fi; \
+	podman_path="$$(command -v podman)"; \
+	if [ -z "$$podman_path" ]; then \
+		echo "dev-sudo-setup: podman not found on PATH, skipping rootful bootstrap"; \
+		exit 0; \
+	fi; \
+	if sudo -n "$$podman_path" --version >/dev/null 2>&1; then \
+		: already configured; \
+	else \
+		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo for $$podman_path (you may be prompted for your password once)"; \
+		echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path" | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
+		sudo chmod 0440 "$(SUDOERS_FILE)"; \
+		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
+			echo "dev-sudo-setup: sudoers validation failed, rolling back"; \
+			sudo rm -f "$(SUDOERS_FILE)"; \
+			exit 1; \
+		fi; \
+		echo "dev-sudo-setup: passwordless sudo for podman configured at $(SUDOERS_FILE)"; \
+	fi; \
+	sudo podman login $(DEV_REGISTRY_HOST)
+
 ## dev-shell: interactive shell in the shared dev-container image, this repo mounted at /workspace
-dev-shell:
+dev-shell: dev-sudo-setup
 	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod"
 	$(DEV_RUN) -it $(DEV_IMAGE) bash -c '$(DEV_ENSURE_VIM); exec bash'
 
 ## dev-run: run one script (SCRIPT=path) inside the dev container, then exit — the automation counterpart to dev-shell
-dev-run:
+dev-run: dev-sudo-setup
 	@if [ -z "$(SCRIPT)" ]; then \
 		echo "dev-run: pass SCRIPT=<path-to-script-under-the-repo>, e.g. make dev-run SCRIPT=scripts/build-and-push.sh" >&2; \
 		exit 2; \

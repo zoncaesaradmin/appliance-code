@@ -125,15 +125,20 @@ enough — no sibling checkout of `platformkit` is needed. `platformkit`
 is a normal versioned `go.mod` dependency
 (`github.com/zoncaesaradmin/platformkit`), and `server/backend/vendor/`
 already carries its exact pinned source, so the image build never
-touches the network:
+touches the network.
+
+### Building the image
+
+`make dev-shell`/`make dev-run` bootstrap everything they need on the
+first run — nothing to set up by hand beforehand:
 
 ```bash
 git clone <appliance-code-remote> appliance-code
 cd appliance-code
 
-podman login ghcr.io    # once, for the dev-container image itself
-make dev-shell SUDO=sudo   # drops into automation-dev, this repo mounted
-                            # (or set SUDO=sudo permanently, see below)
+podman login ghcr.io   # once, for the dev-container image itself (rootless)
+make dev-shell          # first run only: may prompt once for your sudo
+                        # password and/or ghcr.io credentials — see below
 
 # now inside the container:
 cd server/backend
@@ -142,10 +147,34 @@ exit                     # tears the container down (--rm); the built image stay
                          # in the build server's local container storage
 ```
 
-**`SUDO=sudo` is required** (or set permanently via `dev-container/env`,
-see `dev-container/env.example`) whenever `CONTAINER_ENGINE` itself runs
-rootless — the normal case for a developer/build-server account. Here's
-why: a rootless outer container only gets a single, fully-consumed
+`make dev-shell`/`make dev-run` depend on a `dev-sudo-setup` step (see
+its comment in the root `Makefile`) that, only the first time it's
+needed on a given host, does two things:
+
+1. Writes a NOPASSWD sudoers rule scoped to exactly the `podman` binary
+   path (never a blanket sudo grant), validating it with `visudo -c`
+   before it takes effect and rolling back if validation fails. Writing
+   this needs one interactive `sudo` authentication — unavoidably, since
+   nothing can grant itself root the very first time.
+2. Runs `sudo podman login` against the dev-container registry —
+   rootful podman keeps its own credential store, separate from your
+   regular (rootless) `podman login` — prompting for credentials only if
+   not already logged in.
+
+Both checks are idempotent: on every run after the first, they detect
+the rule/login already exist and do nothing, so no later `make
+dev-shell`/`dev-run`/`image` invocation — interactive or scripted —
+ever prompts for anything again on that host.
+
+If a host is already rootful, or only ever uses `dev-shell` for plain
+interactive debugging and you don't want this bootstrap to touch
+`/etc/sudoers.d` at all, set `SUDO=` (empty) — see
+`dev-container/env.example`; `dev-sudo-setup` is a no-op whenever `SUDO`
+is empty.
+
+### Why rootful?
+
+A rootless outer container only gets a single, fully-consumed
 user-namespace mapping. Buildah building the control-plane image inside
 that container needs to create *another*, independent mapping (for the
 image layers it extracts, which need real multi-UID/GID ownership, e.g.
@@ -154,10 +183,8 @@ nested mapping no matter which build tool is used (`podman build` and
 `buildah bud` both hit the same wall; `buildah bud` is still preferred
 over `podman build` once running rootful, since Buildah's chroot
 isolation, `BUILDAH_ISOLATION=chroot`, needs no build-time namespace at
-all). `sudo podman run` (rootful) gives the outer container a real,
-unrestricted namespace, so the nested build inside it just works — this
-requires passwordless `sudo` for `podman` (or a rootful Podman service)
-configured once on the build server.
+all). Rootful `podman run` gives the outer container a real, unrestricted
+namespace, so the nested build inside it just works.
 
 If `platformkit` (or any other dependency) gets bumped, refresh the
 vendored tree once — this does need network access and read access to
