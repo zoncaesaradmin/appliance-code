@@ -1108,7 +1108,7 @@ Required properties:
 - Local tests must run by compiling and executing Go code directly on the host machine.
 - Containerization and K3s packaging must be deployment layers, not prerequisites for normal development.
 - The same application code paths should be used locally and in-container, with configuration selecting environment-specific behavior.
-- Buildah/K3s security acceptance runs on the supported Linux appliance lane, not on macOS. Podman machine may be a developer convenience on macOS but is not release evidence.
+- Buildah/K3s security acceptance, and the control-plane's own container image build, run only on the Linux build server/CI — never on macOS, and never on a developer laptop regardless of platform. No container tooling (Podman, Buildah, etc.) is installed or used on macOS for this repo; see docs/dev-container.md.
 - Unit and HTTP contract tests use in-process fakes at the Buildah, Skopeo, ORAS, zot, and Kubernetes interfaces. Separate integration lanes exercise the real pinned tools; fakes must not replace those release gates.
 
 Recommended local workflow:

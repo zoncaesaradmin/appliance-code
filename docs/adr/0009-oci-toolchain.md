@@ -36,7 +36,7 @@ Additional rules:
 - V1 production support is `linux/amd64`. Multi-architecture manifest creation, foreign architecture execution, and emulation are out of scope until separately gated.
 - User-provided build secrets are out of scope for the first build slice. Source and registry credentials are appliance-issued, short-lived, file-mounted, and deleted with the Job.
 - Disable Git submodules, Git LFS downloads, floating refs, remote build contexts, and unbounded redirects by default. Add each only through an explicit source-policy extension and tests.
-- Local Go development requires none of these tools. macOS may use Podman machine for convenience, but Buildah/K3s release evidence comes from the supported Linux appliance lane.
+- Local Go development requires none of these tools. All of Buildah/K3s release evidence and the control-plane's own container image build come from the supported Linux build server/CI lane; macOS is not a supported host for any of this tooling (see docs/dev-container.md).
 
 ## Compatibility Gates
 

@@ -34,3 +34,5 @@ The production pod and storage layout is shown in the [K3s deployment topology](
 The local-first end-to-end testing strategy is captured in [docs/e2e-testing-plan.md](docs/e2e-testing-plan.md).
 
 The accepted ownership and artifact handoff between this private product repo and the public release repo is defined in the [repository boundary](docs/repository-boundary.md).
+
+The control-plane's release container image is built, signed, and scanned only on the Linux build server/CI — never from a developer laptop, and never from macOS regardless of what container tooling is installed there. There is no `make image` target and no Containerfile for the control-plane image in this repo for that reason (see [docs/dev-container.md](docs/dev-container.md)). Day to day, `make build`/`make run`/`make test` work directly against the plain Go binary, no containers involved; `make dev-shell`/`make dev-run` are Linux-only, for interactive debugging in the same toolchain CI uses, not for producing a release artifact.

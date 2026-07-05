@@ -20,7 +20,7 @@ COVER_FILE := coverage.out
 .PHONY: build test lint coverage verify test-local clean
 
 build:
-	$(GO) build ./...
+	$(GO) build -o /dev/null ./...
 
 test:
 	$(GO) test -race ./...
@@ -70,4 +70,4 @@ test-local:
 	}
 
 clean:
-	rm -rf "$(RUN_DIR)" "$(COVER_FILE)"
+	rm -rf "$(RUN_DIR)" "$(COVER_FILE)" integration-test

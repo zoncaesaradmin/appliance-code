@@ -147,18 +147,21 @@ clean:
 		$(MAKE) -C "$$module" clean; \
 	done
 
-# --- Developer Container ----------------------------------------------
-# This is where the product actually gets built and containerized, so
-# the shared dev toolchain (Go, Buildah, Skopeo, etc. — see the image's
-# own repo) belongs here, not in appliance-release (which only consumes
-# already-built, signed release artifacts — see docs/repository-boundary.md).
+# --- Developer Container (Linux only — see docs/dev-container.md) -----
+# A shared toolchain image (Go, Buildah, Skopeo, etc. — see the image's
+# own repo) for interactive debugging and ad hoc reproduction, e.g.
+# investigating a CI build failure in the same environment CI runs in.
+# Requires a Linux host (the build server or a Linux dev machine);
+# macOS is not a supported host for this or any container tooling in
+# this repo. It is NOT how the control-plane release image gets built:
+# that only ever happens on the Linux build server/CI, never from a
+# developer laptop — this repo has no `make image` target or
+# Containerfile for the control-plane image on purpose.
 #
 # `make dev-shell` drops you into an interactive shell in the shared
-# automation-dev image with this repo mounted at /workspace, so you can
-# build, test, build/push the control-plane image, etc. against a known
-# toolchain instead of whatever's on the host. `make dev-run SCRIPT=...`
-# is the non-interactive counterpart for automation: it runs one script
-# inside the same container and exits.
+# automation-dev image with this repo mounted at /workspace. `make
+# dev-run SCRIPT=...` is the non-interactive counterpart for automation:
+# it runs one script inside the same container and exits.
 #
 # Both are ephemeral (--rm): `exit` inside `make dev-shell` just tears
 # the container down, nothing to clean up afterward. See
