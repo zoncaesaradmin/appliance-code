@@ -206,7 +206,14 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # Every run flag must precede $(DEV_IMAGE) — anything after the image
 # name is passed to the container's entrypoint, not to the engine.
 # $(SUDO) (empty by default) goes first so rootful Podman is used when set.
+# `-e VAR` with no value forwards VAR from the current shell's
+# environment (if set) rather than baking a value into the command
+# line, so `make -C server/backend image`/`push` inside the container
+# see the same REGISTRY_USER/REGISTRY_TOKEN already exported on the
+# host — no need to re-export them again inside dev-shell.
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
+	-e REGISTRY_USER \
+	-e REGISTRY_TOKEN \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \
@@ -216,10 +223,16 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ## Buildah builds — a prerequisite of dev-shell/dev-run, not meant to be
 ## run directly. Only acts when CONTAINER_ENGINE is podman and SUDO is
 ## non-empty (the defaults); a no-op otherwise. Two things happen, both
-## skipped automatically once already in place:
+## skipped automatically once already in place (re-detected by an actual
+## functional check each run, not just file existence, so a host bootstrapped
+## before this env-passthrough rule existed gets upgraded automatically):
 ##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
-##      (never a blanket sudo grant) — writing this needs one interactive
-##      sudo authentication, unavoidably, the very first time
+##      (never a blanket sudo grant), plus an env_keep rule preserving
+##      only REGISTRY_USER/REGISTRY_TOKEN through sudo (so `-e VAR`
+##      name-only forwarding on DEV_RUN's rootful podman actually works —
+##      sudo's env_reset default would otherwise silently strip them
+##      before podman ever saw them). Writing/rewriting this needs one
+##      interactive sudo authentication, unavoidably, whenever it changes.
 ##   2. `sudo podman login` against the dev-container registry, via
 ##      REGISTRY_USER/REGISTRY_TOKEN (never interactive — rootful podman
 ##      keeps its own credential store, separate from a regular
@@ -233,23 +246,28 @@ dev-sudo-setup:
 		echo "dev-sudo-setup: podman not found on PATH, skipping rootful bootstrap"; \
 		exit 0; \
 	fi; \
-	if sudo -n "$$podman_path" --version >/dev/null 2>&1; then \
+	probe="dev-sudo-setup-probe-$$$$"; \
+	if sudo -n "$$podman_path" --version >/dev/null 2>&1 \
+		&& [ "$$(REGISTRY_USER=$$probe sudo -n env 2>/dev/null | sed -n 's/^REGISTRY_USER=//p')" = "$$probe" ]; then \
 		: already configured; \
 	else \
-		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo for $$podman_path (you may be prompted for your password once)"; \
-		echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path" | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
+		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
+		{ \
+			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
+			echo "Defaults:$$(whoami) env_keep += \"REGISTRY_USER REGISTRY_TOKEN\""; \
+		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
 		sudo chmod 0440 "$(SUDOERS_FILE)"; \
 		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
 			echo "dev-sudo-setup: sudoers validation failed, rolling back"; \
 			sudo rm -f "$(SUDOERS_FILE)"; \
 			exit 1; \
 		fi; \
-		echo "dev-sudo-setup: passwordless sudo for podman configured at $(SUDOERS_FILE)"; \
+		echo "dev-sudo-setup: passwordless sudo + env passthrough for podman configured at $(SUDOERS_FILE)"; \
 	fi; \
 	if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
 		echo "dev-sudo-setup: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive) for the rootful registry login:" >&2; \
 		echo "  export REGISTRY_USER=<github-username>" >&2; \
-		echo "  export REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
 		exit 1; \
 	fi; \
 	echo "$(REGISTRY_TOKEN)" | sudo podman login --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)

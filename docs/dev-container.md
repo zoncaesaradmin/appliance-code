@@ -160,13 +160,14 @@ non-interactive pattern as everything else — fails fast if either is
 unset, never prompts) since it always builds *and* pushes in one step;
 retarget with `REGISTRY`/`IMAGE_OWNER`/`IMAGE_REPO`/`IMAGE_NAME` (e.g.
 `make image REGISTRY=registry.zon.local` for a future internal
-registry).
-
-`make push` reuses the same `REGISTRY_USER`/`REGISTRY_TOKEN` as
-everything else (non-interactive `--password-stdin`, fails fast if
-either is unset) and retargets with `REGISTRY`/`IMAGE_OWNER`/
-`IMAGE_REPO`/`IMAGE_NAME` (e.g. `make push REGISTRY=registry.zon.local`
-for a future internal registry).
+registry). It sees these two variables without having to re-export them
+inside the container: `DEV_RUN` forwards `REGISTRY_USER`/
+`REGISTRY_TOKEN` from the host's environment into `dev-shell`/`dev-run`
+with `-e VAR` (name-only, no value on the command line), and
+`dev-sudo-setup`'s sudoers rule includes an `env_keep` entry for exactly
+these two variables — without it, `sudo`'s default `env_reset` policy
+would silently strip them before Podman ever saw them, since `dev-shell`
+itself runs via `sudo -n podman run ...`.
 
 `make dev-shell`/`make dev-run` depend on a `dev-sudo-setup` step (see
 its comment in the root `Makefile`) that, only the first time it's
