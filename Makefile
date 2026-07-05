@@ -220,10 +220,10 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
 ##      (never a blanket sudo grant) — writing this needs one interactive
 ##      sudo authentication, unavoidably, the very first time
-##   2. `sudo podman login` against the dev-container registry — rootful
-##      podman keeps its own credential store, separate from a regular
-##      (rootless) `podman login`; prompts for credentials only if not
-##      already logged in
+##   2. `sudo podman login` against the dev-container registry, via
+##      REGISTRY_USER/REGISTRY_TOKEN (never interactive — rootful podman
+##      keeps its own credential store, separate from a regular
+##      (rootless) `podman login`)
 ## After both are in place, no future make dev-shell/dev-run/image ever
 ## prompts for anything again on this host.
 dev-sudo-setup:
@@ -246,7 +246,13 @@ dev-sudo-setup:
 		fi; \
 		echo "dev-sudo-setup: passwordless sudo for podman configured at $(SUDOERS_FILE)"; \
 	fi; \
-	sudo podman login $(DEV_REGISTRY_HOST)
+	if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
+		echo "dev-sudo-setup: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive) for the rootful registry login:" >&2; \
+		echo "  export REGISTRY_USER=<github-username>" >&2; \
+		echo "  export REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+		exit 1; \
+	fi; \
+	echo "$(REGISTRY_TOKEN)" | sudo podman login --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
 
 ## dev-shell: interactive shell in the shared dev-container image, this repo mounted at /workspace
 dev-shell: dev-sudo-setup

@@ -39,9 +39,14 @@ repo's sake; there is nothing here for it to build or run.
 - A **Linux** host (see "Supported Hosts" above).
 - [Podman](https://podman.io/) (the default container engine; see
   `CONTAINER_ENGINE` below to use Docker instead).
-- `podman login ghcr.io` first — `ghcr.io/zoncaesaradmin/development-container`
-  is **not** public; pulling without logging in fails with `unauthorized`.
-  Use a GitHub username and a PAT with `read:packages` scope.
+- `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment — a
+  GitHub username and a PAT with `read:packages` scope.
+  `ghcr.io/zoncaesaradmin/development-container` is **not** public, and
+  these two variables are used non-interactively for every registry
+  login this repo's Makefile needs (both the regular pull of the
+  dev-container image and, on hosts using rootful `SUDO`, the rootful
+  login `dev-sudo-setup` performs — see "Building the Control-Plane
+  Image" below). Never typed at a prompt, never committed.
 
 ## Usage
 
@@ -136,9 +141,10 @@ first run — nothing to set up by hand beforehand:
 git clone <appliance-code-remote> appliance-code
 cd appliance-code
 
-podman login ghcr.io   # once, for the dev-container image itself (rootless)
-make dev-shell          # first run only: may prompt once for your sudo
-                        # password and/or ghcr.io credentials — see below
+export REGISTRY_USER=<github-username>
+export REGISTRY_TOKEN=<PAT with read:packages>
+podman login --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"   # once, for the dev-container image itself (rootless)
+make dev-shell          # first run only: may prompt once for your sudo password — see below
 
 # now inside the container:
 cd server/backend
@@ -156,15 +162,20 @@ needed on a given host, does two things:
    before it takes effect and rolling back if validation fails. Writing
    this needs one interactive `sudo` authentication — unavoidably, since
    nothing can grant itself root the very first time.
-2. Runs `sudo podman login` against the dev-container registry —
-   rootful podman keeps its own credential store, separate from your
-   regular (rootless) `podman login` — prompting for credentials only if
-   not already logged in.
+2. Runs `sudo podman login` against the dev-container registry using
+   `REGISTRY_USER`/`REGISTRY_TOKEN` (`--password-stdin`, never an
+   interactive prompt) — rootful podman keeps its own credential store,
+   separate from your regular (rootless) `podman login` above. Fails
+   fast with a clear message if either variable isn't set — it will
+   never sit waiting for typed credentials.
 
 Both checks are idempotent: on every run after the first, they detect
-the rule/login already exist and do nothing, so no later `make
-dev-shell`/`dev-run`/`image` invocation — interactive or scripted —
-ever prompts for anything again on that host.
+the sudoers rule already exists and skip it (the login call itself
+still runs every time, but is a fast, silent no-op if already
+authenticated), so no later `make dev-shell`/`dev-run`/`image`
+invocation ever prompts for anything, as long as `REGISTRY_USER`/
+`REGISTRY_TOKEN` stay exported (e.g. in the shell profile that runs
+these commands, or your CI job's secret env vars).
 
 If a host is already rootful, or only ever uses `dev-shell` for plain
 interactive debugging and you don't want this bootstrap to touch
