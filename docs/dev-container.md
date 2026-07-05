@@ -148,11 +148,11 @@ make dev-shell          # first run only: may prompt once for your sudo password
 
 # now inside the container:
 cd server/backend
-make image                    # builds appliance-control-plane:<version> via `buildah bud`, from vendor/
-make image TAG=v0.1.0          # optional: override the tag (defaults to `git describe`, i.e. VERSION)
-make push TAG=v0.1.0           # builds (if needed), then tags and pushes to
-                                # ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane:v0.1.0
-                                # — needs REGISTRY_TOKEN scoped to write:packages, not just read:packages
+make image                        # builds appliance-control-plane:<version> via `buildah bud`, from vendor/
+make image IMAGE_TAG=v0.1.0       # optional: override the tag (defaults to `git describe`, i.e. VERSION)
+make push IMAGE_TAG=v0.1.0        # builds (if needed), then tags and pushes to
+                                    # ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane:v0.1.0
+                                    # — needs REGISTRY_TOKEN scoped to write:packages, not just read:packages
 exit                     # tears the container down (--rm); the built image stays
                          # in the build server's local container storage
 ```

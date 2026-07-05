@@ -43,11 +43,9 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
 ENGINE_BIN   ?= buildah
 BUILD_ENGINE ?= $(ENGINE_BIN) bud
 IMAGE_NAME   ?= appliance-control-plane
-# TAG is a short alias for IMAGE_TAG (e.g. `make image TAG=v0.1.0`),
-# matching development-container's own convention; IMAGE_TAG still wins
-# if both are set. Defaults to VERSION (git describe) if neither is set.
-TAG          ?=
-IMAGE_TAG    ?= $(if $(TAG),$(TAG),$(VERSION))
+# Defaults to VERSION (git describe); override explicitly, e.g.
+# `make image IMAGE_TAG=v0.1.0`.
+IMAGE_TAG    ?= $(VERSION)
 IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
 
 # Push destination for `make push`. Only REGISTRY needs to change to
