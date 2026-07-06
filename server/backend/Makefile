@@ -198,11 +198,12 @@ stop:
 
 ## image: build the release-engineering control-plane container image
 ## and push it to REMOTE_IMAGE (REGISTRY/IMAGE_OWNER/IMAGE_REPO/
-## IMAGE_NAME); run only on the Linux build server/CI, inside the shared
-## dev container — see docs/dev-container.md. Builds from vendor/, so
-## the build itself needs no network access; run `make vendor` first if
-## it's stale. Pushing requires REGISTRY_USER/REGISTRY_TOKEN (scoped to
-## write:packages) — never interactive, fails fast if either is unset.
+## IMAGE_NAME) as both IMAGE_TAG and "latest"; run only on the Linux
+## build server/CI, inside the shared dev container — see
+## docs/dev-container.md. Builds from vendor/, so the build itself needs
+## no network access; run `make vendor` first if it's stale. Pushing
+## requires REGISTRY_USER/REGISTRY_TOKEN (scoped to write:packages) —
+## never interactive, fails fast if either is unset.
 image:
 	@if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
 		echo "image: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
@@ -221,6 +222,11 @@ image:
 	$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):$(IMAGE_TAG)
 	$(ENGINE_BIN) push $(REMOTE_IMAGE):$(IMAGE_TAG)
 	@echo "image: pushed $(REMOTE_IMAGE):$(IMAGE_TAG)"
+	@if [ "$(IMAGE_TAG)" != "latest" ]; then \
+		$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):latest; \
+		$(ENGINE_BIN) push $(REMOTE_IMAGE):latest; \
+		echo "image: pushed $(REMOTE_IMAGE):latest"; \
+	fi
 
 ## clean: remove local build, run, and coverage artifacts
 clean: stop
