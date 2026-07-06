@@ -13,7 +13,7 @@ without copying product-specific structure that does not apply here.
 ## Primary Decisions
 
 - End-to-end tests live in a top-level `e2etests/` area, not inside
-  `server/backend` or the SDK module.
+  `services/controlplane` or the SDK module.
 - End-to-end tests exercise the real compiled server binary over its public
   HTTP surface using the Go SDK as the client.
 - The local E2E lane is the required first lane and must run on a normal
@@ -54,7 +54,7 @@ The flow is:
 2. Start it with isolated temp state on loopback addresses.
 3. Run bootstrap init through the real CLI.
 4. Run an external Go test client from `e2etests/` that talks only through
-   `server/sdk/golang/applianceclient`.
+   `sdk/golang/applianceclient`.
 5. Exercise the supported public APIs end to end.
 6. Stop the server and retain logs/artifacts on failure.
 
@@ -138,7 +138,7 @@ This is the cleanest boundary for the kind of validation we want:
 - they should remain reusable against both local and packaged targets
 - they should not be structurally tied to the backend module's internals
 
-Putting them inside `server/backend` would blur the boundary and make it too
+Putting them inside `services/controlplane` would blur the boundary and make it too
 easy to reach into internal packages instead of using the SDK and public
 APIs.
 
@@ -223,11 +223,11 @@ The root repo should grow these targets:
 
 The backend module should grow helper targets:
 
-- `make -C server/backend test-start`
+- `make -C services/controlplane test-start`
   - build and start the local server on supplied addresses/data dir
-- `make -C server/backend test-stop`
+- `make -C services/controlplane test-stop`
   - stop the local test server via pid file
-- `make -C server/backend test-live`
+- `make -C services/controlplane test-live`
   - optional backend-owned wrapper for one local live-server scenario
 
 The new `e2etests/` module should grow:

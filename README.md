@@ -5,8 +5,8 @@ Product repo for the appliance. V1 ships one service, the control plane
 repo is laid out for multiple independently versioned services and their
 client SDKs, not as a single-service codebase:
 
-- `server/backend/` — the control-plane service (its own Go module and Makefile)
-- `server/sdk/golang/applianceclient/` — a Go client SDK for the control-plane REST API
+- `services/controlplane/` — the control-plane service (its own Go module and Makefile)
+- `sdk/golang/applianceclient/` — a Go client SDK for the control-plane REST API
 - `e2etests/` — reserved for external live-server end-to-end test harnesses that use the SDK as a client
 - `deploy/charts/appliance-control-plane/` — the control plane's Helm chart (its own Go module, for chart policy tests)
 - `scripts/package/` — release-input producer helpers for handoff into `appliance-release`
@@ -18,13 +18,13 @@ build`, `make test`, ...) to each module, with one deliberate exception:
 are root-level since they're about the repo as a whole, not any one
 module. A `go.work` at the root ties the modules together for local
 development. Future services (and their SDKs) are added as new
-top-level siblings of `server/backend`.
+entries under `services/` and `sdk/`.
 
-`server/backend` depends on the shared `github.com/zoncaesaradmin/platformkit`
+`services/controlplane` depends on the shared `github.com/zoncaesaradmin/platformkit`
 module (logging, context utilities) as a normal versioned `go.mod`
-dependency, vendored into `server/backend/vendor/` — no sibling checkout
+dependency, vendored into `services/controlplane/vendor/` — no sibling checkout
 needed, and builds never require network access. Run `make -C
-server/backend vendor` after bumping it.
+services/controlplane vendor` after bumping it.
 
 V1 is an offline-first appliance: its sole production distribution is a complete signed air-gap bundle that installs and operates without public internet access.
 
@@ -42,4 +42,4 @@ The local-first end-to-end testing strategy is captured in [docs/e2e-testing-pla
 
 The accepted ownership and artifact handoff between this private product repo and the public release repo is defined in the [repository boundary](docs/repository-boundary.md).
 
-The control-plane's release container image (`server/backend/Containerfile`, built via `make -C server/backend image`) is built, signed, and scanned only on the Linux build server/CI, inside the shared dev container (`make dev-shell`) — never from a developer laptop, and never from macOS at all regardless of what container tooling is installed there (see [docs/dev-container.md](docs/dev-container.md) for the exact steps). Day to day, `make build`/`make run`/`make test` work directly against the plain Go binary, no containers involved.
+The control-plane's release container image (`services/controlplane/Containerfile`, built via `make -C services/controlplane image`) is built, signed, and scanned only on the Linux build server/CI, inside the shared dev container (`make dev-shell`) — never from a developer laptop, and never from macOS at all regardless of what container tooling is installed there (see [docs/dev-container.md](docs/dev-container.md) for the exact steps). Day to day, `make build`/`make run`/`make test` work directly against the plain Go binary, no containers involved.

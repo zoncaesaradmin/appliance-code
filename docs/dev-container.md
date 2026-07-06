@@ -3,7 +3,7 @@
 Two Makefile targets (`make dev-shell`, `make dev-run`) give you a
 container with a known, shared toolchain (Go, Buildah, Skopeo, etc.).
 This is where the control-plane's release container image actually gets
-built (`make -C server/backend image`, run from inside `make
+built (`make -C services/controlplane image`, run from inside `make
 dev-shell`), and it's also useful for reproducing a CI build failure
 interactively in the exact same environment CI runs in. **It requires a
 Linux host with Podman or Docker installed** (the Linux build server
@@ -48,7 +48,7 @@ repo's sake; there is nothing here for it to build or run.
   Creating the directory alone is not enough; `podman login` is what
   actually creates/populates the auth file.
 - `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment when you
-  want to run `make -C server/backend image` inside the dev container.
+  want to run `make -C services/controlplane image` inside the dev container.
   Those variables are for the image push step, not for the outer
   dev-container pull anymore.
 
@@ -140,7 +140,7 @@ rather than from PowerShell directly.
 On the Linux build server (or a Linux dev machine), this repo alone is
 enough — no sibling checkout of `platformkit` is needed. `platformkit`
 is a normal versioned `go.mod` dependency
-(`github.com/zoncaesaradmin/platformkit`), and `server/backend/vendor/`
+(`github.com/zoncaesaradmin/platformkit`), and `services/controlplane/vendor/`
 already carries its exact pinned source, so the image build never
 touches the network.
 
@@ -196,7 +196,7 @@ export IMAGE_TAG=v0.1.0          # optional host-side default for this dev-shell
 make dev-shell
 
 # now inside the container:
-cd server/backend
+cd services/controlplane
 make image                        # builds, then tags and pushes appliance-control-plane:<version>
                                     # to ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane
 make image IMAGE_TAG=v0.1.0       # optional: override the tag (defaults to `git describe`, i.e. VERSION)
@@ -280,7 +280,7 @@ go env -w 'GOPRIVATE=github.com/zoncaesaradmin/*'
 Then, whenever a dependency actually changes:
 
 ```bash
-cd server/backend
+cd services/controlplane
 make vendor    # go mod tidy && go mod vendor
 git add go.mod go.sum vendor
 ```

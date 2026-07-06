@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-BACKEND_DIR ?= ../server/backend
+BACKEND_DIR ?= ../services/controlplane
 GO ?= go
 RUN_DIR ?= .run/local
 LOG_DIR ?= $(RUN_DIR)/logs

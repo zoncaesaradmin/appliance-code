@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"appliance-code/server/sdk/golang/applianceclient"
+	"appliance-code/sdk/golang/applianceclient"
 )
 
 type config struct {

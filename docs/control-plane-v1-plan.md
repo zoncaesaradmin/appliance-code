@@ -448,8 +448,8 @@ The system creates:
 This repo is not a single-service codebase: it is the product repo for the appliance's control-plane service today, with room for additional independently versioned services (and their own client SDKs) as siblings, the same pattern used in this org's other multi-service repos. Each functional area below is its own Go module with its own `go.mod` and `Makefile`; the repo root holds no `go.mod` and its `Makefile` only delegates (`$(MAKE) -C <module> <target>`) to per-module targets plus a small number of repo-wide composite targets (`build`, `test`, `lint`, `coverage`, `verify`, `run`, `stop`, `dev-k3s`, `clean`). A root-level `go.work` ties the modules together for local development, including the shared `../platformkit` module.
 
 ```text
-server/
-  backend/                 -- the control-plane service (this phase's implementation)
+services/
+  controlplane/            -- the control-plane service (this phase's implementation)
     cmd/
       appliance-server/
         main.go
@@ -484,11 +484,11 @@ server/
       observability/
     go.mod
     Makefile
-  sdk/
-    golang/
-      applianceclient/      -- Go client SDK for the control-plane REST API
-        go.mod
-        Makefile
+sdk/
+  golang/
+    applianceclient/       -- Go client SDK for the control-plane REST API
+      go.mod
+      Makefile
 
 deploy/
   charts/
@@ -506,9 +506,9 @@ go.work
 Makefile
 ```
 
-Future services (for example a future frontend, worker, or additional appliance component) are added as new top-level siblings of `server/backend`, each with its own module, `Makefile`, and — if it exposes an API other components consume — its own SDK under `server/sdk/`. A top-level `e2etests/` module is the natural place for cross-service tests once a second service exists; it is not scaffolded yet because there is nothing to cross-test.
+Future services (for example a future frontend, worker, or additional appliance component) are added under `services/`, each with its own module, `Makefile`, and — if it exposes an API other components consume — its own SDK under `sdk/`. A top-level `e2etests/` module is the natural place for cross-service tests once a second service exists; it is not scaffolded yet because there is nothing to cross-test.
 
-Recommended layering within `server/backend/internal`:
+Recommended layering within `services/controlplane/internal`:
 
 - `httpapi/` contains REST routing, request parsing, response formatting, and middleware
 - `mcp/` contains MCP transport and request handling shell
@@ -1430,7 +1430,7 @@ Accepted direction:
 - Registry access tokens have a five-minute maximum lifetime and carry only the repository actions currently allowed by appliance RBAC.
 - Backup and restore cover control-plane state/keys and the zot storage PVC plus required extension state; no separate registry database exists in v1.
 
-Recommended adapter boundary (all paths below are relative to `server/backend/`):
+Recommended adapter boundary (all paths below are relative to `services/controlplane/`):
 
 - `internal/artifacts/` owns appliance artifact-domain use cases and metadata.
 - `internal/registryauth/` owns OCI challenge parameters, scope parsing/intersection, registry JWT claims, signing, and key rotation.
@@ -1507,13 +1507,13 @@ Suggested outputs from this repo:
 Under the accepted split, this repo should grow these top-level areas, per the multi-service layout in [Proposed Repo Structure](#proposed-repo-structure):
 
 ```text
-server/
-  backend/
+services/
+  controlplane/
     cmd/
     internal/
-  sdk/
-    golang/
-      applianceclient/
+sdk/
+  golang/
+    applianceclient/
 deploy/
   dev/
   k3s/

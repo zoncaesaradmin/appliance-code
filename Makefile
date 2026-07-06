@@ -1,5 +1,5 @@
-BACKEND_DIR := server/backend
-SDK_DIR     := server/sdk/golang/applianceclient
+BACKEND_DIR := services/controlplane
+SDK_DIR     := sdk/golang/applianceclient
 CHART_DIR   := deploy/charts/appliance-control-plane
 E2E_DIR     := e2etests
 VERIFY_LOG_DIR := $(CURDIR)/.run/logs
@@ -27,7 +27,7 @@ DEV_REGISTRY_HOST := $(firstword $(subst /, ,$(DEV_REGISTRY)))
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
-# Rootful Podman is required for `make -C server/backend image` to work
+# Rootful Podman is required for `make -C services/controlplane image` to work
 # from inside dev-shell: a rootless outer container has only one, fully
 # consumed user-namespace mapping, so a nested Buildah build inside it
 # can't create the additional mapping a real image layer needs (see
@@ -54,7 +54,7 @@ SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
 .PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-release-input-tar
 
-## build: compile the local server binary (server/backend/bin/appliance-server)
+## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
 	@set -e; \
 	for module in $(GO_MODULE_DIRS); do \
@@ -197,12 +197,12 @@ package-release-input-tar:
 # --- Developer Container (Linux only — see docs/dev-container.md) -----
 # A shared toolchain image (Go, Buildah, Skopeo, etc. — see the image's
 # own repo). This is where the control-plane's release container image
-# actually gets built (`make -C server/backend image`, run from inside
+# actually gets built (`make -C services/controlplane image`, run from inside
 # `make dev-shell`) and also where CI build failures get reproduced
 # interactively. Requires a Linux host — the build server or a Linux dev
 # machine; macOS is not a supported host for this or any container
 # tooling in this repo, so there is no `make image` target at the repo
-# root, only inside server/backend, meant to be invoked from in here.
+# root, only inside services/controlplane, meant to be invoked from in here.
 #
 # `make dev-shell` drops you into an interactive shell in the shared
 # automation-dev image with this repo mounted. `make dev-run SCRIPT=...`
@@ -213,7 +213,7 @@ package-release-input-tar:
 # this container to build the control-plane image (nested containers;
 # see development-container's own shell-dev target for the same
 # requirement). The image build itself uses `buildah bud`, not `podman
-# build` — see server/backend/Makefile's `image` target for why.
+# build` — see services/controlplane/Makefile's `image` target for why.
 #
 # Both are ephemeral (--rm): `exit` inside `make dev-shell` just tears
 # the container down, nothing to clean up afterward. See
@@ -238,7 +238,7 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # $(SUDO) (empty by default) goes first so rootful Podman is used when set.
 # `-e VAR` with no value forwards VAR from the current shell's
 # environment (if set) rather than baking a value into the command
-# line, so `make -C server/backend image`/`push` inside the container
+# line, so `make -C services/controlplane image`/`push` inside the container
 # see the same REGISTRY_USER/REGISTRY_TOKEN/IMAGE_TAG already exported
 # on the host — no need to re-export them again inside dev-shell.
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
