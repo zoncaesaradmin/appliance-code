@@ -39,14 +39,14 @@ repo's sake; there is nothing here for it to build or run.
 - A **Linux** host (see "Supported Hosts" above).
 - [Podman](https://podman.io/) (the default container engine; see
   `CONTAINER_ENGINE` below to use Docker instead).
-- `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment — a
-  GitHub username and a PAT with `read:packages` scope.
-  `ghcr.io/zoncaesaradmin/development-container` is **not** public, and
-  these two variables are used non-interactively for every registry
-  login this repo's Makefile needs (both the regular pull of the
-  dev-container image and, on hosts using rootful `SUDO`, the rootful
-  login `dev-sudo-setup` performs — see "Building the Control-Plane
-  Image" below). Never typed at a prompt, never committed.
+- A persistent Podman auth file for the dev-container registry image.
+  `ghcr.io/zoncaesaradmin/development-container` is **not** public; log
+  in once with `podman login --authfile ~/.config/containers-auth.json
+  ghcr.io` (or point `DEV_REGISTRY_AUTH_FILE` at a different path).
+- `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment when you
+  want to run `make -C server/backend image` inside the dev container.
+  Those variables are for the image push step, not for the outer
+  dev-container pull anymore.
 
 ## Usage
 
@@ -83,11 +83,12 @@ Every setting below is a Makefile variable — override per-invocation
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `CONTAINER_ENGINE` | `podman` | Container engine binary (`docker` also works for `dev-shell`/`dev-run`). |
-| `SUDO` | *(empty)* | Set to `sudo` on hosts where `CONTAINER_ENGINE` runs rootless (needed for `make image` to work — see "Building the Control-Plane Image" below). |
+| `SUDO` | `sudo -n` | Non-interactive prefix used to run the outer container rootful when Podman is rootless on the host. |
 | `DEV_REGISTRY` | `ghcr.io/zoncaesaradmin/development-container` | Registry + repo path for the dev-container image. |
 | `DEV_IMAGE_NAME` | `automation-dev` | Image name within the registry. |
 | `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
 | `DEV_IMAGE` | `$(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)` | Full image reference; set directly to bypass the three variables above. |
+| `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers-auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
 | `DEV_CACHE_DIR` | `$(HOME)/.cache/appliance-code-dev` | Host directory persisting the Go build/module caches across invocations. |
 | `DEV_VOLUME_OPTS` | *(empty)* | Suffix appended to every bind-mount flag. Set to `:Z` on SELinux-enforcing hosts (Fedora, RHEL, CentOS) so Podman can relabel the mounted directories. |
 
@@ -99,7 +100,9 @@ Every setting below is a Makefile variable — override per-invocation
 
 ```bash
 # install Podman via your distro's package manager
-podman login ghcr.io     # required — the dev-container image isn't public
+mkdir -p "$HOME/.config"
+chmod 700 "$HOME/.config"
+podman login --authfile "$HOME/.config/containers-auth.json" ghcr.io
 ```
 
 You do *not* need a separate `podman pull` step — the first `make
@@ -134,8 +137,40 @@ touches the network.
 
 ### Building the image
 
-`make dev-shell`/`make dev-run` bootstrap everything they need on the
-first run — nothing to set up by hand beforehand:
+There are two different concerns here:
+
+1. One-time host bootstrap.
+2. Normal day-to-day use of `make dev-shell` and `make image`.
+
+Only the first of those is a one-time setup.
+
+#### One-time host bootstrap
+
+Do these only once per Linux host:
+
+```bash
+export REGISTRY_USER=<github-username>
+export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
+mkdir -p "$HOME/.config"
+chmod 700 "$HOME/.config"
+podman login --authfile "$HOME/.config/containers-auth.json" --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"
+```
+
+Then, the first time you ever run `make dev-shell` or `make dev-run` on
+that host, enter your sudo password once if prompted. That one prompt is
+for `dev-sudo-setup` to install the scoped sudoers rule for `podman`.
+After that, later `make dev-shell` and `make dev-run` calls should not
+ask for the sudo password again on that host.
+
+If you already completed that bootstrap once, do not repeat it just
+because you changed a config value or because you are opening the dev
+container again.
+
+If the registry token rotates, refresh only the auth file with another
+`podman login --authfile "$HOME/.config/containers-auth.json" ...`.
+That does not mean you need to redo the one-time sudo bootstrap.
+
+#### Normal image-build flow
 
 ```bash
 git clone <appliance-code-remote> appliance-code
@@ -143,8 +178,7 @@ cd appliance-code
 
 export REGISTRY_USER=<github-username>
 export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
-podman login --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"   # once, for the dev-container image itself (rootless)
-make dev-shell          # first run only: may prompt once for your sudo password — see below
+make dev-shell
 
 # now inside the container:
 cd server/backend
@@ -169,29 +203,29 @@ these two variables — without it, `sudo`'s default `env_reset` policy
 would silently strip them before Podman ever saw them, since `dev-shell`
 itself runs via `sudo -n podman run ...`.
 
+The outer `podman run` that pulls and starts the shared dev-container
+image no longer depends on a separate rootful login. Instead, it uses
+Podman's `--authfile` support to point rootful Podman at the build
+user's persistent auth file (`DEV_REGISTRY_AUTH_FILE`, default
+`~/.config/containers-auth.json`).
+
 `make dev-shell`/`make dev-run` depend on a `dev-sudo-setup` step (see
 its comment in the root `Makefile`) that, only the first time it's
-needed on a given host, does two things:
+needed on a given host, does one thing:
 
 1. Writes a NOPASSWD sudoers rule scoped to exactly the `podman` binary
    path (never a blanket sudo grant), validating it with `visudo -c`
    before it takes effect and rolling back if validation fails. Writing
    this needs one interactive `sudo` authentication — unavoidably, since
    nothing can grant itself root the very first time.
-2. Runs `sudo podman login` against the dev-container registry using
-   `REGISTRY_USER`/`REGISTRY_TOKEN` (`--password-stdin`, never an
-   interactive prompt) — rootful podman keeps its own credential store,
-   separate from your regular (rootless) `podman login` above. Fails
-   fast with a clear message if either variable isn't set — it will
-   never sit waiting for typed credentials.
 
-Both checks are idempotent: on every run after the first, they detect
-the sudoers rule already exists and skip it (the login call itself
-still runs every time, but is a fast, silent no-op if already
-authenticated), so no later `make dev-shell`/`dev-run`/`image`
-invocation ever prompts for anything, as long as `REGISTRY_USER`/
-`REGISTRY_TOKEN` stay exported (e.g. in the shell profile that runs
-these commands, or your CI job's secret env vars).
+That check is idempotent: on every run after the first, it detects the
+sudoers rule already exists and skips it, so no later `make
+dev-shell`/`dev-run`/`image` invocation should prompt for a sudo
+password again on that host. Keep `REGISTRY_USER`/`REGISTRY_TOKEN`
+exported when you plan to run `make image` inside the container (e.g. in
+the shell profile that runs these commands, or your CI job's secret env
+vars).
 
 If a host is already rootful, or only ever uses `dev-shell` for plain
 interactive debugging and you don't want this bootstrap to touch

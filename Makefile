@@ -23,6 +23,7 @@ DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
 DEV_IMAGE_NAME   ?= automation-dev
 DEV_IMAGE_TAG    ?= latest
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers-auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
 # Rootful Podman is required for `make -C server/backend image` to work
@@ -31,16 +32,21 @@ DEV_VOLUME_OPTS  ?=
 # can't create the additional mapping a real image layer needs (see
 # docs/dev-container.md). Defaults to non-interactive sudo so this works
 # out of the box on any host with the one-time NOPASSWD sudoers rule +
-# `sudo podman login` set up (see docs/dev-container.md); "-n" is
+# a persistent dev-registry authfile already logged in (see
+# docs/dev-container.md); "-n" is
 # deliberate — it must never prompt in automation, so a missing/wrong
 # sudoers rule fails fast and loud instead of hanging. Override to empty
 # (`SUDO=`) via dev-container/env on a host that's already rootful, or
 # that only ever uses dev-shell/dev-run for plain interactive debugging
 # and hasn't set up the sudoers rule.
 SUDO ?= sudo -n
-# Registry host portion of DEV_REGISTRY (e.g. "ghcr.io"), for the rootful
-# login dev-sudo-setup performs below.
-DEV_REGISTRY_HOST := $(firstword $(subst /, ,$(DEV_REGISTRY)))
+# `podman run` accepts `--authfile`, which lets rootful Podman reuse the
+# build user's persistent registry credentials without a separate
+# `sudo podman login` bootstrap.
+DEV_ENGINE_AUTH_FLAGS :=
+ifeq ($(CONTAINER_ENGINE),podman)
+DEV_ENGINE_AUTH_FLAGS += --authfile "$(DEV_REGISTRY_AUTH_FILE)"
+endif
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
 .PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-sudo-setup
@@ -212,6 +218,7 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # see the same REGISTRY_USER/REGISTRY_TOKEN already exported on the
 # host — no need to re-export them again inside dev-shell.
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
+	$(DEV_ENGINE_AUTH_FLAGS) \
 	-e REGISTRY_USER \
 	-e REGISTRY_TOKEN \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
@@ -233,12 +240,11 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ##      sudo's env_reset default would otherwise silently strip them
 ##      before podman ever saw them). Writing/rewriting this needs one
 ##      interactive sudo authentication, unavoidably, whenever it changes.
-##   2. `sudo podman login` against the dev-container registry, via
-##      REGISTRY_USER/REGISTRY_TOKEN (never interactive — rootful podman
-##      keeps its own credential store, separate from a regular
-##      (rootless) `podman login`)
-## After both are in place, no future make dev-shell/dev-run/image ever
-## prompts for anything again on this host.
+## The dev-container image pull itself now uses Podman's `--authfile`
+## support, pointing rootful Podman at the build user's persistent auth
+## file, so there is no separate rootful `podman login` bootstrap here.
+## After the sudoers rule is in place, no future make dev-shell/dev-run/image
+## ever prompts for a sudo password again on this host.
 dev-sudo-setup:
 	@if [ "$(CONTAINER_ENGINE)" != "podman" ] || [ -z "$(SUDO)" ]; then exit 0; fi; \
 	podman_path="$$(command -v podman)"; \
@@ -263,14 +269,7 @@ dev-sudo-setup:
 			exit 1; \
 		fi; \
 		echo "dev-sudo-setup: passwordless sudo + env passthrough for podman configured at $(SUDOERS_FILE)"; \
-	fi; \
-	if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
-		echo "dev-sudo-setup: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive) for the rootful registry login:" >&2; \
-		echo "  export REGISTRY_USER=<github-username>" >&2; \
-		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
-		exit 1; \
-	fi; \
-	echo "$(REGISTRY_TOKEN)" | sudo podman login --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
+	fi
 
 ## dev-shell: interactive shell in the shared dev-container image, this repo mounted at /workspace
 dev-shell: dev-sudo-setup
