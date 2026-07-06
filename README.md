@@ -9,6 +9,7 @@ client SDKs, not as a single-service codebase:
 - `server/sdk/golang/applianceclient/` — a Go client SDK for the control-plane REST API
 - `e2etests/` — reserved for external live-server end-to-end test harnesses that use the SDK as a client
 - `deploy/charts/appliance-control-plane/` — the control plane's Helm chart (its own Go module, for chart policy tests)
+- `scripts/package/` — release-input producer helpers for handoff into `appliance-release`
 
 Each has its own `go.mod` and `Makefile`; the root has neither a `go.mod`
 nor detailed targets — its `Makefile` only delegates (`make verify`, `make

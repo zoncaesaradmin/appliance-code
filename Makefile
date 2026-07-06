@@ -52,7 +52,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-release-input-tar
 
 ## build: compile the local server binary (server/backend/bin/appliance-server)
 build:
@@ -172,6 +172,27 @@ clean:
 	@for module in $(GO_MODULE_DIRS); do \
 		$(MAKE) -C "$$module" clean; \
 	done
+## package-release-input-tar: create the versioned release-input tarball handoff
+package-release-input-tar:
+	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${PRODUCT_VERSION:-}" ] || [ -z "$${CONTROL_PLANE_IMAGE:-}" ] || [ -z "$${ARGO_CRDS:-}" ] || [ -z "$${K3S_VERSION:-}" ]; then \
+		echo "package-release-input-tar: set OUT_FILE, PRODUCT_VERSION, CONTROL_PLANE_IMAGE, ARGO_CRDS, and K3S_VERSION" >&2; \
+		exit 2; \
+	fi
+	bash ./scripts/package/archive-release-input.sh \
+		--out-file "$${OUT_FILE}" \
+		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
+		--product-version "$${PRODUCT_VERSION}" \
+		--control-plane-image "$${CONTROL_PLANE_IMAGE}" \
+		--argo-crds "$${ARGO_CRDS}" \
+		--k3s-version "$${K3S_VERSION}" \
+		$${RELEASE_ID:+--release-id "$${RELEASE_ID}"} \
+		$${CHART_VERSION:+--chart-version "$${CHART_VERSION}"} \
+		$${ARGO_VERSION:+--argo-version "$${ARGO_VERSION}"} \
+		$${SUPPORTED_UPGRADE_SOURCE:+--supported-upgrade-source "$${SUPPORTED_UPGRADE_SOURCE}"} \
+		$${SBOM_DIR:+--sbom-dir "$${SBOM_DIR}"} \
+		$${PROVENANCE_DIR:+--provenance-dir "$${PROVENANCE_DIR}"} \
+		$${NOTICES_DIR:+--notices-dir "$${NOTICES_DIR}"} \
+		$${TESTS_DIR:+--tests-dir "$${TESTS_DIR}"}
 
 # --- Developer Container (Linux only — see docs/dev-container.md) -----
 # A shared toolchain image (Go, Buildah, Skopeo, etc. — see the image's
