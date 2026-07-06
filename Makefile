@@ -23,6 +23,7 @@ DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
 DEV_IMAGE_NAME   ?= automation-dev
 DEV_IMAGE_TAG    ?= latest
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+DEV_REGISTRY_HOST := $(firstword $(subst /, ,$(DEV_REGISTRY)))
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
@@ -51,7 +52,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-auth-check dev-sudo-setup
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup
 
 ## build: compile the local server binary (server/backend/bin/appliance-server)
 build:
@@ -246,14 +247,29 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ## file, so there is no separate rootful `podman login` bootstrap here.
 ## After the sudoers rule is in place, no future make dev-shell/dev-run/image
 ## ever prompts for a sudo password again on this host.
+dev-registry-login:
+	@if [ "$(CONTAINER_ENGINE)" != "podman" ]; then \
+		echo "dev-registry-login: CONTAINER_ENGINE=$(CONTAINER_ENGINE); this helper is for Podman auth files only" >&2; \
+		exit 2; \
+	fi; \
+	if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
+		echo "dev-registry-login: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
+		echo "  export REGISTRY_USER=<github-username>" >&2; \
+		echo "  export REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
+	chmod 700 "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
+	printf '%s\n' "$(REGISTRY_TOKEN)" | podman login --authfile "$(DEV_REGISTRY_AUTH_FILE)" --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
+
 dev-registry-auth-check:
 	@if [ "$(CONTAINER_ENGINE)" != "podman" ]; then exit 0; fi; \
 	if [ -f "$(DEV_REGISTRY_AUTH_FILE)" ]; then exit 0; fi; \
 	echo "dev-registry-auth-check: missing Podman auth file: $(DEV_REGISTRY_AUTH_FILE)" >&2; \
-	echo "dev-registry-auth-check: create it once with:" >&2; \
-	echo "  mkdir -p \"$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")\"" >&2; \
-	echo "  chmod 700 \"$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")\"" >&2; \
-	echo "  podman login --authfile \"$(DEV_REGISTRY_AUTH_FILE)\" ghcr.io" >&2; \
+	echo "dev-registry-auth-check: create it once non-interactively with:" >&2; \
+	echo "  export REGISTRY_USER=<github-username>" >&2; \
+	echo "  export REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+	echo "  make dev-registry-login" >&2; \
 	echo "dev-registry-auth-check: if you already keep credentials elsewhere, set DEV_REGISTRY_AUTH_FILE to that path." >&2; \
 	exit 1
 

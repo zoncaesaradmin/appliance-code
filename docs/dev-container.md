@@ -41,8 +41,10 @@ repo's sake; there is nothing here for it to build or run.
   `CONTAINER_ENGINE` below to use Docker instead).
 - A persistent Podman auth file for the dev-container registry image.
   `ghcr.io/zoncaesaradmin/development-container` is **not** public; log
-  in once with `podman login --authfile ~/.config/containers/auth.json
-  ghcr.io` (or point `DEV_REGISTRY_AUTH_FILE` at a different path).
+  in once non-interactively with `REGISTRY_USER`/`REGISTRY_TOKEN`
+  (either via `make dev-registry-login` or the explicit `podman login
+  --username ... --password-stdin ...` form), or point
+  `DEV_REGISTRY_AUTH_FILE` at a different existing auth-file path.
   Creating the directory alone is not enough; `podman login` is what
   actually creates/populates the auth file.
 - `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment when you
@@ -102,13 +104,15 @@ Every setting below is a Makefile variable — override per-invocation
 
 ```bash
 # install Podman via your distro's package manager
-mkdir -p "$HOME/.config/containers"
-chmod 700 "$HOME/.config/containers"
-podman login --authfile "$HOME/.config/containers/auth.json" ghcr.io
+export REGISTRY_USER=<github-username>
+export REGISTRY_TOKEN=<PAT with read:packages>
+make dev-registry-login
 ```
 
-`mkdir`/`chmod` prepare the location; `podman login` is the step that
-actually creates `auth.json`.
+`make dev-registry-login` is intentionally non-interactive: it creates
+the auth-file directory if needed, then runs `podman login` with
+`--username "$REGISTRY_USER"` and `--password-stdin` so the command does
+not stop and prompt for credentials.
 
 You do *not* need a separate `podman pull` step — the first `make
 dev-shell`/`make dev-run` pulls the image automatically if it isn't
@@ -156,9 +160,7 @@ Do these only once per Linux host:
 ```bash
 export REGISTRY_USER=<github-username>
 export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
-mkdir -p "$HOME/.config/containers"
-chmod 700 "$HOME/.config/containers"
-podman login --authfile "$HOME/.config/containers/auth.json" --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"
+make dev-registry-login
 ```
 
 Then, the first time you ever run `make dev-shell` or `make dev-run` on
@@ -172,7 +174,14 @@ because you changed a config value or because you are opening the dev
 container again.
 
 If the registry token rotates, refresh only the auth file with another
-`podman login --authfile "$HOME/.config/containers/auth.json" ...`.
+non-interactive login using the same environment variables:
+
+```bash
+export REGISTRY_USER=<github-username>
+export REGISTRY_TOKEN=<new-PAT with read:packages>
+make dev-registry-login
+```
+
 That does not mean you need to redo the one-time sudo bootstrap.
 
 #### Normal image-build flow
