@@ -51,7 +51,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-sudo-setup
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-auth-check dev-sudo-setup
 
 ## build: compile the local server binary (server/backend/bin/appliance-server)
 build:
@@ -246,7 +246,18 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ## file, so there is no separate rootful `podman login` bootstrap here.
 ## After the sudoers rule is in place, no future make dev-shell/dev-run/image
 ## ever prompts for a sudo password again on this host.
-dev-sudo-setup:
+dev-registry-auth-check:
+	@if [ "$(CONTAINER_ENGINE)" != "podman" ]; then exit 0; fi; \
+	if [ -f "$(DEV_REGISTRY_AUTH_FILE)" ]; then exit 0; fi; \
+	echo "dev-registry-auth-check: missing Podman auth file: $(DEV_REGISTRY_AUTH_FILE)" >&2; \
+	echo "dev-registry-auth-check: create it once with:" >&2; \
+	echo "  mkdir -p \"$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")\"" >&2; \
+	echo "  chmod 700 \"$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")\"" >&2; \
+	echo "  podman login --authfile \"$(DEV_REGISTRY_AUTH_FILE)\" ghcr.io" >&2; \
+	echo "dev-registry-auth-check: if you already keep credentials elsewhere, set DEV_REGISTRY_AUTH_FILE to that path." >&2; \
+	exit 1
+
+dev-sudo-setup: dev-registry-auth-check
 	@if [ "$(CONTAINER_ENGINE)" != "podman" ] || [ -z "$(SUDO)" ]; then exit 0; fi; \
 	podman_path="$$(command -v podman)"; \
 	if [ -z "$$podman_path" ]; then \

@@ -43,6 +43,8 @@ repo's sake; there is nothing here for it to build or run.
   `ghcr.io/zoncaesaradmin/development-container` is **not** public; log
   in once with `podman login --authfile ~/.config/containers/auth.json
   ghcr.io` (or point `DEV_REGISTRY_AUTH_FILE` at a different path).
+  Creating the directory alone is not enough; `podman login` is what
+  actually creates/populates the auth file.
 - `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment when you
   want to run `make -C server/backend image` inside the dev container.
   Those variables are for the image push step, not for the outer
@@ -104,6 +106,9 @@ mkdir -p "$HOME/.config/containers"
 chmod 700 "$HOME/.config/containers"
 podman login --authfile "$HOME/.config/containers/auth.json" ghcr.io
 ```
+
+`mkdir`/`chmod` prepare the location; `podman login` is the step that
+actually creates `auth.json`.
 
 You do *not* need a separate `podman pull` step — the first `make
 dev-shell`/`make dev-run` pulls the image automatically if it isn't
