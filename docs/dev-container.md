@@ -41,7 +41,7 @@ repo's sake; there is nothing here for it to build or run.
   `CONTAINER_ENGINE` below to use Docker instead).
 - A persistent Podman auth file for the dev-container registry image.
   `ghcr.io/zoncaesaradmin/development-container` is **not** public; log
-  in once with `podman login --authfile ~/.config/containers-auth.json
+  in once with `podman login --authfile ~/.config/containers/auth.json
   ghcr.io` (or point `DEV_REGISTRY_AUTH_FILE` at a different path).
 - `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment when you
   want to run `make -C server/backend image` inside the dev container.
@@ -88,7 +88,7 @@ Every setting below is a Makefile variable — override per-invocation
 | `DEV_IMAGE_NAME` | `automation-dev` | Image name within the registry. |
 | `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
 | `DEV_IMAGE` | `$(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)` | Full image reference; set directly to bypass the three variables above. |
-| `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers-auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
+| `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers/auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
 | `DEV_CACHE_DIR` | `$(HOME)/.cache/appliance-code-dev` | Host directory persisting the Go build/module caches across invocations. |
 | `DEV_VOLUME_OPTS` | *(empty)* | Suffix appended to every bind-mount flag. Set to `:Z` on SELinux-enforcing hosts (Fedora, RHEL, CentOS) so Podman can relabel the mounted directories. |
 
@@ -100,9 +100,9 @@ Every setting below is a Makefile variable — override per-invocation
 
 ```bash
 # install Podman via your distro's package manager
-mkdir -p "$HOME/.config"
-chmod 700 "$HOME/.config"
-podman login --authfile "$HOME/.config/containers-auth.json" ghcr.io
+mkdir -p "$HOME/.config/containers"
+chmod 700 "$HOME/.config/containers"
+podman login --authfile "$HOME/.config/containers/auth.json" ghcr.io
 ```
 
 You do *not* need a separate `podman pull` step — the first `make
@@ -151,9 +151,9 @@ Do these only once per Linux host:
 ```bash
 export REGISTRY_USER=<github-username>
 export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
-mkdir -p "$HOME/.config"
-chmod 700 "$HOME/.config"
-podman login --authfile "$HOME/.config/containers-auth.json" --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"
+mkdir -p "$HOME/.config/containers"
+chmod 700 "$HOME/.config/containers"
+podman login --authfile "$HOME/.config/containers/auth.json" --username "$REGISTRY_USER" --password-stdin ghcr.io <<<"$REGISTRY_TOKEN"
 ```
 
 Then, the first time you ever run `make dev-shell` or `make dev-run` on
@@ -167,7 +167,7 @@ because you changed a config value or because you are opening the dev
 container again.
 
 If the registry token rotates, refresh only the auth file with another
-`podman login --authfile "$HOME/.config/containers-auth.json" ...`.
+`podman login --authfile "$HOME/.config/containers/auth.json" ...`.
 That does not mean you need to redo the one-time sudo bootstrap.
 
 #### Normal image-build flow
@@ -178,6 +178,7 @@ cd appliance-code
 
 export REGISTRY_USER=<github-username>
 export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
+export IMAGE_TAG=v0.1.0          # optional host-side default for this dev-shell session
 make dev-shell
 
 # now inside the container:
@@ -196,18 +197,24 @@ retarget with `REGISTRY`/`IMAGE_OWNER`/`IMAGE_REPO`/`IMAGE_NAME` (e.g.
 `make image REGISTRY=registry.zon.local` for a future internal
 registry). It sees these two variables without having to re-export them
 inside the container: `DEV_RUN` forwards `REGISTRY_USER`/
-`REGISTRY_TOKEN` from the host's environment into `dev-shell`/`dev-run`
-with `-e VAR` (name-only, no value on the command line), and
-`dev-sudo-setup`'s sudoers rule includes an `env_keep` entry for exactly
-these two variables — without it, `sudo`'s default `env_reset` policy
-would silently strip them before Podman ever saw them, since `dev-shell`
-itself runs via `sudo -n podman run ...`.
+`REGISTRY_TOKEN`/`IMAGE_TAG` from the host's environment into
+`dev-shell`/`dev-run` with `-e VAR` (name-only, no value on the command
+line), and `dev-sudo-setup`'s sudoers rule includes an `env_keep` entry
+for exactly these variables — without it, `sudo`'s default `env_reset`
+policy would silently strip them before Podman ever saw them, since
+`dev-shell` itself runs via `sudo -n podman run ...`.
+
+That means you can optionally export `IMAGE_TAG` on the host before
+opening `dev-shell`, and `make image` inside the container will see it
+as the default tag for that shell session. If you explicitly run
+`make image IMAGE_TAG=...` inside the container, that explicit Makefile
+assignment still wins over the inherited environment value.
 
 The outer `podman run` that pulls and starts the shared dev-container
 image no longer depends on a separate rootful login. Instead, it uses
 Podman's `--authfile` support to point rootful Podman at the build
 user's persistent auth file (`DEV_REGISTRY_AUTH_FILE`, default
-`~/.config/containers-auth.json`).
+`~/.config/containers/auth.json`).
 
 `make dev-shell`/`make dev-run` depend on a `dev-sudo-setup` step (see
 its comment in the root `Makefile`) that, only the first time it's

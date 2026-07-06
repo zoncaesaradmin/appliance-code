@@ -23,7 +23,7 @@ DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
 DEV_IMAGE_NAME   ?= automation-dev
 DEV_IMAGE_TAG    ?= latest
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
-DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers-auth.json
+DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
 # Rootful Podman is required for `make -C server/backend image` to work
@@ -47,6 +47,8 @@ DEV_ENGINE_AUTH_FLAGS :=
 ifeq ($(CONTAINER_ENGINE),podman)
 DEV_ENGINE_AUTH_FLAGS += --authfile "$(DEV_REGISTRY_AUTH_FILE)"
 endif
+DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
+DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
 .PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-sudo-setup
@@ -215,12 +217,11 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # `-e VAR` with no value forwards VAR from the current shell's
 # environment (if set) rather than baking a value into the command
 # line, so `make -C server/backend image`/`push` inside the container
-# see the same REGISTRY_USER/REGISTRY_TOKEN already exported on the
-# host — no need to re-export them again inside dev-shell.
+# see the same REGISTRY_USER/REGISTRY_TOKEN/IMAGE_TAG already exported
+# on the host — no need to re-export them again inside dev-shell.
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	$(DEV_ENGINE_AUTH_FLAGS) \
-	-e REGISTRY_USER \
-	-e REGISTRY_TOKEN \
+	$(DEV_FORWARD_ENV_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \
@@ -235,7 +236,7 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ## before this env-passthrough rule existed gets upgraded automatically):
 ##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
 ##      (never a blanket sudo grant), plus an env_keep rule preserving
-##      only REGISTRY_USER/REGISTRY_TOKEN through sudo (so `-e VAR`
+##      only REGISTRY_USER/REGISTRY_TOKEN/IMAGE_TAG through sudo (so `-e VAR`
 ##      name-only forwarding on DEV_RUN's rootful podman actually works —
 ##      sudo's env_reset default would otherwise silently strip them
 ##      before podman ever saw them). Writing/rewriting this needs one
@@ -252,15 +253,17 @@ dev-sudo-setup:
 		echo "dev-sudo-setup: podman not found on PATH, skipping rootful bootstrap"; \
 		exit 0; \
 	fi; \
-	probe="dev-sudo-setup-probe-$$$$"; \
+	probe_user="dev-sudo-setup-user-probe-$$$$"; \
+	probe_tag="dev-sudo-setup-tag-probe-$$$$"; \
 	if sudo -n "$$podman_path" --version >/dev/null 2>&1 \
-		&& [ "$$(REGISTRY_USER=$$probe sudo -n env 2>/dev/null | sed -n 's/^REGISTRY_USER=//p')" = "$$probe" ]; then \
+		&& [ "$$(REGISTRY_USER=$$probe_user sudo -n env 2>/dev/null | sed -n 's/^REGISTRY_USER=//p')" = "$$probe_user" ] \
+		&& [ "$$(IMAGE_TAG=$$probe_tag sudo -n env 2>/dev/null | sed -n 's/^IMAGE_TAG=//p')" = "$$probe_tag" ]; then \
 		: already configured; \
 	else \
 		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
 		{ \
 			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
-			echo "Defaults:$$(whoami) env_keep += \"REGISTRY_USER REGISTRY_TOKEN\""; \
+			echo "Defaults:$$(whoami) env_keep += \"REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG\""; \
 		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
 		sudo chmod 0440 "$(SUDOERS_FILE)"; \
 		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
