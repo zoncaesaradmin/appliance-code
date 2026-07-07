@@ -17,7 +17,7 @@ The boundary is an artifact handoff, not a source-code dependency. `appliance-re
 | REST, MCP, authn/authz, and audit behavior | Owns | Documents released behavior |
 | SQLite schema and migrations | Owns and embeds/packages | Invokes through supported application lifecycle only |
 | zot and registry integration behavior | Owns | Packages pinned validated image/config inputs |
-| Argo workflow templates and adapter | Owns | Packages pinned CRDs/controller/executor inputs |
+| Argo workflow templates and adapter | Owns | Packages approved product inputs when enabled |
 | Canonical Helm chart and schema | Owns | Installs the exact packaged chart; never forks it |
 | Development manifests and local Go lane | Owns | Out of scope |
 | Component compatibility evidence | Produces | Verifies and publishes accepted matrix |
@@ -35,11 +35,10 @@ The boundary is an artifact handoff, not a source-code dependency. `appliance-re
 Each candidate from `appliance-code` publishes one immutable input set identified by product version and source revision:
 
 ```text
-release-input/
+  release-input/
   release-input.json
   control-plane.oci.tar.zst
   appliance-chart-<version>.tgz
-  argo-crds-<version>.tar.zst
   configuration.schema.json
   compatibility.json
   checksums.txt
@@ -56,8 +55,7 @@ release-input/
 - control-plane image digest and supported architectures
 - chart version, application version, and required values-schema version
 - database migration compatibility and minimum/maximum source version
-- required K3s/Kubernetes, Traefik, zot, Argo, Buildah, Podman, Skopeo, ORAS, Syft, Grype, and Helm compatibility identities
-- required Argo CRD/controller/executor compatibility tuple
+- required K3s/Kubernetes, Traefik, zot, Buildah, Podman, Skopeo, ORAS, Syft, Grype, and Helm compatibility identities
 - configuration and bootstrap contract versions
 - release-signing and verification identities
 - conformance-test entrypoints and expected evidence schema
@@ -66,7 +64,7 @@ The set is signed and immutable. Rebuilding any member creates a new candidate i
 
 ## Release Output Contract
 
-`appliance-release` turns one accepted input set into one complete air-gap bundle containing supported-host package prerequisites, K3s, K3s platform images, product/dependency OCI images, chart, Argo CRDs, installer, schemas, scanner data, notices, SBOMs, provenance, and checksums.
+`appliance-release` turns one accepted input set into one complete air-gap bundle containing supported-host package prerequisites, K3s, K3s platform images, product/dependency OCI images, chart, installer, schemas, scanner data, notices, SBOMs, provenance, and checksums.
 
 There is no connected production package in v1. A machine with internet access may install the same air-gap bundle, but installation and runtime never fetch missing components or switch behavior based on connectivity.
 

@@ -12,6 +12,7 @@ VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
 GO_MODULE_DIRS := $(BACKEND_DIR) $(SDK_DIR) $(CHART_DIR) $(E2E_DIR)
+CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)"; printf '%s' "$$raw" | sed 's/[^A-Za-z0-9_.-]/-/g')
 
 # Per-developer overrides (dev-container image/tag, engine, cache paths).
 # See dev-container/env.example. Included early so its plain `=`
@@ -52,7 +53,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -172,22 +173,32 @@ clean:
 	@for module in $(GO_MODULE_DIRS); do \
 		$(MAKE) -C "$$module" clean; \
 	done
+## package-control-plane-image-archive: always build and export the control-plane
+## image from this checkout as an OCI archive tarball for release-input packaging.
+## The image/archive version always comes from this repo's git describe identity.
+package-control-plane-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
+	mkdir -p "$$(dirname "$$out_file")"; \
+	bash ./scripts/package/export-control-plane-image-archive.sh \
+		--out-file "$$out_file"
+
 ## package-release-input-tar: create the versioned release-input tarball handoff
+## by always building the control-plane image archive from this checkout
 package-release-input-tar:
-	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${PRODUCT_VERSION:-}" ] || [ -z "$${CONTROL_PLANE_IMAGE:-}" ] || [ -z "$${ARGO_CRDS:-}" ] || [ -z "$${K3S_VERSION:-}" ]; then \
-		echo "package-release-input-tar: set OUT_FILE, PRODUCT_VERSION, CONTROL_PLANE_IMAGE, ARGO_CRDS, and K3S_VERSION" >&2; \
+	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ]; then \
+		echo "package-release-input-tar: set OUT_FILE and K3S_VERSION" >&2; \
 		exit 2; \
 	fi
+	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
+	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	bash ./scripts/package/archive-release-input.sh \
 		--out-file "$${OUT_FILE}" \
 		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
-		--product-version "$${PRODUCT_VERSION}" \
-		--control-plane-image "$${CONTROL_PLANE_IMAGE}" \
-		--argo-crds "$${ARGO_CRDS}" \
+		--code-version "$${CODE_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}" \
+		--control-plane-image "$$control_plane_image" \
 		--k3s-version "$${K3S_VERSION}" \
 		$${RELEASE_ID:+--release-id "$${RELEASE_ID}"} \
 		$${CHART_VERSION:+--chart-version "$${CHART_VERSION}"} \
-		$${ARGO_VERSION:+--argo-version "$${ARGO_VERSION}"} \
 		$${SUPPORTED_UPGRADE_SOURCE:+--supported-upgrade-source "$${SUPPORTED_UPGRADE_SOURCE}"} \
 		$${SBOM_DIR:+--sbom-dir "$${SBOM_DIR}"} \
 		$${PROVENANCE_DIR:+--provenance-dir "$${PROVENANCE_DIR}"} \

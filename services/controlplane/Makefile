@@ -55,7 +55,7 @@ IMAGE_OWNER ?= zoncaesaradmin
 IMAGE_REPO  ?= appliance-code
 REMOTE_IMAGE := $(REGISTRY)/$(IMAGE_OWNER)/$(IMAGE_REPO)/$(IMAGE_NAME)
 
-.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image vendor
+.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image image-local vendor
 
 ## build: compile the local server binary into bin/
 build:
@@ -195,6 +195,17 @@ stop:
 	else \
 		echo "no pid file at $(PID_FILE); nothing to stop"; \
 	fi
+
+## image-local: build the release-engineering control-plane container image
+## into local container storage without pushing it anywhere
+image-local:
+	$(BUILD_ENGINE) \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		-f Containerfile \
+		-t $(IMAGE_REF) \
+		.
 
 ## image: build the release-engineering control-plane container image
 ## and push it to REMOTE_IMAGE (REGISTRY/IMAGE_OWNER/IMAGE_REPO/

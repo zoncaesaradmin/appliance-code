@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-usage: archive-release-input.sh --out-file PATH --product-version VERSION --control-plane-image PATH --argo-crds PATH --k3s-version VERSION [options]
+usage: archive-release-input.sh --out-file PATH --code-version VERSION --control-plane-image PATH --k3s-version VERSION [options]
 
 Creates a versioned release-input tarball for appliance-release.
 
@@ -11,14 +11,12 @@ Options:
   --out-file PATH                  Output .tar.gz/.tgz file. Required.
   --latest-out-file PATH           Optional second path to copy the same tarball
                                    to, e.g. release-input-latest.tar.gz.
-  --product-version VERSION        Product version. Required.
+  --code-version VERSION           appliance-code version. Required.
   --release-id ID                  Release identifier. Defaults to
-                                   local-<product-version>-<timestamp>.
+                                   local-<code-version>-<timestamp>.
   --control-plane-image PATH       Control-plane image archive. Required.
-  --argo-crds PATH                 Argo CRD manifest. Required.
   --k3s-version VERSION            Pinned K3s version. Required.
-  --chart-version VERSION          Chart version. Defaults to product version.
-  --argo-version VERSION           Argo version string. Defaults to deferred.
+  --chart-version VERSION          Chart version. Defaults to code version.
   --supported-upgrade-source VER   Repeatable. Adds a supported upgrade
                                    source version to compatibility metadata.
   --sbom-dir DIR                   Existing SBOM directory to copy.
@@ -36,13 +34,11 @@ VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
 LATEST_OUT_FILE=""
-PRODUCT_VERSION=""
+CODE_VERSION=""
 RELEASE_ID=""
 CONTROL_PLANE_IMAGE=""
-ARGO_CRDS=""
 K3S_VERSION=""
 CHART_VERSION=""
-ARGO_VERSION="deferred"
 SBOM_DIR=""
 PROVENANCE_DIR=""
 NOTICES_DIR=""
@@ -59,8 +55,8 @@ while [[ $# -gt 0 ]]; do
       LATEST_OUT_FILE="${2:-}"
       shift 2
       ;;
-    --product-version)
-      PRODUCT_VERSION="${2:-}"
+    --code-version)
+      CODE_VERSION="${2:-}"
       shift 2
       ;;
     --release-id)
@@ -71,20 +67,12 @@ while [[ $# -gt 0 ]]; do
       CONTROL_PLANE_IMAGE="${2:-}"
       shift 2
       ;;
-    --argo-crds)
-      ARGO_CRDS="${2:-}"
-      shift 2
-      ;;
     --k3s-version)
       K3S_VERSION="${2:-}"
       shift 2
       ;;
     --chart-version)
       CHART_VERSION="${2:-}"
-      shift 2
-      ;;
-    --argo-version)
-      ARGO_VERSION="${2:-}"
       shift 2
       ;;
     --supported-upgrade-source)
@@ -119,7 +107,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${OUT_FILE}" || -z "${PRODUCT_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${ARGO_CRDS}" || -z "${K3S_VERSION}" ]]; then
+if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${K3S_VERSION}" ]]; then
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
@@ -129,20 +117,16 @@ if [[ ! -f "${CONTROL_PLANE_IMAGE}" ]]; then
   echo "archive-release-input: control-plane image not found: ${CONTROL_PLANE_IMAGE}" >&2
   exit 1
 fi
-if [[ ! -f "${ARGO_CRDS}" ]]; then
-  echo "archive-release-input: argo CRDs file not found: ${ARGO_CRDS}" >&2
-  exit 1
-fi
 if [[ ! -f "${VALUES_SCHEMA_PATH}" ]]; then
   echo "archive-release-input: missing chart values schema: ${VALUES_SCHEMA_PATH}" >&2
   exit 1
 fi
 
 if [[ -z "${CHART_VERSION}" ]]; then
-  CHART_VERSION="${PRODUCT_VERSION}"
+  CHART_VERSION="${CODE_VERSION}"
 fi
 if [[ -z "${RELEASE_ID}" ]]; then
-  RELEASE_ID="local-${PRODUCT_VERSION}-$(date -u +%Y%m%dT%H%M%SZ)"
+  RELEASE_ID="local-${CODE_VERSION}-$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 
 mkdir -p "$(dirname "${OUT_FILE}")"
@@ -208,14 +192,12 @@ copy_dir_or_empty() {
 }
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
-CHART_ARCHIVE="appliance-chart-${PRODUCT_VERSION}.tgz"
-ARGO_CRDS_BASENAME="argo-crds.yaml"
+CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
 
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
-cp "${ARGO_CRDS}" "${RELEASE_INPUT_DIR}/${ARGO_CRDS_BASENAME}"
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
 mkdir -p "${TMP_DIR}/appliance-chart"
@@ -225,8 +207,7 @@ tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" appliance-chart
 {
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
-  printf '  "chartVersion": "%s",\n' "${CHART_VERSION}"
-  printf '  "argoVersion": "%s"' "${ARGO_VERSION}"
+  printf '  "chartVersion": "%s"' "${CHART_VERSION}"
   if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
     printf ',\n  "supportedUpgradeSources": ['
     first=1
@@ -251,7 +232,6 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   for file in \
     "${CONTROL_PLANE_BASENAME}" \
     "${CHART_ARCHIVE}" \
-    "${ARGO_CRDS_BASENAME}" \
     "${CONFIG_SCHEMA_BASENAME}" \
     "${COMPATIBILITY_BASENAME}"
   do
@@ -290,13 +270,12 @@ fi
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {
   "schemaVersion": 1,
-  "productVersion": "${PRODUCT_VERSION}",
+  "codeVersion": "${CODE_VERSION}",
   "releaseId": "${RELEASE_ID}",
   "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "artifacts": {
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}"),
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
-    "argoCrds": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_CRDS_BASENAME}" "${ARGO_CRDS_BASENAME}"),
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
     "checksums": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}" "${CHECKSUMS_BASENAME}"),
@@ -307,8 +286,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}",
-    "argoVersion": "${ARGO_VERSION}"${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON
