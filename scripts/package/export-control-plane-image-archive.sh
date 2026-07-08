@@ -25,6 +25,7 @@ CONTROLPLANE_DIR="${REPO_ROOT}/services/controlplane"
 OUT_FILE=""
 IMAGE_TAG=""
 IMAGE_NAME="appliance-control-plane"
+LOCAL_IMAGE_PREFIX="localhost"
 
 sanitize_tag() {
   printf '%s' "$1" | sed 's/[^A-Za-z0-9_.-]/-/g'
@@ -78,9 +79,9 @@ IMAGE_TAG="$(sanitize_tag "${IMAGE_TAG}")"
 
 mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
-IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
+IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-make -C "${CONTROLPLANE_DIR}" image-local IMAGE_TAG="${IMAGE_TAG}"
+make -C "${CONTROLPLANE_DIR}" image-local IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" IMAGE_TAG="${IMAGE_TAG}"
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 
