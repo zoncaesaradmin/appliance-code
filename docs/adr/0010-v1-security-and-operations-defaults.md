@@ -50,7 +50,7 @@ The architecture is settled, but implementation still needs concrete defaults fo
 
 - Login usernames are canonical lowercase ASCII, 3 to 64 characters, matching `[a-z][a-z0-9._-]*`. Unicode belongs in a separate display-name field and is never an authentication identifier.
 - Login usernames are immutable after creation because they anchor personal zot namespaces. A mutable Unicode display name is presentation-only.
-- Passwords are exact valid UTF-8 input with 14 to 128 Unicode code points and at most 1024 bytes. Do not normalize or trim them; canonically equivalent strings remain distinct. Passphrases and password-manager output are allowed; composition rules and periodic forced rotation are not used.
+- Passwords are exact valid UTF-8 input with 8 to 128 Unicode code points and at most 1024 bytes. Do not normalize or trim them; canonically equivalent strings remain distinct. Passphrases and password-manager output are allowed; composition rules and periodic forced rotation are not used.
 - Reject known breached, default, username-derived, or product-derived passwords. Calibrate Argon2id on the minimum supported appliance and store parameters with each hash.
 - Login and recovery responses do not reveal whether an account exists.
 - Apply rate limits by normalized account and trusted source. Durable account counters live in SQLite; bounded source-address token buckets may remain in memory and reset on restart. After five failures in 15 minutes, add progressive delay; after 20 failures in one hour, deny login for 15 minutes. Successful login clears the account failure counter.

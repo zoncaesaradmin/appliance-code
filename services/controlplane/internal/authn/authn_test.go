@@ -44,6 +44,8 @@ func TestValidatePasswordPolicy(t *testing.T) {
 		wantErr  bool
 	}{
 		{"short", true},
+		{"7chars!", true},
+		{"8chars!!", false},
 		{"exactly14chars", false},
 		{"a very reasonable passphrase", false},
 	}

@@ -82,8 +82,8 @@ func DecodeParams(raw string) (Argon2idParams, error) {
 // available in this environment yet.
 func ValidatePasswordPolicy(password string) error {
 	length := len([]rune(password))
-	if length < 14 {
-		return fmt.Errorf("password must be at least 14 characters")
+	if length < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
 	}
 	if length > 128 {
 		return fmt.Errorf("password must be at most 128 characters")
