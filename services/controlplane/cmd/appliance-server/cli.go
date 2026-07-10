@@ -45,11 +45,9 @@ func runBootstrapInit(argv []string) error {
 	fs := flag.NewFlagSet("bootstrap init", flag.ContinueOnError)
 	adminUsername := fs.String("admin-username", "", "initial administrator username (required)")
 	passwordFile := fs.String("admin-password-file", "", "path to a file containing the initial administrator password (required)")
-	hostname := fs.String("hostname", "", "appliance hostname (reserved; the canonical origin comes from configuration)")
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
-	_ = hostname
 	if *adminUsername == "" || *passwordFile == "" {
 		return fmt.Errorf("--admin-username and --admin-password-file are required")
 	}
@@ -130,7 +128,7 @@ func dispatchCLI(args []string) (handled bool, err error) {
 	switch args[0] {
 	case "bootstrap":
 		if len(args) < 2 || args[1] != "init" {
-			return true, fmt.Errorf("usage: appliance-server bootstrap init --admin-username <username> --admin-password-file <path> --hostname <hostname>")
+			return true, fmt.Errorf("usage: appliance-server bootstrap init --admin-username <username> --admin-password-file <path>")
 		}
 		return true, runBootstrapInit(args[2:])
 	case "recovery":

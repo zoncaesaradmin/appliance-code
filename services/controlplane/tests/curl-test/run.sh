@@ -190,7 +190,7 @@ log_step "Bootstrapping initial administrator..."
   APPLIANCE_PUBLIC_ADDR="${PUBLIC_ADDR}" \
   APPLIANCE_INTERNAL_ADDR="${INTERNAL_ADDR}" \
   APPLIANCE_CANONICAL_ORIGIN="${PUBLIC_URL}" \
-  "${SERVER_BIN}" bootstrap init --admin-username "${ADMIN_USERNAME}" --admin-password-file "${PASSWORD_DIR}/admin.txt" --hostname "localhost"
+  "${SERVER_BIN}" bootstrap init --admin-username "${ADMIN_USERNAME}" --admin-password-file "${PASSWORD_DIR}/admin.txt"
 )
 
 log_step "Starting appliance-server on ${PUBLIC_URL}"

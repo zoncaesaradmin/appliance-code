@@ -47,6 +47,10 @@ IMAGE_NAME   ?= appliance-control-plane
 # `make image IMAGE_TAG=v0.1.0`.
 IMAGE_TAG    ?= $(VERSION)
 IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
+# Runtime profile for the final container image. `debug` includes common
+# operator tools (bash, vim, curl, ping/dns/process tools); `runtime`
+# keeps only the lean base runtime packages.
+RUNTIME_PROFILE ?= debug
 
 # Push destination for `make push`. Only REGISTRY needs to change to
 # retarget a different registry (e.g. a future internal Zot server).
@@ -88,7 +92,7 @@ test-bootstrap-init: build
 	APPLIANCE_PUBLIC_ADDR="$(TEST_PUBLIC_ADDR)" \
 	APPLIANCE_INTERNAL_ADDR="$(TEST_INTERNAL_ADDR)" \
 	APPLIANCE_CANONICAL_ORIGIN="$(TEST_CANONICAL_ORIGIN)" \
-	./$(BINARY) bootstrap init --admin-username "$(TEST_ADMIN_USERNAME)" --admin-password-file "$(TEST_PASSWORD_FILE)" --hostname localhost
+	./$(BINARY) bootstrap init --admin-username "$(TEST_ADMIN_USERNAME)" --admin-password-file "$(TEST_PASSWORD_FILE)"
 
 ## test-start: start the real server on dedicated local loopback test ports
 test-start: build
@@ -203,6 +207,7 @@ image-local:
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE) \
 		-f Containerfile \
 		-t $(IMAGE_REF) \
 		.
@@ -226,6 +231,7 @@ image:
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
+		--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE) \
 		-f Containerfile \
 		-t $(IMAGE_REF) \
 		.

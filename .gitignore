@@ -38,3 +38,6 @@ dev-container/env
 bin/
 .run/
 data/
+
+# Prevent accidental local binaries at the module root from getting tracked.
+services/controlplane/appliance-server

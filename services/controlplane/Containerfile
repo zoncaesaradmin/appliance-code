@@ -19,12 +19,31 @@ RUN CGO_ENABLED=0 go build -mod=vendor \
               -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \
     -o /out/appliance-server ./cmd/appliance-server
 
-# Final stage: no shell, no package manager, nothing but the static binary,
-# a CA bundle (for any outbound HTTPS, e.g. to zot), and tzdata. Runs as the
-# same non-root UID the Helm chart's securityContext already assumes.
-FROM scratch
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
+# Final stage: small Alpine runtime with basic operator/debug ergonomics
+# while still staying lean. We keep the runtime to a static Go binary,
+# CA bundle, tzdata, and a minimal shell/tooling layer from Alpine.
+ARG RUNTIME_PROFILE=debug
+FROM alpine:3.24.1
+ARG RUNTIME_PROFILE
+RUN set -eux; \
+    apk add --no-cache \
+      bash \
+      ca-certificates \
+      tzdata; \
+    if [ "${RUNTIME_PROFILE}" = "debug" ]; then \
+      apk add --no-cache \
+        bind-tools \
+        curl \
+        iproute2 \
+        iputils \
+        procps \
+        vim; \
+    elif [ "${RUNTIME_PROFILE}" != "runtime" ]; then \
+      echo "unsupported RUNTIME_PROFILE=${RUNTIME_PROFILE}" >&2; \
+      exit 1; \
+    fi; \
+    addgroup -S -g 10001 appliance; \
+    adduser -S -D -H -u 10001 -G appliance appliance
 COPY --from=build /out/appliance-server /appliance-server
 USER 10001:10001
 ENTRYPOINT ["/appliance-server"]
