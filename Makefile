@@ -190,12 +190,14 @@ package-release-input-tar:
 		exit 2; \
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
+	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	bash ./scripts/package/archive-release-input.sh \
 		--out-file "$${OUT_FILE}" \
 		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
 		--code-version "$${CODE_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}" \
 		--control-plane-image "$$control_plane_image" \
+		--control-plane-image-reference "$$control_plane_image_ref" \
 		--k3s-version "$${K3S_VERSION}" \
 		$${RELEASE_ID:+--release-id "$${RELEASE_ID}"} \
 		$${CHART_VERSION:+--chart-version "$${CHART_VERSION}"} \

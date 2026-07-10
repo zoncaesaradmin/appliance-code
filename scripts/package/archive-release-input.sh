@@ -15,6 +15,9 @@ Options:
   --release-id ID                  Release identifier. Defaults to
                                    local-<code-version>-<timestamp>.
   --control-plane-image PATH       Control-plane image archive. Required.
+  --control-plane-image-reference REF
+                                   Canonical control-plane image reference
+                                   contained in the OCI archive.
   --k3s-version VERSION            Pinned K3s version. Required.
   --chart-version VERSION          Chart version. Defaults to code version.
   --supported-upgrade-source VER   Repeatable. Adds a supported upgrade
@@ -37,6 +40,7 @@ LATEST_OUT_FILE=""
 CODE_VERSION=""
 RELEASE_ID=""
 CONTROL_PLANE_IMAGE=""
+CONTROL_PLANE_IMAGE_REFERENCE=""
 K3S_VERSION=""
 CHART_VERSION=""
 SBOM_DIR=""
@@ -65,6 +69,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --control-plane-image)
       CONTROL_PLANE_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --control-plane-image-reference)
+      CONTROL_PLANE_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
     --k3s-version)
@@ -242,10 +250,16 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
 render_file_artifact() {
   local path="$1"
   local rel="$2"
-  printf '{ "path": "%s", "digest": "%s", "sizeBytes": %s }' \
+  local image_reference="${3:-}"
+
+  printf '{ "path": "%s", "digest": "%s", "sizeBytes": %s' \
     "${rel}" \
     "$(sha256_file "${path}")" \
     "$(file_size "${path}")"
+  if [[ -n "${image_reference}" ]]; then
+    printf ', "imageReference": "%s"' "${image_reference}"
+  fi
+  printf ' }'
 }
 
 render_dir_artifact() {
@@ -274,7 +288,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   "releaseId": "${RELEASE_ID}",
   "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "artifacts": {
-    "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}"),
+    "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
