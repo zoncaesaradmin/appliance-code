@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "appliance-argo-workflows.configMapName" . }}
+  namespace: {{ include "appliance-argo-workflows.workflowsNamespace" . }}
+  labels:
+    {{- include "appliance-argo-workflows.labels" . | nindent 4 }}
+data:
+  instanceID: {{ .Values.config.instanceID | quote }}
+  containerRuntimeExecutor: {{ .Values.config.containerRuntimeExecutor | quote }}
+  archiveLogs: {{ ternary "true" "false" .Values.config.archiveLogs | quote }}

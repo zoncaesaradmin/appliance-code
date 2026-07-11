@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "namespace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "workflows": { "type": "string", "minLength": 1 },
+        "builds": { "type": "string", "minLength": 1 }
+      },
+      "required": ["create", "workflows", "builds"]
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "controller": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "digest": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          },
+          "required": ["repository", "tag", "digest", "pullPolicy"]
+        },
+        "executor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "digest": { "type": "string" }
+          },
+          "required": ["repository", "tag", "digest"]
+        }
+      },
+      "required": ["controller", "executor"]
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 1 },
+        "logLevel": { "type": "string", "minLength": 1 },
+        "managedNamespace": { "type": "string" },
+        "extraArgs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["replicas", "logLevel", "managedNamespace", "extraArgs"]
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instanceID": { "type": "string", "minLength": 1 },
+        "containerRuntimeExecutor": { "type": "string", "minLength": 1 },
+        "archiveLogs": { "type": "boolean" }
+      },
+      "required": ["instanceID", "containerRuntimeExecutor", "archiveLogs"]
+    },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "controller": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": { "type": "boolean" },
+            "name": { "type": "string" }
+          },
+          "required": ["create", "name"]
+        },
+        "executor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": { "type": "boolean" },
+            "name": { "type": "string" }
+          },
+          "required": ["create", "name"]
+        }
+      },
+      "required": ["controller", "executor"]
+    },
+    "rbac": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" }
+      },
+      "required": ["create"]
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": { "type": "string", "minLength": 1 },
+            "memory": { "type": "string", "minLength": 1 }
+          },
+          "required": ["cpu", "memory"]
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cpu": { "type": "string", "minLength": 1 },
+            "memory": { "type": "string", "minLength": 1 }
+          },
+          "required": ["cpu", "memory"]
+        }
+      },
+      "required": ["requests", "limits"]
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "seccompProfile": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "minLength": 1 }
+          },
+          "required": ["type"]
+        }
+      },
+      "required": ["seccompProfile"]
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowPrivilegeEscalation": { "type": "boolean" },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "drop": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["drop"]
+        }
+      },
+      "required": ["allowPrivilegeEscalation", "capabilities"]
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["enabled"]
+    }
+  },
+  "required": [
+    "namespace",
+    "image",
+    "controller",
+    "config",
+    "serviceAccount",
+    "rbac",
+    "resources",
+    "podSecurityContext",
+    "containerSecurityContext",
+    "networkPolicy"
+  ]
+}

@@ -39,6 +39,10 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
   release-input.json
   control-plane.oci.tar.zst
   appliance-chart-<version>.tgz
+  appliance-argo-workflows-chart-<version>.tgz
+  argo-crds/
+  argo-controller.oci.tar.zst
+  argo-executor.oci.tar.zst
   configuration.schema.json
   compatibility.json
   checksums.txt
@@ -53,7 +57,10 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
 - product version, source revision, build identity, creation time, and schema version
 - digest and size of every file
 - control-plane image digest and supported architectures
+- Argo controller/executor image digests and supported architectures when the
+  Argo workflow engine is enabled in the release-input set
 - chart version, application version, and required values-schema version
+- Argo version, CRD bundle identity, and workflow-controller chart identity
 - database migration compatibility and minimum/maximum source version
 - required K3s/Kubernetes, Traefik, zot, Buildah, Podman, Skopeo, ORAS, Syft, Grype, and Helm compatibility identities
 - configuration and bootstrap contract versions

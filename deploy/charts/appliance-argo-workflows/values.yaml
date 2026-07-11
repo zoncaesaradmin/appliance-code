@@ -1,0 +1,58 @@
+namespace:
+  create: true
+  workflows: appliance-workflows
+  builds: appliance-builds
+
+image:
+  controller:
+    repository: quay.io/argoproj/workflow-controller
+    tag: "" # defaults to .Chart.AppVersion; releases should pin by digest
+    digest: ""
+    pullPolicy: IfNotPresent
+  executor:
+    repository: quay.io/argoproj/argoexec
+    tag: "" # defaults to .Chart.AppVersion; releases should pin by digest
+    digest: ""
+
+controller:
+  replicas: 1
+  logLevel: info
+  managedNamespace: ""
+  extraArgs: []
+
+config:
+  instanceID: appliance
+  containerRuntimeExecutor: emissary
+  archiveLogs: false
+
+serviceAccount:
+  controller:
+    create: true
+    name: ""
+  executor:
+    create: true
+    name: ""
+
+rbac:
+  create: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+networkPolicy:
+  enabled: false
+

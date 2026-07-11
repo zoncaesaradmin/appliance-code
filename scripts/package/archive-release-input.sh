@@ -18,6 +18,17 @@ Options:
   --control-plane-image-reference REF
                                    Canonical control-plane image reference
                                    contained in the OCI archive.
+  --argo-version VERSION           Optional pinned Argo Workflows version.
+  --argo-controller-image PATH     Optional Argo controller image archive.
+  --argo-controller-image-reference REF
+                                   Canonical Argo controller image reference
+                                   contained in the OCI archive.
+  --argo-executor-image PATH       Optional Argo executor image archive.
+  --argo-executor-image-reference REF
+                                   Canonical Argo executor image reference
+                                   contained in the OCI archive.
+  --argo-crds-dir DIR              Optional directory containing the versioned
+                                   Argo CRD bundle to copy into release-input.
   --k3s-version VERSION            Pinned K3s version. Required.
   --chart-version VERSION          Chart version. Defaults to code version.
   --supported-upgrade-source VER   Repeatable. Adds a supported upgrade
@@ -33,6 +44,7 @@ USAGE
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
+ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-argo-workflows"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
@@ -41,6 +53,12 @@ CODE_VERSION=""
 RELEASE_ID=""
 CONTROL_PLANE_IMAGE=""
 CONTROL_PLANE_IMAGE_REFERENCE=""
+ARGO_VERSION=""
+ARGO_CONTROLLER_IMAGE=""
+ARGO_CONTROLLER_IMAGE_REFERENCE=""
+ARGO_EXECUTOR_IMAGE=""
+ARGO_EXECUTOR_IMAGE_REFERENCE=""
+ARGO_CRDS_DIR=""
 K3S_VERSION=""
 CHART_VERSION=""
 SBOM_DIR=""
@@ -73,6 +91,30 @@ while [[ $# -gt 0 ]]; do
       ;;
     --control-plane-image-reference)
       CONTROL_PLANE_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --argo-version)
+      ARGO_VERSION="${2:-}"
+      shift 2
+      ;;
+    --argo-controller-image)
+      ARGO_CONTROLLER_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --argo-controller-image-reference)
+      ARGO_CONTROLLER_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --argo-executor-image)
+      ARGO_EXECUTOR_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --argo-executor-image-reference)
+      ARGO_EXECUTOR_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --argo-crds-dir)
+      ARGO_CRDS_DIR="${2:-}"
       shift 2
       ;;
     --k3s-version)
@@ -123,6 +165,18 @@ fi
 
 if [[ ! -f "${CONTROL_PLANE_IMAGE}" ]]; then
   echo "archive-release-input: control-plane image not found: ${CONTROL_PLANE_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${ARGO_CONTROLLER_IMAGE}" && ! -f "${ARGO_CONTROLLER_IMAGE}" ]]; then
+  echo "archive-release-input: Argo controller image not found: ${ARGO_CONTROLLER_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${ARGO_EXECUTOR_IMAGE}" && ! -f "${ARGO_EXECUTOR_IMAGE}" ]]; then
+  echo "archive-release-input: Argo executor image not found: ${ARGO_EXECUTOR_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${ARGO_CRDS_DIR}" && ! -d "${ARGO_CRDS_DIR}" ]]; then
+  echo "archive-release-input: Argo CRDs directory not found: ${ARGO_CRDS_DIR}" >&2
   exit 1
 fi
 if [[ ! -f "${VALUES_SCHEMA_PATH}" ]]; then
@@ -201,6 +255,7 @@ copy_dir_or_empty() {
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
+ARGO_CHART_ARCHIVE="appliance-argo-workflows-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
@@ -208,14 +263,38 @@ CHECKSUMS_BASENAME="checksums.txt"
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
+ARGO_CONTROLLER_BASENAME=""
+ARGO_EXECUTOR_BASENAME=""
+if [[ -n "${ARGO_CONTROLLER_IMAGE}" ]]; then
+  ARGO_CONTROLLER_BASENAME="$(basename "${ARGO_CONTROLLER_IMAGE}")"
+  cp "${ARGO_CONTROLLER_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}"
+fi
+if [[ -n "${ARGO_EXECUTOR_IMAGE}" ]]; then
+  ARGO_EXECUTOR_BASENAME="$(basename "${ARGO_EXECUTOR_IMAGE}")"
+  cp "${ARGO_EXECUTOR_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}"
+fi
+
 mkdir -p "${TMP_DIR}/appliance-chart"
 cp -R "${CHART_DIR}/." "${TMP_DIR}/appliance-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" appliance-chart
+
+if [[ -d "${ARGO_CHART_DIR}" ]]; then
+  mkdir -p "${TMP_DIR}/appliance-argo-workflows-chart"
+  cp -R "${ARGO_CHART_DIR}/." "${TMP_DIR}/appliance-argo-workflows-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" appliance-argo-workflows-chart
+fi
+
+if [[ -n "${ARGO_CRDS_DIR}" ]]; then
+  copy_dir_or_empty "${ARGO_CRDS_DIR}" "${RELEASE_INPUT_DIR}/argo-crds"
+fi
 
 {
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
+  if [[ -n "${ARGO_VERSION}" ]]; then
+    printf ',\n  "argoVersion": "%s"' "${ARGO_VERSION}"
+  fi
   if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
     printf ',\n  "supportedUpgradeSources": ['
     first=1
@@ -245,6 +324,15 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   do
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${file}" | sed 's/^sha256://')" "${file}"
   done
+  if [[ -f "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" | sed 's/^sha256://')" "${ARGO_CHART_ARCHIVE}"
+  fi
+  if [[ -n "${ARGO_CONTROLLER_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${ARGO_CONTROLLER_BASENAME}"
+  fi
+  if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" | sed 's/^sha256://')" "${ARGO_EXECUTOR_BASENAME}"
+  fi
 } >"${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}"
 
 render_file_artifact() {
@@ -281,6 +369,29 @@ if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
   SUPPORTED_UPGRADES_JSON+=']'
 fi
 
+ARGO_COMPATIBILITY_JSON=""
+if [[ -n "${ARGO_VERSION}" ]]; then
+  ARGO_COMPATIBILITY_JSON=', "argoVersion": "'"${ARGO_VERSION}"'"'
+fi
+
+OPTIONAL_ARGO_ARTIFACTS_JSON=""
+if [[ -f "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" ]]; then
+  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
+    "argoWorkflowsChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" "${ARGO_CHART_ARCHIVE}")"
+fi
+if [[ -d "${RELEASE_INPUT_DIR}/argo-crds" ]]; then
+  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
+    "argoCRDs": '"$(render_dir_artifact "argo-crds")"
+fi
+if [[ -n "${ARGO_CONTROLLER_BASENAME}" ]]; then
+  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
+    "argoControllerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}" "${ARGO_CONTROLLER_BASENAME}" "${ARGO_CONTROLLER_IMAGE_REFERENCE}")"
+fi
+if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
+  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
+    "argoExecutorImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" "${ARGO_EXECUTOR_BASENAME}" "${ARGO_EXECUTOR_IMAGE_REFERENCE}")"
+fi
+
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {
   "schemaVersion": 1,
@@ -296,11 +407,11 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "sbom": $(render_dir_artifact "sbom"),
     "provenance": $(render_dir_artifact "provenance"),
     "notices": $(render_dir_artifact "notices"),
-    "tests": $(render_dir_artifact "tests")
+    "tests": $(render_dir_artifact "tests")${OPTIONAL_ARGO_ARTIFACTS_JSON}
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON
