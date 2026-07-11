@@ -46,7 +46,8 @@ type Services struct {
 	WorkflowEngine     workflows.Engine
 	Builds             *builds.Service
 
-	Keys *keys.Material
+	Keys  *keys.Material
+	Audit *audit.Recorder
 }
 
 // WireServices opens storage, migrates it, seeds the built-in role/
@@ -115,5 +116,6 @@ func WireServices(cfg config.Config) (*Services, error) {
 		WorkflowEngine:     workflowEngine,
 		Builds:             buildsSvc,
 		Keys:               keyMaterial,
+		Audit:              recorder,
 	}, nil
 }

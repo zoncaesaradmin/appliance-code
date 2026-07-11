@@ -14,14 +14,18 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
+	rolesvc "appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/tokens"
+	"appliance-code/services/controlplane/internal/users"
 )
 
 // Principal is the authenticated identity and resolved permission set for
 // one request.
 type Principal struct {
 	UserID      string
+	Username    string
+	RoleNames   []string
 	Permissions map[string]bool
 	AuthMethod  string // "session" | "api_token"
 	FamilyID    string // set for AuthMethod == "session"
@@ -57,6 +61,8 @@ type Deps struct {
 	Sessions *authn.SessionService
 	Tokens   *tokens.Service
 	Authz    *authz.Service
+	Users    *users.Service
+	Roles    *rolesvc.Service
 }
 
 // BearerToken extracts the bearer credential from an Authorization header
@@ -91,9 +97,14 @@ func Authenticate(ctx context.Context, deps Deps, raw string) (Principal, error)
 		if err != nil {
 			return Principal{}, err
 		}
+		user, roleNames, err := principalIdentity(ctx, deps, tok.UserID)
+		if err != nil {
+			return Principal{}, err
+		}
 		return Principal{
-			UserID: tok.UserID, Permissions: authz.IntersectScopes(effective, tok.Scopes),
-			AuthMethod: "api_token", TokenID: tok.ID,
+			UserID: tok.UserID, Username: user.Username, RoleNames: roleNames,
+			Permissions: authz.IntersectScopes(effective, tok.Scopes),
+			AuthMethod:  "api_token", TokenID: tok.ID,
 		}, nil
 	}
 
@@ -105,5 +116,42 @@ func Authenticate(ctx context.Context, deps Deps, raw string) (Principal, error)
 	if err != nil {
 		return Principal{}, err
 	}
-	return Principal{UserID: user.ID, Permissions: effective, AuthMethod: "session", FamilyID: claims.FamilyID}, nil
+	roleNames, err := principalRoleNames(ctx, deps, user.ID)
+	if err != nil {
+		return Principal{}, err
+	}
+	return Principal{
+		UserID: user.ID, Username: user.Username, RoleNames: roleNames, Permissions: effective,
+		AuthMethod: "session", FamilyID: claims.FamilyID,
+	}, nil
+}
+
+func principalIdentity(ctx context.Context, deps Deps, userID string) (storage.User, []string, error) {
+	if deps.Users == nil {
+		return storage.User{}, nil, errors.New("reqauth: users service is required")
+	}
+	user, err := deps.Users.Get(ctx, userID)
+	if err != nil {
+		return storage.User{}, nil, err
+	}
+	roleNames, err := principalRoleNames(ctx, deps, userID)
+	if err != nil {
+		return storage.User{}, nil, err
+	}
+	return user, roleNames, nil
+}
+
+func principalRoleNames(ctx context.Context, deps Deps, userID string) ([]string, error) {
+	if deps.Roles == nil {
+		return nil, errors.New("reqauth: roles service is required")
+	}
+	userRoles, err := deps.Roles.ListUserRoles(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(userRoles))
+	for _, role := range userRoles {
+		names = append(names, role.Name)
+	}
+	return names, nil
 }

@@ -54,6 +54,14 @@ ingress:
     - websecure
   host: ""
   tlsSecretName: "appliance-tls"
+  forwardAuth:
+    enabled: true
+    responseHeaders:
+      - X-Appliance-User-Id
+      - X-Appliance-Username
+      - X-Appliance-Scopes
+      - X-Appliance-Roles
+      - X-Appliance-Auth-Method
 
 serviceAccount:
   create: true

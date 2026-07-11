@@ -101,6 +101,7 @@ Expected front-door routing:
 
 - `/api/v1/*` -> control plane service
 - `/mcp` -> control plane service
+- `/internal/auth/check` -> control plane service, cluster-internal only, for Traefik ForwardAuth checks on protected application routes
 - `/api/v1/registry/*` -> control plane service
 - `/v2/*` -> OCI registry service
 

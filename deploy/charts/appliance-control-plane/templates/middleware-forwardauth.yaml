@@ -1,0 +1,15 @@
+{{- if and .Values.ingress.enabled .Values.ingress.forwardAuth.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "appliance-control-plane.forwardAuthMiddlewareName" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  forwardAuth:
+    address: {{ printf "http://%s.%s.svc.cluster.local:%d/internal/auth/check" (include "appliance-control-plane.fullname" .) (include "appliance-control-plane.namespace" .) (.Values.service.publicPort | int) | quote }}
+    trustForwardHeader: true
+    authResponseHeaders:
+      {{- toYaml .Values.ingress.forwardAuth.responseHeaders | nindent 6 }}
+{{- end }}

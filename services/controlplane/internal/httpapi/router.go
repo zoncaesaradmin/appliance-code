@@ -15,6 +15,7 @@ type Deps struct {
 	Logger           logging.Logger
 	Auth             AuthDeps
 	AuthH            *AuthHandlers
+	ForwardAuthH     *ForwardAuthHandlers
 	UsersH           *UserHandlers
 	RolesH           *RoleHandlers
 	TokensH          *TokenHandlers
@@ -48,6 +49,9 @@ func NewPublicMux(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/refresh", deps.AuthH.Refresh)
 	mux.Handle("POST /api/v1/auth/logout", authenticatedOnly(deps.AuthH.Logout))
 	mux.Handle("GET /api/v1/auth/session", authenticatedOnly(deps.AuthH.Session))
+	if deps.ForwardAuthH != nil {
+		mux.HandleFunc("/internal/auth/check", deps.ForwardAuthH.Check)
+	}
 
 	// User management
 	mux.Handle("POST /api/v1/users", protect(roles.PermUsersCreate, deps.UsersH.Create))

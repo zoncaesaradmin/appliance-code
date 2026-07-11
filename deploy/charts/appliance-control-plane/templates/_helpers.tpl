@@ -67,3 +67,10 @@ Image reference, preferring an explicit digest pin over a tag.
 {{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+ForwardAuth middleware name.
+*/}}
+{{- define "appliance-control-plane.forwardAuthMiddlewareName" -}}
+{{- printf "%s-forward-auth" (include "appliance-control-plane.fullname" .) -}}
+{{- end -}}

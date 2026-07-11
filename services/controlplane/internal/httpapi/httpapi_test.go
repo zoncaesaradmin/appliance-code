@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"appliance-code/services/controlplane/internal/app"
@@ -41,11 +42,17 @@ func newTestServer(t *testing.T) *testServer {
 		t.Fatalf("logging.New: %v", err)
 	}
 
-	authDeps := httpapi.AuthDeps{Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz}
+	authDeps := httpapi.AuthDeps{
+		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,
+		Users: services.Users, Roles: services.Roles,
+	}
 	deps := httpapi.Deps{
-		Logger:  logger,
-		Auth:    authDeps,
-		AuthH:   &httpapi.AuthHandlers{Sessions: services.Sessions},
+		Logger: logger,
+		Auth:   authDeps,
+		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
+		ForwardAuthH: &httpapi.ForwardAuthHandlers{
+			Auth: authDeps, Audit: services.Audit,
+		},
 		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
 		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
 		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
@@ -162,6 +169,65 @@ func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
 			t.Errorf("GET %s without credentials = %d, want 401", path, resp.StatusCode)
 		}
 		resp.Body.Close()
+	}
+}
+
+func TestForwardAuthCheckAllowsAuthorizedMCPRequest(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	token := ts.login(t, "admin", testPassword)
+	resp := ts.doJSONWithHeaders(t, "GET", "/internal/auth/check", token, "", map[string]string{
+		"X-Forwarded-Method": "POST",
+		"X-Forwarded-Uri":    "/mcp",
+		"X-Forwarded-Host":   "appliance.example.internal",
+	})
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("forward auth status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Appliance-User-Id"); got == "" {
+		t.Error("forward auth should return X-Appliance-User-Id")
+	}
+	if got := resp.Header.Get("X-Appliance-Username"); got != "admin" {
+		t.Errorf("X-Appliance-Username = %q, want admin", got)
+	}
+	if got := resp.Header.Get("X-Appliance-Scopes"); !strings.Contains(got, roles.PermMCPInvoke) {
+		t.Errorf("X-Appliance-Scopes = %q, want to contain %q", got, roles.PermMCPInvoke)
+	}
+	if got := resp.Header.Get("X-Appliance-Roles"); !strings.Contains(got, "administrator") {
+		t.Errorf("X-Appliance-Roles = %q, want administrator", got)
+	}
+}
+
+func TestForwardAuthCheckRejectsUnauthenticatedRequest(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	resp := ts.doJSONWithHeaders(t, "GET", "/internal/auth/check", "", "", map[string]string{
+		"X-Forwarded-Method": "POST",
+		"X-Forwarded-Uri":    "/mcp",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("forward auth unauthenticated status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestForwardAuthCheckRejectsUnauthorizedRequest(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	ts.createUserWithRole(t, "viewer-user", testPassword, roles.ViewerRoleID)
+
+	token := ts.login(t, "viewer-user", testPassword)
+	resp := ts.doJSONWithHeaders(t, "GET", "/internal/auth/check", token, "", map[string]string{
+		"X-Forwarded-Method": "POST",
+		"X-Forwarded-Uri":    "/mcp",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("forward auth unauthorized status = %d, want 403", resp.StatusCode)
 	}
 }
 

@@ -39,7 +39,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	t.Cleanup(func() { services.DB.Close() })
 
-	deps := reqauth.Deps{Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz}
+	deps := reqauth.Deps{
+		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,
+		Users: services.Users, Roles: services.Roles,
+	}
 	handler := mcp.NewHandler(deps, cfg.CanonicalOrigin)
 
 	srv := httptest.NewServer(handler)

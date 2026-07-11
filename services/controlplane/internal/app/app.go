@@ -43,11 +43,17 @@ func New(cfg config.Config, logger logging.Logger) (*App, error) {
 	startup := &httpapi.StartupState{}
 	startup.MarkStarted()
 
-	authDeps := reqauth.Deps{Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz}
+	authDeps := reqauth.Deps{
+		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,
+		Users: services.Users, Roles: services.Roles,
+	}
 	deps := httpapi.Deps{
-		Logger:  logger,
-		Auth:    authDeps,
-		AuthH:   &httpapi.AuthHandlers{Sessions: services.Sessions},
+		Logger: logger,
+		Auth:   authDeps,
+		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
+		ForwardAuthH: &httpapi.ForwardAuthHandlers{
+			Auth: authDeps, Audit: services.Audit,
+		},
 		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
 		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
 		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
