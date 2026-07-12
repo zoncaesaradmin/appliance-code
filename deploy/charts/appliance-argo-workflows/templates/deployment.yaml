@@ -12,6 +12,8 @@ spec:
       {{- include "appliance-argo-workflows.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "appliance-argo-workflows.labels" . | nindent 8 }}
         {{- include "appliance-argo-workflows.selectorLabels" . | nindent 8 }}
@@ -39,6 +41,11 @@ spec:
             {{- range .Values.controller.extraArgs }}
             - {{ . | quote }}
             {{- end }}
+          env:
+            - name: LEADER_ELECTION_IDENTITY
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:

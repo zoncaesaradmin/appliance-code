@@ -1,4 +1,4 @@
-{{- if .Values.namespace.create }}
+{{- if and .Values.namespace.create (ne (include "appliance-argo-workflows.workflowsNamespace" .) .Release.Namespace) }}
 apiVersion: v1
 kind: Namespace
 metadata:
