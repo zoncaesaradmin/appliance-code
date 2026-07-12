@@ -42,6 +42,9 @@ The discussion converged on a simple v1 identity model:
 - `/api/v1` HTTP endpoints for auth, users, roles, tokens, builds, and artifacts
 - `/mcp` endpoint with authentication, authorization, and protocol shell
 - OCI registry token and lifecycle APIs used by Podman, Skopeo, Buildah, Helm, and ORAS clients
+- Appliance-profile selection at startup, resolving product-level appliance
+  profiles into implementation-level appliance capabilities. See
+  [appliance-profiles-v1.md](appliance-profiles-v1.md).
 - Local user database
 - Role-based access control
 - Audit-friendly authentication and authorization flow
@@ -51,7 +54,6 @@ The discussion converged on a simple v1 identity model:
 
 - Full MCP tool implementation
 - External AAA integrations such as OIDC, SAML, LDAP, or AD
-- Multiple appliance profiles as productized configurations
 - Full artifact registry implementation in this repo if a separate OCI registry is used as the data plane
 - Custom control-plane UI/frontend; zot's embedded browse/search UI remains an ADR 0008 gated candidate
 - Multi-node control-plane HA and multi-site replication
@@ -617,7 +619,7 @@ Use Argo Workflows as the workflow engine in the complete v1 appliance. See [ADR
 - Argo is operational state, not durable product state. Persist build/workflow intent, transitions, ownership, results, and audit in SQLite; apply Workflow and pod TTLs after reconciliation.
 - Do not enable workflow archive/offloading in v1 and do not introduce PostgreSQL solely for Argo. Reassess archive storage when PostgreSQL becomes the appliance database or retention requirements justify it.
 - Package CRDs with explicit ownership and upgrade ordering. Pin controller/executor images by digest and validate Argo/K3s compatibility, RBAC, cancellation, restart reconciliation, and air-gap behavior.
-- The single v1 appliance bundle includes Argo and the build namespace. Modular chart boundaries remain, but package-profile selection is deferred.
+- The single v1 appliance bundle includes Argo and the build namespace. Modular chart boundaries remain, but release-bundle profile selection is deferred.
 
 ### P0 Decision: Trusted Builds With Ephemeral Rootless Buildah
 
@@ -1373,7 +1375,7 @@ V1 uses one complete air-gap bundle containing a lifecycle CLI, pinned K3s, all 
 - The lifecycle CLI performs host preflight, installs bundled K3s, preloads images, applies CRDs, installs the chart, generates secrets, bootstraps the server, and verifies health.
 - Helm is the Kubernetes packaging primitive underneath the CLI.
 - Raw manifests remain development and debugging assets in this repo, not another product package.
-- There is no connected installer, package-profile selection, remote fallback, or installation onto arbitrary existing clusters in v1.
+- There is no connected installer, release-bundle profile selection, remote fallback, or installation onto arbitrary existing clusters in v1.
 - The same bundle and code path are used whether or not the target host happens to have internet connectivity.
 
 ### Argo Packaging Contract

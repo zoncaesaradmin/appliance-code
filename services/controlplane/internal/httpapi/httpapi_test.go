@@ -10,11 +10,13 @@ import (
 	"testing"
 
 	"appliance-code/services/controlplane/internal/app"
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/httpapi"
 	"appliance-code/services/controlplane/internal/logging"
+	"appliance-code/services/controlplane/internal/mcp"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
 )
@@ -25,9 +27,14 @@ type testServer struct {
 }
 
 func newTestServer(t *testing.T) *testServer {
+	return newTestServerWithProfile(t, appliance.ProfileBuilder)
+}
+
+func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServer {
 	t.Helper()
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
+	cfg.ApplianceProfile = string(profile)
 	cfg.AllowedGitSourceHosts = []string{"git.internal.example.com"}
 	cfg.AllowedBuilderImageDigests = []string{"buildah@sha256:approved"}
 
@@ -51,23 +58,32 @@ func newTestServer(t *testing.T) *testServer {
 		Auth:   authDeps,
 		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
-			Auth: authDeps, Audit: services.Audit,
+			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
-		RegistryH: &httpapi.RegistryTokenHandlers{
+		UsersH:     &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:     &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH:    &httpapi.TokenHandlers{Tokens: services.Tokens},
+		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin),
+	}
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
+		deps.RegistryH = &httpapi.RegistryTokenHandlers{
 			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,
 			Keys: services.Keys, Issuer: cfg.CanonicalOrigin,
-		},
-		RegistryGrantsH: &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore},
-		RegistryCatalogH: &httpapi.RegistryCatalogHandlers{
+		}
+		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore}
+		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
 			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
-		},
-		BuildsH: &httpapi.BuildHandlers{Builds: services.Builds},
+		}
+	}
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
+		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 	}
 
-	srv := httptest.NewServer(httpapi.NewPublicMux(deps))
+	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)
+	if err != nil {
+		t.Fatalf("NewPublicMux: %v", err)
+	}
+	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	return &testServer{Server: srv, services: services}
 }
@@ -228,6 +244,39 @@ func TestForwardAuthCheckRejectsUnauthorizedRequest(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("forward auth unauthorized status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestDisabledCapabilityRoutesReturnNotFound(t *testing.T) {
+	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	token := ts.login(t, "admin", testPassword)
+
+	for _, path := range []string{
+		"/api/v1/builds",
+		"/api/v1/registry/grants",
+		"/api/v1/registry/repositories",
+	} {
+		resp := ts.doJSON(t, "GET", path, token, "")
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", path, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+}
+
+func TestForwardAuthCheckReturnsNotFoundWhenArtifactCapabilityDisabled(t *testing.T) {
+	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	token := ts.login(t, "admin", testPassword)
+
+	resp := ts.doJSONWithHeaders(t, "GET", "/internal/auth/check", token, "", map[string]string{
+		"X-Forwarded-Method": "GET",
+		"X-Forwarded-Uri":    "/v2/library/nginx/manifests/latest",
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("forward auth status = %d, want 404", resp.StatusCode)
 	}
 }
 

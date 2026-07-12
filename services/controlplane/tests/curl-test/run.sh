@@ -175,6 +175,7 @@ wait_for_ready() {
 printf '%s\n' "${ADMIN_PASSWORD}" > "${PASSWORD_DIR}/admin.txt"
 cat > "${CONFIG_FILE}" <<EOF
 {
+  "applianceProfile": "builder",
   "allowedGitSourceHosts": ["git.internal.example.com"]
 }
 EOF

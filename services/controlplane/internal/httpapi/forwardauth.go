@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/forwardauth"
@@ -17,8 +18,9 @@ import (
 // It never proxies application traffic; it only authenticates, authorizes,
 // emits trusted identity headers, and audits the decision.
 type ForwardAuthHandlers struct {
-	Auth  AuthDeps
-	Audit *audit.Recorder
+	Auth         AuthDeps
+	Audit        *audit.Recorder
+	Capabilities appliance.Set
 }
 
 func (h *ForwardAuthHandlers) Check(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +44,11 @@ func (h *ForwardAuthHandlers) Check(w http.ResponseWriter, r *http.Request) {
 	if !decision.Allowed {
 		h.recordPrincipal(r, principal, storage.AuditOutcomeFailure, decision.ReasonCode, host, method, uri, "")
 		WriteProblem(w, r, http.StatusForbidden, "forbidden", "Insufficient permissions", "")
+		return
+	}
+	if !h.Capabilities.Enabled(decision.Capability) {
+		h.recordPrincipal(r, principal, storage.AuditOutcomeFailure, "capability_disabled", host, method, uri, "")
+		WriteProblem(w, r, http.StatusNotFound, "not_found", "Not found", "")
 		return
 	}
 	if !authz.HasPermission(principal.Permissions, decision.Permission) {

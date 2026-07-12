@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/roles"
 )
 
@@ -23,6 +24,7 @@ const (
 // Decision describes the authorization requirement for one forwarded request.
 type Decision struct {
 	Allowed    bool
+	Capability appliance.Capability
 	Permission string
 	ReasonCode string
 }
@@ -38,15 +40,15 @@ func RequiredPermission(host, method, rawURI string) Decision {
 
 	switch {
 	case path == "/mcp" || strings.HasPrefix(path, "/mcp/"):
-		return Decision{Allowed: true, Permission: roles.PermMCPInvoke}
+		return Decision{Allowed: true, Capability: appliance.CapabilityBase, Permission: roles.PermMCPInvoke}
 	case path == "/v2/" || path == "/v2" || strings.HasPrefix(path, "/v2/"):
 		switch normalizedMethod {
 		case http.MethodGet, http.MethodHead:
-			return Decision{Allowed: true, Permission: roles.PermRegistryPull}
+			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermRegistryPull}
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			return Decision{Allowed: true, Permission: roles.PermRegistryPush}
+			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermRegistryPush}
 		case http.MethodDelete:
-			return Decision{Allowed: true, Permission: roles.PermRegistryDelete}
+			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermRegistryDelete}
 		default:
 			return Decision{Allowed: false, ReasonCode: "unsupported_method"}
 		}

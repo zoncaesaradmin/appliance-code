@@ -11,12 +11,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"appliance-code/services/controlplane/internal/appliance"
 )
 
 // Config is the complete typed configuration surface for the control plane
 // process. All fields have safe local-development defaults; production
 // deployment layers override them through environment variables.
 type Config struct {
+	// ApplianceProfile is the product-level appliance profile selected for
+	// this deployment. The control plane resolves it into appliance
+	// capabilities at startup.
+	ApplianceProfile string `json:"applianceProfile"`
+
 	// Environment selects environment-specific behavior (e.g. "development",
 	// "production"). It never selects a different persistence backend in v1.
 	Environment string `json:"environment"`
@@ -88,6 +95,7 @@ type Config struct {
 // Default returns the local-development default configuration.
 func Default() Config {
 	return Config{
+		ApplianceProfile:     string(appliance.ProfileCore),
 		Environment:          "development",
 		CanonicalOrigin:      "http://localhost:8080",
 		PublicAddr:           "127.0.0.1:8080",
@@ -176,6 +184,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			*dst = v
 		}
 	}
+	str("PROFILE", &cfg.ApplianceProfile)
 	str("ENVIRONMENT", &cfg.Environment)
 	str("CANONICAL_ORIGIN", &cfg.CanonicalOrigin)
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
@@ -250,6 +259,10 @@ func (c Config) Validate() error {
 	case "development", "production":
 	default:
 		errs = append(errs, `environment must be "development" or "production"`)
+	}
+
+	if _, err := appliance.ResolveProfile(c.ApplianceProfile); err != nil {
+		errs = append(errs, fmt.Sprintf("applianceProfile %q is invalid: %v", c.ApplianceProfile, err))
 	}
 
 	if u, err := url.Parse(c.CanonicalOrigin); err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" {

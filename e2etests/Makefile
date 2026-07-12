@@ -49,7 +49,7 @@ test-local:
 	rm -rf "$$server_run_dir_abs"; \
 	mkdir -p "$$server_run_dir_abs"; \
 	printf '%s\n' "$(TEST_ADMIN_PASSWORD)" >"$$admin_password_file"; \
-	printf '%s\n' '{"allowedGitSourceHosts":["git.internal.example.com"]}' >"$$server_config_file"; \
+	printf '%s\n' '{"applianceProfile":"builder","allowedGitSourceHosts":["git.internal.example.com"]}' >"$$server_config_file"; \
 	$(MAKE) -C "$(BACKEND_DIR)" --no-print-directory test-stop TEST_RUN_DIR="$$server_run_dir_abs" TEST_PUBLIC_ADDR="$(TEST_PUBLIC_ADDR)" TEST_INTERNAL_ADDR="$(TEST_INTERNAL_ADDR)" >/dev/null 2>&1 || true; \
 	$(MAKE) -C "$(BACKEND_DIR)" --no-print-directory test-bootstrap-init TEST_RUN_DIR="$$server_run_dir_abs" TEST_CONFIG_FILE="$$server_config_file" TEST_PUBLIC_ADDR="$(TEST_PUBLIC_ADDR)" TEST_INTERNAL_ADDR="$(TEST_INTERNAL_ADDR)" TEST_ADMIN_USERNAME="$(TEST_ADMIN_USERNAME)" TEST_PASSWORD_FILE="$$admin_password_file"; \
 	$(MAKE) -C "$(BACKEND_DIR)" --no-print-directory test-start TEST_RUN_DIR="$$server_run_dir_abs" TEST_CONFIG_FILE="$$server_config_file" TEST_PUBLIC_ADDR="$(TEST_PUBLIC_ADDR)" TEST_INTERNAL_ADDR="$(TEST_INTERNAL_ADDR)"; \

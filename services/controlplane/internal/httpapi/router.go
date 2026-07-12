@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/version"
@@ -26,94 +28,47 @@ type Deps struct {
 	MCPHandler       http.Handler
 }
 
+type publicRoute struct {
+	capability appliance.Capability
+	pattern    string
+	build      func(Deps, wrappers) (http.Handler, error)
+}
+
+type wrappers struct {
+	protect           func(permission string, h http.HandlerFunc) http.Handler
+	protectAny        func(h http.HandlerFunc, permissions ...string) http.Handler
+	authenticatedOnly func(h http.HandlerFunc) http.Handler
+}
+
 // NewPublicMux builds the mux for the public-facing listener: the Phase 2
 // auth/user/role/token surface, protected by RequireAuth and per-route
 // RequirePermission/RequireAnyPermission. Everything else falls through to
 // a standard application/problem+json 404.
-func NewPublicMux(deps Deps) http.Handler {
+func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
 	mux := http.NewServeMux()
 
 	authRequired := RequireAuth(deps.Auth)
-	protect := func(permission string, h http.HandlerFunc) http.Handler {
-		return authRequired(RequirePermission(permission)(h))
-	}
-	protectAny := func(h http.HandlerFunc, permissions ...string) http.Handler {
-		return authRequired(RequireAnyPermission(permissions...)(h))
-	}
-	authenticatedOnly := func(h http.HandlerFunc) http.Handler {
-		return authRequired(h)
-	}
-
-	// Authentication
-	mux.HandleFunc("POST /api/v1/auth/login", deps.AuthH.Login)
-	mux.HandleFunc("POST /api/v1/auth/refresh", deps.AuthH.Refresh)
-	mux.Handle("POST /api/v1/auth/logout", authenticatedOnly(deps.AuthH.Logout))
-	mux.Handle("GET /api/v1/auth/session", authenticatedOnly(deps.AuthH.Session))
-	if deps.ForwardAuthH != nil {
-		mux.HandleFunc("/internal/auth/check", deps.ForwardAuthH.Check)
+	w := wrappers{
+		protect: func(permission string, h http.HandlerFunc) http.Handler {
+			return authRequired(RequirePermission(permission)(h))
+		},
+		protectAny: func(h http.HandlerFunc, permissions ...string) http.Handler {
+			return authRequired(RequireAnyPermission(permissions...)(h))
+		},
+		authenticatedOnly: func(h http.HandlerFunc) http.Handler {
+			return authRequired(h)
+		},
 	}
 
-	// User management
-	mux.Handle("POST /api/v1/users", protect(roles.PermUsersCreate, deps.UsersH.Create))
-	mux.Handle("GET /api/v1/users", protect(roles.PermUsersRead, deps.UsersH.List))
-	mux.Handle("GET /api/v1/users/{id}", protect(roles.PermUsersRead, deps.UsersH.Get))
-	mux.Handle("PATCH /api/v1/users/{id}", protect(roles.PermUsersUpdate, deps.UsersH.Patch))
-	mux.Handle("POST /api/v1/users/{id}/disable", protect(roles.PermUsersDisable, deps.UsersH.Disable))
-	mux.Handle("POST /api/v1/users/{id}/enable", protect(roles.PermUsersDisable, deps.UsersH.Enable))
-	mux.Handle("POST /api/v1/users/{id}/unlock", protect(roles.PermUsersDisable, deps.UsersH.Unlock))
-	mux.Handle("POST /api/v1/users/{id}/password-reset", protect(roles.PermUsersUpdate, deps.UsersH.PasswordReset))
-	mux.Handle("PUT /api/v1/users/{id}/roles", protect(roles.PermUsersUpdate, deps.UsersH.SetRoles))
-
-	// Role management
-	mux.Handle("GET /api/v1/roles", protect(roles.PermRolesRead, deps.RolesH.List))
-	mux.Handle("GET /api/v1/permissions", protect(roles.PermRolesRead, deps.RolesH.ListPermissions))
-	mux.Handle("POST /api/v1/roles", protect(roles.PermRolesCreate, deps.RolesH.Create))
-	mux.Handle("PUT /api/v1/roles/{id}", protect(roles.PermRolesUpdate, deps.RolesH.Update))
-	mux.Handle("DELETE /api/v1/roles/{id}", protect(roles.PermRolesDelete, deps.RolesH.Delete))
-
-	// API token management
-	mux.Handle("POST /api/v1/tokens", protect(roles.PermTokensCreateSelf, deps.TokensH.CreateSelf))
-	mux.Handle("GET /api/v1/tokens", protect(roles.PermTokensReadSelf, deps.TokensH.ListSelf))
-	mux.Handle("DELETE /api/v1/tokens/{id}", protectAny(deps.TokensH.RevokeSelf, roles.PermTokensRevokeSelf, roles.PermTokensRevokeAny))
-	mux.Handle("POST /api/v1/users/{userId}/tokens", protect(roles.PermTokensCreateAny, deps.TokensH.CreateForUser))
-	mux.Handle("DELETE /api/v1/users/{userId}/tokens/{tokenId}", protect(roles.PermTokensRevokeAny, deps.TokensH.RevokeForUser))
-
-	// Registry token/grants. The token endpoint authenticates itself (an
-	// OCI Distribution client presents Basic auth, not a bearer session);
-	// it is not wrapped in RequireAuth.
-	if deps.RegistryH != nil {
-		mux.HandleFunc("GET /api/v1/registry/token", deps.RegistryH.Token)
-	}
-	if deps.RegistryGrantsH != nil {
-		mux.Handle("GET /api/v1/registry/grants", protect(roles.PermRegistryGrantsRead, deps.RegistryGrantsH.List))
-		mux.Handle("POST /api/v1/registry/grants", protect(roles.PermRegistryGrantsWrite, deps.RegistryGrantsH.Create))
-		mux.Handle("DELETE /api/v1/registry/grants/{id}", protect(roles.PermRegistryGrantsWrite, deps.RegistryGrantsH.Delete))
-	}
-	// Repository/tag/referrer catalog reads: authentication is required at
-	// the route level, but which repositories are visible is a per-request
-	// grant-filtering decision the handler makes itself (registry.pull plus
-	// prefix matching), not a single fixed permission gate.
-	if deps.RegistryCatalogH != nil {
-		mux.Handle("GET /api/v1/registry/repositories", authenticatedOnly(deps.RegistryCatalogH.ListRepositories))
-		mux.Handle("GET /api/v1/registry/repositories/{rest...}", authenticatedOnly(deps.RegistryCatalogH.CatalogItem))
-	}
-
-	// Build management: create requires the base permission; read/cancel/
-	// logs require either the ".self" or ".any" permission at the route
-	// level, with the handler enforcing per-build ownership itself.
-	if deps.BuildsH != nil {
-		mux.Handle("POST /api/v1/builds", protect(roles.PermBuildsCreate, deps.BuildsH.Create))
-		mux.Handle("GET /api/v1/builds", protectAny(deps.BuildsH.List, roles.PermBuildsReadSelf, roles.PermBuildsReadAny))
-		mux.Handle("GET /api/v1/builds/{id}", protectAny(deps.BuildsH.Get, roles.PermBuildsReadSelf, roles.PermBuildsReadAny))
-		mux.Handle("POST /api/v1/builds/{id}/cancel", protectAny(deps.BuildsH.Cancel, roles.PermBuildsCancelSelf, roles.PermBuildsCancelAny))
-		mux.Handle("GET /api/v1/builds/{id}/logs", protectAny(deps.BuildsH.Logs, roles.PermBuildsReadSelf, roles.PermBuildsReadAny))
-	}
-
-	// MCP: the handler performs its own bearer authentication and RBAC
-	// mapping internally, since its JSON-RPC error semantics differ from
-	// REST's problem+json envelope.
-	if deps.MCPHandler != nil {
-		mux.Handle("/mcp", deps.MCPHandler)
+	for _, route := range publicRoutes() {
+		if !capabilities.Enabled(route.capability) {
+			continue
+		}
+		handler, err := route.build(deps, w)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", route.pattern, err)
+		}
+		mux.Handle(route.pattern, handler)
 	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +76,7 @@ func NewPublicMux(deps Deps) http.Handler {
 	})
 
 	chain := Chain(RequestID, Recover(deps.Logger), AccessLog(deps.Logger))
-	return chain(mux)
+	return chain(mux), nil
 }
 
 // NewInternalMux builds the mux for the operator-only internal listener:
@@ -139,4 +94,225 @@ func NewInternalMux(logger logging.Logger, checker ReadinessChecker, startup *St
 
 	chain := Chain(RequestID, Recover(logger), AccessLog(logger))
 	return chain(mux)
+}
+
+func publicRoutes() []publicRoute {
+	return []publicRoute{
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/auth/login", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return http.HandlerFunc(deps.AuthH.Login), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/auth/refresh", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return http.HandlerFunc(deps.AuthH.Refresh), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/auth/logout", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return w.authenticatedOnly(deps.AuthH.Logout), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/auth/session", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return w.authenticatedOnly(deps.AuthH.Session), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "/internal/auth/check", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.ForwardAuthH == nil {
+				return nil, fmt.Errorf("missing forward-auth handlers")
+			}
+			return http.HandlerFunc(deps.ForwardAuthH.Check), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/users", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersCreate, deps.UsersH.Create), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/users", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersRead, deps.UsersH.List), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/users/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersRead, deps.UsersH.Get), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "PATCH /api/v1/users/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersUpdate, deps.UsersH.Patch), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/users/{id}/disable", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersDisable, deps.UsersH.Disable), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/users/{id}/enable", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersDisable, deps.UsersH.Enable), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/users/{id}/unlock", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersDisable, deps.UsersH.Unlock), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/users/{id}/password-reset", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersUpdate, deps.UsersH.PasswordReset), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "PUT /api/v1/users/{id}/roles", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.UsersH == nil {
+				return nil, fmt.Errorf("missing user handlers")
+			}
+			return w.protect(roles.PermUsersUpdate, deps.UsersH.SetRoles), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/roles", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RolesH == nil {
+				return nil, fmt.Errorf("missing role handlers")
+			}
+			return w.protect(roles.PermRolesRead, deps.RolesH.List), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/permissions", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RolesH == nil {
+				return nil, fmt.Errorf("missing role handlers")
+			}
+			return w.protect(roles.PermRolesRead, deps.RolesH.ListPermissions), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/roles", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RolesH == nil {
+				return nil, fmt.Errorf("missing role handlers")
+			}
+			return w.protect(roles.PermRolesCreate, deps.RolesH.Create), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "PUT /api/v1/roles/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RolesH == nil {
+				return nil, fmt.Errorf("missing role handlers")
+			}
+			return w.protect(roles.PermRolesUpdate, deps.RolesH.Update), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "DELETE /api/v1/roles/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RolesH == nil {
+				return nil, fmt.Errorf("missing role handlers")
+			}
+			return w.protect(roles.PermRolesDelete, deps.RolesH.Delete), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/tokens", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.TokensH == nil {
+				return nil, fmt.Errorf("missing token handlers")
+			}
+			return w.protect(roles.PermTokensCreateSelf, deps.TokensH.CreateSelf), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/tokens", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.TokensH == nil {
+				return nil, fmt.Errorf("missing token handlers")
+			}
+			return w.protect(roles.PermTokensReadSelf, deps.TokensH.ListSelf), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "DELETE /api/v1/tokens/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.TokensH == nil {
+				return nil, fmt.Errorf("missing token handlers")
+			}
+			return w.protectAny(deps.TokensH.RevokeSelf, roles.PermTokensRevokeSelf, roles.PermTokensRevokeAny), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/users/{userId}/tokens", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.TokensH == nil {
+				return nil, fmt.Errorf("missing token handlers")
+			}
+			return w.protect(roles.PermTokensCreateAny, deps.TokensH.CreateForUser), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "DELETE /api/v1/users/{userId}/tokens/{tokenId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.TokensH == nil {
+				return nil, fmt.Errorf("missing token handlers")
+			}
+			return w.protect(roles.PermTokensRevokeAny, deps.TokensH.RevokeForUser), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "/mcp", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.MCPHandler == nil {
+				return nil, fmt.Errorf("missing MCP handler")
+			}
+			return deps.MCPHandler, nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.RegistryH == nil {
+				return nil, fmt.Errorf("missing registry token handlers")
+			}
+			return http.HandlerFunc(deps.RegistryH.Token), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RegistryGrantsH == nil {
+				return nil, fmt.Errorf("missing registry grant handlers")
+			}
+			return w.protect(roles.PermRegistryGrantsRead, deps.RegistryGrantsH.List), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "POST /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RegistryGrantsH == nil {
+				return nil, fmt.Errorf("missing registry grant handlers")
+			}
+			return w.protect(roles.PermRegistryGrantsWrite, deps.RegistryGrantsH.Create), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "DELETE /api/v1/registry/grants/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RegistryGrantsH == nil {
+				return nil, fmt.Errorf("missing registry grant handlers")
+			}
+			return w.protect(roles.PermRegistryGrantsWrite, deps.RegistryGrantsH.Delete), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/repositories", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RegistryCatalogH == nil {
+				return nil, fmt.Errorf("missing registry catalog handlers")
+			}
+			return w.authenticatedOnly(deps.RegistryCatalogH.ListRepositories), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/repositories/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.RegistryCatalogH == nil {
+				return nil, fmt.Errorf("missing registry catalog handlers")
+			}
+			return w.authenticatedOnly(deps.RegistryCatalogH.CatalogItem), nil
+		}},
+		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.BuildsH == nil {
+				return nil, fmt.Errorf("missing build handlers")
+			}
+			return w.protect(roles.PermBuildsCreate, deps.BuildsH.Create), nil
+		}},
+		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.BuildsH == nil {
+				return nil, fmt.Errorf("missing build handlers")
+			}
+			return w.protectAny(deps.BuildsH.List, roles.PermBuildsReadSelf, roles.PermBuildsReadAny), nil
+		}},
+		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builds/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.BuildsH == nil {
+				return nil, fmt.Errorf("missing build handlers")
+			}
+			return w.protectAny(deps.BuildsH.Get, roles.PermBuildsReadSelf, roles.PermBuildsReadAny), nil
+		}},
+		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/builds/{id}/cancel", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.BuildsH == nil {
+				return nil, fmt.Errorf("missing build handlers")
+			}
+			return w.protectAny(deps.BuildsH.Cancel, roles.PermBuildsCancelSelf, roles.PermBuildsCancelAny), nil
+		}},
+		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builds/{id}/logs", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.BuildsH == nil {
+				return nil, fmt.Errorf("missing build handlers")
+			}
+			return w.protectAny(deps.BuildsH.Logs, roles.PermBuildsReadSelf, roles.PermBuildsReadAny), nil
+		}},
+	}
 }

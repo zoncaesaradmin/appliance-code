@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/roles"
 )
 
@@ -14,6 +15,9 @@ func TestRequiredPermissionMCP(t *testing.T) {
 	}
 	if decision.Permission != roles.PermMCPInvoke {
 		t.Errorf("permission = %q, want %q", decision.Permission, roles.PermMCPInvoke)
+	}
+	if decision.Capability != appliance.CapabilityBase {
+		t.Errorf("capability = %q, want %q", decision.Capability, appliance.CapabilityBase)
 	}
 }
 
@@ -40,6 +44,9 @@ func TestRequiredPermissionRegistry(t *testing.T) {
 			}
 			if tc.wantAllowed && decision.Permission != tc.want {
 				t.Errorf("permission = %q, want %q", decision.Permission, tc.want)
+			}
+			if tc.wantAllowed && decision.Capability != appliance.CapabilityArtifact {
+				t.Errorf("capability = %q, want %q", decision.Capability, appliance.CapabilityArtifact)
 			}
 		})
 	}

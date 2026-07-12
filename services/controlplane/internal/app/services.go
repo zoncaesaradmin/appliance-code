@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
@@ -27,6 +28,8 @@ const SessionAudience = "appliance-api"
 // and the CLI bootstrap/recovery commands, so both wire identically instead
 // of duplicating storage/service construction.
 type Services struct {
+	ApplianceProfile appliance.ResolvedProfile
+
 	DB storage.DB
 
 	UserStore          storage.UserStore
@@ -55,6 +58,14 @@ type Services struct {
 // service. It does not start any HTTP listener, so it is also used directly
 // by the bootstrap and recovery CLI commands.
 func WireServices(cfg config.Config) (*Services, error) {
+	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
+	if err != nil {
+		return nil, fmt.Errorf("app: resolving appliance profile: %w", err)
+	}
+	return wireServices(cfg, resolved)
+}
+
+func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Services, error) {
 	db, err := sqlite.Open(cfg.SQLitePath())
 	if err != nil {
 		return nil, fmt.Errorf("app: opening storage: %w", err)
@@ -87,31 +98,43 @@ func WireServices(cfg config.Config) (*Services, error) {
 	recorder := audit.NewRecorder(auditStore)
 
 	var zotClient zotadapter.Client
-	if cfg.ZotBaseURL != "" {
-		zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, nil)
-	} else {
-		zotClient = zotadapter.NewFake()
+	var registryAuthorizer *registryauth.Authorizer
+	if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+		registryAuthorizer = registryauth.NewAuthorizer(registryGrantStore, roleStore)
+		if cfg.ZotBaseURL != "" {
+			zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, nil)
+		} else {
+			zotClient = zotadapter.NewFake()
+		}
 	}
 
 	buildStore := sqlite.NewBuildStore(db)
 	idempotencyStore := sqlite.NewIdempotencyStore(db)
-	// The real internal/workflows/argo adapter is not implemented in this
-	// pass (see internal/workflows's doc comment): validating it needs a
-	// real K3s host with the namespace-scoped Argo Workflow Controller and
-	// the rootless Buildah isolation gate proven, neither available here.
-	workflowEngine := workflows.NewFake()
-	buildsSvc := builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
-		cfg.AllowedGitSourceHosts, cfg.AllowedBuilderImageDigests, cfg.BuildDefaultDeadline)
+	var workflowEngine workflows.Engine
+	if resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
+		// The real internal/workflows/argo adapter is not implemented in this
+		// pass (see internal/workflows's doc comment): validating it needs a
+		// real K3s host with the namespace-scoped Argo Workflow Controller and
+		// the rootless Buildah isolation gate proven, neither available here.
+		workflowEngine = workflows.NewFake()
+	}
+
+	var buildsSvc *builds.Service
+	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
+			cfg.AllowedGitSourceHosts, cfg.AllowedBuilderImageDigests, cfg.BuildDefaultDeadline)
+	}
 
 	return &Services{
-		DB: db, UserStore: userStore, RoleStore: roleStore, AuditStore: auditStore, RegistryGrantStore: registryGrantStore,
+		ApplianceProfile: resolved,
+		DB:               db, UserStore: userStore, RoleStore: roleStore, AuditStore: auditStore, RegistryGrantStore: registryGrantStore,
 		BuildStore: buildStore, IdempotencyStore: idempotencyStore,
 		Users:              users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial),
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokens.NewService(db, tokenStore, recorder, keyMaterial),
 		Sessions:           authn.NewSessionService(db, userStore, sessionStore, throttleStore, recorder, keyMaterial, cfg.CanonicalOrigin, SessionAudience),
 		Authz:              authz.NewService(roleStore),
-		RegistryAuthorizer: registryauth.NewAuthorizer(registryGrantStore, roleStore),
+		RegistryAuthorizer: registryAuthorizer,
 		Zot:                zotClient,
 		WorkflowEngine:     workflowEngine,
 		Builds:             buildsSvc,

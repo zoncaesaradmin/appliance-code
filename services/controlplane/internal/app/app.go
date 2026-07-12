@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/httpapi"
 	"appliance-code/services/controlplane/internal/logging"
@@ -35,7 +36,11 @@ func (r readinessAdapter) Ready(ctx context.Context) error { return r.db.Ping(ct
 // New wires every service and builds the public and internal HTTP servers.
 // It does not start listening; call Run for that.
 func New(cfg config.Config, logger logging.Logger) (*App, error) {
-	services, err := WireServices(cfg)
+	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
+	if err != nil {
+		return nil, err
+	}
+	services, err := wireServices(cfg, resolved)
 	if err != nil {
 		return nil, err
 	}
@@ -52,24 +57,32 @@ func New(cfg config.Config, logger logging.Logger) (*App, error) {
 		Auth:   authDeps,
 		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
-			Auth: authDeps, Audit: services.Audit,
+			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
-		RegistryH: &httpapi.RegistryTokenHandlers{
-			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,
-			Keys: services.Keys, Issuer: cfg.CanonicalOrigin,
-		},
-		RegistryGrantsH: &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore},
-		RegistryCatalogH: &httpapi.RegistryCatalogHandlers{
-			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
-		},
-		BuildsH:    &httpapi.BuildHandlers{Builds: services.Builds},
+		UsersH:     &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:     &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH:    &httpapi.TokenHandlers{Tokens: services.Tokens},
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin),
 	}
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
+		deps.RegistryH = &httpapi.RegistryTokenHandlers{
+			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,
+			Keys: services.Keys, Issuer: cfg.CanonicalOrigin,
+		}
+		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore}
+		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
+			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
+		}
+	}
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
+		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
+	}
 
-	publicHandler := httpapi.NewPublicMux(deps)
+	publicHandler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)
+	if err != nil {
+		services.DB.Close()
+		return nil, fmt.Errorf("building public mux: %w", err)
+	}
 	internalHandler := httpapi.NewInternalMux(logger, readinessAdapter{db: services.DB}, startup)
 
 	public := &http.Server{

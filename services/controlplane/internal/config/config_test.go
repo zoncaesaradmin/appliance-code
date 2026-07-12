@@ -15,6 +15,7 @@ func TestDefaultIsValid(t *testing.T) {
 
 func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 	environ := []string{
+		"APPLIANCE_PROFILE=builder",
 		"APPLIANCE_PUBLIC_ADDR=0.0.0.0:9000",
 		"APPLIANCE_LOG_LEVEL=debug",
 		"APPLIANCE_CANONICAL_ORIGIN=https://appliance.example.internal",
@@ -25,6 +26,9 @@ func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 	}
 	if cfg.PublicAddr != "0.0.0.0:9000" {
 		t.Errorf("PublicAddr = %q, want 0.0.0.0:9000", cfg.PublicAddr)
+	}
+	if cfg.ApplianceProfile != "builder" {
+		t.Errorf("ApplianceProfile = %q, want builder", cfg.ApplianceProfile)
 	}
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want debug", cfg.LogLevel)
@@ -69,5 +73,16 @@ func TestValidateRejectsCanonicalOriginWithPath(t *testing.T) {
 	cfg.CanonicalOrigin = "https://appliance.example.internal/some/path"
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate should reject a canonical origin with a path component")
+	}
+}
+
+func TestLoadRejectsUnknownApplianceProfile(t *testing.T) {
+	environ := []string{"APPLIANCE_PROFILE=unknown"}
+	_, err := config.Load(environ)
+	if err == nil {
+		t.Fatal("Load with an unknown appliance profile should fail")
+	}
+	if !strings.Contains(err.Error(), "applianceProfile") {
+		t.Fatalf("error = %v, want applianceProfile mentioned", err)
 	}
 }

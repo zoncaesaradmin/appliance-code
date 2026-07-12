@@ -25,8 +25,9 @@
     },
     "config": {
       "type": "object",
-      "required": ["environment", "canonicalOrigin", "logLevel"],
+      "required": ["applianceProfile", "environment", "canonicalOrigin", "logLevel"],
       "properties": {
+        "applianceProfile": { "type": "string", "enum": ["core", "builder", "storage"] },
         "environment": { "type": "string", "enum": ["development", "production"] },
         "canonicalOrigin": { "type": "string", "minLength": 1 },
         "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "error"] },

@@ -24,6 +24,7 @@ namespace:
 # CLI creates them out of band and the chart only references their names,
 # per ADR 0005.
 config:
+  applianceProfile: core
   environment: production
   canonicalOrigin: "https://appliance.example.internal"
   logLevel: info
