@@ -179,6 +179,19 @@ if [[ -n "${ARGO_CRDS_DIR}" && ! -d "${ARGO_CRDS_DIR}" ]]; then
   echo "archive-release-input: Argo CRDs directory not found: ${ARGO_CRDS_DIR}" >&2
   exit 1
 fi
+# The Argo Workflows chart is always packaged when its source directory
+# exists in this checkout (see below) — there is no opt-out flag — and
+# ADR 0011 requires it in the complete v1 appliance. A release-input
+# bundle that ships the chart without its CRDs installs a workflow
+# controller that crash-loops forever on startup (its first API call,
+# "get workflows.argoproj.io", 404s) until zonctl's install eventually
+# times out and rolls the whole install back. Refuse to produce that
+# bundle at packaging time rather than let it surface as a confusing
+# install-time failure.
+if [[ -d "${ARGO_CHART_DIR}" && -z "${ARGO_CRDS_DIR}" ]]; then
+  echo "archive-release-input: packaging the Argo Workflows chart (${ARGO_CHART_DIR}) requires --argo-crds-dir; the workflow controller cannot start without its CRDs" >&2
+  exit 1
+fi
 if [[ ! -f "${VALUES_SCHEMA_PATH}" ]]; then
   echo "archive-release-input: missing chart values schema: ${VALUES_SCHEMA_PATH}" >&2
   exit 1

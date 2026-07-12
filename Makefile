@@ -183,10 +183,14 @@ package-control-plane-image-archive:
 		--out-file "$$out_file"
 
 ## package-release-input-tar: create the versioned release-input tarball handoff
-## by always building the control-plane image archive from this checkout
+## by always building the control-plane image archive from this checkout.
+## ARGO_CRDS_DIR is required: the Argo Workflows chart is always packaged
+## (ADR 0011 requires it in the complete v1 appliance), and a bundle
+## shipping the chart without its CRDs installs a workflow controller
+## that crash-loops forever on startup.
 package-release-input-tar:
-	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ]; then \
-		echo "package-release-input-tar: set OUT_FILE and K3S_VERSION" >&2; \
+	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${ARGO_CRDS_DIR:-}" ]; then \
+		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, and ARGO_CRDS_DIR" >&2; \
 		exit 2; \
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
@@ -205,7 +209,13 @@ package-release-input-tar:
 		$${SBOM_DIR:+--sbom-dir "$${SBOM_DIR}"} \
 		$${PROVENANCE_DIR:+--provenance-dir "$${PROVENANCE_DIR}"} \
 		$${NOTICES_DIR:+--notices-dir "$${NOTICES_DIR}"} \
-		$${TESTS_DIR:+--tests-dir "$${TESTS_DIR}"}
+		$${TESTS_DIR:+--tests-dir "$${TESTS_DIR}"} \
+		$${ARGO_VERSION:+--argo-version "$${ARGO_VERSION}"} \
+		$${ARGO_CONTROLLER_IMAGE:+--argo-controller-image "$${ARGO_CONTROLLER_IMAGE}"} \
+		$${ARGO_CONTROLLER_IMAGE_REFERENCE:+--argo-controller-image-reference "$${ARGO_CONTROLLER_IMAGE_REFERENCE}"} \
+		$${ARGO_EXECUTOR_IMAGE:+--argo-executor-image "$${ARGO_EXECUTOR_IMAGE}"} \
+		$${ARGO_EXECUTOR_IMAGE_REFERENCE:+--argo-executor-image-reference "$${ARGO_EXECUTOR_IMAGE_REFERENCE}"} \
+		$${ARGO_CRDS_DIR:+--argo-crds-dir "$${ARGO_CRDS_DIR}"}
 
 # --- Developer Container (Linux only — see docs/dev-container.md) -----
 # A shared toolchain image (Go, Buildah, Skopeo, etc. — see the image's
