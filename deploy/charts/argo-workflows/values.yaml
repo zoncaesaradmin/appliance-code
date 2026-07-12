@@ -1,6 +1,6 @@
 namespace:
   create: true
-  workflows: appliance-workflows
+  workflows: workflows
   builds: appliance-builds
 
 image:

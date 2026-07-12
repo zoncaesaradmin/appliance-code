@@ -39,7 +39,7 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
   release-input.json
   control-plane.oci.tar.zst
   appliance-chart-<version>.tgz
-  appliance-argo-workflows-chart-<version>.tgz
+  argo-workflows-chart-<version>.tgz
   argo-crds/
   argo-controller.oci.tar.zst
   argo-executor.oci.tar.zst

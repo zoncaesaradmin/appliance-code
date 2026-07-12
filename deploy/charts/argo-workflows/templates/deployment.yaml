@@ -1,41 +1,41 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "appliance-argo-workflows.fullname" . }}
-  namespace: {{ include "appliance-argo-workflows.workflowsNamespace" . }}
+  name: {{ include "argo-workflows.fullname" . }}
+  namespace: {{ include "argo-workflows.workflowsNamespace" . }}
   labels:
-    {{- include "appliance-argo-workflows.labels" . | nindent 4 }}
+    {{- include "argo-workflows.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.controller.replicas }}
   selector:
     matchLabels:
-      {{- include "appliance-argo-workflows.selectorLabels" . | nindent 6 }}
+      {{- include "argo-workflows.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
-        {{- include "appliance-argo-workflows.labels" . | nindent 8 }}
-        {{- include "appliance-argo-workflows.selectorLabels" . | nindent 8 }}
+        {{- include "argo-workflows.labels" . | nindent 8 }}
+        {{- include "argo-workflows.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "appliance-argo-workflows.controllerServiceAccountName" . }}
+      serviceAccountName: {{ include "argo-workflows.controllerServiceAccountName" . }}
       automountServiceAccountToken: true
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: workflow-controller
-          image: {{ include "appliance-argo-workflows.image" (dict "image" .Values.image.controller "Chart" .Chart) | quote }}
+          image: {{ include "argo-workflows.image" (dict "image" .Values.image.controller "Chart" .Chart) | quote }}
           imagePullPolicy: {{ .Values.image.controller.pullPolicy }}
           command:
             - workflow-controller
           args:
             - --configmap
-            - {{ include "appliance-argo-workflows.configMapName" . }}
+            - {{ include "argo-workflows.configMapName" . }}
             - --executor-image
-            - {{ include "appliance-argo-workflows.image" (dict "image" .Values.image.executor "Chart" .Chart) | quote }}
+            - {{ include "argo-workflows.image" (dict "image" .Values.image.executor "Chart" .Chart) | quote }}
             - --namespaced
             - --managed-namespace
-            - {{ include "appliance-argo-workflows.managedNamespace" . }}
+            - {{ include "argo-workflows.managedNamespace" . }}
             - --loglevel
             - {{ .Values.controller.logLevel }}
             {{- range .Values.controller.extraArgs }}

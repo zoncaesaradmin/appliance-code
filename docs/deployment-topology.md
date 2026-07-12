@@ -22,7 +22,7 @@ flowchart TD
             ZotPVC[("zot RWO PVC<br/>OCI manifests + blobs + indexes")]
         end
 
-        subgraph WorkflowNS["appliance-workflows namespace"]
+        subgraph WorkflowNS["workflows namespace"]
             Argo["Argo Workflow Controller pod<br/>Internal workflow reconciliation"]
         end
 

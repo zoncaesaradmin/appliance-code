@@ -2,10 +2,10 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "appliance-argo-workflows.fullname" . }}-executor
-  namespace: {{ include "appliance-argo-workflows.buildsNamespace" . }}
+  name: {{ include "argo-workflows.fullname" . }}-executor
+  namespace: {{ include "argo-workflows.buildsNamespace" . }}
   labels:
-    {{- include "appliance-argo-workflows.labels" . | nindent 4 }}
+    {{- include "argo-workflows.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["argoproj.io"]
     resources: ["workflowtaskresults"]

@@ -44,7 +44,7 @@ USAGE
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
-ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-argo-workflows"
+ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/argo-workflows"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
@@ -255,7 +255,7 @@ copy_dir_or_empty() {
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
-ARGO_CHART_ARCHIVE="appliance-argo-workflows-chart-${CODE_VERSION}.tgz"
+ARGO_CHART_ARCHIVE="argo-workflows-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
@@ -279,9 +279,9 @@ cp -R "${CHART_DIR}/." "${TMP_DIR}/appliance-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" appliance-chart
 
 if [[ -d "${ARGO_CHART_DIR}" ]]; then
-  mkdir -p "${TMP_DIR}/appliance-argo-workflows-chart"
-  cp -R "${ARGO_CHART_DIR}/." "${TMP_DIR}/appliance-argo-workflows-chart/"
-  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" appliance-argo-workflows-chart
+  mkdir -p "${TMP_DIR}/argo-workflows-chart"
+  cp -R "${ARGO_CHART_DIR}/." "${TMP_DIR}/argo-workflows-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" argo-workflows-chart
 fi
 
 if [[ -n "${ARGO_CRDS_DIR}" ]]; then

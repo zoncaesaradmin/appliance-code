@@ -8,7 +8,7 @@ bring it up successfully inside K3s before using it for real build workflows.
 
 Make Argo part of the appliance bundle and installed topology so that:
 
-- the Argo Workflow Controller runs in `appliance-workflows`
+- the Argo Workflow Controller runs in `workflows`
 - the managed workload namespace `appliance-builds` exists
 - Argo CRDs are recognized as first-class release inputs
 - the release/installer path can verify that Argo is present and healthy
@@ -22,7 +22,7 @@ packaging, chart, and verification surface for that later step.
 Included in this phase:
 
 - Argo chart/module owned in `appliance-code`
-- namespace layout for `appliance-workflows` and `appliance-builds`
+- namespace layout for `workflows` and `appliance-builds`
 - first-pass Argo controller Deployment and ServiceAccounts
 - first-pass namespace-scoped RBAC and controller configuration wiring
 - release-input contract updates for Argo chart, CRDs, and pinned images
@@ -41,7 +41,7 @@ Deferred to later phases:
 
 Two namespaces are required and intentionally distinct:
 
-- `appliance-workflows`
+- `workflows`
   - the always-running Argo Workflow Controller
   - controller configuration
   - controller ServiceAccount and leader-election RBAC
@@ -71,7 +71,7 @@ the CRD lifecycle is not delegated to normal Helm templating.
 This phase is successful when a clean appliance install can prove:
 
 - `workflows.argoproj.io` CRDs are installed
-- `appliance-workflows` namespace exists
+- `workflows` namespace exists
 - `appliance-builds` namespace exists
 - the Workflow Controller Deployment is ready
 - the controller pod restarts successfully
@@ -80,8 +80,8 @@ This phase is successful when a clean appliance install can prove:
 
 The release verification lane should later check at least:
 
-- `kubectl get ns appliance-workflows appliance-builds`
-- `kubectl -n appliance-workflows get deploy,pods`
+- `kubectl get ns workflows appliance-builds`
+- `kubectl -n workflows get deploy,pods`
 - `kubectl get crd workflows.argoproj.io`
 
 ## Execution Order

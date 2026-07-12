@@ -9,7 +9,7 @@ The complete appliance needs a workflow engine for multi-step builds, verificati
 
 ## Decision
 
-- Deploy one Argo Workflow Controller in the complete v1 appliance. Use a namespace-scoped/managed-namespace configuration: the controller lives in `appliance-workflows` and manages appliance-owned Workflows and task pods in `appliance-builds`.
+- Deploy one Argo Workflow Controller in the complete v1 appliance. Use a namespace-scoped/managed-namespace configuration: the controller lives in `workflows` and manages appliance-owned Workflows and task pods in `appliance-builds`.
 - Install the required cluster-scoped CRDs as a separate versioned release input before the appliance Helm release. The installer owns compatibility checks, upgrade ordering, and rollback tests because normal Helm CRD handling does not provide the required upgrade lifecycle.
 - Do not expose Argo Server or the Argo UI. The controller can operate independently; the appliance REST/MCP APIs are the only user-facing workflow surface.
 - The control plane uses the Kubernetes API through a typed `WorkflowEngine` adapter to create, get, watch, and terminate only Workflow resources bearing immutable appliance ownership labels. Namespace-limited RBAC also permits read-only task-pod status and logs so appliance APIs can report progress. The control plane cannot create arbitrary pods and does not grant users Kubernetes or Argo credentials.

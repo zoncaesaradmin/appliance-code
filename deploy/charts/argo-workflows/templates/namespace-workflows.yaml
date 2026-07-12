@@ -1,0 +1,11 @@
+{{- if and .Values.namespace.create (ne (include "argo-workflows.workflowsNamespace" .) .Release.Namespace) }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "argo-workflows.workflowsNamespace" . }}
+  labels:
+    {{- include "argo-workflows.labels" . | nindent 4 }}
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+{{- end }}

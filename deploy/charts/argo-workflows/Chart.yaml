@@ -1,5 +1,5 @@
 apiVersion: v2
-name: appliance-argo-workflows
+name: argo-workflows
 description: >-
   Namespace-scoped Argo Workflow Controller for the appliance. This chart
   brings up the internal workflow engine only; it does not expose Argo
