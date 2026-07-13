@@ -1,4 +1,5 @@
 BACKEND_DIR := services/controlplane
+UI_DIR      := services/ui
 SDK_DIR     := sdk/golang/applianceclient
 CHART_DIR   := deploy/charts/appliance-control-plane
 E2E_DIR     := e2etests
@@ -11,7 +12,7 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(SDK_DIR) $(CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(SDK_DIR) $(CHART_DIR) $(E2E_DIR)
 CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)"; printf '%s' "$$raw" | sed 's/[^A-Za-z0-9_.-]/-/g')
 
 # Per-developer overrides (dev-container image/tag, engine, cache paths).
@@ -53,7 +54,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -182,6 +183,14 @@ package-control-plane-image-archive:
 	bash ./scripts/package/export-control-plane-image-archive.sh \
 		--out-file "$$out_file"
 
+## package-ui-image-archive: always build and export the UI service image from
+## this checkout as an OCI archive tarball for release-input packaging.
+package-ui-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
+	mkdir -p "$$(dirname "$$out_file")"; \
+	bash ./scripts/package/export-ui-image-archive.sh \
+		--out-file "$$out_file"
+
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.
 ## ARGO_CRDS_DIR is required: the Argo Workflows chart is always packaged
@@ -194,14 +203,19 @@ package-release-input-tar:
 		exit 2; \
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
+	ui_image="$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
+	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
+	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
 	bash ./scripts/package/archive-release-input.sh \
 		--out-file "$${OUT_FILE}" \
 		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
 		--code-version "$${CODE_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}" \
 		--control-plane-image "$$control_plane_image" \
 		--control-plane-image-reference "$$control_plane_image_ref" \
+		--ui-image "$$ui_image" \
+		--ui-image-reference "$$ui_image_ref" \
 		--k3s-version "$${K3S_VERSION}" \
 		$${RELEASE_ID:+--release-id "$${RELEASE_ID}"} \
 		$${CHART_VERSION:+--chart-version "$${CHART_VERSION}"} \

@@ -1,0 +1,25 @@
+{{define "layout-start"}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>{{.Title}} · Zon Appliance</title>
+    <link rel="stylesheet" href="/static/vendor/pico.min.css">
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/vendor/htmx.min.js" defer></script>
+  </head>
+  <body>
+    <header class="appliance-header">
+      <a class="brand" href="/">Zon Appliance</a>
+      <span class="profile-pill">profile: {{.ApplianceProfile}}</span>
+    </header>
+    <main class="container appliance-main">
+{{end}}
+
+{{define "layout-end"}}
+    </main>
+  </body>
+</html>
+{{end}}

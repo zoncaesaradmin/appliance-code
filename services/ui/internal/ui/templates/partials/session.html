@@ -1,0 +1,20 @@
+{{define "session.html"}}
+{{template "session-panel" .}}
+{{end}}
+
+{{define "session-panel"}}
+<header>
+  <strong>Current session</strong>
+</header>
+<dl>
+  <dt>User ID</dt>
+  <dd>{{if .Session.UserID}}{{.Session.UserID}}{{else}}unknown{{end}}</dd>
+  <dt>Auth method</dt>
+  <dd>{{if .Session.AuthMethod}}{{.Session.AuthMethod}}{{else}}unknown{{end}}</dd>
+  <dt>Permissions</dt>
+  <dd>{{len .Session.Permissions}}</dd>
+</dl>
+<a class="secondary" href="/dashboard" hx-get="/partials/session" hx-target="#session-panel" hx-swap="innerHTML" role="button">
+  Refresh session
+</a>
+{{end}}

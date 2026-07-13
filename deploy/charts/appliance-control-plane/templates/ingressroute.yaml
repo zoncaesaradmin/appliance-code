@@ -19,6 +19,13 @@ spec:
       services:
         - name: {{ include "appliance-control-plane.fullname" . }}
           port: {{ .Values.service.publicPort }}
+    {{- if .Values.ui.enabled }}
+    - match: {{ printf "%sPathPrefix(`/`)" $hostMatch }}
+      kind: Rule
+      services:
+        - name: {{ include "appliance-control-plane.uiServiceName" . }}
+          port: {{ .Values.ui.service.port }}
+    {{- end }}
   tls:
     secretName: {{ .Values.ingress.tlsSecretName }}
 {{- end }}

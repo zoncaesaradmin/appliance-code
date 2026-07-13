@@ -16,6 +16,41 @@
         "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
       }
     },
+    "ui": {
+      "type": "object",
+      "required": ["enabled", "image", "service", "config", "resources"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "required": ["repository", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "digest": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "service": {
+          "type": "object",
+          "required": ["port"],
+          "properties": {
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        },
+        "config": {
+          "type": "object",
+          "required": ["logLevel", "cookieSecure"],
+          "properties": {
+            "logLevel": { "type": "string", "enum": ["debug", "info", "warn", "error"] },
+            "cookieSecure": { "type": "boolean" },
+            "controlPlaneBaseURL": { "type": "string" },
+            "controlPlaneInternalBaseURL": { "type": "string" }
+          }
+        },
+        "resources": { "type": "object" }
+      }
+    },
     "namespace": {
       "type": "object",
       "properties": {

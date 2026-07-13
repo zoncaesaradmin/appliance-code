@@ -1,0 +1,23 @@
+{{define "dashboard.html"}}
+{{template "layout-start" .}}
+<section class="dashboard-heading">
+  <div>
+    <p class="eyebrow">Dashboard</p>
+    <h1>Appliance status</h1>
+    <p class="muted">A compact operator view of this appliance instance.</p>
+  </div>
+  <form method="post" action="/logout">
+    <button class="secondary" type="submit">Sign out</button>
+  </form>
+</section>
+
+<div class="grid">
+  <article id="session-panel">
+    {{template "session-panel" .}}
+  </article>
+  <article id="status-panel">
+    {{template "status-panel" .}}
+  </article>
+</div>
+{{template "layout-end" .}}
+{{end}}

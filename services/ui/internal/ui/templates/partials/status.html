@@ -1,0 +1,25 @@
+{{define "status.html"}}
+{{template "status-panel" .}}
+{{end}}
+
+{{define "status-panel"}}
+<header>
+  <strong>Platform</strong>
+</header>
+{{if .StatusError}}
+<p class="notice error">{{.StatusError}}</p>
+{{end}}
+<dl>
+  <dt>Control plane</dt>
+  <dd><span class="status-dot {{if eq .Health.Status "ready"}}ok{{else}}warn{{end}}"></span>{{if .Health.Status}}{{.Health.Status}}{{else}}unknown{{end}}</dd>
+  <dt>Version</dt>
+  <dd>{{if .Version.Version}}{{.Version.Version}}{{else}}unknown{{end}}</dd>
+  <dt>Commit</dt>
+  <dd>{{if .Version.Commit}}{{.Version.Commit}}{{else}}unknown{{end}}</dd>
+  <dt>Profile</dt>
+  <dd>{{.ApplianceProfile}}</dd>
+</dl>
+<a class="secondary" href="/dashboard" hx-get="/partials/status" hx-target="#status-panel" hx-swap="innerHTML" role="button">
+  Refresh status
+</a>
+{{end}}

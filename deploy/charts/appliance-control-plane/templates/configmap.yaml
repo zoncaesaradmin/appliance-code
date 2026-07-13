@@ -14,3 +14,20 @@ data:
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}
   APPLIANCE_INTERNAL_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.internalPort | int) | quote }}
   APPLIANCE_DATA_DIR: {{ .Values.persistence.dataDir | quote }}
+{{- if .Values.ui.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "appliance-control-plane.uiServiceName" . }}-config
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.uiLabels" . | nindent 4 }}
+data:
+  APPLIANCE_PROFILE: {{ .Values.config.applianceProfile | quote }}
+  APPLIANCE_UI_ADDR: {{ printf "0.0.0.0:%d" (.Values.ui.service.port | int) | quote }}
+  APPLIANCE_UI_LOG_LEVEL: {{ .Values.ui.config.logLevel | quote }}
+  APPLIANCE_UI_COOKIE_SECURE: {{ .Values.ui.config.cookieSecure | quote }}
+  APPLIANCE_CONTROL_PLANE_BASE_URL: {{ include "appliance-control-plane.uiControlPlaneBaseURL" . | quote }}
+  APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL: {{ include "appliance-control-plane.uiControlPlaneInternalBaseURL" . | quote }}
+{{- end }}

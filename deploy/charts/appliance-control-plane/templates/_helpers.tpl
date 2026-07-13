@@ -39,10 +39,29 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
+Common labels for the UI component.
+*/}}
+{{- define "appliance-control-plane.uiLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "appliance-control-plane.uiSelectorLabels" . }}
+app.kubernetes.io/component: ui
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
 Selector labels.
 */}}
 {{- define "appliance-control-plane.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+Selector labels for the UI pod.
+*/}}
+{{- define "appliance-control-plane.uiSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.name" . }}-ui
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -65,6 +84,48 @@ Image reference, preferring an explicit digest pin over a tag.
 {{- printf "%s@%s" .Values.image.repository .Values.image.digest -}}
 {{- else -}}
 {{- printf "%s:%s" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+UI image reference, preferring an explicit digest pin over a tag.
+*/}}
+{{- define "appliance-control-plane.uiImage" -}}
+{{- if .Values.ui.image.digest -}}
+{{- printf "%s@%s" .Values.ui.image.repository .Values.ui.image.digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.ui.image.repository (.Values.ui.image.tag | default .Chart.AppVersion) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+UI service name.
+*/}}
+{{- define "appliance-control-plane.uiServiceName" -}}
+{{- printf "%s-ui" (include "appliance-control-plane.fullname" .) -}}
+{{- end -}}
+
+{{/*
+Default UI -> control-plane public base URL. Allows an explicit override, but
+keeps the common in-chart case aligned with the rendered Service name.
+*/}}
+{{- define "appliance-control-plane.uiControlPlaneBaseURL" -}}
+{{- if .Values.ui.config.controlPlaneBaseURL -}}
+{{- .Values.ui.config.controlPlaneBaseURL -}}
+{{- else -}}
+{{- printf "http://%s:%d" (include "appliance-control-plane.fullname" .) (.Values.service.publicPort | int) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Default UI -> control-plane internal base URL. Allows an explicit override, but
+keeps the common in-chart case aligned with the rendered internal Service name.
+*/}}
+{{- define "appliance-control-plane.uiControlPlaneInternalBaseURL" -}}
+{{- if .Values.ui.config.controlPlaneInternalBaseURL -}}
+{{- .Values.ui.config.controlPlaneInternalBaseURL -}}
+{{- else -}}
+{{- printf "http://%s-internal:%d" (include "appliance-control-plane.fullname" .) (.Values.service.internalPort | int) -}}
 {{- end -}}
 {{- end -}}
 

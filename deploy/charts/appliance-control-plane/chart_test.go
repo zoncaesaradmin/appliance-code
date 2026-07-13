@@ -78,6 +78,18 @@ func findByKind(docs []map[string]any, kind string) []map[string]any {
 	return out
 }
 
+func findByKindAndName(docs []map[string]any, kind, name string) map[string]any {
+	for _, d := range docs {
+		if k, _ := d["kind"].(string); k != kind {
+			continue
+		}
+		if n, _ := at(d, "metadata", "name").(string); n == name {
+			return d
+		}
+	}
+	return nil
+}
+
 // at walks nested maps by key, returning nil if any step is missing or not
 // a map, so callers can write a single assertion without a chain of ok
 // checks.
@@ -108,11 +120,10 @@ func defaultRenderArgs() []string {
 
 func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	deployments := findByKind(docs, "Deployment")
-	if len(deployments) != 1 {
-		t.Fatalf("expected exactly one Deployment, got %d", len(deployments))
+	dep := findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane")
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
 	}
-	dep := deployments[0]
 
 	replicas, _ := at(dep, "spec", "replicas").(int)
 	if replicas != 1 {
@@ -125,11 +136,11 @@ func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
 
 func TestPodAndContainerSecurityHardening(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	deployments := findByKind(docs, "Deployment")
-	if len(deployments) != 1 {
-		t.Fatalf("expected exactly one Deployment, got %d", len(deployments))
+	dep := findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane")
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
 	}
-	podSpec, ok := at(deployments[0], "spec", "template", "spec").(map[string]any)
+	podSpec, ok := at(dep, "spec", "template", "spec").(map[string]any)
 	if !ok {
 		t.Fatal("could not find spec.template.spec on the Deployment")
 	}
@@ -226,8 +237,76 @@ func TestIngressRouteOnlyReferencesPublicService(t *testing.T) {
 	}
 }
 
+func TestUIResourcesRenderByDefault(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane-ui") == nil {
+		t.Fatal("expected UI Deployment")
+	}
+	if findByKindAndName(docs, "Service", "appliance-appliance-control-plane-ui") == nil {
+		t.Fatal("expected UI Service")
+	}
+	if findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-ui-config") == nil {
+		t.Fatal("expected UI ConfigMap")
+	}
+	if findByKindAndName(docs, "NetworkPolicy", "appliance-appliance-control-plane-ui-allow") == nil {
+		t.Fatal("expected UI NetworkPolicy")
+	}
+}
+
+func TestUIConfigMapDefaultsToRenderedControlPlaneServiceNames(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	cm := findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-ui-config")
+	if cm == nil {
+		t.Fatal("expected UI ConfigMap")
+	}
+
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://appliance-appliance-control-plane:8080" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://appliance-appliance-control-plane:8080", got)
+	}
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://appliance-appliance-control-plane-internal:8081" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://appliance-appliance-control-plane-internal:8081", got)
+	}
+}
+
+func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	routes := findByKind(docs, "IngressRoute")
+	if len(routes) != 1 {
+		t.Fatalf("expected exactly one IngressRoute, got %d", len(routes))
+	}
+	routeList, _ := at(routes[0], "spec", "routes").([]any)
+	if len(routeList) != 2 {
+		t.Fatalf("expected API and UI routes, got %d", len(routeList))
+	}
+
+	var apiRouteOK, uiRouteOK bool
+	for _, raw := range routeList {
+		route, _ := raw.(map[string]any)
+		match, _ := route["match"].(string)
+		services, _ := route["services"].([]any)
+		if len(services) != 1 {
+			continue
+		}
+		svc, _ := services[0].(map[string]any)
+		name, _ := svc["name"].(string)
+		switch {
+		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" && name == "appliance-appliance-control-plane":
+			apiRouteOK = true
+		case match == "PathPrefix(`/`)" && name == "appliance-appliance-control-plane-ui":
+			uiRouteOK = true
+		}
+	}
+	if !apiRouteOK {
+		t.Error("expected /api/v1 and /mcp route to target control-plane service")
+	}
+	if !uiRouteOK {
+		t.Error("expected / route to target UI service")
+	}
+}
+
 func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
-	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "ingress.enabled=false")
+	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
 	if len(findByKind(docs, "Namespace")) != 0 {
 		t.Error("namespace.create=false should omit the Namespace object")
 	}
@@ -239,7 +318,10 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	}
 	// The Deployment must still render without a dangling volume/mount
 	// reference to the now-absent PVC.
-	if len(findByKind(docs, "Deployment")) != 1 {
-		t.Error("Deployment should still render with persistence disabled")
+	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane") == nil {
+		t.Error("control-plane Deployment should still render with persistence disabled")
+	}
+	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane-ui") != nil {
+		t.Error("ui.enabled=false should omit the UI Deployment")
 	}
 }

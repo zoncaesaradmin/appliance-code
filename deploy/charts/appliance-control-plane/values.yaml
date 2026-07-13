@@ -9,6 +9,28 @@ image:
   digest: "" # e.g. sha256:...; when set, takes precedence over tag
   pullPolicy: IfNotPresent
 
+ui:
+  enabled: true
+  image:
+    repository: appliance-ui
+    tag: "" # defaults to .Chart.AppVersion
+    digest: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  config:
+    logLevel: info
+    cookieSecure: true
+    controlPlaneBaseURL: "" # empty => derive from the rendered public Service name
+    controlPlaneInternalBaseURL: "" # empty => derive from the rendered internal Service name
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
 nameOverride: ""
 fullnameOverride: ""
 

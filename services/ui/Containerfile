@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1
+#
+# Built only on the Linux build server/CI, inside the shared dev container.
+
+FROM docker.io/library/golang:1.26 AS build
+WORKDIR /src
+COPY . .
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-X appliance-code/services/ui/internal/version.Version=${VERSION} \
+              -X appliance-code/services/ui/internal/version.Commit=${COMMIT} \
+              -X appliance-code/services/ui/internal/version.BuildTime=${BUILD_TIME}" \
+    -o /out/appliance-ui ./cmd/appliance-ui
+
+FROM alpine:3.24.1
+RUN set -eux; \
+    apk add --no-cache ca-certificates tzdata; \
+    addgroup -S -g 10002 appliance-ui; \
+    adduser -S -D -H -u 10002 -G appliance-ui appliance-ui
+COPY --from=build /out/appliance-ui /appliance-ui
+USER 10002:10002
+ENTRYPOINT ["/appliance-ui"]

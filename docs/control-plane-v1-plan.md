@@ -55,7 +55,7 @@ The discussion converged on a simple v1 identity model:
 - Full MCP tool implementation
 - External AAA integrations such as OIDC, SAML, LDAP, or AD
 - Full artifact registry implementation in this repo if a separate OCI registry is used as the data plane
-- Custom control-plane UI/frontend; zot's embedded browse/search UI remains an ADR 0008 gated candidate
+- A heavy SPA-style frontend is out of scope; the product may ship a separate lightweight Go/HTMX UI service while zot's embedded browse/search UI remains an ADR 0008 gated candidate
 - Multi-node control-plane HA and multi-site replication
 
 Single-appliance durability, backup, restore, safe upgrade, and disaster recovery are explicitly in scope. A non-HA appliance still needs predictable recovery from process, node, disk, certificate, and upgrade failures.

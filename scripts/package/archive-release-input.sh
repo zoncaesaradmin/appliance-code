@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-usage: archive-release-input.sh --out-file PATH --code-version VERSION --control-plane-image PATH --k3s-version VERSION [options]
+usage: archive-release-input.sh --out-file PATH --code-version VERSION --control-plane-image PATH --ui-image PATH --k3s-version VERSION [options]
 
 Creates a versioned release-input tarball for appliance-release.
 
@@ -18,6 +18,9 @@ Options:
   --control-plane-image-reference REF
                                    Canonical control-plane image reference
                                    contained in the OCI archive.
+  --ui-image PATH                  Appliance UI image archive. Required.
+  --ui-image-reference REF         Canonical UI image reference contained in
+                                   the OCI archive.
   --argo-version VERSION           Optional pinned Argo Workflows version.
   --argo-controller-image PATH     Optional Argo controller image archive.
   --argo-controller-image-reference REF
@@ -53,6 +56,8 @@ CODE_VERSION=""
 RELEASE_ID=""
 CONTROL_PLANE_IMAGE=""
 CONTROL_PLANE_IMAGE_REFERENCE=""
+UI_IMAGE=""
+UI_IMAGE_REFERENCE=""
 ARGO_VERSION=""
 ARGO_CONTROLLER_IMAGE=""
 ARGO_CONTROLLER_IMAGE_REFERENCE=""
@@ -91,6 +96,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --control-plane-image-reference)
       CONTROL_PLANE_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --ui-image)
+      UI_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --ui-image-reference)
+      UI_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
     --argo-version)
@@ -157,7 +170,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${K3S_VERSION}" ]]; then
+if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${K3S_VERSION}" ]]; then
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
@@ -165,6 +178,10 @@ fi
 
 if [[ ! -f "${CONTROL_PLANE_IMAGE}" ]]; then
   echo "archive-release-input: control-plane image not found: ${CONTROL_PLANE_IMAGE}" >&2
+  exit 1
+fi
+if [[ ! -f "${UI_IMAGE}" ]]; then
+  echo "archive-release-input: UI image not found: ${UI_IMAGE}" >&2
   exit 1
 fi
 if [[ -n "${ARGO_CONTROLLER_IMAGE}" && ! -f "${ARGO_CONTROLLER_IMAGE}" ]]; then
@@ -267,6 +284,7 @@ copy_dir_or_empty() {
 }
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
+UI_BASENAME="$(basename "${UI_IMAGE}")"
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 ARGO_CHART_ARCHIVE="argo-workflows-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
@@ -274,6 +292,7 @@ COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
 
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
+cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
 ARGO_CONTROLLER_BASENAME=""
@@ -331,6 +350,7 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
 {
   for file in \
     "${CONTROL_PLANE_BASENAME}" \
+    "${UI_BASENAME}" \
     "${CHART_ARCHIVE}" \
     "${CONFIG_SCHEMA_BASENAME}" \
     "${COMPATIBILITY_BASENAME}"
@@ -413,6 +433,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   "generatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "artifacts": {
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
+    "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),

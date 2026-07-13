@@ -1,14 +1,15 @@
 # appliance-code
 
-Product repo for the appliance. V1 ships one service, the control plane
-(auth, RBAC, HTTP APIs, MCP endpoint, and K3s-facing orchestration), but the
-repo is laid out for multiple independently versioned services and their
-client SDKs, not as a single-service codebase:
+Product repo for the appliance. V1 now ships two always-running product-facing
+services: the control plane and a separate server-rendered UI service. The repo
+is laid out for multiple independently versioned services and their client SDKs,
+not as a single-service codebase:
 
 - `services/controlplane/` — the control-plane service (its own Go module and Makefile)
+- `services/ui/` — the HTMX/server-rendered browser UI service (its own Go module and Makefile)
 - `sdk/golang/applianceclient/` — a Go client SDK for the control-plane REST API
 - `e2etests/` — reserved for external live-server end-to-end test harnesses that use the SDK as a client
-- `deploy/charts/appliance-control-plane/` — the control plane's Helm chart (its own Go module, for chart policy tests)
+- `deploy/charts/appliance-control-plane/` — the appliance chart that now deploys both the control plane and the UI service (its own Go module, for chart policy tests)
 - `scripts/package/` — release-input producer helpers for handoff into `appliance-release`
 
 Each has its own `go.mod` and `Makefile`; the root has neither a `go.mod`

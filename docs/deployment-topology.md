@@ -17,6 +17,7 @@ flowchart TD
 
         subgraph AppNS["appliance-system namespace"]
             Control["Control-plane pod<br/>One Go server replica<br/>REST + MCP + auth + RBAC + orchestration"]
+            UI["UI pod<br/>One Go server replica<br/>HTMX + server-rendered HTML"]
             Zot["zot pod<br/>One registry replica<br/>OCI data plane"]
             ControlPVC[("Control-plane RWO PVC<br/>SQLite + durable application state")]
             ZotPVC[("zot RWO PVC<br/>OCI manifests + blobs + indexes")]
@@ -47,6 +48,7 @@ flowchart TD
     end
 
     Client -->|"TCP 443"| Traefik
+    Traefik -->|"/ and browser UI paths"| UI
     Traefik -->|"/api/v1/* and /mcp"| Control
     Traefik -.->|ForwardAuth<br/>"/internal/auth/check"| Control
     Traefik -->|"/v2/*"| Zot
@@ -76,12 +78,13 @@ flowchart TD
 
 | Pod | Replicas | Public route | Responsibility |
 | --- | ---: | --- | --- |
+| UI service | 1 | `/`, browser UI paths | Login page, operator dashboard, and HTMX/server-rendered browser flows backed by control-plane APIs |
 | Control plane | 1 | `/api/v1/*`, `/mcp` | REST, MCP, local identity, sessions, API tokens, RBAC, registry-token issuance, internal ForwardAuth decisions, audit, builds, artifact metadata, reconciliation, and internal maintenance scheduling |
 | zot | 1 | `/v2/*` | OCI manifests, tags, digests, referrers, blobs, enhanced search, scrub, deduplication, garbage collection, and internal events |
 | Argo Workflow Controller | 1 | None | Watches appliance-owned `Workflow` resources and reconciles build, scan, and image-operation task pods |
 | Traefik | K3s-managed | TCP 443 | TLS termination, canonical-host enforcement, request limits, and routing to the control plane or zot |
 
-SQLite runs inside the control-plane process and stores files on its PVC. It is not a separate pod. MCP is part of the same Go server and is not a separate pod. Argo Server and its UI are not deployed in v1: the Workflow Controller can operate independently, and the appliance control plane remains the only user-facing workflow API.
+SQLite runs inside the control-plane process and stores files on its PVC. It is not a separate pod. MCP is part of the same Go server and is not a separate pod. Argo Server and its UI are not deployed in v1: the Workflow Controller can operate independently, and the appliance's own UI plus control plane remain the only user-facing surfaces.
 
 ## Temporary Workload Pods
 
@@ -161,7 +164,6 @@ V1 does not deploy separate pods for:
 - MCP
 - identity, authorization, or local-user services
 - a second registry identity store
-- a custom UI
 - Argo Server/UI or an Argo workflow-archive database
 - Podman or Helm as resident services
 
@@ -173,6 +175,7 @@ The normal product steady state is intentionally small:
 
 ```text
 K3s platform pods
+  + one UI pod
   + one control-plane pod
   + one zot pod
   + one Argo Workflow Controller pod
