@@ -47,10 +47,15 @@ namespace:
 # per ADR 0005.
 config:
   applianceProfile: core
-  environment: production
   canonicalOrigin: "https://appliance.example.internal"
   logLevel: info
   trustedProxyCount: 1
+  # Developer workflow catalog used by the builder profile. It is the single
+  # source of truth for allowed Git sources, source credential references,
+  # build targets, and pinned builder images. Keep this empty for core/storage.
+  # Entries may reference source credential secret names, but must never inline
+  # private key or token material.
+  buildCatalog: {}
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects

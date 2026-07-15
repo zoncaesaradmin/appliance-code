@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/devflows"
 )
 
 // Config is the complete typed configuration surface for the control plane
@@ -23,10 +24,6 @@ type Config struct {
 	// this deployment. The control plane resolves it into appliance
 	// capabilities at startup.
 	ApplianceProfile string `json:"applianceProfile"`
-
-	// Environment selects environment-specific behavior (e.g. "development",
-	// "production"). It never selects a different persistence backend in v1.
-	Environment string `json:"environment"`
 
 	// CanonicalOrigin is the externally reachable origin (scheme://host[:port])
 	// used to derive absolute URLs. It must be an absolute http(s) URL with no
@@ -61,21 +58,17 @@ type Config struct {
 	// real ADR 0008 conformance evidence requires a real zot instance.
 	ZotBaseURL string `json:"zotBaseURL"`
 
-	// AllowedGitSourceHosts is the build policy allowlist of Git hosts
-	// builds may fetch source from. Empty means no host is allowed,
-	// failing closed rather than silently permitting arbitrary sources.
-	// This is configuration data, not an environment-tuned process knob.
-	AllowedGitSourceHosts []string `json:"allowedGitSourceHosts"`
-
-	// AllowedBuilderImageDigests is the build policy allowlist of
-	// approved, pinned builder image references builds may use. Empty
-	// means unrestricted builder selection until an explicit policy is
-	// configured.
-	AllowedBuilderImageDigests []string `json:"allowedBuilderImageDigests"`
-
 	// BuildDefaultDeadline bounds how long a build may run before it is
 	// automatically cancelled and marked timed out.
 	BuildDefaultDeadline time.Duration `json:"buildDefaultDeadline"`
+
+	// WorkflowEngine selects the workflow backend explicitly.
+	WorkflowEngine string `json:"workflowEngine"`
+
+	// BuildCatalog describes the builder-profile developer workflow catalog.
+	// It contains product-facing profile/target names and secret references,
+	// never private key or token material.
+	BuildCatalog devflows.Catalog `json:"buildCatalog"`
 
 	// ReadHeaderTimeout, ReadTimeout, WriteTimeout, and IdleTimeout bound the
 	// public HTTP server per the plan's default HTTP contract.
@@ -96,7 +89,6 @@ type Config struct {
 func Default() Config {
 	return Config{
 		ApplianceProfile:     string(appliance.ProfileCore),
-		Environment:          "development",
 		CanonicalOrigin:      "http://localhost:8080",
 		PublicAddr:           "127.0.0.1:8080",
 		InternalAddr:         "127.0.0.1:8081",
@@ -111,6 +103,7 @@ func Default() Config {
 		MaxHeaderBytes:       16 * 1024,
 		MaxBodyBytes:         1 * 1024 * 1024,
 		BuildDefaultDeadline: 30 * time.Minute,
+		WorkflowEngine:       "fake",
 	}
 }
 
@@ -158,18 +151,6 @@ func parseEnviron(environ []string) map[string]string {
 // splitNonEmpty splits a comma-separated environment value, trimming
 // whitespace and dropping empty entries so trailing commas don't produce
 // spurious blank allowlist entries.
-func splitNonEmpty(v string) []string {
-	parts := strings.Split(v, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 func loadFile(path string, cfg *Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -185,13 +166,13 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		}
 	}
 	str("PROFILE", &cfg.ApplianceProfile)
-	str("ENVIRONMENT", &cfg.Environment)
 	str("CANONICAL_ORIGIN", &cfg.CanonicalOrigin)
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
 	str("DATA_DIR", &cfg.DataDir)
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
+	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 
 	var errs []string
 
@@ -244,6 +225,12 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		}
 	}
 
+	if v, ok := env[envPrefix+"BUILD_CATALOG_JSON"]; ok && strings.TrimSpace(v) != "" {
+		if err := json.Unmarshal([]byte(v), &cfg.BuildCatalog); err != nil {
+			errs = append(errs, fmt.Sprintf("BUILD_CATALOG_JSON: %v", err))
+		}
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
@@ -255,14 +242,19 @@ func applyEnv(cfg *Config, env map[string]string) error {
 func (c Config) Validate() error {
 	var errs []string
 
-	switch c.Environment {
-	case "development", "production":
-	default:
-		errs = append(errs, `environment must be "development" or "production"`)
-	}
-
-	if _, err := appliance.ResolveProfile(c.ApplianceProfile); err != nil {
-		errs = append(errs, fmt.Sprintf("applianceProfile %q is invalid: %v", c.ApplianceProfile, err))
+	resolved, profileErr := appliance.ResolveProfile(c.ApplianceProfile)
+	if profileErr != nil {
+		errs = append(errs, fmt.Sprintf("applianceProfile %q is invalid: %v", c.ApplianceProfile, profileErr))
+	} else if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+		if c.BuildCatalog.Empty() {
+			errs = append(errs, "buildCatalog must not be empty when the build capability is enabled")
+		} else if err := c.BuildCatalog.Validate(); err != nil {
+			errs = append(errs, err.Error())
+		}
+	} else if !c.BuildCatalog.Empty() {
+		if err := c.BuildCatalog.Validate(); err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 
 	if u, err := url.Parse(c.CanonicalOrigin); err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" {
@@ -290,6 +282,12 @@ func (c Config) Validate() error {
 
 	if c.TrustedProxyCount < 0 {
 		errs = append(errs, "trustedProxyCount must not be negative")
+	}
+
+	switch c.WorkflowEngine {
+	case "fake", "argo":
+	default:
+		errs = append(errs, `workflowEngine must be one of "fake", "argo"`)
 	}
 
 	durations := map[string]time.Duration{

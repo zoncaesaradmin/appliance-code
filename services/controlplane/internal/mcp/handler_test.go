@@ -10,17 +10,29 @@ import (
 	"testing"
 
 	"appliance-code/services/controlplane/internal/app"
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/mcp"
 	"appliance-code/services/controlplane/internal/reqauth"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
+	"appliance-code/services/controlplane/internal/workflows"
 )
 
 const canonicalOrigin = "https://appliance.example.internal"
 const testPassword = "a-sufficiently-long-test-password-1"
+
+func testBuildCatalog() devflows.Catalog {
+	return devflows.Catalog{
+		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows"}},
+		SourceCredentials: []devflows.SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com", KubernetesSecretName: "git-main-key", KnownHostsSecretName: "git-known-hosts"}},
+		Repos:             []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
+		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, WorkProfile: "builder", Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+	}
+}
 
 type testEnv struct {
 	*httptest.Server
@@ -29,9 +41,18 @@ type testEnv struct {
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
+	return newTestEnvWithProfile(t, appliance.ProfileCore)
+}
+
+func newTestEnvWithProfile(t *testing.T, profile appliance.Profile) *testEnv {
+	t.Helper()
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.CanonicalOrigin = canonicalOrigin
+	cfg.ApplianceProfile = string(profile)
+	if profile == appliance.ProfileBuilder {
+		cfg.BuildCatalog = testBuildCatalog()
+	}
 
 	services, err := app.WireServices(cfg)
 	if err != nil {
@@ -43,7 +64,8 @@ func newTestEnv(t *testing.T) *testEnv {
 		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,
 		Users: services.Users, Roles: services.Roles,
 	}
-	handler := mcp.NewHandler(deps, cfg.CanonicalOrigin)
+	handler := mcp.NewHandler(deps, cfg.CanonicalOrigin,
+		mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities))
 
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -386,5 +408,289 @@ func TestRESTAndMCPAuthorizationEquivalence(t *testing.T) {
 		if mcpAllowed != directDecision {
 			t.Errorf("MCP decision for %s = %v (status %d), want it to match authz.Service decision %v", tc.username, mcpAllowed, resp.StatusCode, directDecision)
 		}
+	}
+}
+
+func TestBuilderProfileListsDeveloperWorkflowTools(t *testing.T) {
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	token := env.login(t, "admin")
+	sessionID := env.initializeSession(t, token)
+
+	resp, parsed := env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"1","method":"tools/list"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("tools/list status = %d, want 200", resp.StatusCode)
+	}
+	var result struct {
+		Tools []mcp.Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(parsed.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tools) == 0 {
+		t.Fatalf("builder profile should list developer workflow tools")
+	}
+	var sawCreateWorkspace, sawSubmitBuild bool
+	for _, tool := range result.Tools {
+		switch tool.Name {
+		case "create_workspace":
+			sawCreateWorkspace = strings.Contains(string(tool.InputSchema), "workspace_name")
+		case "submit_build":
+			sawSubmitBuild = strings.Contains(string(tool.InputSchema), "build_target")
+		}
+	}
+	if !sawCreateWorkspace || !sawSubmitBuild {
+		t.Fatalf("tools/list should expose explicit MCP schemas, got %+v", result.Tools)
+	}
+}
+
+func TestCoreProfileHidesDeveloperWorkflowTools(t *testing.T) {
+	env := newTestEnv(t)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	token := env.login(t, "admin")
+	sessionID := env.initializeSession(t, token)
+	_, parsed := env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"1","method":"tools/list"}`)
+	var result struct {
+		Tools []mcp.Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(parsed.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tools) != 0 {
+		t.Fatalf("core profile tools = %+v, want none", result.Tools)
+	}
+}
+
+func TestCoreProfileRejectsDirectDeveloperWorkflowToolCallAsNotFound(t *testing.T) {
+	env := newTestEnv(t)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	token := env.login(t, "admin")
+	sessionID := env.initializeSession(t, token)
+
+	resp, parsed := env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"submit_build","arguments":{"build_target":"app"}}}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want JSON-RPC 200", resp.StatusCode)
+	}
+	if parsed.Error == nil || parsed.Error.Code != mcp.ErrCodeMethodNotFound || parsed.Error.Message != "Tool not found" {
+		t.Fatalf("core profile submit_build error = %+v, want tool-not-found", parsed.Error)
+	}
+}
+
+func TestMCPInvokeAloneCannotSubmitBuild(t *testing.T) {
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	actor := audit.Actor{Type: storage.AuditActorSystem, AuthMethod: "test"}
+	role, err := env.services.Roles.Create(t.Context(), actor, "mcp-only", []string{roles.PermMCPInvoke})
+	if err != nil {
+		t.Fatalf("creating mcp-only role: %v", err)
+	}
+	user, err := env.services.Users.Create(t.Context(), actor, "mcp-only-user", "mcp-only-user", testPassword)
+	if err != nil {
+		t.Fatalf("creating user: %v", err)
+	}
+	if err := env.services.Roles.SetUserRoles(t.Context(), actor, user.ID, []string{role.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	token := env.login(t, "mcp-only-user")
+	sessionID := env.initializeSession(t, token)
+	resp, parsed := env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"list","method":"tools/list"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("tools/list status = %d, want 200", resp.StatusCode)
+	}
+	var listResult struct {
+		Tools []mcp.Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(parsed.Result, &listResult); err != nil {
+		t.Fatalf("decoding tools/list result: %v", err)
+	}
+	if len(listResult.Tools) != 0 {
+		t.Fatalf("mcp.invoke-only principal tools = %+v, want none", listResult.Tools)
+	}
+
+	resp, parsed = env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"submit_build","arguments":{"build_target":"app"}}}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want JSON-RPC 200", resp.StatusCode)
+	}
+	if parsed.Error == nil || parsed.Error.Code != mcp.ErrCodeInvalidRequest {
+		t.Fatalf("submit_build with mcp.invoke only error = %+v, want permission denied invalid request", parsed.Error)
+	}
+}
+
+func TestToolsListFiltersByToolPermission(t *testing.T) {
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	actor := audit.Actor{Type: storage.AuditActorSystem, AuthMethod: "test"}
+	role, err := env.services.Roles.Create(t.Context(), actor, "mcp-work-profiles-only", []string{roles.PermMCPInvoke, roles.PermWorkProfilesRead})
+	if err != nil {
+		t.Fatalf("creating role: %v", err)
+	}
+	user, err := env.services.Users.Create(t.Context(), actor, "mcp-work-profiles-user", "mcp-work-profiles-user", testPassword)
+	if err != nil {
+		t.Fatalf("creating user: %v", err)
+	}
+	if err := env.services.Roles.SetUserRoles(t.Context(), actor, user.ID, []string{role.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	token := env.login(t, "mcp-work-profiles-user")
+	sessionID := env.initializeSession(t, token)
+	resp, parsed := env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"list","method":"tools/list"}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("tools/list status = %d, want 200", resp.StatusCode)
+	}
+	var result struct {
+		Tools []mcp.Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(parsed.Result, &result); err != nil {
+		t.Fatalf("decoding tools/list result: %v", err)
+	}
+	if len(result.Tools) != 1 || result.Tools[0].Name != "list_work_profiles" {
+		t.Fatalf("filtered tools = %+v, want only list_work_profiles", result.Tools)
+	}
+
+	resp, parsed = env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"submit","method":"tools/call","params":{"name":"submit_build","arguments":{"build_target":"app"}}}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want JSON-RPC 200", resp.StatusCode)
+	}
+	if parsed.Error == nil || parsed.Error.Code != mcp.ErrCodeInvalidRequest {
+		t.Fatalf("submit_build error = %+v, want permission denied invalid request", parsed.Error)
+	}
+}
+
+func TestBuildPermissionAloneCannotUseMCP(t *testing.T) {
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	env.createUserWithRole(t, "automation-user", roles.AutomationRoleID)
+	token := env.login(t, "automation-user")
+	sessionID := env.initializeSession(t, token)
+	resp, _ := env.post(t, token, sessionID, `{"jsonrpc":"2.0","id":"1","method":"tools/list"}`)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("automation tools/list status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+	fake, ok := env.services.WorkflowEngine.(*workflows.Fake)
+	if !ok {
+		t.Fatalf("workflow engine is %T, want *workflows.Fake", env.services.WorkflowEngine)
+	}
+	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+
+	token := env.login(t, "admin")
+	sessionID := env.initializeSession(t, token)
+
+	callTool := func(id, name, args string) map[string]any {
+		t.Helper()
+		body := fmt.Sprintf(`{"jsonrpc":"2.0","id":%q,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, id, name, args)
+		resp, parsed := env.post(t, token, sessionID, body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", name, resp.StatusCode)
+		}
+		if parsed.Error != nil {
+			t.Fatalf("%s returned JSON-RPC error: %+v", name, parsed.Error)
+		}
+		var result struct {
+			StructuredContent map[string]any `json:"structuredContent"`
+		}
+		if err := json.Unmarshal(parsed.Result, &result); err != nil {
+			t.Fatalf("decoding %s result: %v", name, err)
+		}
+		return result.StructuredContent
+	}
+
+	created := callTool("create", "create_workspace", `{"workspace_name":"app","profile_name":"builder","repo_name":"app","source_ref":"0123456789abcdef0123456789abcdef01234567"}`)
+	workspaceMap, ok := created["workspace"].(map[string]any)
+	if !ok {
+		t.Fatalf("create_workspace structured content = %+v, want workspace", created)
+	}
+	workspaceID, _ := workspaceMap["id"].(string)
+	if workspaceID == "" {
+		t.Fatalf("create_workspace workspace missing id: %+v", workspaceMap)
+	}
+
+	workspaces := callTool("workspaces", "list_workspaces", `{}`)
+	if items, ok := workspaces["items"].([]any); !ok || len(items) == 0 {
+		t.Fatalf("list_workspaces structured content = %+v, want items", workspaces)
+	}
+
+	current := callTool("current", "get_workspace", `{}`)
+	if workspace, ok := current["workspace"].(map[string]any); !ok || workspace["id"] != workspaceID {
+		t.Fatalf("get_workspace structured content = %+v, want current workspace %q", current, workspaceID)
+	}
+
+	selected := callTool("select", "set_workspace", fmt.Sprintf(`{"workspace_id":%q}`, workspaceID))
+	if workspace, ok := selected["workspace"].(map[string]any); !ok || workspace["id"] != workspaceID {
+		t.Fatalf("set_workspace structured content = %+v, want selected workspace %q", selected, workspaceID)
+	}
+
+	targets := callTool("targets", "list_build_targets", `{}`)
+	if items, ok := targets["items"].([]any); !ok || len(items) == 0 {
+		t.Fatalf("list_build_targets structured content = %+v, want items", targets)
+	}
+
+	submitted := callTool("submit", "submit_build", `{"build_target":"app","tag":"v1"}`)
+	jobMap, ok := submitted["job"].(map[string]any)
+	if !ok {
+		t.Fatalf("submit_build structured content = %+v, want job", submitted)
+	}
+	jobID, _ := jobMap["id"].(string)
+	if jobID == "" {
+		t.Fatalf("submit_build job missing id: %+v", jobMap)
+	}
+	if artifactRef, _ := jobMap["artifactRef"].(string); artifactRef != "users/alice/app:v1" {
+		t.Fatalf("submit_build artifactRef = %q, want users/alice/app:v1", artifactRef)
+	}
+	for _, secretText := range []string{"git-main-key", "git-known-hosts"} {
+		if strings.Contains(fmt.Sprint(submitted), secretText) {
+			t.Fatalf("submit_build structured content leaked source credential material %q: %+v", secretText, submitted)
+		}
+	}
+
+	status := callTool("status", "get_job_status", fmt.Sprintf(`{"job_id":%q}`, jobID))
+	if statusJob, ok := status["job"].(map[string]any); !ok || statusJob["status"] == "" {
+		t.Fatalf("get_job_status structured content = %+v, want job status", status)
+	} else if artifactRef, _ := statusJob["artifactRef"].(string); artifactRef != "users/alice/app:v1" {
+		t.Fatalf("get_job_status artifactRef = %q, want users/alice/app:v1", artifactRef)
+	}
+	for _, secretText := range []string{"git-main-key", "git-known-hosts"} {
+		if strings.Contains(fmt.Sprint(status), secretText) {
+			t.Fatalf("get_job_status structured content leaked source credential material %q: %+v", secretText, status)
+		}
+	}
+
+	steps := callTool("steps", "get_job_steps", fmt.Sprintf(`{"job_id":%q}`, jobID))
+	if items, ok := steps["items"].([]any); !ok || len(items) == 0 {
+		t.Fatalf("get_job_steps structured content = %+v, want items", steps)
+	}
+
+	logs := callTool("logs", "get_job_logs", fmt.Sprintf(`{"job_id":%q}`, jobID))
+	if got, _ := logs["logs"].(string); !strings.Contains(got, "fake logs for workflow") {
+		t.Fatalf("get_job_logs logs = %q, want fake workflow logs", got)
+	}
+
+	cancelled := callTool("cancel", "cancel_job", fmt.Sprintf(`{"job_id":%q}`, jobID))
+	cancelledJob, ok := cancelled["job"].(map[string]any)
+	if !ok {
+		t.Fatalf("cancel_job structured content = %+v, want job", cancelled)
+	}
+	if cancelledJob["status"] != string(storage.JobStatusCancelled) {
+		t.Fatalf("cancel_job status = %v, want cancelled", cancelledJob["status"])
 	}
 }

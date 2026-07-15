@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/devflows"
 )
 
 func TestDefaultIsValid(t *testing.T) {
@@ -15,7 +16,6 @@ func TestDefaultIsValid(t *testing.T) {
 
 func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 	environ := []string{
-		"APPLIANCE_PROFILE=builder",
 		"APPLIANCE_PUBLIC_ADDR=0.0.0.0:9000",
 		"APPLIANCE_LOG_LEVEL=debug",
 		"APPLIANCE_CANONICAL_ORIGIN=https://appliance.example.internal",
@@ -27,8 +27,8 @@ func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 	if cfg.PublicAddr != "0.0.0.0:9000" {
 		t.Errorf("PublicAddr = %q, want 0.0.0.0:9000", cfg.PublicAddr)
 	}
-	if cfg.ApplianceProfile != "builder" {
-		t.Errorf("ApplianceProfile = %q, want builder", cfg.ApplianceProfile)
+	if cfg.ApplianceProfile != "core" {
+		t.Errorf("ApplianceProfile = %q, want core", cfg.ApplianceProfile)
 	}
 	if cfg.LogLevel != "debug" {
 		t.Errorf("LogLevel = %q, want debug", cfg.LogLevel)
@@ -84,5 +84,40 @@ func TestLoadRejectsUnknownApplianceProfile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "applianceProfile") {
 		t.Fatalf("error = %v, want applianceProfile mentioned", err)
+	}
+}
+
+func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
+	cfg := config.Default()
+	cfg.ApplianceProfile = "builder"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "buildCatalog") {
+		t.Fatalf("builder profile without catalog error = %v, want buildCatalog", err)
+	}
+	cfg.BuildCatalog = testBuildCatalog()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("builder profile with catalog Validate: %v", err)
+	}
+}
+
+func testBuildCatalog() devflows.Catalog {
+	return devflows.Catalog{
+		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows"}},
+		SourceCredentials: []devflows.SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com", KubernetesSecretName: "git-main-key", KnownHostsSecretName: "git-known-hosts"}},
+		Repos:             []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
+		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, WorkProfile: "builder", Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+	}
+}
+
+func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
+	jsonCatalog := `{"workProfiles":[{"name":"builder"}],"sourceCredentials":[{"id":"git-main","gitHost":"git.internal.example.com","kubernetesSecretName":"git-main-key","knownHostsSecretName":"git-known-hosts"}],"repos":[{"name":"app","url":"git@git.internal.example.com:team/app.git","defaultRef":"0123456789abcdef0123456789abcdef01234567","sourceCredentialRef":"git-main"}],"buildTargets":[{"name":"default","aliases":["app"],"workProfile":"builder","repo":"app","execution":"repo_script","imageRepository":"users/alice/app","builderImageDigest":"buildah@sha256:approved"}]}`
+	cfg, err := config.Load([]string{
+		"APPLIANCE_PROFILE=builder",
+		"APPLIANCE_BUILD_CATALOG_JSON=" + jsonCatalog,
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.BuildCatalog.BuildTargets) != 1 {
+		t.Fatalf("BuildCatalog targets = %+v, want one", cfg.BuildCatalog.BuildTargets)
 	}
 }

@@ -59,10 +59,11 @@ func New(cfg config.Config, logger logging.Logger) (*App, error) {
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:     &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:     &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH:    &httpapi.TokenHandlers{Tokens: services.Tokens},
-		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin),
+		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
+		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
+			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{
@@ -76,6 +77,7 @@ func New(cfg config.Config, logger logging.Logger) (*App, error) {
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
+		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows}
 	}
 
 	publicHandler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)

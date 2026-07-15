@@ -176,7 +176,28 @@ printf '%s\n' "${ADMIN_PASSWORD}" > "${PASSWORD_DIR}/admin.txt"
 cat > "${CONFIG_FILE}" <<EOF
 {
   "applianceProfile": "builder",
-  "allowedGitSourceHosts": ["git.internal.example.com"]
+  "allowedGitSourceHosts": ["git.internal.example.com"],
+  "allowedBuilderImageDigests": ["${BUILD_BUILDER_DIGEST}"],
+  "buildCatalog": {
+    "workProfiles": [
+      {"name": "builder", "description": "Builder workflows"}
+    ],
+    "repos": [
+      {"name": "app", "url": "${BUILD_SOURCE_URL}", "defaultRef": "${BUILD_SOURCE_SHA}"}
+    ],
+    "buildTargets": [
+      {
+        "name": "default",
+        "aliases": ["app"],
+        "workProfile": "builder",
+        "repo": "app",
+        "execution": "repo_script",
+        "imageRepository": "${BUILD_IMAGE_REPOSITORY}",
+        "imageTagTemplate": "{commit12}",
+        "builderImageDigest": "${BUILD_BUILDER_DIGEST}"
+      }
+    ]
+  }
 }
 EOF
 

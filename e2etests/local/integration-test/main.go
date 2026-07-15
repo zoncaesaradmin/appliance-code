@@ -22,6 +22,7 @@ type config struct {
 	apiBaseURL    string
 	serverBinary  string
 	dataDir       string
+	configFile    string
 	publicAddr    string
 	internalAddr  string
 	adminUsername string
@@ -43,6 +44,7 @@ func main() {
 	flag.StringVar(&cfg.apiBaseURL, "api-base-url", "", "control-plane API base URL (required)")
 	flag.StringVar(&cfg.serverBinary, "server-binary", "", "path to appliance-server binary (required)")
 	flag.StringVar(&cfg.dataDir, "data-dir", "", "control-plane data directory (required)")
+	flag.StringVar(&cfg.configFile, "config-file", "", "control-plane config file used by node-local commands")
 	flag.StringVar(&cfg.publicAddr, "public-addr", "", "public listen addr used by the local server")
 	flag.StringVar(&cfg.internalAddr, "internal-addr", "", "internal listen addr used by the local server")
 	flag.StringVar(&cfg.adminUsername, "admin-username", "admin", "bootstrap administrator username")
@@ -205,9 +207,16 @@ func (r *runner) run(ctx context.Context) error {
 		"tokens.create.self",
 		"tokens.revoke.self",
 		"registry.pull",
+		"work_profiles.read",
+		"workspaces.create",
+		"workspaces.read.self",
+		"workspaces.delete.self",
+		"build_targets.read",
 		"builds.create",
 		"builds.read.self",
 		"builds.cancel.self",
+		"jobs.read.self",
+		"jobs.cancel.self",
 		"mcp.invoke",
 	}); err != nil {
 		return fmt.Errorf("update alice role: %w", err)
@@ -353,6 +362,110 @@ func (r *runner) run(ctx context.Context) error {
 		return fmt.Errorf("cancel build returned id %q, want %q", cancelled.ID, build.ID)
 	}
 
+	r.logger.Print("exercising developer workflow REST APIs through SDK")
+	profiles, err := r.client.ListWorkProfiles(ctx, aliceAccess)
+	if err != nil {
+		return fmt.Errorf("list workspace profiles: %w", err)
+	}
+	if !containsWorkProfile(profiles, "builder") {
+		return fmt.Errorf("workspace profile builder not present: %#v", profiles)
+	}
+	workspace, err := r.client.CreateWorkspace(ctx, aliceAccess, applianceclient.CreateWorkspaceRequest{
+		Name:        "sdk-app",
+		WorkProfile: "builder",
+		Repo:        "app",
+		SourceRef:   "0123456789abcdef0123456789abcdef01234567",
+	})
+	if err != nil {
+		return fmt.Errorf("create workspace: %w", err)
+	}
+	workspaces, err := r.client.ListWorkspaces(ctx, aliceAccess)
+	if err != nil {
+		return fmt.Errorf("list workspaces: %w", err)
+	}
+	if !containsWorkspace(workspaces, workspace.ID) {
+		return fmt.Errorf("workspace %s not present in list", workspace.ID)
+	}
+	gotWorkspace, err := r.client.GetWorkspace(ctx, aliceAccess, workspace.ID)
+	if err != nil {
+		return fmt.Errorf("get workspace: %w", err)
+	}
+	if gotWorkspace.ID != workspace.ID {
+		return fmt.Errorf("get workspace id = %q, want %q", gotWorkspace.ID, workspace.ID)
+	}
+	currentWorkspace, err := r.client.CurrentWorkspace(ctx, aliceAccess)
+	if err != nil {
+		return fmt.Errorf("current workspace: %w", err)
+	}
+	if currentWorkspace.ID != workspace.ID {
+		return fmt.Errorf("current workspace id = %q, want %q", currentWorkspace.ID, workspace.ID)
+	}
+	if _, err := r.client.SetCurrentWorkspace(ctx, aliceAccess, workspace.ID); err != nil {
+		return fmt.Errorf("set current workspace: %w", err)
+	}
+	targets, err := r.client.ListCurrentBuildTargets(ctx, aliceAccess)
+	if err != nil {
+		return fmt.Errorf("list current build targets: %w", err)
+	}
+	if !containsBuildTarget(targets, "app") {
+		return fmt.Errorf("build target app not present: %#v", targets)
+	}
+	job, err := r.client.SubmitCurrentBuildWithIdempotencyKey(ctx, aliceAccess, applianceclient.SubmitCurrentBuildRequest{
+		TargetName: "app",
+		ImageTag:   "sdk-v1",
+	}, "sdk-workflow-build")
+	if err != nil {
+		return fmt.Errorf("submit current build: %w", err)
+	}
+	if job.ArtifactRef != "users/alice/app:sdk-v1" {
+		return fmt.Errorf("submitted job artifactRef = %q, want users/alice/app:sdk-v1", job.ArtifactRef)
+	}
+	currentJob, err := r.client.CurrentWorkspaceBuildStatus(ctx, aliceAccess)
+	if err != nil {
+		return fmt.Errorf("current workspace build status: %w", err)
+	}
+	if currentJob.ID != job.ID {
+		return fmt.Errorf("current workspace build status id = %q, want %q", currentJob.ID, job.ID)
+	}
+	jobs, err := r.client.ListJobs(ctx, aliceAccess)
+	if err != nil {
+		return fmt.Errorf("list jobs: %w", err)
+	}
+	if !containsJob(jobs, job.ID) {
+		return fmt.Errorf("job %s not present in list", job.ID)
+	}
+	gotJob, err := r.client.GetJob(ctx, aliceAccess, job.ID)
+	if err != nil {
+		return fmt.Errorf("get job: %w", err)
+	}
+	if gotJob.ArtifactRef != job.ArtifactRef {
+		return fmt.Errorf("get job artifactRef = %q, want %q", gotJob.ArtifactRef, job.ArtifactRef)
+	}
+	steps, err := r.client.JobSteps(ctx, aliceAccess, job.ID)
+	if err != nil {
+		return fmt.Errorf("job steps: %w", err)
+	}
+	if len(steps) == 0 {
+		return fmt.Errorf("job steps were empty")
+	}
+	jobLogs, err := r.client.JobLogs(ctx, aliceAccess, job.ID)
+	if err != nil {
+		return fmt.Errorf("job logs: %w", err)
+	}
+	if !strings.Contains(jobLogs, "fake logs for workflow") {
+		return fmt.Errorf("unexpected job logs: %q", jobLogs)
+	}
+	cancelledJob, err := r.client.CancelJob(ctx, aliceAccess, job.ID)
+	if err != nil {
+		return fmt.Errorf("cancel job: %w", err)
+	}
+	if cancelledJob.ID != job.ID {
+		return fmt.Errorf("cancel job returned id %q, want %q", cancelledJob.ID, job.ID)
+	}
+	if err := r.client.DeleteWorkspace(ctx, aliceAccess, workspace.ID); err != nil {
+		return fmt.Errorf("delete workspace: %w", err)
+	}
+
 	r.logger.Print("exercising live MCP endpoint")
 	if err := r.exerciseMCP(ctx, aliceAccess); err != nil {
 		return fmt.Errorf("exercise /mcp: %w", err)
@@ -395,6 +508,7 @@ func (r *runner) runRecoveryResetPassword(ctx context.Context, username, newPass
 
 	cmd := exec.CommandContext(ctx, r.cfg.serverBinary, "recovery", "reset-password", "--username", username, "--password-file", passwordFile)
 	cmd.Env = append(os.Environ(),
+		"APPLIANCE_CONFIG_FILE="+r.cfg.configFile,
 		"APPLIANCE_PROFILE=builder",
 		"APPLIANCE_DATA_DIR="+r.cfg.dataDir,
 		"APPLIANCE_CANONICAL_ORIGIN="+r.cfg.apiBaseURL,
@@ -460,6 +574,26 @@ func (r *runner) exerciseMCP(ctx context.Context, bearer string) error {
 	}
 	if _, ok := toolsResult["tools"]; !ok {
 		return fmt.Errorf("tools/list response missing tools: %#v", toolsResp)
+	}
+	toolNames, err := mcpToolNames(toolsResult["tools"])
+	if err != nil {
+		return fmt.Errorf("decode tools/list tools: %w", err)
+	}
+	for _, expected := range []string{
+		"list_work_profiles",
+		"get_workspace",
+		"set_workspace",
+		"list_build_targets",
+		"submit_build",
+		"list_jobs",
+		"get_job_status",
+		"get_job_steps",
+		"get_job_logs",
+		"cancel_job",
+	} {
+		if !toolNames[expected] {
+			return fmt.Errorf("tools/list missing builder MCP tool %q: %#v", expected, toolsResult["tools"])
+		}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, r.cfg.apiBaseURL+"/mcp", nil)
@@ -565,6 +699,67 @@ func containsBuild(builds []applianceclient.Build, buildID string) bool {
 		}
 	}
 	return false
+}
+
+func containsWorkProfile(profiles []applianceclient.WorkProfile, name string) bool {
+	for _, profile := range profiles {
+		if profile.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func containsWorkspace(workspaces []applianceclient.Workspace, workspaceID string) bool {
+	for _, workspace := range workspaces {
+		if workspace.ID == workspaceID {
+			return true
+		}
+	}
+	return false
+}
+
+func containsBuildTarget(targets []applianceclient.BuildTarget, nameOrAlias string) bool {
+	for _, target := range targets {
+		if target.Name == nameOrAlias {
+			return true
+		}
+		for _, alias := range target.Aliases {
+			if alias == nameOrAlias {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsJob(jobs []applianceclient.Job, jobID string) bool {
+	for _, job := range jobs {
+		if job.ID == jobID {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpToolNames(raw any) (map[string]bool, error) {
+	items, ok := raw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("tools has type %T, want array", raw)
+	}
+	names := make(map[string]bool, len(items))
+	for _, item := range items {
+		tool, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("tool has type %T, want object", item)
+		}
+		name, ok := tool["name"].(string)
+		if !ok || name == "" {
+			return nil, fmt.Errorf("tool missing non-empty name: %#v", tool)
+		}
+		names[name] = true
+	}
+	return names, nil
 }
 
 func problemCode(err error) string {

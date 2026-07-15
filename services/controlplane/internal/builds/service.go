@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +19,8 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/workflows"
 )
+
+var privateKeyBlockRE = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
 
 // idempotencyScope namespaces build-creation idempotency keys within the
 // shared storage.IdempotencyStore.
@@ -37,12 +42,18 @@ var ErrIdempotencyInProgress = errors.New("builds: a request with this idempoten
 // "Containerfile" (a literal "Dockerfile" is accepted only as a
 // Buildah-compatible filename alias, per the plan).
 type CreateRequest struct {
-	SourceRepoURL      string
-	SourceCommitSHA    string
-	ContainerfilePath  string
-	ImageRepository    string
-	ImageTag           string
-	BuilderImageDigest string
+	SourceRepoURL          string
+	SourceCommitSHA        string
+	Execution              string
+	ScriptPath             string
+	MakeTarget             string
+	ContainerfilePath      string
+	ImageRepository        string
+	ImageTag               string
+	BuilderImageDigest     string
+	SourceCredentialRef    string
+	SourceCredentialSecret string
+	KnownHostsSecret       string
 }
 
 // Service implements build request business logic above storage.BuildStore
@@ -55,6 +66,7 @@ type Service struct {
 	audit                *audit.Recorder
 	allowedGitHosts      []string
 	allowedBuilderImages []string
+	sensitiveLogValues   []string
 	defaultDeadline      time.Duration
 }
 
@@ -63,11 +75,43 @@ type Service struct {
 func NewService(
 	db storage.DB, buildStore storage.BuildStore, idempotency storage.IdempotencyStore, engine workflows.Engine,
 	recorder *audit.Recorder, allowedGitHosts, allowedBuilderImages []string, defaultDeadline time.Duration,
+	sensitiveLogValues ...string,
 ) *Service {
 	return &Service{
 		db: db, builds: buildStore, idempotency: idempotency, engine: engine, audit: recorder,
-		allowedGitHosts: allowedGitHosts, allowedBuilderImages: allowedBuilderImages, defaultDeadline: defaultDeadline,
+		allowedGitHosts: allowedGitHosts, allowedBuilderImages: allowedBuilderImages,
+		sensitiveLogValues: normalizeSensitiveValues(sensitiveLogValues), defaultDeadline: defaultDeadline,
 	}
+}
+
+func normalizeSensitiveValues(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+	return out
+}
+
+func (s *Service) redact(text string) string {
+	for _, value := range s.sensitiveLogValues {
+		text = strings.ReplaceAll(text, value, "[REDACTED]")
+	}
+	text = redactPrivateKeyBlocks(text)
+	return text
+}
+
+func redactPrivateKeyBlocks(text string) string {
+	return privateKeyBlockRE.ReplaceAllString(text, "[REDACTED]")
 }
 
 func hashRequest(req CreateRequest) string {
@@ -82,6 +126,9 @@ func hashRequest(req CreateRequest) string {
 func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string, req CreateRequest, idempotencyKey string) (storage.Build, error) {
 	if err := ValidateSource(req.SourceRepoURL, req.SourceCommitSHA, s.allowedGitHosts); err != nil {
 		return storage.Build{}, err
+	}
+	if IsSSHSource(req.SourceRepoURL) && (req.SourceCredentialSecret == "" || req.KnownHostsSecret == "") {
+		return storage.Build{}, fmt.Errorf("builds: SSH sources require source credential and known_hosts secrets")
 	}
 	if err := ValidateBuilderImage(req.BuilderImageDigest, s.allowedBuilderImages); err != nil {
 		return storage.Build{}, err
@@ -139,15 +186,19 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 	workflowName := "build-" + build.ID
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
 		Name: workflowName, SourceRepoURL: build.SourceRepoURL, SourceCommitSHA: build.SourceCommitSHA,
+		Execution: req.Execution, ScriptPath: req.ScriptPath, MakeTarget: req.MakeTarget,
 		ContainerfilePath: build.ContainerfilePath, BuilderImageDigest: build.BuilderImageDigest,
-		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag, Deadline: build.DeadlineAt,
+		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag,
+		SourceCredentialRef: req.SourceCredentialRef, SourceCredentialSecret: req.SourceCredentialSecret,
+		KnownHostsSecret: req.KnownHostsSecret, Deadline: build.DeadlineAt,
 	})
 	completedAt := time.Now().UTC()
 	if submitErr != nil {
-		_ = s.builds.UpdateStatus(ctx, build.ID, storage.BuildStatusFailed, "workflow_submit_failed", submitErr.Error(), nil, &completedAt)
+		redactedErr := s.redact(submitErr.Error())
+		_ = s.builds.UpdateStatus(ctx, build.ID, storage.BuildStatusFailed, "workflow_submit_failed", redactedErr, nil, &completedAt)
 		build.Status = storage.BuildStatusFailed
 		build.ReasonCode = "workflow_submit_failed"
-		build.ErrorMessage = submitErr.Error()
+		build.ErrorMessage = redactedErr
 		build.CompletedAt = &completedAt
 	} else {
 		_ = s.builds.SetWorkflowName(ctx, build.ID, workflowName)
@@ -227,7 +278,10 @@ func (s *Service) Logs(ctx context.Context, id string) (string, error) {
 	if errors.Is(err, workflows.ErrNotFound) {
 		return "", nil
 	}
-	return logs, err
+	if err != nil {
+		return "", err
+	}
+	return s.redact(logs), nil
 }
 
 // ReconcileAll refreshes every non-terminal build's status against the
@@ -272,6 +326,10 @@ func (s *Service) reconcile(ctx context.Context, b storage.Build) (storage.Build
 
 	status, err := s.engine.Status(ctx, b.WorkflowName)
 	if errors.Is(err, workflows.ErrNotFound) {
+		if err := s.builds.UpdateStatus(ctx, b.ID, storage.BuildStatusFailed, "workflow_not_found", "workflow was not found", nil, &now); err != nil {
+			return storage.Build{}, err
+		}
+		b.Status, b.ReasonCode, b.ErrorMessage, b.CompletedAt = storage.BuildStatusFailed, "workflow_not_found", "workflow was not found", &now
 		return b, nil
 	}
 	if err != nil {
@@ -289,10 +347,11 @@ func (s *Service) reconcile(ctx context.Context, b storage.Build) (storage.Build
 		if b.CancelRequested {
 			final, reason = storage.BuildStatusCancelled, "cancelled"
 		}
-		if err := s.builds.UpdateStatus(ctx, b.ID, final, reason, status.Message, nil, &now); err != nil {
+		redactedMessage := s.redact(status.Message)
+		if err := s.builds.UpdateStatus(ctx, b.ID, final, reason, redactedMessage, nil, &now); err != nil {
 			return storage.Build{}, err
 		}
-		b.Status, b.ReasonCode, b.ErrorMessage, b.CompletedAt = final, reason, status.Message, &now
+		b.Status, b.ReasonCode, b.ErrorMessage, b.CompletedAt = final, reason, redactedMessage, &now
 	case workflows.PhaseRunning:
 		if b.Status != storage.BuildStatusRunning {
 			if err := s.builds.UpdateStatus(ctx, b.ID, storage.BuildStatusRunning, "", "", &now, nil); err != nil {

@@ -7,10 +7,11 @@ metadata:
     {{- include "appliance-control-plane.labels" . | nindent 4 }}
 data:
   APPLIANCE_PROFILE: {{ .Values.config.applianceProfile | quote }}
-  APPLIANCE_ENVIRONMENT: {{ .Values.config.environment | quote }}
   APPLIANCE_CANONICAL_ORIGIN: {{ .Values.config.canonicalOrigin | quote }}
   APPLIANCE_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   APPLIANCE_TRUSTED_PROXY_COUNT: {{ .Values.config.trustedProxyCount | quote }}
+  APPLIANCE_WORKFLOW_ENGINE: "argo"
+  APPLIANCE_BUILD_CATALOG_JSON: {{ .Values.config.buildCatalog | default dict | toJson | quote }}
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}
   APPLIANCE_INTERNAL_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.internalPort | int) | quote }}
   APPLIANCE_DATA_DIR: {{ .Values.persistence.dataDir | quote }}

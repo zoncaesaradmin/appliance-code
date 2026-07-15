@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/url"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/authz"
+	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/reqauth"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/version"
@@ -37,23 +39,38 @@ type Handler struct {
 	allowedOrigin string // "scheme://host", or "" to skip Origin validation
 	serverInfo    ServerInfo
 	concurrency   chan struct{}
+	devflows      *devflows.Service
+	capabilities  appliance.Set
 }
 
 // NewHandler builds a Handler. canonicalOrigin is the appliance's
 // configured external origin; requests carrying a different non-empty
 // Origin header are rejected, per the plan's Origin-validation requirement.
-func NewHandler(deps reqauth.Deps, canonicalOrigin string) *Handler {
+type Option func(*Handler)
+
+func WithDeveloperWorkflows(service *devflows.Service, capabilities appliance.Set) Option {
+	return func(h *Handler) {
+		h.devflows = service
+		h.capabilities = capabilities
+	}
+}
+
+func NewHandler(deps reqauth.Deps, canonicalOrigin string, opts ...Option) *Handler {
 	allowed := ""
 	if u, err := url.Parse(canonicalOrigin); err == nil && u.Scheme != "" && u.Host != "" {
 		allowed = u.Scheme + "://" + u.Host
 	}
-	return &Handler{
+	h := &Handler{
 		auth:          deps,
 		sessions:      newSessionStore(defaultMaxSessions),
 		allowedOrigin: allowed,
 		serverInfo:    ServerInfo{Name: "appliance-server", Version: version.Current().Version},
 		concurrency:   make(chan struct{}, defaultMaxConcurrentRequests),
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +193,13 @@ func (h *Handler) handlePost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		writeJSONRPC(w, http.StatusOK, newResult(req.ID, ToolsListResult{Tools: []Tool{}}))
+		writeJSONRPC(w, http.StatusOK, newResult(req.ID, ToolsListResult{Tools: h.listTools(principal)}))
+	case "tools/call":
+		if !authz.HasPermission(principal.Permissions, roles.PermMCPInvoke) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		h.handleToolCall(w, r, req, principal)
 	default:
 		if req.IsNotification() {
 			// Unknown notifications have no response to send; the client

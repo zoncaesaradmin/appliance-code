@@ -3,14 +3,10 @@
 // through this interface without knowing whether the real implementation
 // is Argo Workflows or something else.
 //
-// The intended real implementation, internal/workflows/argo, submits and
-// reconciles appliance-owned Argo Workflow resources per ADR 0011. It is
-// not implemented in this pass: proving it needs a real K3s host with the
-// namespace-scoped Argo Workflow Controller installed and the rootless
-// Buildah isolation gate (ADR 0003) validated against it, neither of which
-// this development environment has. Every test in this codebase instead
-// uses the in-process Fake, matching the plan's local-first testing rule
-// that unit and HTTP contract tests use fakes at cluster-facing interfaces.
+// The production implementation, internal/workflows/argo, submits and
+// reconciles appliance-owned Argo Workflow resources through the Kubernetes
+// API. Local unit and HTTP contract tests can still use the in-process Fake,
+// matching the plan's local-first testing rule for cluster-facing interfaces.
 package workflows
 
 import (
@@ -36,14 +32,20 @@ var ErrNotFound = errors.New("workflows: workflow not found")
 // structured values; nothing here is a free-form command or shell string,
 // per the plan's "domain interfaces accept structured values" rule.
 type Spec struct {
-	Name               string // caller-assigned unique workflow name, e.g. "build-<uuid>"
-	SourceRepoURL      string
-	SourceCommitSHA    string
-	ContainerfilePath  string
-	BuilderImageDigest string
-	TargetRepository   string
-	TargetTag          string
-	Deadline           time.Time
+	Name                   string // caller-assigned unique workflow name, e.g. "build-<uuid>"
+	SourceRepoURL          string
+	SourceCommitSHA        string
+	Execution              string
+	ScriptPath             string
+	MakeTarget             string
+	ContainerfilePath      string
+	BuilderImageDigest     string
+	TargetRepository       string
+	TargetTag              string
+	SourceCredentialRef    string
+	SourceCredentialSecret string
+	KnownHostsSecret       string
+	Deadline               time.Time
 }
 
 // Status is a workflow's last-observed state.

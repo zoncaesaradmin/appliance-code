@@ -58,6 +58,10 @@ func basicCredential(user, password string) credential {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, cred credential, body, out any) error {
+	return c.doWithHeaders(ctx, method, path, cred, nil, body, out)
+}
+
+func (c *Client) doWithHeaders(ctx context.Context, method, path string, cred credential, headers map[string]string, body, out any) error {
 	var reqBody io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -79,6 +83,11 @@ func (c *Client) do(ctx context.Context, method, path string, cred credential, b
 	}
 	if cred.basicUser != "" {
 		req.SetBasicAuth(cred.basicUser, cred.basicPassword)
+	}
+	for key, value := range headers {
+		if value != "" {
+			req.Header.Set(key, value)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -471,6 +480,190 @@ func (c *Client) BuildLogs(ctx context.Context, accessToken, buildID string) (st
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("applianceclient: reading build logs: %w", err)
+	}
+	return string(body), nil
+}
+
+// ListWorkProfiles lists configured developer workflow profiles.
+func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]WorkProfile, error) {
+	var result struct {
+		Items []WorkProfile `json:"items"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/work-profiles", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+// CreateWorkspaceRequest describes a new developer workflow workspace.
+type CreateWorkspaceRequest struct {
+	Name        string `json:"name"`
+	WorkProfile string `json:"workProfile"`
+	Repo        string `json:"repo"`
+	SourceRef   string `json:"sourceRef"`
+}
+
+// CreateWorkspace creates a developer workflow workspace and makes it current.
+func (c *Client) CreateWorkspace(ctx context.Context, accessToken string, req CreateWorkspaceRequest) (*Workspace, error) {
+	var result Workspace
+	if err := c.do(ctx, http.MethodPost, "/api/v1/workspaces", bearerCredential(accessToken), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ListWorkspaces lists developer workflow workspaces visible to the caller.
+func (c *Client) ListWorkspaces(ctx context.Context, accessToken string) ([]Workspace, error) {
+	var result struct {
+		Items []Workspace `json:"items"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/workspaces", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+// GetWorkspace returns one developer workflow workspace by ID.
+func (c *Client) GetWorkspace(ctx context.Context, accessToken, workspaceID string) (*Workspace, error) {
+	var result Workspace
+	if err := c.do(ctx, http.MethodGet, "/api/v1/workspaces/"+url.PathEscape(workspaceID), bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// DeleteWorkspace deletes one developer workflow workspace.
+func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID string) error {
+	return c.do(ctx, http.MethodDelete, "/api/v1/workspaces/"+url.PathEscape(workspaceID), bearerCredential(accessToken), nil, nil)
+}
+
+// CurrentWorkspace returns the caller's current developer workflow workspace.
+func (c *Client) CurrentWorkspace(ctx context.Context, accessToken string) (*Workspace, error) {
+	var result Workspace
+	if err := c.do(ctx, http.MethodGet, "/api/v1/current-workspace", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// SetCurrentWorkspace makes workspaceID the caller's current workspace.
+func (c *Client) SetCurrentWorkspace(ctx context.Context, accessToken, workspaceID string) (*Workspace, error) {
+	var result Workspace
+	body := map[string]string{"workspaceId": workspaceID}
+	if err := c.do(ctx, http.MethodPost, "/api/v1/current-workspace", bearerCredential(accessToken), body, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ListCurrentBuildTargets lists build targets for the caller's current workspace.
+func (c *Client) ListCurrentBuildTargets(ctx context.Context, accessToken string) ([]BuildTarget, error) {
+	var result struct {
+		Items []BuildTarget `json:"items"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/current-workspace/build-targets", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+// SubmitCurrentBuildRequest describes a build-target submission for the current workspace.
+type SubmitCurrentBuildRequest struct {
+	TargetName string `json:"targetName"`
+	ImageTag   string `json:"imageTag,omitempty"`
+}
+
+// SubmitCurrentBuild submits a build target for the caller's current workspace.
+func (c *Client) SubmitCurrentBuild(ctx context.Context, accessToken string, req SubmitCurrentBuildRequest) (*Job, error) {
+	return c.SubmitCurrentBuildWithIdempotencyKey(ctx, accessToken, req, "")
+}
+
+// SubmitCurrentBuildWithIdempotencyKey submits a current-workspace build with an optional idempotency key.
+func (c *Client) SubmitCurrentBuildWithIdempotencyKey(ctx context.Context, accessToken string, req SubmitCurrentBuildRequest, idempotencyKey string) (*Job, error) {
+	var result Job
+	headers := map[string]string{}
+	if idempotencyKey != "" {
+		headers["Idempotency-Key"] = idempotencyKey
+	}
+	if err := c.doWithHeaders(ctx, http.MethodPost, "/api/v1/current-workspace/builds", bearerCredential(accessToken), headers, req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CurrentWorkspaceBuildStatus returns the latest build job for the caller's current workspace.
+func (c *Client) CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (*Job, error) {
+	var result Job
+	if err := c.do(ctx, http.MethodGet, "/api/v1/current-workspace/build-status", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ListJobs lists developer workflow jobs visible to the caller.
+func (c *Client) ListJobs(ctx context.Context, accessToken string) ([]Job, error) {
+	var result struct {
+		Items []Job `json:"items"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/jobs", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+// GetJob returns one developer workflow job by ID.
+func (c *Client) GetJob(ctx context.Context, accessToken, jobID string) (*Job, error) {
+	var result Job
+	if err := c.do(ctx, http.MethodGet, "/api/v1/jobs/"+url.PathEscape(jobID), bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CancelJob cancels one developer workflow job.
+func (c *Client) CancelJob(ctx context.Context, accessToken, jobID string) (*Job, error) {
+	var result Job
+	if err := c.do(ctx, http.MethodPost, "/api/v1/jobs/"+url.PathEscape(jobID)+"/cancel", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// JobSteps lists steps for one developer workflow job.
+func (c *Client) JobSteps(ctx context.Context, accessToken, jobID string) ([]JobStep, error) {
+	var result struct {
+		Items []JobStep `json:"items"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/jobs/"+url.PathEscape(jobID)+"/steps", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+// JobLogs returns text logs for one developer workflow job.
+func (c *Client) JobLogs(ctx context.Context, accessToken, jobID string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/jobs/"+url.PathEscape(jobID)+"/logs", nil)
+	if err != nil {
+		return "", fmt.Errorf("applianceclient: building request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("applianceclient: GET /api/v1/jobs/%s/logs: %w", jobID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var problem Problem
+		if decodeErr := json.NewDecoder(resp.Body).Decode(&problem); decodeErr == nil && problem.Title != "" {
+			return "", &problem
+		}
+		return "", fmt.Errorf("applianceclient: GET /api/v1/jobs/%s/logs: unexpected status %d", jobID, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("applianceclient: reading job logs: %w", err)
 	}
 	return string(body), nil
 }

@@ -21,6 +21,11 @@ Options:
   --ui-image PATH                  Appliance UI image archive. Required.
   --ui-image-reference REF         Canonical UI image reference contained in
                                    the OCI archive.
+  --extra-oci-image PATH           Repeatable additional OCI image archive to
+                                   include in release-input, for example a
+                                   builder task image required by a profile.
+  --extra-oci-image-reference REF  Repeatable canonical image reference for the
+                                   corresponding --extra-oci-image.
   --argo-version VERSION           Optional pinned Argo Workflows version.
   --argo-controller-image PATH     Optional Argo controller image archive.
   --argo-controller-image-reference REF
@@ -64,6 +69,8 @@ ARGO_CONTROLLER_IMAGE_REFERENCE=""
 ARGO_EXECUTOR_IMAGE=""
 ARGO_EXECUTOR_IMAGE_REFERENCE=""
 ARGO_CRDS_DIR=""
+EXTRA_OCI_IMAGES=()
+EXTRA_OCI_IMAGE_REFERENCES=()
 K3S_VERSION=""
 CHART_VERSION=""
 SBOM_DIR=""
@@ -104,6 +111,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ui-image-reference)
       UI_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --extra-oci-image)
+      EXTRA_OCI_IMAGES+=("${2:-}")
+      shift 2
+      ;;
+    --extra-oci-image-reference)
+      EXTRA_OCI_IMAGE_REFERENCES+=("${2:-}")
       shift 2
       ;;
     --argo-version)
@@ -192,6 +207,22 @@ if [[ -n "${ARGO_EXECUTOR_IMAGE}" && ! -f "${ARGO_EXECUTOR_IMAGE}" ]]; then
   echo "archive-release-input: Argo executor image not found: ${ARGO_EXECUTOR_IMAGE}" >&2
   exit 1
 fi
+if [[ ${#EXTRA_OCI_IMAGES[@]} -ne ${#EXTRA_OCI_IMAGE_REFERENCES[@]} ]]; then
+  echo "archive-release-input: every --extra-oci-image must have a matching --extra-oci-image-reference" >&2
+  exit 2
+fi
+for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
+  if [[ ! -f "${extra_image}" ]]; then
+    echo "archive-release-input: extra OCI image not found: ${extra_image}" >&2
+    exit 1
+  fi
+done
+for extra_ref in "${EXTRA_OCI_IMAGE_REFERENCES[@]}"; do
+  if [[ -z "${extra_ref}" ]]; then
+    echo "archive-release-input: --extra-oci-image-reference must not be empty" >&2
+    exit 2
+  fi
+done
 if [[ -n "${ARGO_CRDS_DIR}" && ! -d "${ARGO_CRDS_DIR}" ]]; then
   echo "archive-release-input: Argo CRDs directory not found: ${ARGO_CRDS_DIR}" >&2
   exit 1
@@ -297,6 +328,7 @@ cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
 ARGO_CONTROLLER_BASENAME=""
 ARGO_EXECUTOR_BASENAME=""
+EXTRA_OCI_BASENAMES=()
 if [[ -n "${ARGO_CONTROLLER_IMAGE}" ]]; then
   ARGO_CONTROLLER_BASENAME="$(basename "${ARGO_CONTROLLER_IMAGE}")"
   cp "${ARGO_CONTROLLER_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}"
@@ -305,6 +337,11 @@ if [[ -n "${ARGO_EXECUTOR_IMAGE}" ]]; then
   ARGO_EXECUTOR_BASENAME="$(basename "${ARGO_EXECUTOR_IMAGE}")"
   cp "${ARGO_EXECUTOR_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}"
 fi
+for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
+  extra_basename="$(basename "${extra_image}")"
+  EXTRA_OCI_BASENAMES+=("${extra_basename}")
+  cp "${extra_image}" "${RELEASE_INPUT_DIR}/${extra_basename}"
+done
 
 mkdir -p "${TMP_DIR}/appliance-chart"
 cp -R "${CHART_DIR}/." "${TMP_DIR}/appliance-chart/"
@@ -366,6 +403,9 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" | sed 's/^sha256://')" "${ARGO_EXECUTOR_BASENAME}"
   fi
+  for extra_basename in "${EXTRA_OCI_BASENAMES[@]}"; do
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${extra_basename}" | sed 's/^sha256://')" "${extra_basename}"
+  done
 } >"${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}"
 
 render_file_artifact() {
@@ -425,6 +465,21 @@ if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
     "argoExecutorImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" "${ARGO_EXECUTOR_BASENAME}" "${ARGO_EXECUTOR_IMAGE_REFERENCE}")"
 fi
 
+OPTIONAL_EXTRA_OCI_IMAGES_JSON=""
+if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
+  OPTIONAL_EXTRA_OCI_IMAGES_JSON=',
+    "extraOCIImages": ['
+  for idx in "${!EXTRA_OCI_BASENAMES[@]}"; do
+    if [[ ${idx} -gt 0 ]]; then
+      OPTIONAL_EXTRA_OCI_IMAGES_JSON+=', '
+    fi
+    extra_basename="${EXTRA_OCI_BASENAMES[idx]}"
+    extra_ref="${EXTRA_OCI_IMAGE_REFERENCES[idx]}"
+    OPTIONAL_EXTRA_OCI_IMAGES_JSON+="$(render_file_artifact "${RELEASE_INPUT_DIR}/${extra_basename}" "${extra_basename}" "${extra_ref}")"
+  done
+  OPTIONAL_EXTRA_OCI_IMAGES_JSON+=']'
+fi
+
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {
   "schemaVersion": 1,
@@ -441,7 +496,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "sbom": $(render_dir_artifact "sbom"),
     "provenance": $(render_dir_artifact "provenance"),
     "notices": $(render_dir_artifact "notices"),
-    "tests": $(render_dir_artifact "tests")${OPTIONAL_ARGO_ARTIFACTS_JSON}
+    "tests": $(render_dir_artifact "tests")${OPTIONAL_ARGO_ARTIFACTS_JSON}${OPTIONAL_EXTRA_OCI_IMAGES_JSON}
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",

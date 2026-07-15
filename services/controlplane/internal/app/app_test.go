@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/app"
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/logging"
+	"appliance-code/services/controlplane/internal/storage"
 )
 
 // freeAddr asks the OS for an available loopback port and returns it as an
@@ -87,6 +90,71 @@ func TestAppStartsServesHealthAndShutsDownCleanly(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not return within 5s of shutdown signal")
+	}
+}
+
+func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilder)
+	cfg.WorkflowEngine = "fake"
+	cfg.BuildCatalog = devflows.Catalog{
+		WorkProfiles: []devflows.WorkProfile{{Name: "builder"}},
+		Repos:        []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		BuildTargets: []devflows.BuildTarget{{
+			Name: "default", WorkProfile: "builder", Repo: "app", Execution: devflows.ExecutionRepoScript,
+			ImageRepository: "users/alice/app", BuilderImageDigest: "buildah@sha256:approved",
+		}},
+	}
+
+	services, err := app.WireServices(cfg)
+	if err != nil {
+		t.Fatalf("initial WireServices: %v", err)
+	}
+	now := time.Now().UTC()
+	user := storage.User{ID: "user-reconcile", Username: "alice", DisplayName: "Alice", State: storage.UserStateActive, CreatedAt: now, UpdatedAt: now}
+	if err := services.UserStore.Create(t.Context(), user); err != nil {
+		t.Fatalf("Create user: %v", err)
+	}
+	build := storage.Build{
+		ID: "build-reconcile", OwnerID: user.ID, Status: storage.BuildStatusRunning,
+		SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
+		ContainerfilePath: "Containerfile", ImageRepository: "users/alice/app", ImageTag: "v1",
+		BuilderImageDigest: "buildah@sha256:approved", WorkflowName: "build-reconcile-workflow",
+		CreatedAt: now, UpdatedAt: now, StartedAt: &now, DeadlineAt: now.Add(-time.Minute),
+	}
+	if err := services.BuildStore.Create(t.Context(), build); err != nil {
+		t.Fatalf("Create build: %v", err)
+	}
+	job := storage.Job{
+		ID: "job-reconcile", OwnerID: user.ID, BuildID: build.ID, Type: storage.JobTypeBuild,
+		Status: storage.JobStatusRunning, TargetName: "default", CreatedAt: now, UpdatedAt: now, StartedAt: &now,
+	}
+	if err := services.JobStore.Create(t.Context(), job); err != nil {
+		t.Fatalf("Create job: %v", err)
+	}
+	if err := services.DB.Close(); err != nil {
+		t.Fatalf("closing first services DB: %v", err)
+	}
+
+	restarted, err := app.WireServices(cfg)
+	if err != nil {
+		t.Fatalf("restart WireServices: %v", err)
+	}
+	defer restarted.DB.Close()
+
+	reconciledBuild, err := restarted.BuildStore.Get(t.Context(), build.ID)
+	if err != nil {
+		t.Fatalf("Get build: %v", err)
+	}
+	if reconciledBuild.Status != storage.BuildStatusTimedOut || reconciledBuild.ReasonCode != "deadline_exceeded" {
+		t.Fatalf("build after startup reconciliation = status %q reason %q, want timed_out/deadline_exceeded", reconciledBuild.Status, reconciledBuild.ReasonCode)
+	}
+	reconciledJob, err := restarted.JobStore.Get(t.Context(), job.ID)
+	if err != nil {
+		t.Fatalf("Get job: %v", err)
+	}
+	if reconciledJob.Status != storage.JobStatusFailed || reconciledJob.ReasonCode != "deadline_exceeded" {
+		t.Fatalf("job after startup reconciliation = status %q reason %q, want failed/deadline_exceeded", reconciledJob.Status, reconciledJob.ReasonCode)
 	}
 }
 

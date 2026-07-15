@@ -20,7 +20,7 @@ spec:
         {{- include "appliance-control-plane.labels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "appliance-control-plane.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      automountServiceAccountToken: {{ or .Values.serviceAccount.automountServiceAccountToken (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
       {{- if .Values.priorityClassName }}
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}

@@ -77,6 +77,20 @@ ServiceAccount name.
 {{- end -}}
 
 {{/*
+Whether the control plane should get API access for Argo workflow submission.
+*/}}
+{{- define "appliance-control-plane.argoWorkflowEnabled" -}}
+{{- if eq .Values.config.applianceProfile "builder" -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+
+{{/*
+Fixed namespace for appliance-owned Argo workflows in v1.
+*/}}
+{{- define "appliance-control-plane.argoWorkflowNamespace" -}}
+appliance-builds
+{{- end -}}
+
+{{/*
 Image reference, preferring an explicit digest pin over a tag.
 */}}
 {{- define "appliance-control-plane.image" -}}

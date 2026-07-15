@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -146,7 +147,7 @@ func TestPodAndContainerSecurityHardening(t *testing.T) {
 	}
 
 	if automount, _ := podSpec["automountServiceAccountToken"].(bool); automount {
-		t.Error("automountServiceAccountToken should be false: the control plane does not call the Kubernetes API yet")
+		t.Error("automountServiceAccountToken should be false for core/default rendering")
 	}
 
 	podSecCtx, _ := podSpec["securityContext"].(map[string]any)
@@ -323,5 +324,226 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	}
 	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane-ui") != nil {
 		t.Error("ui.enabled=false should omit the UI Deployment")
+	}
+}
+
+func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "config.applianceProfile=builder",
+		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
+		"--set", "config.buildCatalog.repos[0].sourceCredentialRef=git-main",
+		"--set", "config.buildCatalog.sourceCredentials[0].id=git-main",
+		"--set", "config.buildCatalog.sourceCredentials[0].gitHost=git.internal.example.com",
+		"--set", "config.buildCatalog.sourceCredentials[0].kubernetesSecretName=git-main-key",
+		"--set", "config.buildCatalog.sourceCredentials[0].knownHostsSecretName=git-known-hosts",
+		"--set", "config.buildCatalog.buildTargets[0].name=default",
+		"--set", "config.buildCatalog.buildTargets[0].repo=app",
+		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
+		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
+		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
+	)...)
+	cm := findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-config")
+	if cm == nil {
+		t.Fatal("expected control-plane ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_PROFILE"].(string); got != "builder" {
+		t.Fatalf("APPLIANCE_PROFILE = %q, want builder", got)
+	}
+	catalogJSON, _ := data["APPLIANCE_BUILD_CATALOG_JSON"].(string)
+	if catalogJSON == "" || !bytes.Contains([]byte(catalogJSON), []byte("buildTargets")) {
+		t.Fatalf("APPLIANCE_BUILD_CATALOG_JSON = %q, want rendered catalog", catalogJSON)
+	}
+}
+
+func TestValuesSchemaRejectsUnsafeBuildCatalogPath(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "bad-values.yaml")
+	values := []byte(`
+config:
+  applianceProfile: builder
+  buildCatalog:
+    workProfiles:
+      - name: builder
+    repos:
+      - name: app
+        url: https://git.internal.example.com/team/app.git
+    buildTargets:
+      - name: default
+        repo: app
+        execution: repo_script
+        scriptPath: ../build.sh
+        imageRepository: users/alice/app
+        builderImageDigest: buildah@sha256:approved
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint unexpectedly accepted unsafe build catalog path\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("buildCatalog")) && !bytes.Contains(out, []byte("scriptPath")) {
+		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	}
+}
+
+func TestValuesSchemaRejectsBuilderWithoutBuildCatalog(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "bad-builder-catalog-required.yaml")
+	values := []byte(`
+config:
+  applianceProfile: builder
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint unexpectedly accepted builder config without buildCatalog\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("buildCatalog")) {
+		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	}
+}
+
+func TestValuesSchemaRejectsBuilderCatalogWithoutTargets(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "bad-builder-catalog.yaml")
+	values := []byte(`
+config:
+  applianceProfile: builder
+  buildCatalog:
+    workProfiles:
+      - name: builder
+    repos:
+      - name: app
+        url: https://git.internal.example.com/team/app.git
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint unexpectedly accepted builder catalog without buildTargets\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("buildTargets")) {
+		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	}
+}
+
+func TestValuesSchemaRejectsSSHCatalogRepoWithoutSourceCredential(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "bad-ssh-catalog.yaml")
+	values := []byte(`
+config:
+  applianceProfile: builder
+  buildCatalog:
+    workProfiles:
+      - name: builder
+    repos:
+      - name: app
+        url: git@git.internal.example.com:team/app.git
+    buildTargets:
+      - name: default
+        repo: app
+        execution: repo_script
+        imageRepository: users/alice/app
+        builderImageDigest: buildah@sha256:approved
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint unexpectedly accepted SSH catalog repo without sourceCredentialRef\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("sourceCredentialRef")) {
+		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	}
+}
+
+func TestValuesSchemaRejectsSourceCredentialWithoutKnownHostsSecret(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "bad-source-credential.yaml")
+	values := []byte(`
+config:
+  applianceProfile: builder
+  buildCatalog:
+    sourceCredentials:
+      - id: git-main
+        gitHost: git.internal.example.com
+        kubernetesSecretName: git-main-key
+    repos:
+      - name: app
+        url: git@git.internal.example.com:team/app.git
+        sourceCredentialRef: git-main
+    buildTargets:
+      - name: default
+        repo: app
+        execution: repo_script
+        imageRepository: users/alice/app
+        builderImageDigest: buildah@sha256:approved
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint unexpectedly accepted source credential without knownHostsSecretName\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("knownHostsSecretName")) {
+		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	}
+}
+
+func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "config.applianceProfile=builder",
+		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
+		"--set", "config.buildCatalog.repos[0].sourceCredentialRef=git-main",
+		"--set", "config.buildCatalog.sourceCredentials[0].id=git-main",
+		"--set", "config.buildCatalog.sourceCredentials[0].gitHost=git.internal.example.com",
+		"--set", "config.buildCatalog.sourceCredentials[0].kubernetesSecretName=git-main-key",
+		"--set", "config.buildCatalog.sourceCredentials[0].knownHostsSecretName=git-known-hosts",
+		"--set", "config.buildCatalog.buildTargets[0].name=default",
+		"--set", "config.buildCatalog.buildTargets[0].repo=app",
+		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
+		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
+		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
+	)...)
+	dep := findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane")
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
+	}
+	if automount, _ := at(dep, "spec", "template", "spec", "automountServiceAccountToken").(bool); !automount {
+		t.Fatal("builder/argo deployment should mount a service account token")
+	}
+	role := findByKindAndName(docs, "Role", "appliance-appliance-control-plane-workflows")
+	if role == nil {
+		t.Fatal("expected workflow Role for builder/argo")
+	}
+	if ns, _ := at(role, "metadata", "namespace").(string); ns != "appliance-builds" {
+		t.Fatalf("workflow Role namespace = %q, want appliance-builds", ns)
+	}
+	if rb := findByKindAndName(docs, "RoleBinding", "appliance-appliance-control-plane-workflows"); rb == nil {
+		t.Fatal("expected workflow RoleBinding for builder/argo")
+	}
+	cm := findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-config")
+	if cm == nil {
+		t.Fatal("expected control-plane ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if _, ok := data["APPLIANCE_ARGO_WORKFLOW_NAMESPACE"]; ok {
+		t.Fatal("control-plane ConfigMap should not expose APPLIANCE_ARGO_WORKFLOW_NAMESPACE once the namespace is fixed in code")
 	}
 }

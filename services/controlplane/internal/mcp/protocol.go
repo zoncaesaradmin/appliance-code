@@ -1,8 +1,8 @@
 // Package mcp implements the pinned MCP Streamable HTTP transport at
 // /mcp: JSON-RPC 2.0 framing, initialization/version negotiation, session
 // management, and appliance API-token Bearer authorization mapped onto the
-// same RBAC engine REST uses. Tool modules are not enabled in v1; a valid
-// tools/list always returns an empty list rather than a protocol error.
+// same RBAC engine REST uses. Tool modules are capability-gated and
+// permission-filtered; a valid tools/list always returns a non-nil list.
 package mcp
 
 import "encoding/json"
@@ -85,8 +85,8 @@ type InitializeParams struct {
 }
 
 // ToolsCapability advertises tool-related support. An empty struct still
-// declares the capability present, so tools/list is a valid method call
-// even though v1 enables no tool modules.
+// declares the capability present, so tools/list is a valid method call even
+// when no tools are enabled for the appliance profile or principal.
 type ToolsCapability struct {
 	ListChanged bool `json:"listChanged,omitempty"`
 }
@@ -103,8 +103,7 @@ type InitializeResult struct {
 	ServerInfo      ServerInfo         `json:"serverInfo"`
 }
 
-// Tool describes one callable tool. No fields are populated in v1 since no
-// tool modules are enabled.
+// Tool describes one callable tool exposed to the authenticated principal.
 type Tool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`

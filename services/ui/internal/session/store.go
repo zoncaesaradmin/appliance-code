@@ -17,8 +17,8 @@ type Record struct {
 }
 
 type Store struct {
-	mu  sync.RWMutex
-	now func() time.Time
+	mu   sync.RWMutex
+	now  func() time.Time
 	byID map[string]Record
 }
 

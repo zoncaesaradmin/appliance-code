@@ -14,30 +14,22 @@ import (
 
 var commitSHAPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// ValidateSource checks repoURL and commitSHA against the plan's build
-// input invariants: an allowlisted HTTPS Git source at an immutable full
-// commit SHA. An empty allowedHosts fails closed rather than silently
-// permitting arbitrary sources.
+// ValidateSource checks repoURL and commitSHA against the plan's build input
+// invariants: an allowlisted Git source at an immutable full commit SHA. HTTPS
+// and SSH-style Git URLs are accepted because appliance workflow pods may mount
+// a scoped SSH deploy key for private sources.
 func ValidateSource(repoURL, commitSHA string, allowedHosts []string) error {
 	if !commitSHAPattern.MatchString(commitSHA) {
 		return fmt.Errorf("builds: commit SHA must be exactly 40 lowercase hexadecimal characters")
 	}
 
-	u, err := url.Parse(repoURL)
+	host, err := gitSourceHost(repoURL)
 	if err != nil {
-		return fmt.Errorf("builds: invalid source repository URL: %w", err)
+		return err
 	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("builds: source repository URL must use https")
-	}
-	if u.Host == "" {
-		return fmt.Errorf("builds: source repository URL must include a host")
-	}
-
 	if len(allowedHosts) == 0 {
 		return fmt.Errorf("builds: no allowlisted git source hosts are configured")
 	}
-	host := strings.ToLower(u.Hostname())
 	for _, allowed := range allowedHosts {
 		if strings.EqualFold(host, allowed) {
 			return nil
@@ -46,9 +38,51 @@ func ValidateSource(repoURL, commitSHA string, allowedHosts []string) error {
 	return fmt.Errorf("builds: source host %q is not an allowlisted git source", host)
 }
 
+func gitSourceHost(repoURL string) (string, error) {
+	repoURL = strings.TrimSpace(repoURL)
+	if repoURL == "" {
+		return "", fmt.Errorf("builds: source repository URL is required")
+	}
+	if strings.HasPrefix(repoURL, "git@") {
+		rest := strings.TrimPrefix(repoURL, "git@")
+		host, path, ok := strings.Cut(rest, ":")
+		if !ok || host == "" || path == "" {
+			return "", fmt.Errorf("builds: invalid SSH source repository URL")
+		}
+		return strings.ToLower(host), nil
+	}
+
+	u, err := url.Parse(repoURL)
+	if err != nil {
+		return "", fmt.Errorf("builds: invalid source repository URL: %w", err)
+	}
+	switch u.Scheme {
+	case "https", "ssh":
+	default:
+		return "", fmt.Errorf("builds: source repository URL must use https or ssh")
+	}
+	if u.Hostname() == "" {
+		return "", fmt.Errorf("builds: source repository URL must include a host")
+	}
+	return strings.ToLower(u.Hostname()), nil
+}
+
+func IsSSHSource(repoURL string) bool {
+	repoURL = strings.TrimSpace(repoURL)
+	if strings.HasPrefix(repoURL, "git@") {
+		return true
+	}
+	u, err := url.Parse(repoURL)
+	return err == nil && u.Scheme == "ssh"
+}
+
 // ValidateBuilderImage checks digest against the configured builder image
-// allowlist. An empty allowlist means unrestricted builder selection.
+// allowlist. An empty allowlist means unrestricted builder selection for
+// isolated tests, but the image reference must still be digest-pinned.
 func ValidateBuilderImage(digest string, allowed []string) error {
+	if !strings.Contains(strings.TrimSpace(digest), "@sha256:") {
+		return fmt.Errorf("builds: builder image must be digest-pinned")
+	}
 	if len(allowed) == 0 {
 		return nil
 	}

@@ -26,9 +26,26 @@ func TestValidateBuilderImageAllowsAllWhenNoPolicyConfigured(t *testing.T) {
 	}
 }
 
+func TestValidateBuilderImageRejectsTagOnlyReference(t *testing.T) {
+	if err := ValidateBuilderImage("buildah:latest", nil); err == nil {
+		t.Fatal("ValidateBuilderImage should reject tag-only builder images")
+	}
+}
+
 func TestValidateBuilderImageRejectsUnapprovedDigestWhenPolicyConfigured(t *testing.T) {
 	err := ValidateBuilderImage("buildah@sha256:other", []string{"buildah@sha256:approved"})
 	if err == nil {
 		t.Fatal("ValidateBuilderImage should reject digests outside the configured allowlist")
+	}
+}
+
+func TestValidateSourceAcceptsAllowedSSHForms(t *testing.T) {
+	for _, repoURL := range []string{
+		"git@git.example.internal:team/repo.git",
+		"ssh://git@git.example.internal/team/repo.git",
+	} {
+		if err := ValidateSource(repoURL, "0123456789abcdef0123456789abcdef01234567", []string{"git.example.internal"}); err != nil {
+			t.Fatalf("ValidateSource(%q) returned error: %v", repoURL, err)
+		}
 	}
 }

@@ -25,6 +25,7 @@ type buildResponse struct {
 	ContainerfilePath  string     `json:"containerfilePath"`
 	ImageRepository    string     `json:"imageRepository"`
 	ImageTag           string     `json:"imageTag"`
+	ArtifactRef        string     `json:"artifactRef"`
 	BuilderImageDigest string     `json:"builderImageDigest"`
 	ReasonCode         string     `json:"reasonCode,omitempty"`
 	ErrorMessage       string     `json:"errorMessage,omitempty"`
@@ -39,7 +40,7 @@ func toBuildResponse(b storage.Build) buildResponse {
 	return buildResponse{
 		ID: b.ID, OwnerID: b.OwnerID, Status: string(b.Status),
 		SourceRepoURL: b.SourceRepoURL, SourceCommitSHA: b.SourceCommitSHA, ContainerfilePath: b.ContainerfilePath,
-		ImageRepository: b.ImageRepository, ImageTag: b.ImageTag, BuilderImageDigest: b.BuilderImageDigest,
+		ImageRepository: b.ImageRepository, ImageTag: b.ImageTag, ArtifactRef: b.ImageRepository + ":" + b.ImageTag, BuilderImageDigest: b.BuilderImageDigest,
 		ReasonCode: b.ReasonCode, ErrorMessage: b.ErrorMessage,
 		CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt, StartedAt: b.StartedAt, CompletedAt: b.CompletedAt, DeadlineAt: b.DeadlineAt,
 	}

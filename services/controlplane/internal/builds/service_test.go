@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,47 @@ type harness struct {
 	db   *sqlite.DB
 	svc  *builds.Service
 	fake *workflows.Fake
+}
+
+type failingSubmitEngine struct {
+	err error
+}
+
+func (e failingSubmitEngine) Submit(context.Context, workflows.Spec) error {
+	return e.err
+}
+
+func (e failingSubmitEngine) Status(context.Context, string) (workflows.Status, error) {
+	return workflows.Status{}, workflows.ErrNotFound
+}
+
+func (e failingSubmitEngine) Cancel(context.Context, string) error {
+	return nil
+}
+
+func (e failingSubmitEngine) Logs(context.Context, string) (string, error) {
+	return "", nil
+}
+
+type leakingLogEngine struct {
+	workflowName string
+}
+
+func (e *leakingLogEngine) Submit(_ context.Context, spec workflows.Spec) error {
+	e.workflowName = spec.Name
+	return nil
+}
+
+func (e *leakingLogEngine) Status(context.Context, string) (workflows.Status, error) {
+	return workflows.Status{Phase: workflows.PhaseRunning}, nil
+}
+
+func (e *leakingLogEngine) Cancel(context.Context, string) error {
+	return nil
+}
+
+func (e *leakingLogEngine) Logs(context.Context, string) (string, error) {
+	return "using git-main-key and git-known-hosts\n-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----\n", nil
 }
 
 func newHarness(t *testing.T, deadline time.Duration) *harness {
@@ -101,6 +143,85 @@ func TestCreateReflectsWorkflowFailure(t *testing.T) {
 	}
 }
 
+func TestWorkflowFailureMessageRedactsSensitiveValues(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour, "git-main-key", "git-known-hosts")
+	h.fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
+
+	build, err := svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	h.fake.SetStatus(build.WorkflowName, workflows.Status{Phase: workflows.PhaseFailed, Message: "clone failed using git-main-key and git-known-hosts"})
+
+	got, err := svc.Get(t.Context(), build.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if strings.Contains(got.ErrorMessage, "git-main-key") || strings.Contains(got.ErrorMessage, "git-known-hosts") {
+		t.Fatalf("error message leaked source credential secret names: %q", got.ErrorMessage)
+	}
+	if got.ErrorMessage != "clone failed using [REDACTED] and [REDACTED]" {
+		t.Fatalf("error message = %q, want redacted secret names", got.ErrorMessage)
+	}
+}
+
+func TestLogsRedactSensitiveValues(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	engine := &leakingLogEngine{}
+	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), engine, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour, "git-main-key", "git-known-hosts")
+
+	build, err := svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	logs, err := svc.Logs(t.Context(), build.ID)
+	if err != nil {
+		t.Fatalf("Logs: %v", err)
+	}
+	for _, secret := range []string{"git-main-key", "git-known-hosts", "OPENSSH PRIVATE KEY", "secret"} {
+		if strings.Contains(logs, secret) {
+			t.Fatalf("logs leaked %q: %s", secret, logs)
+		}
+	}
+	if strings.Count(logs, "[REDACTED]") < 3 {
+		t.Fatalf("logs = %q, want redaction markers", logs)
+	}
+}
+
+func TestCreateRecordsFailedBuildWhenWorkflowSubmitFails(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	submitErr := errors.New("kubernetes API unavailable")
+	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), failingSubmitEngine{err: submitErr}, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour)
+
+	build, err := svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if build.Status != storage.BuildStatusFailed || build.ReasonCode != "workflow_submit_failed" {
+		t.Fatalf("build after submit failure = status %q reason %q, want failed/workflow_submit_failed", build.Status, build.ReasonCode)
+	}
+	if build.ErrorMessage != submitErr.Error() {
+		t.Fatalf("error message = %q, want %q", build.ErrorMessage, submitErr.Error())
+	}
+	if build.CompletedAt == nil {
+		t.Fatal("failed build should record CompletedAt")
+	}
+
+	persisted, err := sqlite.NewBuildStore(h.db).Get(t.Context(), build.ID)
+	if err != nil {
+		t.Fatalf("Get persisted build: %v", err)
+	}
+	if persisted.Status != storage.BuildStatusFailed || persisted.ReasonCode != "workflow_submit_failed" || persisted.ErrorMessage != submitErr.Error() {
+		t.Fatalf("persisted build = %+v, want durable submit failure", persisted)
+	}
+}
+
 func TestBuildTimesOutPastDeadline(t *testing.T) {
 	h := newHarness(t, -time.Second) // deadline already in the past
 	h.fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
@@ -118,6 +239,29 @@ func TestBuildTimesOutPastDeadline(t *testing.T) {
 	}
 	if !h.fake.WasCancelled(build.WorkflowName) {
 		t.Error("timed-out build should cancel its underlying workflow")
+	}
+}
+
+func TestWorkflowDisappearsTransitionsBuildToFailed(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	h.fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+
+	build, err := h.svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	missingSvc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), workflows.NewFake(), audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour)
+
+	got, err := missingSvc.Get(t.Context(), build.ID)
+	if err != nil {
+		t.Fatalf("Get with missing workflow: %v", err)
+	}
+	if got.Status != storage.BuildStatusFailed || got.ReasonCode != "workflow_not_found" {
+		t.Fatalf("missing workflow build = status %q reason %q, want failed/workflow_not_found", got.Status, got.ReasonCode)
+	}
+	if got.CompletedAt == nil {
+		t.Fatal("missing workflow build should record CompletedAt")
 	}
 }
 
@@ -172,12 +316,33 @@ func TestCreateRejectsUnlistedGitHost(t *testing.T) {
 	}
 }
 
-func TestCreateRejectsNonHTTPSSource(t *testing.T) {
+func TestCreateRejectsUnsupportedSourceScheme(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	req := validRequest()
 	req.SourceRepoURL = "http://git.internal.example.com/team/app"
 	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err == nil {
-		t.Error("Create should reject a non-HTTPS source URL")
+		t.Error("Create should reject unsupported source URL schemes")
+	}
+}
+
+func TestCreateRejectsSSHSourceWithoutSecrets(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	req := validRequest()
+	req.SourceRepoURL = "git@git.internal.example.com:team/app.git"
+	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err == nil {
+		t.Error("Create should reject SSH source URLs without explicit credential and known_hosts secrets")
+	}
+}
+
+func TestCreateAcceptsSSHSourceWithSecrets(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	req := validRequest()
+	req.SourceRepoURL = "git@git.internal.example.com:team/app.git"
+	req.SourceCredentialRef = "git-main"
+	req.SourceCredentialSecret = "git-main-key"
+	req.KnownHostsSecret = "git-known-hosts"
+	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err != nil {
+		t.Fatalf("Create should accept SSH source URLs with explicit credential and known_hosts secrets: %v", err)
 	}
 }
 
@@ -196,6 +361,25 @@ func TestCreateRejectsUnapprovedBuilderImage(t *testing.T) {
 	req.BuilderImageDigest = "buildah@sha256:not-approved"
 	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err == nil {
 		t.Error("Create should reject a builder image outside the allowlist")
+	}
+}
+
+func TestCreatePassesStructuredExecutionToWorkflow(t *testing.T) {
+	h := newHarness(t, time.Hour)
+	req := validRequest()
+	req.Execution = "make_target"
+	req.MakeTarget = "image"
+	req.ContainerfilePath = "deploy/Containerfile"
+	build, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, "")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	spec, ok := h.fake.SubmittedSpec(build.WorkflowName)
+	if !ok {
+		t.Fatalf("workflow spec %q was not submitted", build.WorkflowName)
+	}
+	if spec.Execution != "make_target" || spec.MakeTarget != "image" || spec.ContainerfilePath != "deploy/Containerfile" {
+		t.Fatalf("workflow spec execution fields = %+v", spec)
 	}
 }
 

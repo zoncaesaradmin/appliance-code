@@ -10,6 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/keys"
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/roles"
@@ -18,11 +19,15 @@ import (
 	"appliance-code/services/controlplane/internal/tokens"
 	"appliance-code/services/controlplane/internal/users"
 	"appliance-code/services/controlplane/internal/workflows"
+	"appliance-code/services/controlplane/internal/workflows/argo"
 	"appliance-code/services/controlplane/internal/zotadapter"
 )
 
 // SessionAudience identifies the API audience session JWTs are issued for.
-const SessionAudience = "appliance-api"
+const (
+	SessionAudience       = "appliance-api"
+	argoWorkflowNamespace = "appliance-builds"
+)
 
 // Services holds every business-logic dependency shared by the HTTP server
 // and the CLI bootstrap/recovery commands, so both wire identically instead
@@ -38,6 +43,8 @@ type Services struct {
 	RegistryGrantStore storage.RegistryGrantStore
 	BuildStore         storage.BuildStore
 	IdempotencyStore   storage.IdempotencyStore
+	WorkspaceStore     storage.WorkspaceStore
+	JobStore           storage.JobStore
 
 	Users              *users.Service
 	Roles              *roles.Service
@@ -48,6 +55,7 @@ type Services struct {
 	Zot                zotadapter.Client
 	WorkflowEngine     workflows.Engine
 	Builds             *builds.Service
+	Devflows           *devflows.Service
 
 	Keys  *keys.Material
 	Audit *audit.Recorder
@@ -110,25 +118,49 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Servi
 
 	buildStore := sqlite.NewBuildStore(db)
 	idempotencyStore := sqlite.NewIdempotencyStore(db)
+	workspaceStore := sqlite.NewWorkspaceStore(db)
+	jobStore := sqlite.NewJobStore(db)
 	var workflowEngine workflows.Engine
-	if resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
-		// The real internal/workflows/argo adapter is not implemented in this
-		// pass (see internal/workflows's doc comment): validating it needs a
-		// real K3s host with the namespace-scoped Argo Workflow Controller and
-		// the rootless Buildah isolation gate proven, neither available here.
-		workflowEngine = workflows.NewFake()
+	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+		switch cfg.WorkflowEngine {
+		case "fake":
+			workflowEngine = workflows.NewFake()
+		case "argo":
+			var err error
+			workflowEngine, err = argo.NewInCluster(argoWorkflowNamespace)
+			if err != nil {
+				db.Close()
+				return nil, fmt.Errorf("app: wiring argo workflow engine: %w", err)
+			}
+		}
 	}
 
 	var buildsSvc *builds.Service
+	var devflowsSvc *devflows.Service
 	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+		allowedGitHosts, err := cfg.BuildCatalog.RepoHosts()
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: deriving build catalog git hosts: %w", err)
+		}
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
-			cfg.AllowedGitSourceHosts, cfg.AllowedBuilderImageDigests, cfg.BuildDefaultDeadline)
+			allowedGitHosts, cfg.BuildCatalog.BuilderImageDigests(), cfg.BuildDefaultDeadline,
+			cfg.BuildCatalog.SensitiveLogValues()...)
+		devflowsSvc = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, recorder)
+		if err := buildsSvc.ReconcileAll(ctx); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: reconciling builds: %w", err)
+		}
+		if err := devflowsSvc.ReconcileAll(ctx); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: reconciling developer workflow jobs: %w", err)
+		}
 	}
 
 	return &Services{
 		ApplianceProfile: resolved,
 		DB:               db, UserStore: userStore, RoleStore: roleStore, AuditStore: auditStore, RegistryGrantStore: registryGrantStore,
-		BuildStore: buildStore, IdempotencyStore: idempotencyStore,
+		BuildStore: buildStore, IdempotencyStore: idempotencyStore, WorkspaceStore: workspaceStore, JobStore: jobStore,
 		Users:              users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial),
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokens.NewService(db, tokenStore, recorder, keyMaterial),
@@ -138,6 +170,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Servi
 		Zot:                zotClient,
 		WorkflowEngine:     workflowEngine,
 		Builds:             buildsSvc,
+		Devflows:           devflowsSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 	}, nil

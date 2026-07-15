@@ -115,6 +115,72 @@ type Build struct {
 	DeadlineAt         time.Time  `json:"deadlineAt"`
 }
 
+// WorkProfile describes one configured developer workflow profile.
+type WorkProfile struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// Workspace mirrors one server-side developer workflow workspace.
+type Workspace struct {
+	ID            string     `json:"id"`
+	OwnerID       string     `json:"ownerId"`
+	Name          string     `json:"name"`
+	WorkProfile   string     `json:"workProfile"`
+	SourceRepoURL string     `json:"sourceRepoUrl"`
+	SourceRef     string     `json:"sourceRef"`
+	Status        string     `json:"status"`
+	ReasonCode    string     `json:"reasonCode,omitempty"`
+	ErrorMessage  string     `json:"errorMessage,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+}
+
+// BuildTarget describes one configured target available for a workspace.
+type BuildTarget struct {
+	Name              string   `json:"name"`
+	Aliases           []string `json:"aliases,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	WorkProfile       string   `json:"workProfile,omitempty"`
+	Repo              string   `json:"repo"`
+	Execution         string   `json:"execution"`
+	ScriptPath        string   `json:"scriptPath,omitempty"`
+	MakeTarget        string   `json:"makeTarget,omitempty"`
+	ContainerfilePath string   `json:"containerfilePath"`
+	ImageRepository   string   `json:"imageRepository"`
+}
+
+// Job mirrors one durable developer workflow job.
+type Job struct {
+	ID           string     `json:"id"`
+	OwnerID      string     `json:"ownerId"`
+	WorkspaceID  string     `json:"workspaceId,omitempty"`
+	BuildID      string     `json:"buildId,omitempty"`
+	Type         string     `json:"type"`
+	Status       string     `json:"status"`
+	TargetName   string     `json:"targetName,omitempty"`
+	ArtifactRef  string     `json:"artifactRef,omitempty"`
+	ReasonCode   string     `json:"reasonCode,omitempty"`
+	ErrorMessage string     `json:"errorMessage,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+}
+
+// JobStep mirrors one developer workflow job step.
+type JobStep struct {
+	ID          string     `json:"id"`
+	JobID       string     `json:"jobId"`
+	Name        string     `json:"name"`
+	Status      string     `json:"status"`
+	Message     string     `json:"message,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	StartedAt   *time.Time `json:"startedAt,omitempty"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+}
+
 // FieldError describes one field-level validation failure within a Problem.
 type FieldError struct {
 	Field   string `json:"field"`

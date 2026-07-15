@@ -144,17 +144,20 @@ APIs.
 
 ## Required SDK Expansion
 
-The current SDK already covers auth, token, and some registry flows, but it
-does not yet cover the complete public API surface needed for real E2E
-coverage.
+The SDK is the supported client surface for REST-first E2E coverage. It now
+covers the core local E2E paths:
 
-Before the E2E harness can validate "all basic flows", the SDK should add
-typed methods for:
-
+- auth/session/refresh/logout
 - users create/list/get/patch/disable/enable/unlock/password-reset/set-roles
 - roles list/permissions/create/update/delete
-- builds create/list/get/cancel/logs
-- registry catalog endpoints
+- tokens create/list/revoke, including admin create/revoke for a user
+- registry token, grants, repositories, tags, and referrers
+- low-level builds create/list/get/cancel/logs
+- developer workflow workspace profiles, workspaces/current workspace, build
+  targets, build-target submission, jobs, job steps, job logs, and job cancel
+
+Still to add when those product contracts are implemented:
+
 - any future audit/system endpoints that are part of the supported public API
 
 Rule:
@@ -295,17 +298,21 @@ These are the recommended choices unless we later find a practical blocker:
 
 Recommended implementation order:
 
-1. Expand the SDK to cover missing public APIs needed by E2E.
+1. Expand the SDK to cover missing public APIs needed by E2E. Completed for
+   current auth/user/role/token/registry/build/developer-workflow REST flows.
 2. Add backend `test-start` and `test-stop` targets with isolated env-based
    runtime paths.
 3. Create the `e2etests/` module and local server-process helpers.
 4. Implement one golden local scenario:
    bootstrap -> login -> token -> user -> role -> permission denial.
 5. Add build-flow and registry-flow scenarios.
-6. Add live `/mcp` initialize/ping/tools list validation.
-7. Add root `make test-e2e`.
-8. Promote the lane into `make verify` once stable.
-9. Reuse the client in `appliance-release` for installed-appliance checks.
+6. Add developer workflow SDK scenarios for workspaces, target submission,
+   jobs, steps, logs, and cancellation.
+7. Add live `/mcp` initialize/ping/tools list validation.
+8. Add core/storage profile-gating checks for disabled build routes and tools.
+9. Add root `make test-e2e`.
+10. Promote the lane into `make verify` once stable.
+11. Reuse the client in `appliance-release` for installed-appliance checks.
 
 ## Non-Goals
 

@@ -94,6 +94,14 @@ func (f *Fake) SetStatus(name string, status Status) {
 	}
 }
 
+// Delete removes a workflow from the fake engine, simulating an external
+// deletion of the workflow resource before the control plane reconciles it.
+func (f *Fake) Delete(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.workflows, name)
+}
+
 // WasCancelled reports whether Cancel was called for name, for tests that
 // need to assert cancellation actually reached the engine.
 func (f *Fake) WasCancelled(name string) bool {
@@ -101,4 +109,17 @@ func (f *Fake) WasCancelled(name string) bool {
 	defer f.mu.Unlock()
 	wf, ok := f.workflows[name]
 	return ok && wf.cancelled
+}
+
+// SubmittedSpec returns the structured workflow spec captured at Submit time.
+// It is intentionally test-oriented: production code should observe workflows
+// through Status/Logs/Cancel, not by peeking into engine internals.
+func (f *Fake) SubmittedSpec(name string) (Spec, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	wf, ok := f.workflows[name]
+	if !ok {
+		return Spec{}, false
+	}
+	return wf.spec, true
 }

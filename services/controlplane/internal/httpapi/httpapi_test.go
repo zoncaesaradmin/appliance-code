@@ -14,12 +14,22 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/httpapi"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/mcp"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
 )
+
+func testBuildCatalog() devflows.Catalog {
+	return devflows.Catalog{
+		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows"}},
+		SourceCredentials: []devflows.SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com", KubernetesSecretName: "git-main-key", KnownHostsSecretName: "git-known-hosts"}},
+		Repos:             []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
+		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, WorkProfile: "builder", Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+	}
+}
 
 type testServer struct {
 	*httptest.Server
@@ -35,8 +45,9 @@ func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServ
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.ApplianceProfile = string(profile)
-	cfg.AllowedGitSourceHosts = []string{"git.internal.example.com"}
-	cfg.AllowedBuilderImageDigests = []string{"buildah@sha256:approved"}
+	if profile == appliance.ProfileBuilder {
+		cfg.BuildCatalog = testBuildCatalog()
+	}
 
 	services, err := app.WireServices(cfg)
 	if err != nil {
@@ -60,10 +71,11 @@ func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServ
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:     &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:     &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH:    &httpapi.TokenHandlers{Tokens: services.Tokens},
-		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin),
+		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
+		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
+			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{
@@ -77,6 +89,7 @@ func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServ
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
+		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows}
 	}
 
 	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)
@@ -327,6 +340,105 @@ func TestAuthorizationMatrix(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestRESTAndMCPDeveloperWorkflowAuthorizationEquivalence(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	actor := audit.Actor{Type: storage.AuditActorSystem, AuthMethod: "test"}
+
+	createRoleUser := func(roleName, username string, permissions []string) string {
+		t.Helper()
+		role, err := ts.services.Roles.Create(t.Context(), actor, roleName, permissions)
+		if err != nil {
+			t.Fatalf("creating role %s: %v", roleName, err)
+		}
+		user, err := ts.services.Users.Create(t.Context(), actor, username, username, testPassword)
+		if err != nil {
+			t.Fatalf("creating user %s: %v", username, err)
+		}
+		if err := ts.services.Roles.SetUserRoles(t.Context(), actor, user.ID, []string{role.ID}); err != nil {
+			t.Fatalf("assigning role to %s: %v", username, err)
+		}
+		return ts.login(t, username, testPassword)
+	}
+
+	mcpInitialize := func(token string) string {
+		t.Helper()
+		body := fmt.Sprintf(`{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":%q,"capabilities":{},"clientInfo":{"name":"test-client","version":"1.0"}}}`, mcp.ProtocolVersion)
+		resp := ts.doJSONWithHeaders(t, http.MethodPost, "/mcp", token, body, map[string]string{"Accept": "application/json, text/event-stream"})
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("MCP initialize status = %d, want 200", resp.StatusCode)
+		}
+		sessionID := resp.Header.Get(mcp.SessionIDHeader)
+		if sessionID == "" {
+			t.Fatal("MCP initialize response missing session id")
+		}
+		return sessionID
+	}
+
+	mcpCallListWorkProfiles := func(token, sessionID string) (int, *struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}) {
+		t.Helper()
+		resp := ts.doJSONWithHeaders(t, http.MethodPost, "/mcp", token, `{"jsonrpc":"2.0","id":"profiles","method":"tools/call","params":{"name":"list_work_profiles","arguments":{}}}`, map[string]string{
+			"Accept":            "application/json, text/event-stream",
+			mcp.SessionIDHeader: sessionID,
+		})
+		defer resp.Body.Close()
+		var parsed struct {
+			Result json.RawMessage `json:"result"`
+			Error  *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+			t.Fatalf("decoding MCP response: %v", err)
+		}
+		if resp.StatusCode == http.StatusOK && parsed.Error == nil && len(parsed.Result) == 0 {
+			t.Fatal("MCP response had neither result nor error")
+		}
+		return resp.StatusCode, parsed.Error
+	}
+
+	allowedToken := createRoleUser("rest-mcp-work-profiles", "rest-mcp-user", []string{roles.PermMCPInvoke, roles.PermWorkProfilesRead})
+	deniedToken := createRoleUser("mcp-without-work-profiles", "mcp-no-work-profile-user", []string{roles.PermMCPInvoke})
+
+	for _, tc := range []struct {
+		name            string
+		token           string
+		wantRESTStatus  int
+		wantMCPJSONCode int
+	}{
+		{name: "allowed", token: allowedToken, wantRESTStatus: http.StatusOK, wantMCPJSONCode: 0},
+		{name: "missing operation permission", token: deniedToken, wantRESTStatus: http.StatusForbidden, wantMCPJSONCode: mcp.ErrCodeInvalidRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rest := ts.doJSON(t, http.MethodGet, "/api/v1/work-profiles", tc.token, "")
+			_ = rest.Body.Close()
+			if rest.StatusCode != tc.wantRESTStatus {
+				t.Fatalf("REST work-profiles status = %d, want %d", rest.StatusCode, tc.wantRESTStatus)
+			}
+
+			sessionID := mcpInitialize(tc.token)
+			status, rpcErr := mcpCallListWorkProfiles(tc.token, sessionID)
+			if status != http.StatusOK {
+				t.Fatalf("MCP list_work_profiles HTTP status = %d, want 200 JSON-RPC response", status)
+			}
+			if tc.wantMCPJSONCode == 0 {
+				if rpcErr != nil {
+					t.Fatalf("MCP list_work_profiles error = %+v, want result", rpcErr)
+				}
+				return
+			}
+			if rpcErr == nil || rpcErr.Code != tc.wantMCPJSONCode {
+				t.Fatalf("MCP list_work_profiles error = %+v, want JSON-RPC code %d", rpcErr, tc.wantMCPJSONCode)
+			}
+		})
 	}
 }
 
