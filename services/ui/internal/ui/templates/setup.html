@@ -3,18 +3,14 @@
 <section class="hero-card">
   <p class="eyebrow">First-time setup</p>
   <h1>Create the first administrator</h1>
-  <p class="muted">This appliance has not been initialized yet. Create the first administrator to continue.</p>
+  <p class="muted">This appliance has not been initialized yet. Create the first administrator account to continue.</p>
   {{if .Error}}
   <article class="notice error" role="alert">{{.Error}}</article>
   {{end}}
   <form method="post" action="/setup">
     <label>
-      Username
+      Administrator username
       <input name="username" autocomplete="username" value="admin" required autofocus>
-    </label>
-    <label>
-      Display name
-      <input name="display_name" autocomplete="name" placeholder="Administrator">
     </label>
     <label>
       Password

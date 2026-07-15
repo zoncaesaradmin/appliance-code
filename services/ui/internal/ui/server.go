@@ -202,7 +202,6 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimSpace(r.Form.Get("username"))
 	password := r.Form.Get("password")
 	confirm := r.Form.Get("password_confirm")
-	displayName := strings.TrimSpace(r.Form.Get("display_name"))
 	if username == "" || password == "" {
 		s.renderSetup(w, r, http.StatusBadRequest, "Username and password are required.")
 		return
@@ -211,7 +210,7 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 		s.renderSetup(w, r, http.StatusBadRequest, "Passwords did not match.")
 		return
 	}
-	if err := s.cp.CreateFirstAdmin(r.Context(), username, password, displayName); err != nil {
+	if err := s.cp.CreateFirstAdmin(r.Context(), username, password, ""); err != nil {
 		if errors.Is(err, controlplane.ErrAlreadyInitialized) {
 			s.renderLogin(w, r, http.StatusConflict, "Appliance is already initialized. Sign in instead.")
 			return

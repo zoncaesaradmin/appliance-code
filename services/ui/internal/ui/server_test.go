@@ -43,7 +43,7 @@ func (f *fakeControlPlane) Refresh(context.Context, string) (controlplane.LoginR
 func (f *fakeControlPlane) Logout(context.Context, string) error { return nil }
 
 func (f *fakeControlPlane) Session(context.Context, string) (controlplane.Session, error) {
-	return controlplane.Session{UserID: "usr_admin", AuthMethod: "session", Permissions: []string{"users.read"}}, nil
+	return controlplane.Session{UserID: "usr_admin", Username: "admin", AuthMethod: "session", Permissions: []string{"users.read"}}, nil
 }
 
 func (f *fakeControlPlane) Version(context.Context) (controlplane.Version, error) {
@@ -142,7 +142,7 @@ func TestSetupCreatesFirstAdminAndRedirectsToDashboard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader("username=admin&display_name=Administrator&password=secret&password_confirm=secret"))
+	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader("username=admin&password=secret&password_confirm=secret"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

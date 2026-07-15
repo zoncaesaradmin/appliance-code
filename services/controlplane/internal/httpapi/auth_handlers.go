@@ -96,6 +96,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 
 type sessionResponse struct {
 	UserID      string   `json:"userId"`
+	Username    string   `json:"username"`
 	AuthMethod  string   `json:"authMethod"`
 	Permissions []string `json:"permissions"`
 }
@@ -111,5 +112,7 @@ func (h *AuthHandlers) Session(w http.ResponseWriter, r *http.Request) {
 	for name := range principal.Permissions {
 		perms = append(perms, name)
 	}
-	writeJSON(w, http.StatusOK, sessionResponse{UserID: principal.UserID, AuthMethod: principal.AuthMethod, Permissions: perms})
+	writeJSON(w, http.StatusOK, sessionResponse{
+		UserID: principal.UserID, Username: principal.Username, AuthMethod: principal.AuthMethod, Permissions: perms,
+	})
 }

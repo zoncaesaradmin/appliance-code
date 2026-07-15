@@ -7,6 +7,8 @@
   <strong>Current session</strong>
 </header>
 <dl>
+  <dt>Username</dt>
+  <dd>{{if .Session.Username}}{{.Session.Username}}{{else}}unknown{{end}}</dd>
   <dt>User ID</dt>
   <dd>{{if .Session.UserID}}{{.Session.UserID}}{{else}}unknown{{end}}</dd>
   <dt>Auth method</dt>

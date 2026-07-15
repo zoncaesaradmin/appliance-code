@@ -13,7 +13,14 @@
   <body>
     <header class="appliance-header">
       <a class="brand" href="/">Zon Appliance</a>
+      {{if .Session.Username}}
+      <div class="header-identity">
+        <strong>{{.Session.Username}}</strong>
+        <span class="profile-pill">profile: {{.ApplianceProfile}}</span>
+      </div>
+      {{else}}
       <span class="profile-pill">profile: {{.ApplianceProfile}}</span>
+      {{end}}
     </header>
     <main class="container appliance-main">
 {{end}}

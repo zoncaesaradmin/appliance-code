@@ -31,6 +31,7 @@ type LoginResult struct {
 
 type Session struct {
 	UserID      string   `json:"userId"`
+	Username    string   `json:"username"`
 	AuthMethod  string   `json:"authMethod"`
 	Permissions []string `json:"permissions"`
 }

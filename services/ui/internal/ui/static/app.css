@@ -27,6 +27,17 @@ body {
   text-decoration: none;
 }
 
+.header-identity {
+  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.header-identity strong {
+  font-size: 0.95rem;
+}
+
 .profile-pill {
   background: var(--zon-surface);
   border: 1px solid var(--zon-border);
@@ -90,6 +101,15 @@ body {
 }
 
 @media (max-width: 720px) {
+  .appliance-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .header-identity {
+    align-items: start;
+  }
+
   .dashboard-heading {
     display: block;
   }
