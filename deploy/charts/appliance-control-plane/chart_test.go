@@ -334,9 +334,6 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
-		"--set", "config.buildCatalog.repos[0].sourceCredentialRef=git-main",
-		"--set", "config.buildCatalog.sourceCredentials[0].id=git-main",
-		"--set", "config.buildCatalog.sourceCredentials[0].gitHost=git.internal.example.com",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
@@ -440,41 +437,9 @@ config:
 	}
 }
 
-func TestValuesSchemaRejectsSSHCatalogRepoWithoutSourceCredential(t *testing.T) {
+func TestValuesSchemaAcceptsSSHCatalogRepoWithoutCredentialMapping(t *testing.T) {
 	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "bad-ssh-catalog.yaml")
-	values := []byte(`
-config:
-  applianceProfile: builder
-  buildCatalog:
-    workProfiles:
-      - name: builder
-    repos:
-      - name: app
-        url: git@git.internal.example.com:team/app.git
-    buildTargets:
-      - name: default
-        repo: app
-        execution: repo_script
-        imageRepository: users/alice/app
-        builderImageDigest: buildah@sha256:approved
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("writing test values: %v", err)
-	}
-	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted SSH catalog repo without sourceCredentialRef\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("sourceCredentialRef")) {
-		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
-	}
-}
-
-func TestValuesSchemaAcceptsLogicalSourceCredential(t *testing.T) {
-	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "logical-source-credential.yaml")
+	valuesPath := filepath.Join(t.TempDir(), "ssh-catalog.yaml")
 	values := []byte(`
 config:
   applianceProfile: builder
@@ -483,13 +448,9 @@ config:
       - name: builder
         repos:
           - name: app
-    sourceCredentials:
-      - id: git-main
-        gitHost: git.internal.example.com
     repos:
       - name: app
         url: git@git.internal.example.com:team/app.git
-        sourceCredentialRef: git-main
     buildTargets:
       - name: default
         repo: app
@@ -503,7 +464,7 @@ config:
 	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("helm lint rejected logical source credential unexpectedly\n%s", out)
+		t.Fatalf("helm lint rejected SSH catalog repo unexpectedly\n%s", out)
 	}
 }
 
@@ -514,9 +475,6 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
-		"--set", "config.buildCatalog.repos[0].sourceCredentialRef=git-main",
-		"--set", "config.buildCatalog.sourceCredentials[0].id=git-main",
-		"--set", "config.buildCatalog.sourceCredentials[0].gitHost=git.internal.example.com",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",

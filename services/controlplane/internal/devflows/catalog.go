@@ -16,8 +16,10 @@ const (
 	ExecutionRepoScript = "repo_script"
 	ExecutionMakeTarget = "make_target"
 
-	DefaultRepoScriptPath            = "build.sh"
-	managedSourceCredentialNamespace = "appliance-builds"
+	DefaultRepoScriptPath             = "build.sh"
+	managedBuilderGitNamespace        = "appliance-builds"
+	managedBuilderGitSecretName       = "builder-git-key"
+	managedBuilderGitKnownHostsSecret = "builder-git-known-hosts"
 )
 
 var (
@@ -28,13 +30,12 @@ var (
 )
 
 // Catalog is product configuration for developer workflows. It contains no
-// private key or token material; source credentials are references to
-// appliance/Kubernetes secrets materialized only into workflow pods.
+// private key or token material; SSH repo access uses appliance-managed
+// Kubernetes secrets materialized only into workflow pods.
 type Catalog struct {
-	WorkProfiles      []WorkProfile      `json:"workProfiles"`
-	Repos             []Repo             `json:"repos"`
-	SourceCredentials []SourceCredential `json:"sourceCredentials"`
-	BuildTargets      []BuildTarget      `json:"buildTargets"`
+	WorkProfiles []WorkProfile `json:"workProfiles"`
+	Repos        []Repo        `json:"repos"`
+	BuildTargets []BuildTarget `json:"buildTargets"`
 }
 
 type WorkProfile struct {
@@ -49,15 +50,9 @@ type ProfileRepo struct {
 }
 
 type Repo struct {
-	Name                string `json:"name"`
-	URL                 string `json:"url"`
-	DefaultRef          string `json:"defaultRef,omitempty"`
-	SourceCredentialRef string `json:"sourceCredentialRef,omitempty"`
-}
-
-type SourceCredential struct {
-	ID      string `json:"id"`
-	GitHost string `json:"gitHost"`
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	DefaultRef string `json:"defaultRef,omitempty"`
 }
 
 type BuildTarget struct {
@@ -80,7 +75,7 @@ type ResolvedTarget struct {
 }
 
 func (c Catalog) Empty() bool {
-	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.SourceCredentials) == 0 && len(c.BuildTargets) == 0
+	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.BuildTargets) == 0
 }
 
 func (c Catalog) Validate() error {
@@ -114,23 +109,6 @@ func (c Catalog) Validate() error {
 		}
 	}
 
-	creds := map[string]SourceCredential{}
-	for _, cred := range c.SourceCredentials {
-		id := normalizeName(cred.ID)
-		if !validName(id) {
-			errs = append(errs, fmt.Sprintf("source credential %q has an invalid id", cred.ID))
-			continue
-		}
-		if cred.GitHost == "" {
-			errs = append(errs, fmt.Sprintf("source credential %q must declare gitHost", id))
-		}
-		if _, exists := creds[id]; exists {
-			errs = append(errs, fmt.Sprintf("source credential %q is duplicated", id))
-		}
-		cred.ID = id
-		creds[id] = cred
-	}
-
 	repos := map[string]Repo{}
 	for _, repo := range c.Repos {
 		name := normalizeName(repo.Name)
@@ -142,17 +120,7 @@ func (c Catalog) Validate() error {
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("repo %q has invalid url: %v", name, err))
 		}
-		if isSSHSource(repo.URL) && repo.SourceCredentialRef == "" {
-			errs = append(errs, fmt.Sprintf("repo %q uses SSH and must declare sourceCredentialRef", name))
-		}
-		if repo.SourceCredentialRef != "" {
-			cred, ok := creds[normalizeName(repo.SourceCredentialRef)]
-			if !ok {
-				errs = append(errs, fmt.Sprintf("repo %q references unknown source credential %q", name, repo.SourceCredentialRef))
-			} else if host != "" && !strings.EqualFold(host, cred.GitHost) {
-				errs = append(errs, fmt.Sprintf("repo %q host %q does not match source credential %q host %q", name, host, cred.ID, cred.GitHost))
-			}
-		}
+		_ = host
 		if _, exists := repos[name]; exists {
 			errs = append(errs, fmt.Sprintf("repo %q is duplicated", name))
 		}
@@ -271,17 +239,6 @@ func (c Catalog) WorkProfile(name string) (WorkProfile, bool) {
 	return WorkProfile{}, false
 }
 
-func (c Catalog) SourceCredential(id string) (SourceCredential, bool) {
-	id = normalizeName(id)
-	for _, cred := range c.SourceCredentials {
-		if normalizeName(cred.ID) == id {
-			cred.ID = id
-			return cred, true
-		}
-	}
-	return SourceCredential{}, false
-}
-
 func (c Catalog) RepoHosts() ([]string, error) {
 	seen := map[string]struct{}{}
 	var out []string
@@ -369,15 +326,11 @@ func IsCommitSHA(ref string) bool {
 	return commitShaRE.MatchString(strings.ToLower(strings.TrimSpace(ref)))
 }
 
-func SourceCredentialNamespace() string { return managedSourceCredentialNamespace }
+func BuilderGitNamespace() string { return managedBuilderGitNamespace }
 
-func SourceCredentialSecretName(id string) string {
-	return "builder-git-" + sourceCredentialIDName(id) + "-key"
-}
+func BuilderGitSecretName() string { return managedBuilderGitSecretName }
 
-func SourceCredentialKnownHostsSecretName(id string) string {
-	return "builder-git-" + sourceCredentialIDName(id) + "-known-hosts"
-}
+func BuilderGitKnownHostsSecretName() string { return managedBuilderGitKnownHostsSecret }
 
 func normalizeName(v string) string { return strings.ToLower(strings.TrimSpace(v)) }
 
@@ -403,32 +356,6 @@ func validMakeTarget(v string) bool {
 
 func validBuilderImageDigest(v string) bool {
 	return strings.Contains(strings.TrimSpace(v), "@sha256:")
-}
-
-func sourceCredentialIDName(v string) string {
-	v = strings.ToLower(strings.TrimSpace(v))
-	if v == "" {
-		return "source"
-	}
-	var b strings.Builder
-	lastDash := false
-	for _, r := range v {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			lastDash = false
-		default:
-			if !lastDash {
-				b.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	name := strings.Trim(b.String(), "-")
-	if name == "" {
-		return "source"
-	}
-	return name
 }
 
 func containsName(values []string, name string) bool {

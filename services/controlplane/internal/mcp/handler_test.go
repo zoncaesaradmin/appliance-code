@@ -27,10 +27,9 @@ const testPassword = "a-sufficiently-long-test-password-1"
 
 func testBuildCatalog() devflows.Catalog {
 	return devflows.Catalog{
-		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		SourceCredentials: []devflows.SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com", KubernetesSecretName: "git-main-key", KnownHostsSecretName: "git-known-hosts"}},
-		Repos:             []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
-		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos:        []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		BuildTargets: []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
 	}
 }
 
@@ -657,7 +656,7 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 	if artifactRef, _ := jobMap["artifactRef"].(string); artifactRef != "users/alice/app:v1" {
 		t.Fatalf("submit_build artifactRef = %q, want users/alice/app:v1", artifactRef)
 	}
-	for _, secretText := range []string{"git-main-key", "git-known-hosts"} {
+	for _, secretText := range []string{"builder-git-key", "builder-git-known-hosts"} {
 		if strings.Contains(fmt.Sprint(submitted), secretText) {
 			t.Fatalf("submit_build structured content leaked source credential material %q: %+v", secretText, submitted)
 		}
@@ -669,7 +668,7 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 	} else if artifactRef, _ := statusJob["artifactRef"].(string); artifactRef != "users/alice/app:v1" {
 		t.Fatalf("get_job_status artifactRef = %q, want users/alice/app:v1", artifactRef)
 	}
-	for _, secretText := range []string{"git-main-key", "git-known-hosts"} {
+	for _, secretText := range []string{"builder-git-key", "builder-git-known-hosts"} {
 		if strings.Contains(fmt.Sprint(status), secretText) {
 			t.Fatalf("get_job_status structured content leaked source credential material %q: %+v", secretText, status)
 		}

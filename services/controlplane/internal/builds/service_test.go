@@ -65,7 +65,7 @@ func (e *leakingLogEngine) Cancel(context.Context, string) error {
 }
 
 func (e *leakingLogEngine) Logs(context.Context, string) (string, error) {
-	return "using git-main-key and git-known-hosts\n-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----\n", nil
+	return "using builder-git-key and builder-git-known-hosts\n-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----\n", nil
 }
 
 func newHarness(t *testing.T, deadline time.Duration) *harness {
@@ -146,7 +146,7 @@ func TestCreateReflectsWorkflowFailure(t *testing.T) {
 func TestWorkflowFailureMessageRedactsSensitiveValues(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour, "git-main-key", "git-known-hosts")
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour, "builder-git-key", "builder-git-known-hosts")
 	h.fake.Behavior = func(spec workflows.Spec) workflows.Status {
 		return workflows.Status{Phase: workflows.PhaseRunning}
 	}
@@ -155,13 +155,13 @@ func TestWorkflowFailureMessageRedactsSensitiveValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	h.fake.SetStatus(build.WorkflowName, workflows.Status{Phase: workflows.PhaseFailed, Message: "clone failed using git-main-key and git-known-hosts"})
+	h.fake.SetStatus(build.WorkflowName, workflows.Status{Phase: workflows.PhaseFailed, Message: "clone failed using builder-git-key and builder-git-known-hosts"})
 
 	got, err := svc.Get(t.Context(), build.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if strings.Contains(got.ErrorMessage, "git-main-key") || strings.Contains(got.ErrorMessage, "git-known-hosts") {
+	if strings.Contains(got.ErrorMessage, "builder-git-key") || strings.Contains(got.ErrorMessage, "builder-git-known-hosts") {
 		t.Fatalf("error message leaked source credential secret names: %q", got.ErrorMessage)
 	}
 	if got.ErrorMessage != "clone failed using [REDACTED] and [REDACTED]" {
@@ -173,7 +173,7 @@ func TestLogsRedactSensitiveValues(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	engine := &leakingLogEngine{}
 	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), engine, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour, "git-main-key", "git-known-hosts")
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour, "builder-git-key", "builder-git-known-hosts")
 
 	build, err := svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
 	if err != nil {
@@ -183,7 +183,7 @@ func TestLogsRedactSensitiveValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Logs: %v", err)
 	}
-	for _, secret := range []string{"git-main-key", "git-known-hosts", "OPENSSH PRIVATE KEY", "secret"} {
+	for _, secret := range []string{"builder-git-key", "builder-git-known-hosts", "OPENSSH PRIVATE KEY", "secret"} {
 		if strings.Contains(logs, secret) {
 			t.Fatalf("logs leaked %q: %s", secret, logs)
 		}
@@ -338,9 +338,8 @@ func TestCreateAcceptsSSHSourceWithSecrets(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	req := validRequest()
 	req.SourceRepoURL = "git@git.internal.example.com:team/app.git"
-	req.SourceCredentialRef = "git-main"
-	req.SourceCredentialSecret = "git-main-key"
-	req.KnownHostsSecret = "git-known-hosts"
+	req.SourceCredentialSecret = "builder-git-key"
+	req.KnownHostsSecret = "builder-git-known-hosts"
 	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err != nil {
 		t.Fatalf("Create should accept SSH source URLs with explicit credential and known_hosts secrets: %v", err)
 	}

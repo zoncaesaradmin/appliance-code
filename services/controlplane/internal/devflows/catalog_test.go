@@ -14,8 +14,8 @@ func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 	if resolved.Target.ScriptPath != DefaultRepoScriptPath {
 		t.Errorf("ScriptPath = %q, want default", resolved.Target.ScriptPath)
 	}
-	if resolved.Repo.SourceCredentialRef != "git-main" {
-		t.Errorf("credential ref = %q", resolved.Repo.SourceCredentialRef)
+	if resolved.Repo.URL != "git@git.internal.example.com:team/app.git" {
+		t.Errorf("repo url = %q", resolved.Repo.URL)
 	}
 }
 
@@ -43,31 +43,15 @@ func TestCatalogRejectsMissingBuildTargets(t *testing.T) {
 	}
 }
 
-func TestSourceCredentialSecretsUseManagedNames(t *testing.T) {
-	if got := SourceCredentialNamespace(); got != "appliance-builds" {
-		t.Fatalf("SourceCredentialNamespace() = %q, want appliance-builds", got)
+func TestBuilderGitSecretsUseManagedNames(t *testing.T) {
+	if got := BuilderGitNamespace(); got != "appliance-builds" {
+		t.Fatalf("BuilderGitNamespace() = %q, want appliance-builds", got)
 	}
-	if got := SourceCredentialSecretName("git.main_repo"); got != "builder-git-git-main-repo-key" {
-		t.Fatalf("SourceCredentialSecretName() = %q", got)
+	if got := BuilderGitSecretName(); got != "builder-git-key" {
+		t.Fatalf("BuilderGitSecretName() = %q", got)
 	}
-	if got := SourceCredentialKnownHostsSecretName("git.main_repo"); got != "builder-git-git-main-repo-known-hosts" {
-		t.Fatalf("SourceCredentialKnownHostsSecretName() = %q", got)
-	}
-}
-
-func TestCatalogRejectsSSHRepoWithoutCredentialRef(t *testing.T) {
-	catalog := testCatalog()
-	catalog.Repos[0].SourceCredentialRef = ""
-	if err := catalog.Validate(); err == nil {
-		t.Fatal("Validate should reject SSH repos without sourceCredentialRef")
-	}
-}
-
-func TestCatalogRejectsCredentialHostMismatch(t *testing.T) {
-	catalog := testCatalog()
-	catalog.SourceCredentials[0].GitHost = "other.example.com"
-	if err := catalog.Validate(); err == nil {
-		t.Fatal("Validate should reject credential host mismatch")
+	if got := BuilderGitKnownHostsSecretName(); got != "builder-git-known-hosts" {
+		t.Fatalf("BuilderGitKnownHostsSecretName() = %q", got)
 	}
 }
 
@@ -132,9 +116,8 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 
 func testCatalog() Catalog {
 	return Catalog{
-		WorkProfiles:      []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		SourceCredentials: []SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com"}},
-		Repos:             []Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
-		BuildTargets:      []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+		WorkProfiles: []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos:        []Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
 	}
 }

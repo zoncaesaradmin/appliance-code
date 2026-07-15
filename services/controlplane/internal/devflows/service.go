@@ -35,11 +35,10 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 func (s *Service) Catalog() Catalog { return s.catalog }
 
 type CreateWorkspaceRequest struct {
-	Name                string
-	WorkProfile         string
-	Repo                string
-	SourceRef           string
-	SourceCredentialRef string
+	Name        string
+	WorkProfile string
+	Repo        string
+	SourceRef   string
 }
 
 type SubmitBuildRequest struct {
@@ -79,9 +78,6 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if !s.catalog.ProfileAllowsRepo(profile, repo.Name) {
 		return storage.Workspace{}, fmt.Errorf("devflows: repo %q is not enabled for workspace profile %q", repo.Name, profile)
 	}
-	if req.SourceCredentialRef != "" && req.SourceCredentialRef != repo.SourceCredentialRef {
-		return storage.Workspace{}, fmt.Errorf("devflows: source credential override is not allowed for repo %q", repo.Name)
-	}
 	ref := strings.TrimSpace(req.SourceRef)
 	if ref == "" {
 		ref = repo.DefaultRef
@@ -91,7 +87,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	}
 	now := time.Now().UTC()
 	ws := storage.Workspace{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Name: name, WorkProfile: profile,
-		SourceRepoURL: repo.URL, SourceRef: ref, SourceCredentialRef: repo.SourceCredentialRef, Status: storage.WorkspaceStatusReady,
+		SourceRepoURL: repo.URL, SourceRef: ref, Status: storage.WorkspaceStatusReady,
 		CreatedAt: now, UpdatedAt: now}
 	if err := s.workspaces.Create(ctx, ws); err != nil {
 		return storage.Workspace{}, err
@@ -222,14 +218,10 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	buildReq := builds.CreateRequest{SourceRepoURL: ws.SourceRepoURL, SourceCommitSHA: ws.SourceRef,
 		Execution: resolved.Target.Execution, ScriptPath: resolved.Target.ScriptPath, MakeTarget: resolved.Target.MakeTarget,
 		ContainerfilePath: resolved.Target.ContainerfilePath, ImageRepository: resolved.Target.ImageRepository, ImageTag: tag,
-		BuilderImageDigest: resolved.Target.BuilderImageDigest, SourceCredentialRef: ws.SourceCredentialRef}
-	if ws.SourceCredentialRef != "" {
-		cred, ok := s.catalog.SourceCredential(ws.SourceCredentialRef)
-		if !ok {
-			return storage.Job{}, fmt.Errorf("devflows: source credential %q is not configured", ws.SourceCredentialRef)
-		}
-		buildReq.SourceCredentialSecret = SourceCredentialSecretName(cred.ID)
-		buildReq.KnownHostsSecret = SourceCredentialKnownHostsSecretName(cred.ID)
+		BuilderImageDigest: resolved.Target.BuilderImageDigest}
+	if isSSHSource(ws.SourceRepoURL) {
+		buildReq.SourceCredentialSecret = BuilderGitSecretName()
+		buildReq.KnownHostsSecret = BuilderGitKnownHostsSecretName()
 	}
 	build, err := s.builds.Create(ctx, actor, ownerID, buildReq, idempotencyKey)
 	if err != nil {

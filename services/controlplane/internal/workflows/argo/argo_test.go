@@ -32,7 +32,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = engine.Submit(t.Context(), workflows.Spec{Name: "build-1", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567", ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1", SourceCredentialRef: "git-main", SourceCredentialSecret: "git-main-key", KnownHostsSecret: "git-known-hosts", Deadline: time.Now().Add(time.Hour)})
+	err = engine.Submit(t.Context(), workflows.Spec{Name: "build-1", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567", ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1", SourceCredentialSecret: "builder-git-key", KnownHostsSecret: "builder-git-known-hosts", Deadline: time.Now().Add(time.Hour)})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}
 	body, _ := json.Marshal(got)
 	text := string(body)
-	for _, want := range []string{"git-main-key", "git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud"} {
+	for _, want := range []string{"builder-git-key", "builder-git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workflow JSON missing %q: %s", want, text)
 		}
@@ -52,10 +52,10 @@ func TestSubmitRejectsCredentialWithoutKnownHosts(t *testing.T) {
 	_, err := workflowObject("appliance-builds", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app",
-		TargetTag: "v1", SourceCredentialRef: "git-main", SourceCredentialSecret: "git-main-key", Deadline: time.Now().Add(time.Hour),
+		TargetTag: "v1", SourceCredentialSecret: "builder-git-key", Deadline: time.Now().Add(time.Hour),
 	})
 	if err == nil {
-		t.Fatal("workflowObject should reject source credentials without known_hosts secret")
+		t.Fatal("workflowObject should reject builder Git secret usage without known_hosts secret")
 	}
 	if !strings.Contains(err.Error(), "known_hosts") {
 		t.Fatalf("workflowObject error = %v, want known_hosts mentioned", err)

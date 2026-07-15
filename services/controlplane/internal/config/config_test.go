@@ -101,15 +101,14 @@ func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
 
 func testBuildCatalog() devflows.Catalog {
 	return devflows.Catalog{
-		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		SourceCredentials: []devflows.SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com"}},
-		Repos:             []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
-		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos:        []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		BuildTargets: []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
 	}
 }
 
 func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
-	jsonCatalog := `{"workProfiles":[{"name":"builder","repos":[{"name":"app","enabledByDefault":true}]}],"sourceCredentials":[{"id":"git-main","gitHost":"git.internal.example.com"}],"repos":[{"name":"app","url":"git@git.internal.example.com:team/app.git","defaultRef":"0123456789abcdef0123456789abcdef01234567","sourceCredentialRef":"git-main"}],"buildTargets":[{"name":"default","aliases":["app"],"repo":"app","execution":"repo_script","imageRepository":"users/alice/app","builderImageDigest":"buildah@sha256:approved"}]}`
+	jsonCatalog := `{"workProfiles":[{"name":"builder","repos":[{"name":"app","enabledByDefault":true}]}],"repos":[{"name":"app","url":"git@git.internal.example.com:team/app.git","defaultRef":"0123456789abcdef0123456789abcdef01234567"}],"buildTargets":[{"name":"default","aliases":["app"],"repo":"app","execution":"repo_script","imageRepository":"users/alice/app","builderImageDigest":"buildah@sha256:approved"}]}`
 	cfg, err := config.Load([]string{
 		"APPLIANCE_PROFILE=builder",
 		"APPLIANCE_BUILD_CATALOG_JSON=" + jsonCatalog,

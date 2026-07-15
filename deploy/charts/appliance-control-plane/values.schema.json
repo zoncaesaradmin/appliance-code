@@ -183,10 +183,6 @@
           "type": "array",
           "items": { "$ref": "#/$defs/repo" }
         },
-        "sourceCredentials": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/sourceCredential" }
-        },
         "buildTargets": {
           "type": "array",
           "minItems": 1,
@@ -221,33 +217,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "url"],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "url": { "type": "string", "pattern": "^(git@|ssh://)" }
-            },
-            "required": ["url"]
-          },
-          "then": {
-            "required": ["sourceCredentialRef"]
-          }
-        }
-      ],
       "properties": {
         "name": { "$ref": "#/$defs/catalogName" },
         "url": { "type": "string", "minLength": 1 },
-        "defaultRef": { "type": "string", "minLength": 1 },
-        "sourceCredentialRef": { "$ref": "#/$defs/catalogName" }
-      }
-    },
-    "sourceCredential": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "gitHost"],
-      "properties": {
-        "id": { "$ref": "#/$defs/catalogName" },
-        "gitHost": { "type": "string", "minLength": 1 }
+        "defaultRef": { "type": "string", "minLength": 1 }
       }
     },
     "buildTarget": {

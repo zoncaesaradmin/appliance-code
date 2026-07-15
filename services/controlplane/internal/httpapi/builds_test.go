@@ -270,7 +270,7 @@ func TestDeveloperWorkflowSubmitBuildByCurrentWorkspace(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow spec for build %s was not submitted", job.BuildID)
 	}
-	if submittedSpec.SourceCredentialRef != "git-main" || submittedSpec.SourceCredentialSecret != "git-main-key" || submittedSpec.KnownHostsSecret != "git-known-hosts" {
+	if submittedSpec.SourceCredentialSecret != "builder-git-key" || submittedSpec.KnownHostsSecret != "builder-git-known-hosts" {
 		t.Fatalf("workflow spec did not receive expected source credential secret refs: %+v", submittedSpec)
 	}
 	if submittedSpec.Execution != "repo_script" || submittedSpec.ScriptPath != "build.sh" {
@@ -287,7 +287,7 @@ func TestDeveloperWorkflowSubmitBuildByCurrentWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secretText := range []string{"git-main-key", "git-known-hosts"} {
+	for _, secretText := range []string{"builder-git-key", "builder-git-known-hosts"} {
 		if strings.Contains(string(statusBody), secretText) {
 			t.Fatalf("job status response leaked source credential material %q: %s", secretText, string(statusBody))
 		}
