@@ -76,6 +76,9 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if !ok {
 		return storage.Workspace{}, fmt.Errorf("devflows: unknown repo %q", req.Repo)
 	}
+	if !s.catalog.ProfileAllowsRepo(profile, repo.Name) {
+		return storage.Workspace{}, fmt.Errorf("devflows: repo %q is not enabled for workspace profile %q", repo.Name, profile)
+	}
 	if req.SourceCredentialRef != "" && req.SourceCredentialRef != repo.SourceCredentialRef {
 		return storage.Workspace{}, fmt.Errorf("devflows: source credential override is not allowed for repo %q", repo.Name)
 	}
@@ -186,7 +189,11 @@ func (s *Service) ListBuildTargetsForCurrent(ctx context.Context, userID string)
 	if err != nil {
 		return nil, err
 	}
-	return s.catalog.TargetsForProfile(ws.WorkProfile), nil
+	repoName := s.repoNameForURL(ws.SourceRepoURL)
+	if repoName == "" {
+		return nil, fmt.Errorf("devflows: current workspace repo is not configured")
+	}
+	return s.catalog.TargetsForRepo(repoName), nil
 }
 
 func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, ownerID string, req SubmitBuildRequest, idempotencyKey string) (storage.Job, error) {
@@ -194,12 +201,13 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if err != nil {
 		return storage.Job{}, err
 	}
-	resolved, err := s.catalog.ResolveTarget(ws.WorkProfile, req.TargetName)
+	repoName := s.repoNameForURL(ws.SourceRepoURL)
+	if repoName == "" {
+		return storage.Job{}, fmt.Errorf("devflows: current workspace repo is not configured")
+	}
+	resolved, err := s.catalog.ResolveTarget(repoName, req.TargetName)
 	if err != nil {
 		return storage.Job{}, err
-	}
-	if normalizeName(resolved.Repo.Name) != normalizeName(s.repoNameForURL(ws.SourceRepoURL)) && resolved.Repo.URL != ws.SourceRepoURL {
-		return storage.Job{}, fmt.Errorf("devflows: build target %q does not match current workspace repo", req.TargetName)
 	}
 	if !IsCommitSHA(ws.SourceRef) {
 		return storage.Job{}, fmt.Errorf("devflows: sourceRef %q is mutable; commit SHA resolution is required before build", ws.SourceRef)
@@ -220,8 +228,8 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 		if !ok {
 			return storage.Job{}, fmt.Errorf("devflows: source credential %q is not configured", ws.SourceCredentialRef)
 		}
-		buildReq.SourceCredentialSecret = cred.KubernetesSecretName
-		buildReq.KnownHostsSecret = cred.KnownHostsSecretName
+		buildReq.SourceCredentialSecret = SourceCredentialSecretName(cred.ID)
+		buildReq.KnownHostsSecret = SourceCredentialKnownHostsSecretName(cred.ID)
 	}
 	build, err := s.builds.Create(ctx, actor, ownerID, buildReq, idempotencyKey)
 	if err != nil {

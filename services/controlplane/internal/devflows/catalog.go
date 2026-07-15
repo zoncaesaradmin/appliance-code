@@ -16,7 +16,8 @@ const (
 	ExecutionRepoScript = "repo_script"
 	ExecutionMakeTarget = "make_target"
 
-	DefaultRepoScriptPath = "build.sh"
+	DefaultRepoScriptPath            = "build.sh"
+	managedSourceCredentialNamespace = "appliance-builds"
 )
 
 var (
@@ -37,8 +38,14 @@ type Catalog struct {
 }
 
 type WorkProfile struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Name        string        `json:"name"`
+	Description string        `json:"description,omitempty"`
+	Repos       []ProfileRepo `json:"repos,omitempty"`
+}
+
+type ProfileRepo struct {
+	Name             string `json:"name"`
+	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
 }
 
 type Repo struct {
@@ -49,17 +56,14 @@ type Repo struct {
 }
 
 type SourceCredential struct {
-	ID                   string `json:"id"`
-	GitHost              string `json:"gitHost"`
-	KubernetesSecretName string `json:"kubernetesSecretName"`
-	KnownHostsSecretName string `json:"knownHostsSecretName,omitempty"`
+	ID      string `json:"id"`
+	GitHost string `json:"gitHost"`
 }
 
 type BuildTarget struct {
 	Name               string   `json:"name"`
 	Aliases            []string `json:"aliases,omitempty"`
 	Description        string   `json:"description,omitempty"`
-	WorkProfile        string   `json:"workProfile,omitempty"`
 	Repo               string   `json:"repo"`
 	Execution          string   `json:"execution"`
 	ScriptPath         string   `json:"scriptPath,omitempty"`
@@ -95,6 +99,19 @@ func (c Catalog) Validate() error {
 			errs = append(errs, fmt.Sprintf("workspace profile %q is duplicated", name))
 		}
 		profiles[name] = struct{}{}
+		seenProfileRepos := map[string]struct{}{}
+		for _, profileRepo := range p.Repos {
+			repoName := normalizeName(profileRepo.Name)
+			if !validName(repoName) {
+				errs = append(errs, fmt.Sprintf("workspace profile %q repo %q has an invalid name", name, profileRepo.Name))
+				continue
+			}
+			if _, exists := seenProfileRepos[repoName]; exists {
+				errs = append(errs, fmt.Sprintf("workspace profile %q repo %q is duplicated", name, repoName))
+				continue
+			}
+			seenProfileRepos[repoName] = struct{}{}
+		}
 	}
 
 	creds := map[string]SourceCredential{}
@@ -106,9 +123,6 @@ func (c Catalog) Validate() error {
 		}
 		if cred.GitHost == "" {
 			errs = append(errs, fmt.Sprintf("source credential %q must declare gitHost", id))
-		}
-		if cred.KubernetesSecretName == "" {
-			errs = append(errs, fmt.Sprintf("source credential %q must declare kubernetesSecretName", id))
 		}
 		if _, exists := creds[id]; exists {
 			errs = append(errs, fmt.Sprintf("source credential %q is duplicated", id))
@@ -137,8 +151,6 @@ func (c Catalog) Validate() error {
 				errs = append(errs, fmt.Sprintf("repo %q references unknown source credential %q", name, repo.SourceCredentialRef))
 			} else if host != "" && !strings.EqualFold(host, cred.GitHost) {
 				errs = append(errs, fmt.Sprintf("repo %q host %q does not match source credential %q host %q", name, host, cred.ID, cred.GitHost))
-			} else if isSSHSource(repo.URL) && cred.KnownHostsSecretName == "" {
-				errs = append(errs, fmt.Sprintf("repo %q uses SSH source credential %q but the credential does not declare knownHostsSecretName", name, cred.ID))
 			}
 		}
 		if _, exists := repos[name]; exists {
@@ -169,11 +181,6 @@ func (c Catalog) Validate() error {
 				errs = append(errs, fmt.Sprintf("build target alias %q is duplicated by %q and %q", alias, prev, name))
 			}
 			seenTargetNames[alias] = name
-		}
-		if target.WorkProfile != "" {
-			if _, ok := profiles[normalizeName(target.WorkProfile)]; !ok {
-				errs = append(errs, fmt.Sprintf("build target %q references unknown workspace profile %q", name, target.WorkProfile))
-			}
 		}
 		if _, ok := repos[normalizeName(target.Repo)]; !ok {
 			errs = append(errs, fmt.Sprintf("build target %q references unknown repo %q", name, target.Repo))
@@ -210,14 +217,26 @@ func (c Catalog) Validate() error {
 		sort.Strings(errs)
 		return fmt.Errorf("devflows catalog: %s", strings.Join(errs, "; "))
 	}
+	for _, p := range c.WorkProfiles {
+		profileName := normalizeName(p.Name)
+		if len(p.Repos) == 0 {
+			return fmt.Errorf("devflows catalog: workspace profile %q must declare at least one repo", profileName)
+		}
+		for _, profileRepo := range p.Repos {
+			repoName := normalizeName(profileRepo.Name)
+			if _, ok := repos[repoName]; !ok {
+				return fmt.Errorf("devflows catalog: workspace profile %q references unknown repo %q", profileName, profileRepo.Name)
+			}
+		}
+	}
 	return nil
 }
 
-func (c Catalog) ResolveTarget(workProfile, name string) (ResolvedTarget, error) {
-	workProfile = normalizeName(workProfile)
+func (c Catalog) ResolveTarget(repoName, name string) (ResolvedTarget, error) {
+	repoName = normalizeName(repoName)
 	lookup := normalizeName(name)
 	for _, target := range c.BuildTargets {
-		if target.WorkProfile != "" && normalizeName(target.WorkProfile) != workProfile {
+		if normalizeName(target.Repo) != repoName {
 			continue
 		}
 		if normalizeName(target.Name) != lookup && !containsName(target.Aliases, lookup) {
@@ -243,6 +262,9 @@ func (c Catalog) WorkProfile(name string) (WorkProfile, bool) {
 	for _, p := range c.WorkProfiles {
 		if normalizeName(p.Name) == name {
 			p.Name = name
+			for i := range p.Repos {
+				p.Repos[i].Name = normalizeName(p.Repos[i].Name)
+			}
 			return p, true
 		}
 	}
@@ -297,25 +319,7 @@ func (c Catalog) BuilderImageDigests() []string {
 }
 
 func (c Catalog) SensitiveLogValues() []string {
-	seen := map[string]struct{}{}
-	var out []string
-	add := func(value string) {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return
-		}
-		if _, ok := seen[value]; ok {
-			return
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	for _, cred := range c.SourceCredentials {
-		add(cred.KubernetesSecretName)
-		add(cred.KnownHostsSecretName)
-	}
-	sort.Strings(out)
-	return out
+	return nil
 }
 
 func (c Catalog) Repo(name string) (Repo, bool) {
@@ -329,11 +333,25 @@ func (c Catalog) Repo(name string) (Repo, bool) {
 	return Repo{}, false
 }
 
-func (c Catalog) TargetsForProfile(workProfile string) []BuildTarget {
-	workProfile = normalizeName(workProfile)
+func (c Catalog) ProfileAllowsRepo(workProfile, repoName string) bool {
+	profile, ok := c.WorkProfile(workProfile)
+	if !ok {
+		return false
+	}
+	repoName = normalizeName(repoName)
+	for _, repo := range profile.Repos {
+		if normalizeName(repo.Name) == repoName {
+			return true
+		}
+	}
+	return false
+}
+
+func (c Catalog) TargetsForRepo(repoName string) []BuildTarget {
+	repoName = normalizeName(repoName)
 	var out []BuildTarget
 	for _, target := range c.BuildTargets {
-		if target.WorkProfile != "" && normalizeName(target.WorkProfile) != workProfile {
+		if normalizeName(target.Repo) != repoName {
 			continue
 		}
 		if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
@@ -349,6 +367,16 @@ func (c Catalog) TargetsForProfile(workProfile string) []BuildTarget {
 
 func IsCommitSHA(ref string) bool {
 	return commitShaRE.MatchString(strings.ToLower(strings.TrimSpace(ref)))
+}
+
+func SourceCredentialNamespace() string { return managedSourceCredentialNamespace }
+
+func SourceCredentialSecretName(id string) string {
+	return "builder-git-" + sourceCredentialIDName(id) + "-key"
+}
+
+func SourceCredentialKnownHostsSecretName(id string) string {
+	return "builder-git-" + sourceCredentialIDName(id) + "-known-hosts"
 }
 
 func normalizeName(v string) string { return strings.ToLower(strings.TrimSpace(v)) }
@@ -375,6 +403,32 @@ func validMakeTarget(v string) bool {
 
 func validBuilderImageDigest(v string) bool {
 	return strings.Contains(strings.TrimSpace(v), "@sha256:")
+}
+
+func sourceCredentialIDName(v string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return "source"
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range v {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	name := strings.Trim(b.String(), "-")
+	if name == "" {
+		return "source"
+	}
+	return name
 }
 
 func containsName(values []string, name string) bool {

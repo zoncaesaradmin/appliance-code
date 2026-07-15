@@ -331,13 +331,12 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
 		"--set", "config.buildCatalog.repos[0].sourceCredentialRef=git-main",
 		"--set", "config.buildCatalog.sourceCredentials[0].id=git-main",
 		"--set", "config.buildCatalog.sourceCredentials[0].gitHost=git.internal.example.com",
-		"--set", "config.buildCatalog.sourceCredentials[0].kubernetesSecretName=git-main-key",
-		"--set", "config.buildCatalog.sourceCredentials[0].knownHostsSecretName=git-known-hosts",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
@@ -367,6 +366,8 @@ config:
   buildCatalog:
     workProfiles:
       - name: builder
+        repos:
+          - name: app
     repos:
       - name: app
         url: https://git.internal.example.com/team/app.git
@@ -420,6 +421,8 @@ config:
   buildCatalog:
     workProfiles:
       - name: builder
+        repos:
+          - name: app
     repos:
       - name: app
         url: https://git.internal.example.com/team/app.git
@@ -469,17 +472,20 @@ config:
 	}
 }
 
-func TestValuesSchemaRejectsSourceCredentialWithoutKnownHostsSecret(t *testing.T) {
+func TestValuesSchemaAcceptsLogicalSourceCredential(t *testing.T) {
 	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "bad-source-credential.yaml")
+	valuesPath := filepath.Join(t.TempDir(), "logical-source-credential.yaml")
 	values := []byte(`
 config:
   applianceProfile: builder
   buildCatalog:
+    workProfiles:
+      - name: builder
+        repos:
+          - name: app
     sourceCredentials:
       - id: git-main
         gitHost: git.internal.example.com
-        kubernetesSecretName: git-main-key
     repos:
       - name: app
         url: git@git.internal.example.com:team/app.git
@@ -496,11 +502,8 @@ config:
 	}
 	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
 	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted source credential without knownHostsSecretName\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("knownHostsSecretName")) {
-		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	if err != nil {
+		t.Fatalf("helm lint rejected logical source credential unexpectedly\n%s", out)
 	}
 }
 
@@ -508,13 +511,12 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
 		"--set", "config.buildCatalog.repos[0].sourceCredentialRef=git-main",
 		"--set", "config.buildCatalog.sourceCredentials[0].id=git-main",
 		"--set", "config.buildCatalog.sourceCredentials[0].gitHost=git.internal.example.com",
-		"--set", "config.buildCatalog.sourceCredentials[0].kubernetesSecretName=git-main-key",
-		"--set", "config.buildCatalog.sourceCredentials[0].knownHostsSecretName=git-known-hosts",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",

@@ -21,8 +21,14 @@ type DeveloperWorkflowHandlers struct {
 // workProfileResponse keeps the ForgeLine-compatible wire name, but the
 // product-facing meaning is a workspace profile, not an appliance profile.
 type workProfileResponse struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Name        string                    `json:"name"`
+	Description string                    `json:"description,omitempty"`
+	Repos       []workProfileRepoResponse `json:"repos,omitempty"`
+}
+
+type workProfileRepoResponse struct {
+	Name             string `json:"name"`
+	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
 }
 
 type workspaceResponse struct {
@@ -44,7 +50,6 @@ type buildTargetResponse struct {
 	Name              string   `json:"name"`
 	Aliases           []string `json:"aliases,omitempty"`
 	Description       string   `json:"description,omitempty"`
-	WorkProfile       string   `json:"workProfile,omitempty"`
 	Repo              string   `json:"repo"`
 	Execution         string   `json:"execution"`
 	ScriptPath        string   `json:"scriptPath,omitempty"`
@@ -87,7 +92,7 @@ func toWorkspaceResponse(ws storage.Workspace) workspaceResponse {
 }
 
 func toBuildTargetResponse(t devflows.BuildTarget) buildTargetResponse {
-	return buildTargetResponse{Name: t.Name, Aliases: t.Aliases, Description: t.Description, WorkProfile: t.WorkProfile, Repo: t.Repo, Execution: t.Execution,
+	return buildTargetResponse{Name: t.Name, Aliases: t.Aliases, Description: t.Description, Repo: t.Repo, Execution: t.Execution,
 		ScriptPath: t.ScriptPath, MakeTarget: t.MakeTarget, ContainerfilePath: t.ContainerfilePath, ImageRepository: t.ImageRepository}
 }
 
@@ -104,7 +109,11 @@ func (h *DeveloperWorkflowHandlers) ListWorkProfiles(w http.ResponseWriter, r *h
 	profiles := h.Devflows.ListWorkProfiles(r.Context())
 	items := make([]workProfileResponse, len(profiles))
 	for i, p := range profiles {
-		items[i] = workProfileResponse{Name: p.Name, Description: p.Description}
+		repos := make([]workProfileRepoResponse, len(p.Repos))
+		for j, repo := range p.Repos {
+			repos[j] = workProfileRepoResponse{Name: repo.Name, EnabledByDefault: repo.EnabledByDefault}
+		}
+		items[i] = workProfileResponse{Name: p.Name, Description: p.Description, Repos: repos}
 	}
 	writeJSON(w, http.StatusOK, struct {
 		Items []workProfileResponse `json:"items"`

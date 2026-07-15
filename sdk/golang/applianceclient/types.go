@@ -117,8 +117,14 @@ type Build struct {
 
 // WorkProfile describes one configured developer workflow profile.
 type WorkProfile struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Repos       []WorkProfileRepo `json:"repos,omitempty"`
+}
+
+type WorkProfileRepo struct {
+	Name             string `json:"name"`
+	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
 }
 
 // Workspace mirrors one server-side developer workflow workspace.
@@ -142,7 +148,6 @@ type BuildTarget struct {
 	Name              string   `json:"name"`
 	Aliases           []string `json:"aliases,omitempty"`
 	Description       string   `json:"description,omitempty"`
-	WorkProfile       string   `json:"workProfile,omitempty"`
 	Repo              string   `json:"repo"`
 	Execution         string   `json:"execution"`
 	ScriptPath        string   `json:"scriptPath,omitempty"`

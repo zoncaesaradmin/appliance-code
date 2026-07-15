@@ -197,10 +197,24 @@
     "workProfile": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["name", "repos"],
+      "properties": {
+        "name": { "$ref": "#/$defs/catalogName" },
+        "description": { "type": "string" },
+        "repos": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/workProfileRepo" }
+        }
+      }
+    },
+    "workProfileRepo": {
+      "type": "object",
+      "additionalProperties": false,
       "required": ["name"],
       "properties": {
         "name": { "$ref": "#/$defs/catalogName" },
-        "description": { "type": "string" }
+        "enabledByDefault": { "type": "boolean" }
       }
     },
     "repo": {
@@ -230,12 +244,10 @@
     "sourceCredential": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "gitHost", "kubernetesSecretName", "knownHostsSecretName"],
+      "required": ["id", "gitHost"],
       "properties": {
         "id": { "$ref": "#/$defs/catalogName" },
-        "gitHost": { "type": "string", "minLength": 1 },
-        "kubernetesSecretName": { "type": "string", "minLength": 1 },
-        "knownHostsSecretName": { "type": "string", "minLength": 1 }
+        "gitHost": { "type": "string", "minLength": 1 }
       }
     },
     "buildTarget": {
@@ -249,7 +261,6 @@
           "items": { "$ref": "#/$defs/catalogName" }
         },
         "description": { "type": "string" },
-        "workProfile": { "$ref": "#/$defs/catalogName" },
         "repo": { "$ref": "#/$defs/catalogName" },
         "execution": { "type": "string", "enum": ["repo_script", "make_target"] },
         "scriptPath": { "$ref": "#/$defs/repoRelativePath" },

@@ -24,10 +24,10 @@ import (
 
 func testBuildCatalog() devflows.Catalog {
 	return devflows.Catalog{
-		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows"}},
+		WorkProfiles:      []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
 		SourceCredentials: []devflows.SourceCredential{{ID: "git-main", GitHost: "git.internal.example.com", KubernetesSecretName: "git-main-key", KnownHostsSecretName: "git-known-hosts"}},
 		Repos:             []devflows.Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567", SourceCredentialRef: "git-main"}},
-		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, WorkProfile: "builder", Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+		BuildTargets:      []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
 	}
 }
 
