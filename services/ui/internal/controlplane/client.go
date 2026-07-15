@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -43,6 +44,12 @@ type Version struct {
 
 type Health struct {
 	Status string `json:"status"`
+}
+
+var ErrAlreadyInitialized = errors.New("controlplane: appliance is already initialized")
+
+type SetupStatus struct {
+	Initialized bool `json:"initialized"`
 }
 
 func NewClient(cfg Config) *Client {
@@ -117,6 +124,40 @@ func (c *Client) Version(ctx context.Context) (Version, error) {
 		return out, err
 	}
 	return out, nil
+}
+
+func (c *Client) SetupStatus(ctx context.Context) (SetupStatus, error) {
+	var out SetupStatus
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/setup/status", nil)
+	if err != nil {
+		return out, err
+	}
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) CreateFirstAdmin(ctx context.Context, username, password, displayName string) error {
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password, "displayName": displayName})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/setup/first-admin", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusCreated:
+		return nil
+	case http.StatusConflict:
+		return ErrAlreadyInitialized
+	default:
+		return fmt.Errorf("%s %s: got HTTP %d, want %d", req.Method, req.URL.Path, resp.StatusCode, http.StatusCreated)
+	}
 }
 
 func (c *Client) Ready(ctx context.Context) (Health, error) {

@@ -56,6 +56,7 @@ func New(cfg config.Config, logger logging.Logger) (*App, error) {
 		Logger: logger,
 		Auth:   authDeps,
 		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
+		SetupH: &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},

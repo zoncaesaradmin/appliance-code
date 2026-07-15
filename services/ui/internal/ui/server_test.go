@@ -14,12 +14,15 @@ import (
 )
 
 type fakeControlPlane struct {
-	loginCalls int
+	loginCalls  int
+	initialized bool
+	adminUser   string
+	adminPass   string
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
 	f.loginCalls++
-	if username != "admin" || password != "secret" {
+	if !f.initialized || username != f.adminUser || password != f.adminPass {
 		return controlplane.LoginResult{}, errFakeAuth
 	}
 	return controlplane.LoginResult{
@@ -51,6 +54,21 @@ func (f *fakeControlPlane) Ready(context.Context) (controlplane.Health, error) {
 	return controlplane.Health{Status: "ready"}, nil
 }
 
+func (f *fakeControlPlane) SetupStatus(context.Context) (controlplane.SetupStatus, error) {
+	return controlplane.SetupStatus{Initialized: f.initialized}, nil
+}
+
+func (f *fakeControlPlane) CreateFirstAdmin(_ context.Context, username, password, displayName string) error {
+	if f.initialized {
+		return controlplane.ErrAlreadyInitialized
+	}
+	f.initialized = true
+	f.adminUser = username
+	f.adminPass = password
+	_ = displayName
+	return nil
+}
+
 type fakeErr string
 
 func (e fakeErr) Error() string { return string(e) }
@@ -59,7 +77,7 @@ const errFakeAuth = fakeErr("invalid credentials")
 
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
-	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), slog.Default())
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}, session.NewStore(time.Now), slog.Default())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -100,6 +118,39 @@ func TestRootRouteReturnsBaseHTMLShell(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "<!doctype html>") || !strings.Contains(body, "Sign in to continue") {
 		t.Fatalf("root body does not look like the base HTML shell:\n%s", body)
+	}
+}
+
+func TestRootRouteShowsSetupWhenUninitialized(t *testing.T) {
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), slog.Default())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "Create the first administrator") {
+		t.Fatalf("root body does not look like the setup page:\n%s", body)
+	}
+}
+
+func TestSetupCreatesFirstAdminAndRedirectsToDashboard(t *testing.T) {
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), slog.Default())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/setup", strings.NewReader("username=admin&display_name=Administrator&password=secret&password_confirm=secret"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rec.Code)
+	}
+	if got := rec.Header().Get("Location"); got != "/dashboard" {
+		t.Fatalf("Location = %q, want /dashboard", got)
 	}
 }
 

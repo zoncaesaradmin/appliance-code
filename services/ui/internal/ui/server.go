@@ -31,6 +31,8 @@ type controlPlane interface {
 	Session(ctx context.Context, accessToken string) (controlplane.Session, error)
 	Version(ctx context.Context) (controlplane.Version, error)
 	Ready(ctx context.Context) (controlplane.Health, error)
+	SetupStatus(ctx context.Context) (controlplane.SetupStatus, error)
+	CreateFirstAdmin(ctx context.Context, username, password, displayName string) error
 }
 
 type Server struct {
@@ -48,6 +50,7 @@ type viewData struct {
 	ApplianceProfile string
 	Error            string
 	Session          controlplane.Session
+	SetupNeeded      bool
 	Version          controlplane.Version
 	Health           controlplane.Health
 	StatusError      string
@@ -89,6 +92,8 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger *slog.Logg
 	mux.HandleFunc("GET /", s.home)
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
+	mux.HandleFunc("GET /setup", s.setupPage)
+	mux.HandleFunc("POST /setup", s.setup)
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /dashboard", s.dashboard)
 	mux.HandleFunc("GET /partials/status", s.statusPartial)
@@ -116,11 +121,16 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusOK, "dashboard.html", data)
 		return
 	}
-	s.render(w, http.StatusOK, "login.html", viewData{
-		Title:            "Sign in",
-		CurrentPath:      r.URL.Path,
-		ApplianceProfile: s.cfg.ApplianceProfile,
-	})
+	initialized, err := s.isInitialized(r.Context())
+	if err != nil {
+		s.renderLoginError(w, r, "Appliance setup state is not available yet.")
+		return
+	}
+	if !initialized {
+		s.renderSetup(w, r, http.StatusOK, "")
+		return
+	}
+	s.renderLogin(w, r, http.StatusOK, "")
 }
 
 func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
@@ -128,11 +138,16 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 		return
 	}
-	s.render(w, http.StatusOK, "login.html", viewData{
-		Title:            "Sign in",
-		CurrentPath:      r.URL.Path,
-		ApplianceProfile: s.cfg.ApplianceProfile,
-	})
+	initialized, err := s.isInitialized(r.Context())
+	if err != nil {
+		s.renderLoginError(w, r, "Appliance setup state is not available yet.")
+		return
+	}
+	if !initialized {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		return
+	}
+	s.renderLogin(w, r, http.StatusOK, "")
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +170,65 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	rec, err := s.sessions.Create(result.AccessToken, result.RefreshToken, result.AccessExpiresAt)
 	if err != nil {
 		s.logger.Error("create UI session failed", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	s.setSessionCookie(w, rec.ID)
+	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+}
+
+func (s *Server) setupPage(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.currentRecord(r); ok {
+		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		return
+	}
+	initialized, err := s.isInitialized(r.Context())
+	if err != nil {
+		s.renderLoginError(w, r, "Appliance setup state is not available yet.")
+		return
+	}
+	if initialized {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	s.renderSetup(w, r, http.StatusOK, "")
+}
+
+func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.renderSetup(w, r, http.StatusBadRequest, "Could not read the submitted form.")
+		return
+	}
+	username := strings.TrimSpace(r.Form.Get("username"))
+	password := r.Form.Get("password")
+	confirm := r.Form.Get("password_confirm")
+	displayName := strings.TrimSpace(r.Form.Get("display_name"))
+	if username == "" || password == "" {
+		s.renderSetup(w, r, http.StatusBadRequest, "Username and password are required.")
+		return
+	}
+	if password != confirm {
+		s.renderSetup(w, r, http.StatusBadRequest, "Passwords did not match.")
+		return
+	}
+	if err := s.cp.CreateFirstAdmin(r.Context(), username, password, displayName); err != nil {
+		if errors.Is(err, controlplane.ErrAlreadyInitialized) {
+			s.renderLogin(w, r, http.StatusConflict, "Appliance is already initialized. Sign in instead.")
+			return
+		}
+		s.logger.Warn("setup create first admin failed", "error", err)
+		s.renderSetup(w, r, http.StatusBadRequest, "Could not create the first administrator. Check the username and password policy and try again.")
+		return
+	}
+	result, err := s.cp.Login(r.Context(), username, password)
+	if err != nil {
+		s.logger.Warn("setup login after first admin creation failed", "error", err)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	rec, err := s.sessions.Create(result.AccessToken, result.RefreshToken, result.AccessExpiresAt)
+	if err != nil {
+		s.logger.Error("create UI session after setup failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -242,13 +316,27 @@ func (s *Server) sessionWithRefresh(r *http.Request, rec session.Record) (contro
 	return sessionInfo, rec, err
 }
 
-func (s *Server) renderLoginError(w http.ResponseWriter, r *http.Request, message string) {
-	s.render(w, http.StatusUnauthorized, "login.html", viewData{
+func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, message string) {
+	s.render(w, status, "login.html", viewData{
 		Title:            "Sign in",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
 		Error:            message,
 	})
+}
+
+func (s *Server) renderSetup(w http.ResponseWriter, r *http.Request, status int, message string) {
+	s.render(w, status, "setup.html", viewData{
+		Title:            "Create first administrator",
+		CurrentPath:      r.URL.Path,
+		ApplianceProfile: s.cfg.ApplianceProfile,
+		Error:            message,
+		SetupNeeded:      true,
+	})
+}
+
+func (s *Server) renderLoginError(w http.ResponseWriter, r *http.Request, message string) {
+	s.renderLogin(w, r, http.StatusUnauthorized, message)
 }
 
 func (s *Server) requireRecord(w http.ResponseWriter, r *http.Request) (session.Record, bool) {
@@ -257,6 +345,11 @@ func (s *Server) requireRecord(w http.ResponseWriter, r *http.Request) (session.
 		return rec, true
 	}
 	s.clearSessionCookie(w)
+	initialized, err := s.isInitialized(r.Context())
+	if err == nil && !initialized {
+		http.Redirect(w, r, "/setup", http.StatusSeeOther)
+		return session.Record{}, false
+	}
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 	return session.Record{}, false
 }
@@ -290,6 +383,14 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
+}
+
+func (s *Server) isInitialized(ctx context.Context) (bool, error) {
+	status, err := s.cp.SetupStatus(ctx)
+	if err != nil {
+		return false, err
+	}
+	return status.Initialized, nil
 }
 
 func (s *Server) render(w http.ResponseWriter, status int, name string, data viewData) {

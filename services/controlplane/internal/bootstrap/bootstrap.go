@@ -24,6 +24,16 @@ type Result struct {
 	Username    string
 }
 
+// Initialized reports whether at least one user already exists, meaning the
+// appliance has completed first-admin setup.
+func Initialized(ctx context.Context, userStore storage.UserStore) (bool, error) {
+	existing, err := userStore.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	return len(existing) > 0, nil
+}
+
 // Init creates the first administrator user and its administrator role
 // assignment in one transaction, refusing to run if any user already
 // exists. It never overwrites or reinitializes an already-initialized

@@ -68,6 +68,7 @@ func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServ
 		Logger: logger,
 		Auth:   authDeps,
 		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
+		SetupH: &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
@@ -169,6 +170,61 @@ func (ts *testServer) doJSONWithHeaders(t *testing.T, method, path, bearer, body
 }
 
 const testPassword = "a-sufficiently-long-test-password-1"
+
+func TestSetupStatusAndFirstAdminFlow(t *testing.T) {
+	ts := newTestServer(t)
+
+	resp := ts.doJSON(t, "GET", "/api/v1/setup/status", "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initial setup status = %d, want 200", resp.StatusCode)
+	}
+	var status struct {
+		Initialized bool `json:"initialized"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		t.Fatalf("decode setup status: %v", err)
+	}
+	if status.Initialized {
+		t.Fatal("expected fresh test appliance to report initialized=false")
+	}
+
+	resp = ts.doJSON(t, "POST", "/api/v1/setup/first-admin", "", `{"username":"admin","password":"`+testPassword+`"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create first admin status = %d, want 201", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resp = ts.doJSON(t, "GET", "/api/v1/setup/status", "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("post-bootstrap setup status = %d, want 200", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		t.Fatalf("decode setup status after bootstrap: %v", err)
+	}
+	if !status.Initialized {
+		t.Fatal("expected initialized=true after creating first admin")
+	}
+
+	token := ts.login(t, "admin", testPassword)
+	resp = ts.doJSON(t, "GET", "/api/v1/auth/session", token, "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("session after setup status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestSetupCreateFirstAdminRejectsAlreadyInitializedAppliance(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	resp := ts.doJSON(t, "POST", "/api/v1/setup/first-admin", "", `{"username":"second","password":"`+testPassword+`"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("create first admin on initialized appliance = %d, want 409", resp.StatusCode)
+	}
+}
 
 func TestLoginHTTPEndToEnd(t *testing.T) {
 	ts := newTestServer(t)

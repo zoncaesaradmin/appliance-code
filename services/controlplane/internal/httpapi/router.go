@@ -17,6 +17,7 @@ type Deps struct {
 	Logger           logging.Logger
 	Auth             AuthDeps
 	AuthH            *AuthHandlers
+	SetupH           *SetupHandlers
 	ForwardAuthH     *ForwardAuthHandlers
 	UsersH           *UserHandlers
 	RolesH           *RoleHandlers
@@ -99,6 +100,18 @@ func NewInternalMux(logger logging.Logger, checker ReadinessChecker, startup *St
 
 func publicRoutes() []publicRoute {
 	return []publicRoute{
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/setup/status", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.SetupH == nil {
+				return nil, fmt.Errorf("missing setup handlers")
+			}
+			return http.HandlerFunc(deps.SetupH.Status), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/setup/first-admin", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.SetupH == nil {
+				return nil, fmt.Errorf("missing setup handlers")
+			}
+			return http.HandlerFunc(deps.SetupH.CreateFirstAdmin), nil
+		}},
 		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/auth/login", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.AuthH == nil {
 				return nil, fmt.Errorf("missing auth handlers")
