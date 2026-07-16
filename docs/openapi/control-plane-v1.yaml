@@ -56,7 +56,7 @@ paths:
           $ref: "#/components/responses/Forbidden"
     post:
       summary: Create workspace
-      description: Creates a workspace from a workspace profile and makes it current for the caller.
+      description: Creates one logical workspace from a workspace profile and makes it current for the caller. The workspace profile determines the repos available inside that workspace.
       operationId: createWorkspace
       requestBody:
         required: true

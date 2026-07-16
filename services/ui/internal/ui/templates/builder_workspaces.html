@@ -4,7 +4,7 @@
   <div>
     <p class="eyebrow">Builder</p>
     <h1>Workspaces</h1>
-    <p class="muted">Create a workspace from a workspace profile, then choose the current workspace for builder operations.</p>
+    <p class="muted">Create one logical workspace from a workspace profile, then use that workspace for builder operations across all repos included in the profile.</p>
   </div>
   <form method="post" action="/logout">
     <button class="secondary" type="submit">Sign out</button>
@@ -38,14 +38,14 @@
       <dt>Workspace profile</dt>
       <dd>{{.CurrentWorkspace.WorkProfile}}</dd>
     </dl>
-    <p class="muted">This workspace is active for builder operations. You only need to open workspace settings if you want to switch or create another one.</p>
+    <p class="muted">This workspace is active for builder operations. It represents one logical multi-repo workspace from the selected workspace profile. You only need to open workspace settings if you want to switch or create another one.</p>
     {{else}}
     <h2>No current workspace yet</h2>
     <p class="builder-attn-copy">Choose a workspace profile and create a workspace before build targets can be selected.</p>
     {{if .Workspaces}}
     <p class="muted">You already have workspace entries. Open workspace settings below to set one as current, or create a new one.</p>
     {{else}}
-    <p class="muted">No workspace has been created yet. Start with a workspace profile, then create one compactly from the settings panel below.</p>
+    <p class="muted">No workspace has been created yet. Start with a workspace profile, then create one compactly from the settings panel below. That workspace will include every repo configured for the chosen workspace profile.</p>
     {{end}}
     {{end}}
   </article>
@@ -115,17 +115,18 @@
           <form method="post" action="/builder/workspaces">
             <label>
               Workspace name
-              <input name="name" placeholder="team-alpha" autocomplete="off" required>
+              <input name="name" placeholder="MyWorkspace" autocomplete="off" required>
             </label>
             <label>
               Workspace profile
               <select name="work_profile" required>
                 <option value="">Select workspace profile</option>
                 {{range .WorkProfiles}}
-                <option value="{{.Name}}">{{.Name}}</option>
+                <option value="{{.Name}}">{{.Name}} ({{len .Repos}} repos)</option>
                 {{end}}
               </select>
             </label>
+            <p class="muted">Selecting a workspace profile creates one logical workspace that includes all repos configured for that profile.</p>
             <button type="submit">Create and set current</button>
           </form>
         </article>
@@ -141,6 +142,7 @@
           <section class="profile-card">
             <h3>{{.Name}}</h3>
             {{if .Description}}<p class="muted">{{.Description}}</p>{{end}}
+            <p class="muted">Contains {{len .Repos}} repo{{if ne (len .Repos) 1}}s{{end}} in this workspace profile.</p>
             {{if .Repos}}
             <ul>
               {{range .Repos}}

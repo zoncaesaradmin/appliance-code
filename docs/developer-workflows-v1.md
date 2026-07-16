@@ -14,6 +14,10 @@ submission.
   developer workflow routes; callers receive the normal appliance 404.
 - The control plane stores catalog/config, workspace profile metadata, workspace records,
   user-scoped current workspace selection, jobs, and job steps in SQLite.
+- A workspace is one logical developer workspace selected from one workspace
+  profile. It is not one workspace per repo. The chosen workspace profile
+  determines the set of repos and build targets available inside that
+  workspace.
 - Build target submission resolves `current workspace + build target + tag` into
   the existing immutable build request shape.
 - Build execution uses the workflow engine interface. Local tests use the fake
