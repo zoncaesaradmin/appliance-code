@@ -33,6 +33,11 @@ type controlPlane interface {
 	Ready(ctx context.Context) (controlplane.Health, error)
 	SetupStatus(ctx context.Context) (controlplane.SetupStatus, error)
 	CreateFirstAdmin(ctx context.Context, username, password, displayName string) error
+	ListWorkProfiles(ctx context.Context, accessToken string) ([]controlplane.WorkProfile, error)
+	ListWorkspaces(ctx context.Context, accessToken string) ([]controlplane.Workspace, error)
+	CurrentWorkspace(ctx context.Context, accessToken string) (controlplane.Workspace, error)
+	CreateWorkspace(ctx context.Context, accessToken string, req controlplane.CreateWorkspaceRequest) (controlplane.Workspace, error)
+	SetCurrentWorkspace(ctx context.Context, accessToken, workspaceID string) (controlplane.Workspace, error)
 }
 
 type Server struct {
@@ -48,12 +53,30 @@ type viewData struct {
 	Title            string
 	CurrentPath      string
 	ApplianceProfile string
+	BuilderEnabled   bool
 	Error            string
+	Message          string
 	Session          controlplane.Session
 	SetupNeeded      bool
 	Version          controlplane.Version
 	Health           controlplane.Health
 	StatusError      string
+}
+
+type builderPageData struct {
+	viewData
+	WorkProfiles     []controlplane.WorkProfile
+	ProfileRepoItems []profileRepoItem
+	Workspaces       []controlplane.Workspace
+	CurrentWorkspace *controlplane.Workspace
+}
+
+type profileRepoItem struct {
+	Value            string
+	WorkProfile      string
+	Repo             string
+	Description      string
+	EnabledByDefault bool
 }
 
 const sessionCookieName = "appliance_ui_session"
@@ -96,6 +119,9 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger *slog.Logg
 	mux.HandleFunc("POST /setup", s.setup)
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /dashboard", s.dashboard)
+	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
+	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
+	mux.HandleFunc("POST /builder/current-workspace", s.setBuilderCurrentWorkspace)
 	mux.HandleFunc("GET /partials/status", s.statusPartial)
 	mux.HandleFunc("GET /partials/session", s.sessionPartial)
 	return securityHeaders(mux), nil
@@ -275,6 +301,7 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 		Title:            "Dashboard",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
+		BuilderEnabled:   s.builderEnabled(),
 	}
 	sessionInfo, refreshed, err := s.sessionWithRefresh(r, rec)
 	if err != nil {
@@ -299,6 +326,148 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 	return data
 }
 
+func (s *Server) builderWorkspaces(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	data := s.builderPageData(r, rec, "", "")
+	s.render(w, http.StatusOK, "builder_workspaces.html", data)
+}
+
+func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not read the submitted form."))
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	profileRepo := strings.TrimSpace(r.Form.Get("profile_repo"))
+	sourceRef := strings.TrimSpace(r.Form.Get("source_ref"))
+	workProfile, repo, ok := strings.Cut(profileRepo, "|")
+	if name == "" || !ok || strings.TrimSpace(workProfile) == "" || strings.TrimSpace(repo) == "" {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace name and workspace profile/repo are required."))
+		return
+	}
+	if _, err := s.cp.CreateWorkspace(r.Context(), rec.AccessToken, controlplane.CreateWorkspaceRequest{
+		Name:        name,
+		WorkProfile: strings.TrimSpace(workProfile),
+		Repo:        strings.TrimSpace(repo),
+		SourceRef:   sourceRef,
+	}); err != nil {
+		s.logger.Warn("create builder workspace failed", "error", err)
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not create the workspace. Check the workspace profile, repo, and source ref."))
+		return
+	}
+	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+}
+
+func (s *Server) setBuilderCurrentWorkspace(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not read the submitted form."))
+		return
+	}
+	workspaceID := strings.TrimSpace(r.Form.Get("workspace_id"))
+	if workspaceID == "" {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace ID is required."))
+		return
+	}
+	if _, err := s.cp.SetCurrentWorkspace(r.Context(), rec.AccessToken, workspaceID); err != nil {
+		s.logger.Warn("set current builder workspace failed", "error", err)
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not switch the current workspace."))
+		return
+	}
+	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+}
+
+func (s *Server) builderPageData(r *http.Request, rec session.Record, message, formError string) builderPageData {
+	base := s.dashboardData(r, rec)
+	base.Title = "Builder workspaces"
+	base.CurrentPath = "/builder/workspaces"
+	base.Message = message
+	base.Error = formError
+
+	data := builderPageData{viewData: base}
+	if base.Session.Username == "" {
+		return data
+	}
+	if latest, ok := s.sessions.Get(rec.ID); ok {
+		rec = latest
+	}
+	profiles, err := s.cp.ListWorkProfiles(r.Context(), rec.AccessToken)
+	if err != nil {
+		data.StatusError = "Workspace profiles are not available."
+		return data
+	}
+	workspaces, err := s.cp.ListWorkspaces(r.Context(), rec.AccessToken)
+	if err != nil {
+		data.StatusError = "Workspaces are not available."
+		return data
+	}
+	current, err := s.cp.CurrentWorkspace(r.Context(), rec.AccessToken)
+	if err == nil {
+		data.CurrentWorkspace = &current
+	} else if !isHTTPStatus(err, http.StatusNotFound) {
+		data.StatusError = "Current workspace is not available."
+	}
+	data.WorkProfiles = profiles
+	data.ProfileRepoItems = profileRepoItems(profiles)
+	data.Workspaces = workspaces
+	return data
+}
+
+func profileRepoItems(profiles []controlplane.WorkProfile) []profileRepoItem {
+	var out []profileRepoItem
+	for _, profile := range profiles {
+		for _, repo := range profile.Repos {
+			out = append(out, profileRepoItem{
+				Value:            profile.Name + "|" + repo.Name,
+				WorkProfile:      profile.Name,
+				Repo:             repo.Name,
+				Description:      profile.Description,
+				EnabledByDefault: repo.EnabledByDefault,
+			})
+		}
+	}
+	return out
+}
+
+func (s *Server) builderEnabled() bool {
+	return s.cfg.ApplianceProfile == "builder"
+}
+
+func isHTTPStatus(err error, status int) bool {
+	var statusErr *controlplane.HTTPStatusError
+	return errors.As(err, &statusErr) && statusErr.StatusCode == status
+}
+
 func (s *Server) sessionWithRefresh(r *http.Request, rec session.Record) (controlplane.Session, session.Record, error) {
 	sessionInfo, err := s.cp.Session(r.Context(), rec.AccessToken)
 	if err == nil {
@@ -315,11 +484,25 @@ func (s *Server) sessionWithRefresh(r *http.Request, rec session.Record) (contro
 	return sessionInfo, rec, err
 }
 
+func (s *Server) refreshRecordForAPI(w http.ResponseWriter, r *http.Request, rec session.Record) (session.Record, bool) {
+	_, refreshed, err := s.sessionWithRefresh(r, rec)
+	if err != nil {
+		s.clearSessionCookie(w)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return session.Record{}, false
+	}
+	if refreshed.ID != "" && refreshed.AccessToken != rec.AccessToken {
+		s.sessions.Update(refreshed)
+	}
+	return refreshed, true
+}
+
 func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, message string) {
 	s.render(w, status, "login.html", viewData{
 		Title:            "Sign in",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
+		BuilderEnabled:   s.builderEnabled(),
 		Error:            message,
 	})
 }
@@ -329,6 +512,7 @@ func (s *Server) renderSetup(w http.ResponseWriter, r *http.Request, status int,
 		Title:            "Create first administrator",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
+		BuilderEnabled:   s.builderEnabled(),
 		Error:            message,
 		SetupNeeded:      true,
 	})
@@ -392,7 +576,7 @@ func (s *Server) isInitialized(ctx context.Context) (bool, error) {
 	return status.Initialized, nil
 }
 
-func (s *Server) render(w http.ResponseWriter, status int, name string, data viewData) {
+func (s *Server) render(w http.ResponseWriter, status int, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)

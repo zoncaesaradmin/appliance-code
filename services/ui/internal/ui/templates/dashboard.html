@@ -19,5 +19,14 @@
     {{template "status-panel" .}}
   </article>
 </div>
+
+{{if .BuilderEnabled}}
+<article class="builder-callout">
+  <p class="eyebrow">Builder workflow</p>
+  <h2>Prepare a workspace</h2>
+  <p class="muted">Select a workspace profile, create a workspace, and choose the current workspace before submitting builds.</p>
+  <a href="/builder/workspaces" role="button">Open builder workspaces</a>
+</article>
+{{end}}
 {{template "layout-end" .}}
 {{end}}

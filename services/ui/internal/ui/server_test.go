@@ -18,6 +18,9 @@ type fakeControlPlane struct {
 	initialized bool
 	adminUser   string
 	adminPass   string
+	profiles    []controlplane.WorkProfile
+	workspaces  []controlplane.Workspace
+	currentID   string
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
@@ -69,6 +72,60 @@ func (f *fakeControlPlane) CreateFirstAdmin(_ context.Context, username, passwor
 	return nil
 }
 
+func (f *fakeControlPlane) ListWorkProfiles(context.Context, string) ([]controlplane.WorkProfile, error) {
+	if f.profiles == nil {
+		return []controlplane.WorkProfile{{
+			Name:        "platform-dev",
+			Description: "Platform development workspace profile",
+			Repos: []controlplane.WorkProfileRepo{
+				{Name: "appliance-code", EnabledByDefault: true},
+				{Name: "appliance-release"},
+			},
+		}}, nil
+	}
+	return f.profiles, nil
+}
+
+func (f *fakeControlPlane) ListWorkspaces(context.Context, string) ([]controlplane.Workspace, error) {
+	return append([]controlplane.Workspace(nil), f.workspaces...), nil
+}
+
+func (f *fakeControlPlane) CurrentWorkspace(context.Context, string) (controlplane.Workspace, error) {
+	for _, workspace := range f.workspaces {
+		if workspace.ID == f.currentID {
+			return workspace, nil
+		}
+	}
+	return controlplane.Workspace{}, &controlplane.HTTPStatusError{Method: http.MethodGet, Path: "/api/v1/current-workspace", StatusCode: http.StatusNotFound}
+}
+
+func (f *fakeControlPlane) CreateWorkspace(_ context.Context, _ string, req controlplane.CreateWorkspaceRequest) (controlplane.Workspace, error) {
+	workspace := controlplane.Workspace{
+		ID:            "ws_" + req.Name,
+		OwnerID:       "usr_admin",
+		Name:          req.Name,
+		WorkProfile:   req.WorkProfile,
+		SourceRepoURL: "git@example.invalid:" + req.Repo + ".git",
+		SourceRef:     req.SourceRef,
+		Status:        "ready",
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	f.workspaces = append(f.workspaces, workspace)
+	f.currentID = workspace.ID
+	return workspace, nil
+}
+
+func (f *fakeControlPlane) SetCurrentWorkspace(_ context.Context, _ string, workspaceID string) (controlplane.Workspace, error) {
+	for _, workspace := range f.workspaces {
+		if workspace.ID == workspaceID {
+			f.currentID = workspaceID
+			return workspace, nil
+		}
+	}
+	return controlplane.Workspace{}, &controlplane.HTTPStatusError{Method: http.MethodPost, Path: "/api/v1/current-workspace", StatusCode: http.StatusNotFound}
+}
+
 type fakeErr string
 
 func (e fakeErr) Error() string { return string(e) }
@@ -78,6 +135,15 @@ const errFakeAuth = fakeErr("invalid credentials")
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
 	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}, session.NewStore(time.Now), slog.Default())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return handler
+}
+
+func newTestServerWithProfile(t *testing.T, applianceProfile string, cp *fakeControlPlane) http.Handler {
+	t.Helper()
+	handler, err := New(Config{ApplianceProfile: applianceProfile, CookieSecure: false, StaticPrefix: "/static/"}, cp, session.NewStore(time.Now), slog.Default())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -207,6 +273,60 @@ func TestDashboardAndPartialsReturnHTML(t *testing.T) {
 		if body := rec.Body.String(); !strings.Contains(body, tc.want) {
 			t.Fatalf("%s body missing %q:\n%s", tc.path, tc.want, body)
 		}
+	}
+}
+
+func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
+	cp := &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
+	}
+	if body := pageRec.Body.String(); !strings.Contains(body, "Workspace profile and repo") || !strings.Contains(body, "platform-dev / appliance-code") {
+		t.Fatalf("builder page body missing workspace controls:\n%s", body)
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=demo&profile_repo=platform-dev%7Cappliance-code&source_ref=main"))
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusSeeOther {
+		t.Fatalf("create status = %d, want 303", createRec.Code)
+	}
+	if got := createRec.Header().Get("Location"); got != "/builder/workspaces" {
+		t.Fatalf("Location = %q, want /builder/workspaces", got)
+	}
+	if cp.currentID != "ws_demo" {
+		t.Fatalf("currentID = %q, want ws_demo", cp.currentID)
+	}
+}
+
+func TestBuilderWorkspacePageNotAvailableForCoreProfile(t *testing.T) {
+	handler := newTestServer(t)
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	req := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
 

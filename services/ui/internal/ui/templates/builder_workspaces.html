@@ -1,0 +1,139 @@
+{{define "builder_workspaces.html"}}
+{{template "layout-start" .}}
+<section class="dashboard-heading">
+  <div>
+    <p class="eyebrow">Builder</p>
+    <h1>Workspaces</h1>
+    <p class="muted">Create a workspace from a workspace profile, then choose the current workspace for builder operations.</p>
+  </div>
+  <form method="post" action="/logout">
+    <button class="secondary" type="submit">Sign out</button>
+  </form>
+</section>
+
+{{if .StatusError}}
+<article class="notice error" role="alert">{{.StatusError}}</article>
+{{end}}
+{{if .Error}}
+<article class="notice error" role="alert">{{.Error}}</article>
+{{end}}
+{{if .Message}}
+<article class="notice" role="status">{{.Message}}</article>
+{{end}}
+
+<div class="grid builder-grid">
+  <article>
+    <header>
+      <strong>Create workspace</strong>
+    </header>
+    <form method="post" action="/builder/workspaces">
+      <label>
+        Workspace name
+        <input name="name" placeholder="platform-dev" autocomplete="off" required>
+      </label>
+      <label>
+        Workspace profile and repo
+        <select name="profile_repo" required>
+          <option value="">Select workspace profile / repo</option>
+          {{range .ProfileRepoItems}}
+          <option value="{{.Value}}">{{.WorkProfile}} / {{.Repo}}{{if .EnabledByDefault}} (default){{end}}</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        Source ref
+        <input name="source_ref" placeholder="default branch from catalog" autocomplete="off">
+      </label>
+      <button type="submit">Create and set current</button>
+    </form>
+  </article>
+
+  <article>
+    <header>
+      <strong>Current workspace</strong>
+    </header>
+    {{if .CurrentWorkspace}}
+    <dl>
+      <dt>Name</dt>
+      <dd>{{.CurrentWorkspace.Name}}</dd>
+      <dt>Workspace profile</dt>
+      <dd>{{.CurrentWorkspace.WorkProfile}}</dd>
+      <dt>Source ref</dt>
+      <dd>{{if .CurrentWorkspace.SourceRef}}{{.CurrentWorkspace.SourceRef}}{{else}}catalog default{{end}}</dd>
+      <dt>Status</dt>
+      <dd>{{.CurrentWorkspace.Status}}</dd>
+    </dl>
+    {{else}}
+    <p class="muted">No current workspace is selected yet. Creating a workspace will make it current automatically.</p>
+    {{end}}
+  </article>
+</div>
+
+<section>
+  <article>
+    <header>
+      <strong>Available workspace profiles</strong>
+    </header>
+    {{if .WorkProfiles}}
+    <div class="profile-card-grid">
+      {{range .WorkProfiles}}
+      <section class="profile-card">
+        <h3>{{.Name}}</h3>
+        {{if .Description}}<p class="muted">{{.Description}}</p>{{end}}
+        {{if .Repos}}
+        <ul>
+          {{range .Repos}}
+          <li>{{.Name}}{{if .EnabledByDefault}} <span class="inline-pill">default</span>{{end}}</li>
+          {{end}}
+        </ul>
+        {{else}}
+        <p class="muted">No repos are configured for this workspace profile.</p>
+        {{end}}
+      </section>
+      {{end}}
+    </div>
+    {{else}}
+    <p class="muted">No workspace profiles are configured.</p>
+    {{end}}
+  </article>
+</section>
+
+<section>
+  <article>
+    <header>
+      <strong>Your workspaces</strong>
+    </header>
+    {{if .Workspaces}}
+    <div class="workspace-list">
+      {{range .Workspaces}}
+      <section class="workspace-row">
+        <div>
+          <h3>{{.Name}}</h3>
+          <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
+          <p class="muted">{{.SourceRepoURL}}</p>
+        </div>
+        {{if $.CurrentWorkspace}}
+          {{if eq $.CurrentWorkspace.ID .ID}}
+          <span class="inline-pill">current</span>
+          {{else}}
+          <form method="post" action="/builder/current-workspace">
+            <input type="hidden" name="workspace_id" value="{{.ID}}">
+            <button class="secondary" type="submit">Set current</button>
+          </form>
+          {{end}}
+        {{else}}
+        <form method="post" action="/builder/current-workspace">
+          <input type="hidden" name="workspace_id" value="{{.ID}}">
+          <button class="secondary" type="submit">Set current</button>
+        </form>
+        {{end}}
+      </section>
+      {{end}}
+    </div>
+    {{else}}
+    <p class="muted">No workspaces yet.</p>
+    {{end}}
+  </article>
+</section>
+{{template "layout-end" .}}
+{{end}}

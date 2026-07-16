@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -49,8 +50,52 @@ type Health struct {
 
 var ErrAlreadyInitialized = errors.New("controlplane: appliance is already initialized")
 
+type HTTPStatusError struct {
+	Method     string
+	Path       string
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("%s %s: got HTTP %d", e.Method, e.Path, e.StatusCode)
+}
+
 type SetupStatus struct {
 	Initialized bool `json:"initialized"`
+}
+
+type WorkProfile struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	Repos       []WorkProfileRepo `json:"repos,omitempty"`
+}
+
+type WorkProfileRepo struct {
+	Name             string `json:"name"`
+	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
+}
+
+type Workspace struct {
+	ID            string     `json:"id"`
+	OwnerID       string     `json:"ownerId"`
+	Name          string     `json:"name"`
+	WorkProfile   string     `json:"workProfile"`
+	SourceRepoURL string     `json:"sourceRepoUrl"`
+	SourceRef     string     `json:"sourceRef"`
+	Status        string     `json:"status"`
+	ReasonCode    string     `json:"reasonCode,omitempty"`
+	ErrorMessage  string     `json:"errorMessage,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
+}
+
+type CreateWorkspaceRequest struct {
+	Name        string `json:"name"`
+	WorkProfile string `json:"workProfile"`
+	Repo        string `json:"repo"`
+	SourceRef   string `json:"sourceRef,omitempty"`
 }
 
 func NewClient(cfg Config) *Client {
@@ -173,6 +218,79 @@ func (c *Client) Ready(ctx context.Context) (Health, error) {
 	return out, nil
 }
 
+func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]WorkProfile, error) {
+	var result struct {
+		Items []WorkProfile `json:"items"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/work-profiles", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) ListWorkspaces(ctx context.Context, accessToken string) ([]Workspace, error) {
+	var result struct {
+		Items []Workspace `json:"items"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/workspaces", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) CurrentWorkspace(ctx context.Context, accessToken string) (Workspace, error) {
+	var out Workspace
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace", nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) CreateWorkspace(ctx context.Context, accessToken string, in CreateWorkspaceRequest) (Workspace, error) {
+	var out Workspace
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/workspaces", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusCreated, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) SetCurrentWorkspace(ctx context.Context, accessToken, workspaceID string) (Workspace, error) {
+	var out Workspace
+	body, _ := json.Marshal(map[string]string{"workspaceId": workspaceID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/current-workspace", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
 func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -180,7 +298,8 @@ func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != wantStatus {
-		return fmt.Errorf("%s %s: got HTTP %d, want %d", req.Method, req.URL.Path, resp.StatusCode, wantStatus)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return &HTTPStatusError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	if out == nil {
 		return nil

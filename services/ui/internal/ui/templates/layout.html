@@ -12,14 +12,22 @@
   </head>
   <body>
     <header class="appliance-header">
-      <a class="brand" href="/">Zon Appliance</a>
+      <nav class="header-nav">
+        <a class="brand" href="/">Zon Appliance</a>
+        {{if .Session.Username}}
+        <a class="{{if eq .CurrentPath "/dashboard"}}active{{end}}" href="/dashboard">Dashboard</a>
+        {{if .BuilderEnabled}}
+        <a class="{{if eq .CurrentPath "/builder/workspaces"}}active{{end}}" href="/builder/workspaces">Builder</a>
+        {{end}}
+        {{end}}
+      </nav>
       {{if .Session.Username}}
       <div class="header-identity">
         <strong>{{.Session.Username}}</strong>
-        <span class="profile-pill">profile: {{.ApplianceProfile}}</span>
+        <span class="profile-pill">appliance profile: {{.ApplianceProfile}}</span>
       </div>
       {{else}}
-      <span class="profile-pill">profile: {{.ApplianceProfile}}</span>
+      <span class="profile-pill">appliance profile: {{.ApplianceProfile}}</span>
       {{end}}
     </header>
     <main class="container appliance-main">

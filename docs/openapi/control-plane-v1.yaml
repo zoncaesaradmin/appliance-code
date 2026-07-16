@@ -1,0 +1,569 @@
+openapi: 3.1.0
+info:
+  title: Zon Appliance Control Plane API
+  version: 0.1.0
+  description: >
+    REST contract for appliance control-plane APIs used by browser UI,
+    CLI, SDKs, and automation clients. UI-only HTMX fragment routes are not
+    part of this contract.
+servers:
+  - url: https://appliance.local
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/work-profiles:
+    get:
+      summary: List workspace profiles
+      description: Lists configured workspace profiles for builder workflows.
+      operationId: listWorkProfiles
+      responses:
+        "200":
+          description: Workspace profiles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WorkProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/workspaces:
+    get:
+      summary: List workspaces
+      operationId: listWorkspaces
+      responses:
+        "200":
+          description: Workspaces visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Workspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create workspace
+      description: Creates a workspace from a workspace profile and makes it current for the caller.
+      operationId: createWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: Created workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/workspaces/{workspaceId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceID"
+    get:
+      summary: Get workspace
+      operationId: getWorkspace
+      responses:
+        "200":
+          description: Workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete workspace
+      operationId: deleteWorkspace
+      responses:
+        "204":
+          description: Workspace deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/current-workspace:
+    get:
+      summary: Get current workspace
+      operationId: getCurrentWorkspace
+      responses:
+        "200":
+          description: Current workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Set current workspace
+      operationId: setCurrentWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workspaceId]
+              properties:
+                workspaceId:
+                  type: string
+      responses:
+        "200":
+          description: Current workspace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/current-workspace/build-targets:
+    get:
+      summary: List build targets for current workspace
+      operationId: listCurrentWorkspaceBuildTargets
+      responses:
+        "200":
+          description: Build targets.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BuildTarget"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/current-workspace/builds:
+    post:
+      summary: Submit build for current workspace
+      operationId: submitCurrentWorkspaceBuild
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+          required: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitBuildRequest"
+      responses:
+        "201":
+          description: Build job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/current-workspace/build-status:
+    get:
+      summary: Get current workspace build status
+      operationId: getCurrentWorkspaceBuildStatus
+      responses:
+        "200":
+          description: Latest current-workspace build job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/jobs:
+    get:
+      summary: List jobs
+      operationId: listJobs
+      responses:
+        "200":
+          description: Jobs visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/jobs/{jobId}:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    get:
+      summary: Get job
+      operationId: getJob
+      responses:
+        "200":
+          description: Job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/jobs/{jobId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    post:
+      summary: Cancel job
+      operationId: cancelJob
+      responses:
+        "200":
+          description: Cancelled job.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/jobs/{jobId}/steps:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    get:
+      summary: List job steps
+      operationId: listJobSteps
+      responses:
+        "200":
+          description: Job steps.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/JobStep"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/jobs/{jobId}/logs:
+    parameters:
+      - $ref: "#/components/parameters/JobID"
+    get:
+      summary: Get job logs
+      operationId: getJobLogs
+      responses:
+        "200":
+          description: Job logs.
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+  parameters:
+    WorkspaceID:
+      in: path
+      name: workspaceId
+      required: true
+      schema:
+        type: string
+    JobID:
+      in: path
+      name: jobId
+      required: true
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: Authentication required.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: Permission denied.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Request conflicts with current resource state.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ValidationProblem:
+      description: Request validation failed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    WorkProfile:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        repos:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkProfileRepo"
+    WorkProfileRepo:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        enabledByDefault:
+          type: boolean
+    CreateWorkspaceRequest:
+      type: object
+      required: [name, workProfile, repo]
+      properties:
+        name:
+          type: string
+        workProfile:
+          type: string
+          description: Workspace profile name.
+        repo:
+          type: string
+          description: Repository name from the selected workspace profile.
+        sourceRef:
+          type: string
+          description: Optional branch, tag, or commit. Empty uses the catalog default.
+    Workspace:
+      type: object
+      required: [id, ownerId, name, workProfile, sourceRepoUrl, sourceRef, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        ownerId:
+          type: string
+        name:
+          type: string
+        workProfile:
+          type: string
+        sourceRepoUrl:
+          type: string
+        sourceRef:
+          type: string
+        status:
+          type: string
+        reasonCode:
+          type: string
+        errorMessage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+    BuildTarget:
+      type: object
+      required: [name, repo, execution, containerfilePath, imageRepository]
+      properties:
+        name:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        description:
+          type: string
+        repo:
+          type: string
+        execution:
+          type: string
+        scriptPath:
+          type: string
+        makeTarget:
+          type: string
+        containerfilePath:
+          type: string
+        imageRepository:
+          type: string
+    SubmitBuildRequest:
+      type: object
+      required: [targetName]
+      properties:
+        targetName:
+          type: string
+        imageTag:
+          type: string
+    Job:
+      type: object
+      required: [id, ownerId, type, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        ownerId:
+          type: string
+        workspaceId:
+          type: string
+        buildId:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        targetName:
+          type: string
+        artifactRef:
+          type: string
+        reasonCode:
+          type: string
+        errorMessage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    JobStep:
+      type: object
+      required: [id, jobId, name, status, createdAt]
+      properties:
+        id:
+          type: string
+        jobId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+    Problem:
+      type: object
+      required: [type, title, status, code, instance]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        instance:
+          type: string
+        requestId:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+              message:
+                type: string
