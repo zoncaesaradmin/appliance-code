@@ -55,7 +55,13 @@ spec:
             - configMapRef:
                 name: {{ include "appliance-control-plane.uiServiceName" . }}-config
           securityContext:
-            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10002
+            runAsGroup: 10002
+            capabilities:
+              drop: ["ALL"]
           resources:
             {{- toYaml .Values.ui.resources | nindent 12 }}
           livenessProbe:
