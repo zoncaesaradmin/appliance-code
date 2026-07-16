@@ -109,7 +109,18 @@
 
         {{if .SelectedExisting}}
           {{if .CurrentWorkspace}}
-            {{if ne .SelectedWorkspaceID .CurrentWorkspace.ID}}
+            {{if eq .SelectedWorkspaceID .CurrentWorkspace.ID}}
+        <article>
+          <header>
+            <strong>Selected workspace</strong>
+          </header>
+          <p class="muted">This workspace is already the current workspace. You can delete it if you no longer need it.</p>
+          <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
+            <button class="secondary" type="submit">Delete Workspace</button>
+          </form>
+        </article>
+            {{else}}
         <article>
           <header>
             <strong>Selected workspace</strong>
@@ -139,8 +150,8 @@
             <div id="workspace-profile-preview">
               {{template "builder-work-profile-preview" .}}
             </div>
-            <p class="muted">Make this workspace current, or delete it if you no longer need it.</p>
-            <button type="submit">Set Current Workspace</button>
+            <p class="muted">Set this workspace to become the current workspace, or delete it if you no longer need it.</p>
+            <button type="submit">Set Workspace</button>
           </form>
           <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
             <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
@@ -178,8 +189,8 @@
             <div id="workspace-profile-preview">
               {{template "builder-work-profile-preview" .}}
             </div>
-            <p class="muted">Make this workspace current, or delete it if you no longer need it.</p>
-            <button type="submit">Set Current Workspace</button>
+            <p class="muted">Set this workspace to become the current workspace, or delete it if you no longer need it.</p>
+            <button type="submit">Set Workspace</button>
           </form>
           <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
             <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
@@ -217,8 +228,8 @@
             <div id="workspace-profile-preview">
               {{template "builder-work-profile-preview" .}}
             </div>
-            <p class="muted">The workspace profile defines the repos inside this logical workspace. Submitting this form will either reuse an existing matching workspace or create a new one, then make it current.</p>
-            <button type="submit">Set Current Workspace</button>
+            <p class="muted">The workspace profile defines the repos inside this logical workspace. Submitting this form will either reuse an existing matching workspace or create a new one, then set it as the current workspace.</p>
+            <button type="submit">Set Workspace</button>
           </form>
           {{if .SelectedExisting}}
           <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
