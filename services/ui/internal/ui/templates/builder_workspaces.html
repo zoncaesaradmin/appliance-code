@@ -63,7 +63,7 @@
 </section>
 
 <section>
-  <details class="workspace-settings {{if not .CurrentWorkspace}}workspace-settings-attn{{end}}" {{if not .CurrentWorkspace}}open{{end}}>
+  <details class="workspace-settings {{if not .CurrentWorkspace}}workspace-settings-attn{{end}}" {{if .OpenWorkspaceSettings}}open{{end}}>
     <summary id="workspace-settings">
       <span class="workspace-settings-icon">+</span>
       <span>
@@ -80,7 +80,7 @@
           {{if .Workspaces}}
           <div class="workspace-list">
             {{range .Workspaces}}
-            <form method="get" action="/builder/workspaces" class="workspace-row-form">
+            <form method="get" action="/builder/workspaces#workspace-settings" class="workspace-row-form">
               <input type="hidden" name="workspace_id" value="{{.ID}}">
               <button class="workspace-row-button{{if $.CurrentWorkspace}}{{if eq $.CurrentWorkspace.ID .ID}} is-current{{end}}{{end}}" type="submit">
                 <span class="workspace-row-copy">
@@ -101,7 +101,7 @@
           {{else}}
           <p class="muted">No workspace exists yet. Start with <strong>Create new workspace</strong>.</p>
           {{end}}
-          <form method="get" action="/builder/workspaces" class="workspace-create-link">
+          <form method="get" action="/builder/workspaces#workspace-settings" class="workspace-create-link">
             <input type="hidden" name="workspace_id" value="new">
             <button type="submit">Create new workspace</button>
           </form>

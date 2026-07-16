@@ -69,6 +69,7 @@ type builderPageData struct {
 	WorkProfiles          []controlplane.WorkProfile
 	Workspaces            []controlplane.Workspace
 	CurrentWorkspace      *controlplane.Workspace
+	OpenWorkspaceSettings bool
 	SelectedWorkspaceID   string
 	SelectedWorkspaceName string
 	SelectedWorkProfile   string
@@ -510,6 +511,7 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 	data.WorkProfiles = profiles
 	data.Workspaces = workspaces
 	selectedID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	data.OpenWorkspaceSettings = data.CurrentWorkspace == nil || selectedID != "" || formError != "" || message != ""
 	selected, selectedIsNew := selectedBuilderWorkspace(selectedID, workspaces, data.CurrentWorkspace)
 	if selectedIsNew {
 		data.SelectedWorkspaceID = "new"

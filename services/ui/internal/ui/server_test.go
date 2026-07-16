@@ -352,7 +352,7 @@ func TestBuilderWorkspacePagePrefillsSelectedExistingWorkspace(t *testing.T) {
 		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
 	}
 	body := pageRec.Body.String()
-	if !strings.Contains(body, "Available Workspaces") || !strings.Contains(body, `value="SecondSpace"`) || !strings.Contains(body, `value="ws_two"`) || !strings.Contains(body, "Delete Workspace") || !strings.Contains(body, "Set Current Workspace") {
+	if !strings.Contains(body, "Available Workspaces") || !strings.Contains(body, `<details class="workspace-settings " open>`) || !strings.Contains(body, `value="SecondSpace"`) || !strings.Contains(body, `value="ws_two"`) || !strings.Contains(body, "Delete Workspace") || !strings.Contains(body, "Set Current Workspace") {
 		t.Fatalf("builder page did not prefill selected workspace:\n%s", body)
 	}
 }
