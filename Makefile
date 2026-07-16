@@ -54,7 +54,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-argo-controller-image-archive package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -191,6 +191,18 @@ package-ui-image-archive:
 	bash ./scripts/package/export-ui-image-archive.sh \
 		--out-file "$$out_file"
 
+## package-argo-controller-image-archive: always build and export the
+## appliance-owned Argo workflow-controller wrapper image as an OCI archive
+## tarball for release-input packaging.
+package-argo-controller-image-archive:
+	@argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
+	out_file="$${OUT_FILE:-$(CURDIR)/.run/argo-controller-$$argo_version.tar}"; \
+	mkdir -p "$$(dirname "$$out_file")"; \
+	bash ./scripts/package/export-argo-controller-image-archive.sh \
+		--out-file "$$out_file" \
+		$${ARGO_CONTROLLER_BASE_IMAGE:+--base-image "$${ARGO_CONTROLLER_BASE_IMAGE}"} \
+		$${ARGO_VERSION:+--image-tag "$${ARGO_VERSION}"}
+
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.
 ## ARGO_CRDS_DIR is required: the Argo Workflows chart is always packaged
@@ -204,10 +216,21 @@ package-release-input-tar:
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	ui_image="$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar"; \
+	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
+	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
+	argo_controller_image_ref="localhost/appliance-argo-controller:$$argo_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
+	if [ -n "$$argo_version" ] && [ -z "$${ARGO_CONTROLLER_IMAGE:-}" ]; then \
+		$(MAKE) --no-print-directory package-argo-controller-image-archive \
+			OUT_FILE="$$argo_controller_image" \
+			ARGO_VERSION="$$argo_version" \
+			ARGO_CONTROLLER_BASE_IMAGE="$${ARGO_CONTROLLER_BASE_IMAGE:-quay.io/argoproj/workflow-controller:$$argo_version}"; \
+		ARGO_CONTROLLER_IMAGE="$$argo_controller_image"; \
+		ARGO_CONTROLLER_IMAGE_REFERENCE="$${ARGO_CONTROLLER_IMAGE_REFERENCE:-$$argo_controller_image_ref}"; \
+	fi; \
 	bash ./scripts/package/archive-release-input.sh \
 		--out-file "$${OUT_FILE}" \
 		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
@@ -224,7 +247,7 @@ package-release-input-tar:
 		$${PROVENANCE_DIR:+--provenance-dir "$${PROVENANCE_DIR}"} \
 		$${NOTICES_DIR:+--notices-dir "$${NOTICES_DIR}"} \
 		$${TESTS_DIR:+--tests-dir "$${TESTS_DIR}"} \
-		$${ARGO_VERSION:+--argo-version "$${ARGO_VERSION}"} \
+		$${argo_version:+--argo-version "$${argo_version}"} \
 		$${ARGO_CONTROLLER_IMAGE:+--argo-controller-image "$${ARGO_CONTROLLER_IMAGE}"} \
 		$${ARGO_CONTROLLER_IMAGE_REFERENCE:+--argo-controller-image-reference "$${ARGO_CONTROLLER_IMAGE_REFERENCE}"} \
 		$${ARGO_EXECUTOR_IMAGE:+--argo-executor-image "$${ARGO_EXECUTOR_IMAGE}"} \

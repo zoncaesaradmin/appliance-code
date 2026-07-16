@@ -45,5 +45,7 @@ RUN set -eux; \
     addgroup -S -g 10001 appliance; \
     adduser -S -D -H -u 10001 -G appliance appliance
 COPY --from=build /out/appliance-server /appliance-server
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
 USER 10001:10001
-ENTRYPOINT ["/appliance-server"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

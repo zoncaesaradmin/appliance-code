@@ -16,9 +16,11 @@ RUN CGO_ENABLED=0 go build \
 
 FROM alpine:3.24.1
 RUN set -eux; \
-    apk add --no-cache ca-certificates tzdata; \
+    apk add --no-cache bash ca-certificates tzdata; \
     addgroup -S -g 10002 appliance-ui; \
     adduser -S -D -H -u 10002 -G appliance-ui appliance-ui
 COPY --from=build /out/appliance-ui /appliance-ui
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
 USER 10002:10002
-ENTRYPOINT ["/appliance-ui"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,0 +1,16 @@
+ARG BASE_IMAGE=quay.io/argoproj/workflow-controller:v3.5.10
+
+FROM ${BASE_IMAGE} AS upstream
+
+FROM alpine:3.24.1
+
+RUN apk add --no-cache bash ca-certificates
+
+COPY --from=upstream /bin/workflow-controller /usr/local/bin/workflow-controller
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
+RUN chmod 0755 /usr/local/bin/workflow-controller /usr/local/bin/entrypoint.sh
+
+USER 65532:65532
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

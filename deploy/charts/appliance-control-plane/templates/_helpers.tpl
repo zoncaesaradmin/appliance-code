@@ -2,7 +2,7 @@
 Expand the name of the chart.
 */}}
 {{- define "appliance-control-plane.name" -}}
-{{- .Values.nameOverride | default .Chart.Name | trunc 63 | trimSuffix "-" -}}
+{{- .Values.nameOverride | default (trimPrefix "appliance-" .Chart.Name) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -12,12 +12,7 @@ Create a fully qualified app name.
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- $name := .Values.nameOverride | default .Chart.Name -}}
-{{- if contains $name .Release.Name -}}
-{{- .Release.Name | trunc 63 | trimSuffix "-" -}}
-{{- else -}}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
+{{- include "appliance-control-plane.name" . -}}
 {{- end -}}
 {{- end -}}
 

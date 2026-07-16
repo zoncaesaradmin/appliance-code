@@ -5,7 +5,7 @@ namespace:
 
 image:
   controller:
-    repository: quay.io/argoproj/workflow-controller
+    repository: localhost/appliance-argo-controller
     tag: "" # defaults to .Chart.AppVersion; releases should pin by digest
     digest: ""
     pullPolicy: IfNotPresent
@@ -55,4 +55,3 @@ containerSecurityContext:
 
 networkPolicy:
   enabled: false
-
