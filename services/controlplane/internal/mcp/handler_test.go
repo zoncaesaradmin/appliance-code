@@ -45,12 +45,17 @@ func newTestEnv(t *testing.T) *testEnv {
 
 func newTestEnvWithProfile(t *testing.T, profile appliance.Profile) *testEnv {
 	t.Helper()
+	return newTestEnvWithCatalog(t, profile, testBuildCatalog())
+}
+
+func newTestEnvWithCatalog(t *testing.T, profile appliance.Profile, catalog devflows.Catalog) *testEnv {
+	t.Helper()
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.CanonicalOrigin = canonicalOrigin
 	cfg.ApplianceProfile = string(profile)
 	if profile == appliance.ProfileBuilder {
-		cfg.BuildCatalog = testBuildCatalog()
+		cfg.BuildCatalog = catalog
 	}
 
 	services, err := app.WireServices(cfg)
@@ -691,5 +696,55 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 	}
 	if cancelledJob["status"] != string(storage.JobStatusCancelled) {
 		t.Fatalf("cancel_job status = %v, want cancelled", cancelledJob["status"])
+	}
+}
+
+func TestCreateWorkspaceToolRejectsExistingNameOnDifferentWorkspaceProfile(t *testing.T) {
+	env := newTestEnvWithCatalog(t, appliance.ProfileBuilder, devflows.Catalog{
+		WorkProfiles: []devflows.WorkProfile{
+			{Name: "platform-dev", Description: "Platform development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
+			{Name: "firmware-dev", Description: "Firmware development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
+		},
+		Repos: []devflows.Repo{
+			{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"},
+		},
+		BuildTargets: []devflows.BuildTarget{
+			{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"},
+		},
+	})
+	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
+		t.Fatalf("bootstrap.Init: %v", err)
+	}
+
+	token := env.login(t, "admin")
+	sessionID := env.initializeSession(t, token)
+	call := func(id, name, args string) (*http.Response, rpcResponse) {
+		t.Helper()
+		body := fmt.Sprintf(`{"jsonrpc":"2.0","id":%q,"method":"tools/call","params":{"name":%q,"arguments":%s}}`, id, name, args)
+		return env.post(t, token, sessionID, body)
+	}
+
+	firstResp, first := call("create-1", "create_workspace", `{"workspace_name":"myworkspace","profile_name":"platform-dev"}`)
+	firstResp.Body.Close()
+	if firstResp.StatusCode != http.StatusOK {
+		t.Fatalf("first create_workspace status = %d, want 200", firstResp.StatusCode)
+	}
+	if first.Error != nil {
+		t.Fatalf("first create_workspace returned JSON-RPC error: %+v", first.Error)
+	}
+
+	conflictResp, conflict := call("create-2", "create_workspace", `{"workspace_name":"myworkspace","profile_name":"firmware-dev"}`)
+	conflictResp.Body.Close()
+	if conflictResp.StatusCode != http.StatusOK {
+		t.Fatalf("conflict create_workspace status = %d, want 200", conflictResp.StatusCode)
+	}
+	if conflict.Error == nil {
+		t.Fatalf("conflicting create_workspace returned success: %+v", conflict)
+	}
+	if conflict.Error.Code != mcp.ErrCodeInvalidRequest {
+		t.Fatalf("conflicting create_workspace error code = %d, want %d", conflict.Error.Code, mcp.ErrCodeInvalidRequest)
+	}
+	if !strings.Contains(conflict.Error.Message, "different workspace profile") {
+		t.Fatalf("conflicting create_workspace error = %q, want different workspace profile detail", conflict.Error.Message)
 	}
 }

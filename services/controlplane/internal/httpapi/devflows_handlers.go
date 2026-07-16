@@ -134,6 +134,10 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 	principal, _ := PrincipalFromContext(r.Context())
 	ws, err := h.Devflows.CreateWorkspace(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), principal.UserID, devflows.CreateWorkspaceRequest{Name: req.Name, WorkProfile: req.WorkProfile})
 	if err != nil {
+		if errors.Is(err, devflows.ErrWorkspaceNameConflict) || errors.Is(err, devflows.ErrWorkspaceProfileConflict) || errors.Is(err, storage.ErrConflict) {
+			WriteProblem(w, r, http.StatusConflict, "workspace_conflict", "Workspace conflict", err.Error())
+			return
+		}
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}

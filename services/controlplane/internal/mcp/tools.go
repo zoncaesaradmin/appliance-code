@@ -171,7 +171,7 @@ func (h *Handler) handleToolCall(w http.ResponseWriter, r *http.Request, req Req
 		writeJSONRPC(w, http.StatusOK, newError(req.ID, ErrCodeInvalidRequest, "Permission denied"))
 		return
 	}
-	if errors.Is(err, storage.ErrNotFound) || errors.Is(err, devflows.ErrNoCurrentWorkspace) {
+	if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrConflict) || errors.Is(err, devflows.ErrNoCurrentWorkspace) || errors.Is(err, devflows.ErrWorkspaceNameConflict) || errors.Is(err, devflows.ErrWorkspaceProfileConflict) {
 		writeJSONRPC(w, http.StatusOK, newError(req.ID, ErrCodeInvalidRequest, err.Error()))
 		return
 	}

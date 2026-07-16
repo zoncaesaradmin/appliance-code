@@ -75,7 +75,7 @@
       <div class="grid builder-grid">
         <article>
           <header>
-            <strong>{{if .Workspaces}}Choose an existing workspace{{else}}Create workspace{{end}}</strong>
+            <strong>Workspace choices</strong>
           </header>
           {{if .Workspaces}}
           <div class="workspace-list">
@@ -85,80 +85,70 @@
                 <h3>{{.Name}}</h3>
                 <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
               </div>
-              {{if $.CurrentWorkspace}}
-                {{if eq $.CurrentWorkspace.ID .ID}}
-                <span class="inline-pill">current</span>
-                {{else}}
-                <form method="post" action="/builder/current-workspace">
-                  <input type="hidden" name="workspace_id" value="{{.ID}}">
-                  <button class="secondary" type="submit">Set current</button>
-                </form>
+              <div class="workspace-row-actions">
+                {{if $.CurrentWorkspace}}
+                  {{if eq $.CurrentWorkspace.ID .ID}}
+                  <span class="inline-pill">current</span>
+                  {{end}}
                 {{end}}
-              {{else}}
-              <form method="post" action="/builder/current-workspace">
-                <input type="hidden" name="workspace_id" value="{{.ID}}">
-                <button class="secondary" type="submit">Set current</button>
-              </form>
-              {{end}}
+                <form method="get" action="/builder/workspaces">
+                  <input type="hidden" name="workspace_id" value="{{.ID}}">
+                  <button class="secondary" type="submit">Open</button>
+                </form>
+              </div>
             </section>
             {{end}}
           </div>
           {{else}}
-          <p class="muted">No workspace exists yet. Create the first one below.</p>
+          <p class="muted">No workspace exists yet. Start with <strong>Create new workspace</strong>.</p>
           {{end}}
+          <form method="get" action="/builder/workspaces" class="workspace-create-link">
+            <input type="hidden" name="workspace_id" value="new">
+            <button type="submit">Create new workspace</button>
+          </form>
         </article>
 
         <article>
           <header>
-            <strong>{{if .CurrentWorkspace}}Create another workspace{{else}}Create the first workspace{{end}}</strong>
+            <strong>{{if .SelectedExisting}}Selected workspace{{else}}Workspace details{{end}}</strong>
           </header>
           <form method="post" action="/builder/workspaces">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
             <label>
               Workspace name
-              <input name="name" placeholder="MyWorkspace" autocomplete="off" required>
+              <input name="name" value="{{.SelectedWorkspaceName}}" placeholder="MyWorkspace" autocomplete="off" required>
             </label>
             <label>
               Workspace profile
-              <select name="work_profile" required>
+              <select
+                name="work_profile"
+                required
+                hx-get="/partials/builder/work-profile"
+                hx-target="#workspace-profile-preview"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                hx-include="[name='work_profile']">
                 <option value="">Select workspace profile</option>
                 {{range .WorkProfiles}}
-                <option value="{{.Name}}">{{.Name}} ({{len .Repos}} repos)</option>
+                <option value="{{.Name}}" {{if eq $.SelectedWorkProfile .Name}}selected{{end}}>{{.Name}} ({{len .Repos}} repos)</option>
                 {{end}}
               </select>
             </label>
-            <p class="muted">Selecting a workspace profile creates one logical workspace that includes all repos configured for that profile.</p>
-            <button type="submit">Create and set current</button>
+            <div id="workspace-profile-preview">
+              {{template "builder-work-profile-preview" .}}
+            </div>
+            <p class="muted">The workspace profile defines the repos inside this logical workspace. Submitting this form will either reuse an existing matching workspace or create a new one, then make it current.</p>
+            <button type="submit">Set Current Workspace</button>
           </form>
+          {{if .SelectedExisting}}
+          <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
+            <button class="secondary" type="submit">Delete Workspace</button>
+          </form>
+          {{end}}
         </article>
       </div>
 
-      <article class="workspace-profile-guide">
-        <header>
-          <strong>Available workspace profiles</strong>
-        </header>
-        {{if .WorkProfiles}}
-        <div class="profile-card-grid">
-          {{range .WorkProfiles}}
-          <section class="profile-card">
-            <h3>{{.Name}}</h3>
-            {{if .Description}}<p class="muted">{{.Description}}</p>{{end}}
-            <p class="muted">Contains {{len .Repos}} repo{{if ne (len .Repos) 1}}s{{end}} in this workspace profile.</p>
-            {{if .Repos}}
-            <ul>
-              {{range .Repos}}
-              <li>{{.Name}}{{if .EnabledByDefault}} <span class="inline-pill">default</span>{{end}}</li>
-              {{end}}
-            </ul>
-            {{else}}
-            <p class="muted">No repos are configured for this workspace profile.</p>
-            {{end}}
-          </section>
-          {{end}}
-        </div>
-        {{else}}
-        <p class="muted">No workspace profiles are configured.</p>
-        {{end}}
-      </article>
     </div>
   </details>
 </section>

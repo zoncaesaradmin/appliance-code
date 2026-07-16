@@ -15,9 +15,11 @@ import (
 )
 
 var (
-	ErrNoCurrentWorkspace     = errors.New("devflows: no current workspace selected")
-	ErrForbidden              = errors.New("devflows: forbidden")
-	ErrWorkspaceHasActiveJobs = errors.New("devflows: workspace has active jobs")
+	ErrNoCurrentWorkspace       = errors.New("devflows: no current workspace selected")
+	ErrForbidden                = errors.New("devflows: forbidden")
+	ErrWorkspaceHasActiveJobs   = errors.New("devflows: workspace has active jobs")
+	ErrWorkspaceNameConflict    = errors.New("devflows: workspace name already exists")
+	ErrWorkspaceProfileConflict = errors.New("devflows: workspace name already exists on a different workspace profile")
 )
 
 type Service struct {
@@ -73,11 +75,27 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if len(resolvedProfile.Repos) == 0 {
 		return storage.Workspace{}, fmt.Errorf("devflows: workspace profile %q has no repos configured", profile)
 	}
+	existing, err := s.workspaces.List(ctx, storage.WorkspaceFilter{OwnerID: ownerID, Limit: 200})
+	if err != nil {
+		return storage.Workspace{}, err
+	}
+	for _, current := range existing {
+		if normalizeName(current.Name) != name {
+			continue
+		}
+		if normalizeName(current.WorkProfile) != profile {
+			return storage.Workspace{}, ErrWorkspaceProfileConflict
+		}
+		return storage.Workspace{}, ErrWorkspaceNameConflict
+	}
 	now := time.Now().UTC()
 	ws := storage.Workspace{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Name: name, WorkProfile: profile,
 		Status:    storage.WorkspaceStatusReady,
 		CreatedAt: now, UpdatedAt: now}
 	if err := s.workspaces.Create(ctx, ws); err != nil {
+		if errors.Is(err, storage.ErrConflict) {
+			return storage.Workspace{}, ErrWorkspaceNameConflict
+		}
 		return storage.Workspace{}, err
 	}
 	_ = s.workspaces.SetCurrent(ctx, ownerID, ws.ID)

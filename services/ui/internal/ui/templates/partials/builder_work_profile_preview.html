@@ -1,0 +1,22 @@
+{{define "builder_work_profile_preview.html"}}
+{{template "builder-work-profile-preview" .}}
+{{end}}
+
+{{define "builder-work-profile-preview"}}
+{{if .SelectedProfile}}
+<section class="profile-card selected-profile-card">
+  <h3>{{.SelectedProfile.Name}}</h3>
+  {{if .SelectedProfile.Description}}<p class="muted">{{.SelectedProfile.Description}}</p>{{end}}
+  <p class="muted">This workspace profile contains {{len .SelectedProfile.Repos}} repo{{if ne (len .SelectedProfile.Repos) 1}}s{{end}} inside one logical workspace.</p>
+  {{if .SelectedProfile.Repos}}
+  <ul>
+    {{range .SelectedProfile.Repos}}
+    <li>{{.Name}}{{if .EnabledByDefault}} <span class="inline-pill">default</span>{{end}}</li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+{{else}}
+<p class="muted profile-preview-empty">Select a workspace profile to see which repos it includes.</p>
+{{end}}
+{{end}}

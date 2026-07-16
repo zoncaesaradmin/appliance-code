@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/workflows"
 )
@@ -627,6 +628,43 @@ func TestDeleteWorkspaceRejectsActiveJobs(t *testing.T) {
 	defer deleteAfterCancel.Body.Close()
 	if deleteAfterCancel.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete workspace after cancel status = %d, want 204", deleteAfterCancel.StatusCode)
+	}
+}
+
+func TestCreateWorkspaceRejectsExistingNameOnDifferentWorkspaceProfile(t *testing.T) {
+	ts := newTestServerWithCatalog(t, appliance.ProfileBuilder, devflows.Catalog{
+		WorkProfiles: []devflows.WorkProfile{
+			{Name: "platform-dev", Description: "Platform development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
+			{Name: "firmware-dev", Description: "Firmware development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
+		},
+		Repos: []devflows.Repo{
+			{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"},
+		},
+		BuildTargets: []devflows.BuildTarget{
+			{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"},
+		},
+	})
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
+	token := ts.login(t, "alice", testPassword)
+
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"myworkspace","workProfile":"platform-dev"}`)
+	defer createWorkspace.Body.Close()
+	if createWorkspace.StatusCode != http.StatusCreated {
+		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
+	}
+
+	conflict := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"myworkspace","workProfile":"firmware-dev"}`)
+	defer conflict.Body.Close()
+	if conflict.StatusCode != http.StatusConflict {
+		t.Fatalf("conflicting workspace profile status = %d, want 409", conflict.StatusCode)
+	}
+	body, err := io.ReadAll(conflict.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "different workspace profile") {
+		t.Fatalf("conflict body = %s, want different workspace profile detail", body)
 	}
 }
 

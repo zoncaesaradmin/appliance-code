@@ -38,6 +38,7 @@ type controlPlane interface {
 	CurrentWorkspace(ctx context.Context, accessToken string) (controlplane.Workspace, error)
 	CreateWorkspace(ctx context.Context, accessToken string, req controlplane.CreateWorkspaceRequest) (controlplane.Workspace, error)
 	SetCurrentWorkspace(ctx context.Context, accessToken, workspaceID string) (controlplane.Workspace, error)
+	DeleteWorkspace(ctx context.Context, accessToken, workspaceID string) error
 }
 
 type Server struct {
@@ -65,9 +66,14 @@ type viewData struct {
 
 type builderPageData struct {
 	viewData
-	WorkProfiles     []controlplane.WorkProfile
-	Workspaces       []controlplane.Workspace
-	CurrentWorkspace *controlplane.Workspace
+	WorkProfiles          []controlplane.WorkProfile
+	Workspaces            []controlplane.Workspace
+	CurrentWorkspace      *controlplane.Workspace
+	SelectedWorkspaceID   string
+	SelectedWorkspaceName string
+	SelectedWorkProfile   string
+	SelectedExisting      bool
+	SelectedProfile       *controlplane.WorkProfile
 }
 
 const sessionCookieName = "appliance_ui_session"
@@ -112,7 +118,9 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger *slog.Logg
 	mux.HandleFunc("GET /dashboard", s.dashboard)
 	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
 	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
+	mux.HandleFunc("POST /builder/workspaces/delete", s.deleteBuilderWorkspace)
 	mux.HandleFunc("POST /builder/current-workspace", s.setBuilderCurrentWorkspace)
+	mux.HandleFunc("GET /partials/builder/work-profile", s.builderWorkProfilePartial)
 	mux.HandleFunc("GET /partials/status", s.statusPartial)
 	mux.HandleFunc("GET /partials/session", s.sessionPartial)
 	return securityHeaders(mux), nil
@@ -353,6 +361,24 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace name and workspace profile are required."))
 		return
 	}
+	workspaces, err := s.cp.ListWorkspaces(r.Context(), rec.AccessToken)
+	if err != nil {
+		s.logger.Warn("list workspaces before set current failed", "error", err)
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not load existing workspaces."))
+		return
+	}
+	if sameName, exact := findWorkspaceByNameProfile(workspaces, name, workProfile); exact != nil {
+		if _, err := s.cp.SetCurrentWorkspace(r.Context(), rec.AccessToken, exact.ID); err != nil {
+			s.logger.Warn("set current existing builder workspace failed", "error", err)
+			s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not switch the current workspace."))
+			return
+		}
+		http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+		return
+	} else if sameName != nil {
+		s.render(w, http.StatusConflict, "builder_workspaces.html", s.builderPageData(r, rec, "", "A workspace with that name already exists on a different workspace profile. Create a different workspace name instead."))
+		return
+	}
 	if _, err := s.cp.CreateWorkspace(r.Context(), rec.AccessToken, controlplane.CreateWorkspaceRequest{
 		Name:        name,
 		WorkProfile: workProfile,
@@ -362,6 +388,36 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+}
+
+func (s *Server) deleteBuilderWorkspace(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not read the submitted form."))
+		return
+	}
+	workspaceID := strings.TrimSpace(r.Form.Get("selected_workspace_id"))
+	if workspaceID == "" || workspaceID == "new" {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Select an existing workspace before deleting it."))
+		return
+	}
+	if err := s.cp.DeleteWorkspace(r.Context(), rec.AccessToken, workspaceID); err != nil {
+		s.logger.Warn("delete builder workspace failed", "error", err)
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not delete the selected workspace."))
+		return
+	}
+	http.Redirect(w, r, "/builder/workspaces?workspace_id=new", http.StatusSeeOther)
 }
 
 func (s *Server) setBuilderCurrentWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -392,6 +448,33 @@ func (s *Server) setBuilderCurrentWorkspace(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+}
+
+func (s *Server) builderWorkProfilePartial(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	profiles, err := s.cp.ListWorkProfiles(r.Context(), rec.AccessToken)
+	if err != nil {
+		s.render(w, http.StatusOK, "builder_work_profile_preview.html", builderPageData{})
+		return
+	}
+	data := builderPageData{
+		SelectedWorkProfile: strings.TrimSpace(r.URL.Query().Get("work_profile")),
+	}
+	if data.SelectedWorkProfile != "" {
+		data.SelectedProfile = findWorkProfile(profiles, data.SelectedWorkProfile)
+	}
+	s.render(w, http.StatusOK, "builder_work_profile_preview.html", data)
 }
 
 func (s *Server) builderPageData(r *http.Request, rec session.Record, message, formError string) builderPageData {
@@ -426,7 +509,72 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 	}
 	data.WorkProfiles = profiles
 	data.Workspaces = workspaces
+	selectedID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	selected, selectedIsNew := selectedBuilderWorkspace(selectedID, workspaces, data.CurrentWorkspace)
+	if selectedIsNew {
+		data.SelectedWorkspaceID = "new"
+	} else if selected != nil {
+		data.SelectedWorkspaceID = selected.ID
+		data.SelectedWorkspaceName = selected.Name
+		data.SelectedWorkProfile = selected.WorkProfile
+		data.SelectedExisting = true
+	}
+	if data.SelectedWorkProfile != "" {
+		data.SelectedProfile = findWorkProfile(profiles, data.SelectedWorkProfile)
+	}
 	return data
+}
+
+func selectedBuilderWorkspace(selectedID string, workspaces []controlplane.Workspace, current *controlplane.Workspace) (*controlplane.Workspace, bool) {
+	if selectedID == "new" {
+		return nil, true
+	}
+	if selectedID != "" {
+		for i := range workspaces {
+			if workspaces[i].ID == selectedID {
+				return &workspaces[i], false
+			}
+		}
+	}
+	if current != nil {
+		for i := range workspaces {
+			if workspaces[i].ID == current.ID {
+				return &workspaces[i], false
+			}
+		}
+	}
+	return nil, len(workspaces) == 0
+}
+
+func findWorkProfile(profiles []controlplane.WorkProfile, name string) *controlplane.WorkProfile {
+	for i := range profiles {
+		if strings.EqualFold(strings.TrimSpace(profiles[i].Name), strings.TrimSpace(name)) {
+			return &profiles[i]
+		}
+	}
+	return nil
+}
+
+func findWorkspaceByNameProfile(workspaces []controlplane.Workspace, name, workProfile string) (*controlplane.Workspace, *controlplane.Workspace) {
+	normalizedName := normalizeWorkspaceKey(name)
+	normalizedProfile := normalizeWorkspaceKey(workProfile)
+	var sameName *controlplane.Workspace
+	for i := range workspaces {
+		if normalizeWorkspaceKey(workspaces[i].Name) != normalizedName {
+			continue
+		}
+		if normalizeWorkspaceKey(workspaces[i].WorkProfile) == normalizedProfile {
+			return sameName, &workspaces[i]
+		}
+		if sameName == nil {
+			sameName = &workspaces[i]
+		}
+	}
+	return sameName, nil
+}
+
+func normalizeWorkspaceKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func (s *Server) builderEnabled() bool {

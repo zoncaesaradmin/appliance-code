@@ -124,6 +124,20 @@ func (f *fakeControlPlane) SetCurrentWorkspace(_ context.Context, _ string, work
 	return controlplane.Workspace{}, &controlplane.HTTPStatusError{Method: http.MethodPost, Path: "/api/v1/current-workspace", StatusCode: http.StatusNotFound}
 }
 
+func (f *fakeControlPlane) DeleteWorkspace(_ context.Context, _ string, workspaceID string) error {
+	for i, workspace := range f.workspaces {
+		if workspace.ID != workspaceID {
+			continue
+		}
+		f.workspaces = append(f.workspaces[:i], f.workspaces[i+1:]...)
+		if f.currentID == workspaceID {
+			f.currentID = ""
+		}
+		return nil
+	}
+	return &controlplane.HTTPStatusError{Method: http.MethodDelete, Path: "/api/v1/workspaces/" + workspaceID, StatusCode: http.StatusNotFound}
+}
+
 type fakeErr string
 
 func (e fakeErr) Error() string { return string(e) }
@@ -291,11 +305,11 @@ func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
 	if pageRec.Code != http.StatusOK {
 		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
 	}
-	if body := pageRec.Body.String(); !strings.Contains(body, "Workspace profile") || !strings.Contains(body, "platform-dev") {
+	if body := pageRec.Body.String(); !strings.Contains(body, "Workspace profile") || !strings.Contains(body, "Create new workspace") {
 		t.Fatalf("builder page body missing workspace controls:\n%s", body)
 	}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=demo&work_profile=platform-dev"))
+	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=demo&work_profile=platform-dev&selected_workspace_id=new"))
 	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	createReq.AddCookie(cookie)
 	createRec := httptest.NewRecorder()
@@ -308,6 +322,135 @@ func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
 	}
 	if cp.currentID != "ws_demo" {
 		t.Fatalf("currentID = %q, want ws_demo", cp.currentID)
+	}
+}
+
+func TestBuilderWorkspacePagePrefillsSelectedExistingWorkspace(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_one", Name: "FirstSpace", WorkProfile: "platform-dev", Status: "ready"},
+			{ID: "ws_two", Name: "SecondSpace", WorkProfile: "platform-dev", Status: "ready"},
+		},
+		currentID: "ws_one",
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces?workspace_id=ws_two", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
+	}
+	body := pageRec.Body.String()
+	if !strings.Contains(body, `value="SecondSpace"`) || !strings.Contains(body, `value="ws_two"`) || !strings.Contains(body, "Delete Workspace") {
+		t.Fatalf("builder page did not prefill selected workspace:\n%s", body)
+	}
+}
+
+func TestBuilderWorkspacePageReusesExistingMatchingWorkspace(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_demo", Name: "DemoSpace", WorkProfile: "platform-dev", Status: "ready"},
+		},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=DemoSpace&work_profile=platform-dev"))
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", createRec.Code)
+	}
+	if cp.currentID != "ws_demo" {
+		t.Fatalf("currentID = %q, want ws_demo", cp.currentID)
+	}
+	if len(cp.workspaces) != 1 {
+		t.Fatalf("workspace count = %d, want 1", len(cp.workspaces))
+	}
+}
+
+func TestBuilderWorkspacePageRejectsSameNameDifferentProfile(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_demo", Name: "DemoSpace", WorkProfile: "platform-dev", Status: "ready"},
+		},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=DemoSpace&work_profile=simulation-dev"))
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", createRec.Code)
+	}
+	if !strings.Contains(createRec.Body.String(), "already exists on a different workspace profile") {
+		t.Fatalf("body = %q, want conflict message", createRec.Body.String())
+	}
+}
+
+func TestBuilderWorkspaceDeleteRemovesSelectedWorkspace(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_demo", Name: "DemoSpace", WorkProfile: "platform-dev", Status: "ready"},
+		},
+		currentID: "ws_demo",
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	deleteReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces/delete", strings.NewReader("selected_workspace_id=ws_demo"))
+	deleteReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	deleteReq.AddCookie(cookie)
+	deleteRec := httptest.NewRecorder()
+	handler.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", deleteRec.Code)
+	}
+	if len(cp.workspaces) != 0 {
+		t.Fatalf("workspace count = %d, want 0", len(cp.workspaces))
+	}
+	if cp.currentID != "" {
+		t.Fatalf("currentID = %q, want empty", cp.currentID)
 	}
 }
 

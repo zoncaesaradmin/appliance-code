@@ -289,6 +289,15 @@ func (c *Client) SetCurrentWorkspace(ctx context.Context, accessToken, workspace
 	return out, nil
 }
 
+func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/workspaces/"+workspaceID, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return c.doJSON(req, http.StatusNoContent, nil)
+}
+
 func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
