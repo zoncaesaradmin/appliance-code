@@ -66,17 +66,8 @@ type viewData struct {
 type builderPageData struct {
 	viewData
 	WorkProfiles     []controlplane.WorkProfile
-	ProfileRepoItems []profileRepoItem
 	Workspaces       []controlplane.Workspace
 	CurrentWorkspace *controlplane.Workspace
-}
-
-type profileRepoItem struct {
-	Value            string
-	WorkProfile      string
-	Repo             string
-	Description      string
-	EnabledByDefault bool
 }
 
 const sessionCookieName = "appliance_ui_session"
@@ -357,21 +348,17 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	name := strings.TrimSpace(r.Form.Get("name"))
-	profileRepo := strings.TrimSpace(r.Form.Get("profile_repo"))
-	sourceRef := strings.TrimSpace(r.Form.Get("source_ref"))
-	workProfile, repo, ok := strings.Cut(profileRepo, "|")
-	if name == "" || !ok || strings.TrimSpace(workProfile) == "" || strings.TrimSpace(repo) == "" {
-		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace name and workspace profile/repo are required."))
+	workProfile := strings.TrimSpace(r.Form.Get("work_profile"))
+	if name == "" || workProfile == "" {
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace name and workspace profile are required."))
 		return
 	}
 	if _, err := s.cp.CreateWorkspace(r.Context(), rec.AccessToken, controlplane.CreateWorkspaceRequest{
 		Name:        name,
-		WorkProfile: strings.TrimSpace(workProfile),
-		Repo:        strings.TrimSpace(repo),
-		SourceRef:   sourceRef,
+		WorkProfile: workProfile,
 	}); err != nil {
 		s.logger.Warn("create builder workspace failed", "error", err)
-		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not create the workspace. Check the workspace profile, repo, and source ref."))
+		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not create the workspace. Check the workspace profile configuration."))
 		return
 	}
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
@@ -438,25 +425,8 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 		data.StatusError = "Current workspace is not available."
 	}
 	data.WorkProfiles = profiles
-	data.ProfileRepoItems = profileRepoItems(profiles)
 	data.Workspaces = workspaces
 	return data
-}
-
-func profileRepoItems(profiles []controlplane.WorkProfile) []profileRepoItem {
-	var out []profileRepoItem
-	for _, profile := range profiles {
-		for _, repo := range profile.Repos {
-			out = append(out, profileRepoItem{
-				Value:            profile.Name + "|" + repo.Name,
-				WorkProfile:      profile.Name,
-				Repo:             repo.Name,
-				Description:      profile.Description,
-				EnabledByDefault: repo.EnabledByDefault,
-			})
-		}
-	}
-	return out
 }
 
 func (s *Server) builderEnabled() bool {

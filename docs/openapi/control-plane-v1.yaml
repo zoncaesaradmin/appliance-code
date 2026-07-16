@@ -404,19 +404,13 @@ components:
           type: boolean
     CreateWorkspaceRequest:
       type: object
-      required: [name, workProfile, repo]
+      required: [name, workProfile]
       properties:
         name:
           type: string
         workProfile:
           type: string
           description: Workspace profile name.
-        repo:
-          type: string
-          description: Repository name from the selected workspace profile.
-        sourceRef:
-          type: string
-          description: Optional branch, tag, or commit. Empty uses the catalog default.
     Workspace:
       type: object
       required: [id, ownerId, name, workProfile, sourceRepoUrl, sourceRef, status, createdAt, updatedAt]

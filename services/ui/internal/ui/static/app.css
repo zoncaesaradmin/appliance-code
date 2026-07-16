@@ -112,8 +112,126 @@ body {
   margin-top: 1rem;
 }
 
+.builder-overview {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.9fr);
+  margin-bottom: 1.25rem;
+}
+
+.builder-primary,
+.builder-next {
+  border-radius: 1rem;
+  padding: 1.25rem;
+}
+
+.builder-primary {
+  background:
+    linear-gradient(135deg, rgba(96, 151, 119, 0.16), rgba(255, 255, 255, 0.92)),
+    var(--zon-surface);
+  border: 1px solid var(--zon-border);
+}
+
+.builder-primary-attn {
+  background:
+    linear-gradient(135deg, rgba(173, 136, 51, 0.20), rgba(255, 250, 238, 0.96)),
+    #fffaf0;
+  border-color: #d5bd7c;
+}
+
+.builder-primary-head {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.builder-primary h2,
+.builder-next h2 {
+  margin-bottom: 0.35rem;
+}
+
+.builder-primary-meta {
+  display: grid;
+  gap: 0.35rem 1rem;
+  grid-template-columns: auto 1fr;
+  margin: 1rem 0;
+}
+
+.builder-primary-meta dt,
+.builder-primary-meta dd {
+  margin: 0;
+}
+
+.builder-attn-copy {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.builder-next {
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px dashed var(--zon-border);
+}
+
 .builder-grid {
   align-items: start;
+}
+
+.workspace-settings {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--zon-border);
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.workspace-settings[open] {
+  box-shadow: 0 18px 42px rgba(51, 84, 64, 0.08);
+}
+
+.workspace-settings-attn {
+  border-color: #d5bd7c;
+}
+
+.workspace-settings summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 0.85rem;
+  list-style: none;
+  padding: 1rem 1.15rem;
+}
+
+.workspace-settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.workspace-settings-icon {
+  align-items: center;
+  background: #1f5c3b;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 1rem;
+  font-weight: 700;
+  height: 1.7rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.7rem;
+}
+
+.workspace-settings[open] .workspace-settings-icon {
+  transform: rotate(45deg);
+}
+
+.workspace-settings-body {
+  border-top: 1px solid var(--zon-border);
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem 1.15rem;
+}
+
+.workspace-profile-guide {
+  margin-top: 0.25rem;
 }
 
 .profile-card-grid {
@@ -194,6 +312,14 @@ body {
 
   .dashboard-heading {
     display: block;
+  }
+
+  .builder-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .builder-primary-head {
+    flex-direction: column;
   }
 
   .workspace-row {

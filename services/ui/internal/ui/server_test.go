@@ -101,15 +101,13 @@ func (f *fakeControlPlane) CurrentWorkspace(context.Context, string) (controlpla
 
 func (f *fakeControlPlane) CreateWorkspace(_ context.Context, _ string, req controlplane.CreateWorkspaceRequest) (controlplane.Workspace, error) {
 	workspace := controlplane.Workspace{
-		ID:            "ws_" + req.Name,
-		OwnerID:       "usr_admin",
-		Name:          req.Name,
-		WorkProfile:   req.WorkProfile,
-		SourceRepoURL: "git@example.invalid:" + req.Repo + ".git",
-		SourceRef:     req.SourceRef,
-		Status:        "ready",
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:          "ws_" + req.Name,
+		OwnerID:     "usr_admin",
+		Name:        req.Name,
+		WorkProfile: req.WorkProfile,
+		Status:      "ready",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 	f.workspaces = append(f.workspaces, workspace)
 	f.currentID = workspace.ID
@@ -293,11 +291,11 @@ func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
 	if pageRec.Code != http.StatusOK {
 		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
 	}
-	if body := pageRec.Body.String(); !strings.Contains(body, "Workspace profile and repo") || !strings.Contains(body, "platform-dev / appliance-code") {
+	if body := pageRec.Body.String(); !strings.Contains(body, "Workspace profile") || !strings.Contains(body, "platform-dev") {
 		t.Fatalf("builder page body missing workspace controls:\n%s", body)
 	}
 
-	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=demo&profile_repo=platform-dev%7Cappliance-code&source_ref=main"))
+	createReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("name=demo&work_profile=platform-dev"))
 	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	createReq.AddCookie(cookie)
 	createRec := httptest.NewRecorder()

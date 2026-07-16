@@ -37,8 +37,6 @@ func (s *Service) Catalog() Catalog { return s.catalog }
 type CreateWorkspaceRequest struct {
 	Name        string
 	WorkProfile string
-	Repo        string
-	SourceRef   string
 }
 
 type SubmitBuildRequest struct {
@@ -71,23 +69,13 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if _, ok := s.catalog.WorkProfile(profile); !ok {
 		return storage.Workspace{}, fmt.Errorf("devflows: unknown workspace profile %q", req.WorkProfile)
 	}
-	repo, ok := s.catalog.Repo(req.Repo)
-	if !ok {
-		return storage.Workspace{}, fmt.Errorf("devflows: unknown repo %q", req.Repo)
-	}
-	if !s.catalog.ProfileAllowsRepo(profile, repo.Name) {
-		return storage.Workspace{}, fmt.Errorf("devflows: repo %q is not enabled for workspace profile %q", repo.Name, profile)
-	}
-	ref := strings.TrimSpace(req.SourceRef)
-	if ref == "" {
-		ref = repo.DefaultRef
-	}
-	if ref == "" {
-		return storage.Workspace{}, fmt.Errorf("devflows: sourceRef is required")
+	resolvedProfile, _ := s.catalog.WorkProfile(profile)
+	if len(resolvedProfile.Repos) == 0 {
+		return storage.Workspace{}, fmt.Errorf("devflows: workspace profile %q has no repos configured", profile)
 	}
 	now := time.Now().UTC()
 	ws := storage.Workspace{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Name: name, WorkProfile: profile,
-		SourceRepoURL: repo.URL, SourceRef: ref, Status: storage.WorkspaceStatusReady,
+		Status:    storage.WorkspaceStatusReady,
 		CreatedAt: now, UpdatedAt: now}
 	if err := s.workspaces.Create(ctx, ws); err != nil {
 		return storage.Workspace{}, err
@@ -185,11 +173,11 @@ func (s *Service) ListBuildTargetsForCurrent(ctx context.Context, userID string)
 	if err != nil {
 		return nil, err
 	}
-	repoName := s.repoNameForURL(ws.SourceRepoURL)
-	if repoName == "" {
-		return nil, fmt.Errorf("devflows: current workspace repo is not configured")
+	targets, err := s.catalog.TargetsForProfile(ws.WorkProfile)
+	if err != nil {
+		return nil, err
 	}
-	return s.catalog.TargetsForRepo(repoName), nil
+	return targets, nil
 }
 
 func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, ownerID string, req SubmitBuildRequest, idempotencyKey string) (storage.Job, error) {
@@ -197,29 +185,26 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if err != nil {
 		return storage.Job{}, err
 	}
-	repoName := s.repoNameForURL(ws.SourceRepoURL)
-	if repoName == "" {
-		return storage.Job{}, fmt.Errorf("devflows: current workspace repo is not configured")
-	}
-	resolved, err := s.catalog.ResolveTarget(repoName, req.TargetName)
+	resolved, err := s.catalog.ResolveTargetForProfile(ws.WorkProfile, req.TargetName)
 	if err != nil {
 		return storage.Job{}, err
 	}
-	if !IsCommitSHA(ws.SourceRef) {
-		return storage.Job{}, fmt.Errorf("devflows: sourceRef %q is mutable; commit SHA resolution is required before build", ws.SourceRef)
+	sourceRef := strings.TrimSpace(resolved.Repo.DefaultRef)
+	if !IsCommitSHA(sourceRef) {
+		return storage.Job{}, fmt.Errorf("devflows: repo %q defaultRef %q is mutable; configure an immutable commit SHA in the builder catalog", resolved.Repo.Name, sourceRef)
 	}
 	tag := strings.TrimSpace(req.ImageTag)
 	if tag == "" {
-		tag = renderTag(resolved.Target.ImageTagTemplate, ws, resolved.Target)
+		tag = renderTag(resolved.Target.ImageTagTemplate, ws, resolved.Target, sourceRef)
 	}
 	if tag == "" {
-		tag = ws.SourceRef[:12]
+		tag = sourceRef[:12]
 	}
-	buildReq := builds.CreateRequest{SourceRepoURL: ws.SourceRepoURL, SourceCommitSHA: ws.SourceRef,
+	buildReq := builds.CreateRequest{SourceRepoURL: resolved.Repo.URL, SourceCommitSHA: sourceRef,
 		Execution: resolved.Target.Execution, ScriptPath: resolved.Target.ScriptPath, MakeTarget: resolved.Target.MakeTarget,
 		ContainerfilePath: resolved.Target.ContainerfilePath, ImageRepository: resolved.Target.ImageRepository, ImageTag: tag,
 		BuilderImageDigest: resolved.Target.BuilderImageDigest}
-	if isSSHSource(ws.SourceRepoURL) {
+	if isSSHSource(resolved.Repo.URL) {
 		buildReq.SourceCredentialSecret = BuilderGitSecretName()
 		buildReq.KnownHostsSecret = BuilderGitKnownHostsSecretName()
 	}
@@ -263,20 +248,11 @@ func (s *Service) CurrentWorkspaceBuildStatus(ctx context.Context, userID string
 	return s.reconcileJob(ctx, jobs[0])
 }
 
-func (s *Service) repoNameForURL(url string) string {
-	for _, repo := range s.catalog.Repos {
-		if repo.URL == url {
-			return repo.Name
-		}
-	}
-	return ""
-}
-
-func renderTag(tmpl string, ws storage.Workspace, target BuildTarget) string {
+func renderTag(tmpl string, ws storage.Workspace, target BuildTarget, sourceRef string) string {
 	if strings.TrimSpace(tmpl) == "" {
 		return ""
 	}
-	return strings.NewReplacer("{workspace}", ws.Name, "{target}", target.Name, "{commit12}", ws.SourceRef[:min(12, len(ws.SourceRef))]).Replace(tmpl)
+	return strings.NewReplacer("{workspace}", ws.Name, "{target}", target.Name, "{commit12}", sourceRef[:min(12, len(sourceRef))]).Replace(tmpl)
 }
 
 func min(a, b int) int {

@@ -499,8 +499,6 @@ func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]Wo
 type CreateWorkspaceRequest struct {
 	Name        string `json:"name"`
 	WorkProfile string `json:"workProfile"`
-	Repo        string `json:"repo"`
-	SourceRef   string `json:"sourceRef"`
 }
 
 // CreateWorkspace creates a developer workflow workspace and makes it current.

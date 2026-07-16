@@ -21,119 +21,144 @@
 <article class="notice" role="status">{{.Message}}</article>
 {{end}}
 
-<div class="grid builder-grid">
-  <article>
-    <header>
-      <strong>Create workspace</strong>
-    </header>
-    <form method="post" action="/builder/workspaces">
-      <label>
-        Workspace name
-        <input name="name" placeholder="platform-dev" autocomplete="off" required>
-      </label>
-      <label>
-        Workspace profile and repo
-        <select name="profile_repo" required>
-          <option value="">Select workspace profile / repo</option>
-          {{range .ProfileRepoItems}}
-          <option value="{{.Value}}">{{.WorkProfile}} / {{.Repo}}{{if .EnabledByDefault}} (default){{end}}</option>
-          {{end}}
-        </select>
-      </label>
-      <label>
-        Source ref
-        <input name="source_ref" placeholder="default branch from catalog" autocomplete="off">
-      </label>
-      <button type="submit">Create and set current</button>
-    </form>
-  </article>
-
-  <article>
-    <header>
-      <strong>Current workspace</strong>
-    </header>
+<section class="builder-overview">
+  <article class="builder-primary {{if not .CurrentWorkspace}}builder-primary-attn{{end}}">
+    <p class="eyebrow">Current workspace</p>
     {{if .CurrentWorkspace}}
-    <dl>
-      <dt>Name</dt>
-      <dd>{{.CurrentWorkspace.Name}}</dd>
-      <dt>Workspace profile</dt>
-      <dd>{{.CurrentWorkspace.WorkProfile}}</dd>
-      <dt>Source ref</dt>
-      <dd>{{if .CurrentWorkspace.SourceRef}}{{.CurrentWorkspace.SourceRef}}{{else}}catalog default{{end}}</dd>
+    <div class="builder-primary-head">
+      <div>
+        <h2>{{.CurrentWorkspace.Name}}</h2>
+        <p class="muted">Workspace profile <strong>{{.CurrentWorkspace.WorkProfile}}</strong></p>
+      </div>
+      <span class="inline-pill">ready to use</span>
+    </div>
+    <dl class="builder-primary-meta">
       <dt>Status</dt>
       <dd>{{.CurrentWorkspace.Status}}</dd>
+      <dt>Workspace profile</dt>
+      <dd>{{.CurrentWorkspace.WorkProfile}}</dd>
     </dl>
+    <p class="muted">This workspace is active for builder operations. You only need to open workspace settings if you want to switch or create another one.</p>
     {{else}}
-    <p class="muted">No current workspace is selected yet. Creating a workspace will make it current automatically.</p>
+    <h2>No current workspace yet</h2>
+    <p class="builder-attn-copy">Choose a workspace profile and create a workspace before build targets can be selected.</p>
+    {{if .Workspaces}}
+    <p class="muted">You already have workspace entries. Open workspace settings below to set one as current, or create a new one.</p>
+    {{else}}
+    <p class="muted">No workspace has been created yet. Start with a workspace profile, then create one compactly from the settings panel below.</p>
+    {{end}}
     {{end}}
   </article>
-</div>
 
-<section>
-  <article>
-    <header>
-      <strong>Available workspace profiles</strong>
-    </header>
-    {{if .WorkProfiles}}
-    <div class="profile-card-grid">
-      {{range .WorkProfiles}}
-      <section class="profile-card">
-        <h3>{{.Name}}</h3>
-        {{if .Description}}<p class="muted">{{.Description}}</p>{{end}}
-        {{if .Repos}}
-        <ul>
-          {{range .Repos}}
-          <li>{{.Name}}{{if .EnabledByDefault}} <span class="inline-pill">default</span>{{end}}</li>
-          {{end}}
-        </ul>
-        {{else}}
-        <p class="muted">No repos are configured for this workspace profile.</p>
-        {{end}}
-      </section>
-      {{end}}
-    </div>
+  <article class="builder-next">
+    <p class="eyebrow">What to build</p>
+    <h2>Build target selection</h2>
+    {{if .CurrentWorkspace}}
+    <p class="muted">This area is reserved for the next step: choosing what to build from the current workspace profile.</p>
+    <p class="muted">The selected workspace profile will drive which build targets appear here.</p>
     {{else}}
-    <p class="muted">No workspace profiles are configured.</p>
+    <p class="muted">Build choices will appear here after a current workspace is set.</p>
     {{end}}
   </article>
 </section>
 
 <section>
-  <article>
-    <header>
-      <strong>Your workspaces</strong>
-    </header>
-    {{if .Workspaces}}
-    <div class="workspace-list">
-      {{range .Workspaces}}
-      <section class="workspace-row">
-        <div>
-          <h3>{{.Name}}</h3>
-          <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
-          <p class="muted">{{.SourceRepoURL}}</p>
-        </div>
-        {{if $.CurrentWorkspace}}
-          {{if eq $.CurrentWorkspace.ID .ID}}
-          <span class="inline-pill">current</span>
+  <details class="workspace-settings {{if not .CurrentWorkspace}}workspace-settings-attn{{end}}" {{if not .CurrentWorkspace}}open{{end}}>
+    <summary id="workspace-settings">
+      <span class="workspace-settings-icon">+</span>
+      <span>
+        {{if .CurrentWorkspace}}Workspace settings{{else}}Set up workspace{{end}}
+      </span>
+    </summary>
+
+    <div class="workspace-settings-body">
+      <div class="grid builder-grid">
+        <article>
+          <header>
+            <strong>{{if .Workspaces}}Choose an existing workspace{{else}}Create workspace{{end}}</strong>
+          </header>
+          {{if .Workspaces}}
+          <div class="workspace-list">
+            {{range .Workspaces}}
+            <section class="workspace-row">
+              <div>
+                <h3>{{.Name}}</h3>
+                <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
+              </div>
+              {{if $.CurrentWorkspace}}
+                {{if eq $.CurrentWorkspace.ID .ID}}
+                <span class="inline-pill">current</span>
+                {{else}}
+                <form method="post" action="/builder/current-workspace">
+                  <input type="hidden" name="workspace_id" value="{{.ID}}">
+                  <button class="secondary" type="submit">Set current</button>
+                </form>
+                {{end}}
+              {{else}}
+              <form method="post" action="/builder/current-workspace">
+                <input type="hidden" name="workspace_id" value="{{.ID}}">
+                <button class="secondary" type="submit">Set current</button>
+              </form>
+              {{end}}
+            </section>
+            {{end}}
+          </div>
           {{else}}
-          <form method="post" action="/builder/current-workspace">
-            <input type="hidden" name="workspace_id" value="{{.ID}}">
-            <button class="secondary" type="submit">Set current</button>
-          </form>
+          <p class="muted">No workspace exists yet. Create the first one below.</p>
           {{end}}
+        </article>
+
+        <article>
+          <header>
+            <strong>{{if .CurrentWorkspace}}Create another workspace{{else}}Create the first workspace{{end}}</strong>
+          </header>
+          <form method="post" action="/builder/workspaces">
+            <label>
+              Workspace name
+              <input name="name" placeholder="team-alpha" autocomplete="off" required>
+            </label>
+            <label>
+              Workspace profile
+              <select name="work_profile" required>
+                <option value="">Select workspace profile</option>
+                {{range .WorkProfiles}}
+                <option value="{{.Name}}">{{.Name}}</option>
+                {{end}}
+              </select>
+            </label>
+            <button type="submit">Create and set current</button>
+          </form>
+        </article>
+      </div>
+
+      <article class="workspace-profile-guide">
+        <header>
+          <strong>Available workspace profiles</strong>
+        </header>
+        {{if .WorkProfiles}}
+        <div class="profile-card-grid">
+          {{range .WorkProfiles}}
+          <section class="profile-card">
+            <h3>{{.Name}}</h3>
+            {{if .Description}}<p class="muted">{{.Description}}</p>{{end}}
+            {{if .Repos}}
+            <ul>
+              {{range .Repos}}
+              <li>{{.Name}}{{if .EnabledByDefault}} <span class="inline-pill">default</span>{{end}}</li>
+              {{end}}
+            </ul>
+            {{else}}
+            <p class="muted">No repos are configured for this workspace profile.</p>
+            {{end}}
+          </section>
+          {{end}}
+        </div>
         {{else}}
-        <form method="post" action="/builder/current-workspace">
-          <input type="hidden" name="workspace_id" value="{{.ID}}">
-          <button class="secondary" type="submit">Set current</button>
-        </form>
+        <p class="muted">No workspace profiles are configured.</p>
         {{end}}
-      </section>
-      {{end}}
+      </article>
     </div>
-    {{else}}
-    <p class="muted">No workspaces yet.</p>
-    {{end}}
-  </article>
+  </details>
 </section>
 {{template "layout-end" .}}
 {{end}}

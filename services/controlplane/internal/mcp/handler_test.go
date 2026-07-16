@@ -614,7 +614,7 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 		return result.StructuredContent
 	}
 
-	created := callTool("create", "create_workspace", `{"workspace_name":"app","profile_name":"builder","repo_name":"app","source_ref":"0123456789abcdef0123456789abcdef01234567"}`)
+	created := callTool("create", "create_workspace", `{"workspace_name":"app","profile_name":"builder"}`)
 	workspaceMap, ok := created["workspace"].(map[string]any)
 	if !ok {
 		t.Fatalf("create_workspace structured content = %+v, want workspace", created)

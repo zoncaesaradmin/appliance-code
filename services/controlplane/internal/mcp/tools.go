@@ -68,15 +68,13 @@ var buildToolDefinitions = []toolDefinition{
 			"workspace_id": map[string]any{"type": "string"},
 		},
 	})},
-	{name: "create_workspace", description: "Create a workspace for one repo/workspace-profile combination. The created workspace becomes the current workspace.", permissions: []string{roles.PermWorkspacesCreate}, inputSchema: mustInputSchema(map[string]any{
+	{name: "create_workspace", description: "Create a workspace for one workspace profile. The profile configuration determines the repos available inside that workspace. The created workspace becomes the current workspace.", permissions: []string{roles.PermWorkspacesCreate}, inputSchema: mustInputSchema(map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"workspace_name": map[string]any{"type": "string"},
 			"profile_name":   map[string]any{"type": "string", "description": "Workspace profile name from list_work_profiles."},
-			"repo_name":      map[string]any{"type": "string"},
-			"source_ref":     map[string]any{"type": "string", "description": "Optional immutable source ref. If omitted, the repo defaultRef is used."},
 		},
-		"required": []string{"workspace_name", "profile_name", "repo_name"},
+		"required": []string{"workspace_name", "profile_name"},
 	})},
 	{name: "set_workspace", description: "Set the current user-scoped workspace by workspace_id.", permissions: []string{roles.PermWorkspacesReadSelf}, inputSchema: mustInputSchema(map[string]any{
 		"type": "object",
@@ -238,29 +236,22 @@ func (h *Handler) callTool(r *http.Request, principal reqauth.Principal, params 
 		var args struct {
 			WorkspaceName string `json:"workspace_name"`
 			ProfileName   string `json:"profile_name"`
-			RepoName      string `json:"repo_name"`
-			SourceRef     string `json:"source_ref"`
 			Name          string `json:"name"`
 			WorkProfile   string `json:"workProfile"`
-			Repo          string `json:"repo"`
 		}
 		if json.Unmarshal(params.Arguments, &args) != nil {
 			return toolCallResult{}, fmt.Errorf("invalid arguments")
 		}
 		workspaceName := firstNonEmpty(args.WorkspaceName, args.Name)
 		profileName := firstNonEmpty(args.ProfileName, args.WorkProfile)
-		repoName := firstNonEmpty(args.RepoName, args.Repo)
 		if workspaceName == "" {
 			return toolCallResult{}, fmt.Errorf("workspace_name is required")
 		}
 		if profileName == "" {
 			return toolCallResult{}, fmt.Errorf("profile_name (workspace profile) is required")
 		}
-		if repoName == "" {
-			return toolCallResult{}, fmt.Errorf("repo_name is required")
-		}
 		ws, err := h.devflows.CreateWorkspace(r.Context(), actor, principal.UserID, devflows.CreateWorkspaceRequest{
-			Name: workspaceName, WorkProfile: profileName, Repo: repoName, SourceRef: args.SourceRef,
+			Name: workspaceName, WorkProfile: profileName,
 		})
 		if err != nil {
 			return toolCallResult{}, err

@@ -234,7 +234,7 @@ func TestDeveloperWorkflowSubmitBuildByCurrentWorkspace(t *testing.T) {
 	fake := ts.fakeWorkflowEngine(t)
 	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -372,7 +372,7 @@ func TestCurrentWorkspaceBuildIdempotencyKey(t *testing.T) {
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -421,7 +421,7 @@ func TestCurrentWorkspaceBuildRejectsUnknownTarget(t *testing.T) {
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -433,13 +433,15 @@ func TestCurrentWorkspaceBuildRejectsUnknownTarget(t *testing.T) {
 	}
 }
 
-func TestCurrentWorkspaceBuildRejectsMutableSourceRef(t *testing.T) {
-	ts := newTestServer(t)
+func TestCurrentWorkspaceBuildRejectsMutableCatalogDefaultRef(t *testing.T) {
+	catalog := testBuildCatalog()
+	catalog.Repos[0].DefaultRef = "main"
+	ts := newTestServerWithCatalog(t, appliance.ProfileBuilder, catalog)
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"main"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -462,7 +464,7 @@ func TestJobVisibilityAndCancelHonorSelfAndAnyPermissions(t *testing.T) {
 	fake := ts.fakeWorkflowEngine(t)
 	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", aliceToken, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", aliceToken, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -537,7 +539,7 @@ func TestWorkspaceListHonorsReadAnyPermission(t *testing.T) {
 		{aliceToken, "alice-app"},
 		{bobToken, "bob-app"},
 	} {
-		resp := ts.doJSON(t, "POST", "/api/v1/workspaces", tc.token, fmt.Sprintf(`{"name":%q,"workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`, tc.name))
+		resp := ts.doJSON(t, "POST", "/api/v1/workspaces", tc.token, fmt.Sprintf(`{"name":%q,"workProfile":"builder"}`, tc.name))
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusCreated {
 			t.Fatalf("create workspace %s status = %d, want 201", tc.name, resp.StatusCode)
@@ -585,7 +587,7 @@ func TestDeleteWorkspaceRejectsActiveJobs(t *testing.T) {
 	fake := ts.fakeWorkflowEngine(t)
 	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -636,7 +638,7 @@ func TestDeveloperWorkflowJobFailsWhenWorkflowDisappears(t *testing.T) {
 	fake := ts.fakeWorkflowEngine(t)
 	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
@@ -692,7 +694,7 @@ func TestCurrentWorkspaceBuildStatusNotFoundBeforeBuild(t *testing.T) {
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 
-	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder","repo":"app","sourceRef":"0123456789abcdef0123456789abcdef01234567"}`)
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
 	if createWorkspace.StatusCode != http.StatusCreated {
 		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)

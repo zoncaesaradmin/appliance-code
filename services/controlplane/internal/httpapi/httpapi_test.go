@@ -36,16 +36,20 @@ type testServer struct {
 }
 
 func newTestServer(t *testing.T) *testServer {
-	return newTestServerWithProfile(t, appliance.ProfileBuilder)
+	return newTestServerWithCatalog(t, appliance.ProfileBuilder, testBuildCatalog())
 }
 
 func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServer {
+	return newTestServerWithCatalog(t, profile, testBuildCatalog())
+}
+
+func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog devflows.Catalog) *testServer {
 	t.Helper()
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.ApplianceProfile = string(profile)
 	if profile == appliance.ProfileBuilder {
-		cfg.BuildCatalog = testBuildCatalog()
+		cfg.BuildCatalog = catalog
 	}
 
 	services, err := app.WireServices(cfg)

@@ -35,6 +35,31 @@ func TestCatalogRejectsUnknownProfileRepoMembership(t *testing.T) {
 	}
 }
 
+func TestCatalogTargetsForProfile(t *testing.T) {
+	catalog := testCatalog()
+	targets, err := catalog.TargetsForProfile("builder")
+	if err != nil {
+		t.Fatalf("TargetsForProfile: %v", err)
+	}
+	if len(targets) != 1 || targets[0].Name != "default" {
+		t.Fatalf("TargetsForProfile returned %+v, want one default target", targets)
+	}
+}
+
+func TestCatalogResolveTargetForProfile(t *testing.T) {
+	catalog := testCatalog()
+	resolved, err := catalog.ResolveTargetForProfile("builder", "app")
+	if err != nil {
+		t.Fatalf("ResolveTargetForProfile: %v", err)
+	}
+	if resolved.Target.Name != "default" {
+		t.Fatalf("resolved target name = %q, want default", resolved.Target.Name)
+	}
+	if resolved.Repo.Name != "app" {
+		t.Fatalf("resolved repo name = %q, want app", resolved.Repo.Name)
+	}
+}
+
 func TestCatalogRejectsMissingBuildTargets(t *testing.T) {
 	catalog := testCatalog()
 	catalog.BuildTargets = nil

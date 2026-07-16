@@ -322,6 +322,64 @@ func (c Catalog) TargetsForRepo(repoName string) []BuildTarget {
 	return out
 }
 
+func (c Catalog) TargetsForProfile(workProfile string) ([]BuildTarget, error) {
+	profile, ok := c.WorkProfile(workProfile)
+	if !ok {
+		return nil, fmt.Errorf("devflows: unknown workspace profile %q", workProfile)
+	}
+	allowed := map[string]struct{}{}
+	for _, repo := range profile.Repos {
+		allowed[normalizeName(repo.Name)] = struct{}{}
+	}
+	var out []BuildTarget
+	for _, target := range c.BuildTargets {
+		if _, ok := allowed[normalizeName(target.Repo)]; !ok {
+			continue
+		}
+		if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
+			target.ScriptPath = DefaultRepoScriptPath
+		}
+		if target.ContainerfilePath == "" {
+			target.ContainerfilePath = "Containerfile"
+		}
+		out = append(out, target)
+	}
+	return out, nil
+}
+
+func (c Catalog) ResolveTargetForProfile(workProfile, name string) (ResolvedTarget, error) {
+	profile, ok := c.WorkProfile(workProfile)
+	if !ok {
+		return ResolvedTarget{}, fmt.Errorf("devflows: unknown workspace profile %q", workProfile)
+	}
+	allowed := map[string]struct{}{}
+	for _, repo := range profile.Repos {
+		allowed[normalizeName(repo.Name)] = struct{}{}
+	}
+	lookup := normalizeName(name)
+	for _, target := range c.BuildTargets {
+		repoName := normalizeName(target.Repo)
+		if _, ok := allowed[repoName]; !ok {
+			continue
+		}
+		if normalizeName(target.Name) != lookup && !containsName(target.Aliases, lookup) {
+			continue
+		}
+		repo, ok := c.Repo(repoName)
+		if !ok {
+			break
+		}
+		if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
+			target.ScriptPath = DefaultRepoScriptPath
+		}
+		if target.ContainerfilePath == "" {
+			target.ContainerfilePath = "Containerfile"
+		}
+		return ResolvedTarget{Target: target, Repo: repo}, nil
+	}
+	return ResolvedTarget{}, fmt.Errorf("devflows: unknown build target %q for workspace profile %q", name, workProfile)
+}
+
 func IsCommitSHA(ref string) bool {
 	return commitShaRE.MatchString(strings.ToLower(strings.TrimSpace(ref)))
 }

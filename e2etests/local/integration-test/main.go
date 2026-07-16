@@ -373,8 +373,6 @@ func (r *runner) run(ctx context.Context) error {
 	workspace, err := r.client.CreateWorkspace(ctx, aliceAccess, applianceclient.CreateWorkspaceRequest{
 		Name:        "sdk-app",
 		WorkProfile: "builder",
-		Repo:        "app",
-		SourceRef:   "0123456789abcdef0123456789abcdef01234567",
 	})
 	if err != nil {
 		return fmt.Errorf("create workspace: %w", err)

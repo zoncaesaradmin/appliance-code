@@ -94,8 +94,6 @@ type Workspace struct {
 type CreateWorkspaceRequest struct {
 	Name        string `json:"name"`
 	WorkProfile string `json:"workProfile"`
-	Repo        string `json:"repo"`
-	SourceRef   string `json:"sourceRef,omitempty"`
 }
 
 func NewClient(cfg Config) *Client {

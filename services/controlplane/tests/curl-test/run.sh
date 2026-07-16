@@ -180,7 +180,13 @@ cat > "${CONFIG_FILE}" <<EOF
   "allowedBuilderImageDigests": ["${BUILD_BUILDER_DIGEST}"],
   "buildCatalog": {
     "workProfiles": [
-      {"name": "builder", "description": "Builder workflows"}
+      {
+        "name": "builder",
+        "description": "Builder workflows",
+        "repos": [
+          {"name": "app", "enabledByDefault": true}
+        ]
+      }
     ],
     "repos": [
       {"name": "app", "url": "${BUILD_SOURCE_URL}", "defaultRef": "${BUILD_SOURCE_SHA}"}
@@ -189,7 +195,6 @@ cat > "${CONFIG_FILE}" <<EOF
       {
         "name": "default",
         "aliases": ["app"],
-        "workProfile": "builder",
         "repo": "app",
         "execution": "repo_script",
         "imageRepository": "${BUILD_IMAGE_REPOSITORY}",
