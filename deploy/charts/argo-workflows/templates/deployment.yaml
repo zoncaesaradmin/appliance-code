@@ -30,6 +30,15 @@ spec:
             - sh
             - -c
             - mkdir -p /var/log/appliance/argo-controller && chown 65532:65532 /var/log/appliance/argo-controller
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
+              drop: ["ALL"]
           volumeMounts:
             - name: appliance-logs
               mountPath: /var/log/appliance

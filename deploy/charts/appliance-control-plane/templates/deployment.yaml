@@ -41,6 +41,7 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
+              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
               drop: ["ALL"]
           volumeMounts:
             - name: appliance-logs
