@@ -75,28 +75,27 @@
       <div class="grid builder-grid">
         <article>
           <header>
-            <strong>Workspace choices</strong>
+            <strong>Available Workspaces</strong>
           </header>
           {{if .Workspaces}}
           <div class="workspace-list">
             {{range .Workspaces}}
-            <section class="workspace-row">
-              <div>
-                <h3>{{.Name}}</h3>
-                <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
-              </div>
-              <div class="workspace-row-actions">
-                {{if $.CurrentWorkspace}}
-                  {{if eq $.CurrentWorkspace.ID .ID}}
-                  <span class="inline-pill">current</span>
+            <form method="get" action="/builder/workspaces" class="workspace-row-form">
+              <input type="hidden" name="workspace_id" value="{{.ID}}">
+              <button class="workspace-row-button{{if $.CurrentWorkspace}}{{if eq $.CurrentWorkspace.ID .ID}} is-current{{end}}{{end}}" type="submit">
+                <span class="workspace-row-copy">
+                  <h3>{{.Name}}</h3>
+                  <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
+                </span>
+                <span class="workspace-row-actions">
+                  {{if $.CurrentWorkspace}}
+                    {{if eq $.CurrentWorkspace.ID .ID}}
+                    <span class="inline-pill">current</span>
+                    {{end}}
                   {{end}}
-                {{end}}
-                <form method="get" action="/builder/workspaces">
-                  <input type="hidden" name="workspace_id" value="{{.ID}}">
-                  <button class="secondary" type="submit">Open</button>
-                </form>
-              </div>
-            </section>
+                </span>
+              </button>
+            </form>
             {{end}}
           </div>
           {{else}}
@@ -108,9 +107,90 @@
           </form>
         </article>
 
+        {{if .SelectedExisting}}
+          {{if .CurrentWorkspace}}
+            {{if ne .SelectedWorkspaceID .CurrentWorkspace.ID}}
         <article>
           <header>
-            <strong>{{if .SelectedExisting}}Selected workspace{{else}}Workspace details{{end}}</strong>
+            <strong>Selected workspace</strong>
+          </header>
+          <form method="post" action="/builder/workspaces">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
+            <label>
+              Workspace name
+              <input name="name" value="{{.SelectedWorkspaceName}}" placeholder="MyWorkspace" autocomplete="off" required>
+            </label>
+            <label>
+              Workspace profile
+              <select
+                name="work_profile"
+                required
+                hx-get="/partials/builder/work-profile"
+                hx-target="#workspace-profile-preview"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                hx-include="[name='work_profile']">
+                <option value="">Select workspace profile</option>
+                {{range .WorkProfiles}}
+                <option value="{{.Name}}" {{if eq $.SelectedWorkProfile .Name}}selected{{end}}>{{.Name}} ({{len .Repos}} repos)</option>
+                {{end}}
+              </select>
+            </label>
+            <div id="workspace-profile-preview">
+              {{template "builder-work-profile-preview" .}}
+            </div>
+            <p class="muted">Make this workspace current, or delete it if you no longer need it.</p>
+            <button type="submit">Set Current Workspace</button>
+          </form>
+          <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
+            <button class="secondary" type="submit">Delete Workspace</button>
+          </form>
+        </article>
+            {{end}}
+          {{else}}
+        <article>
+          <header>
+            <strong>Selected workspace</strong>
+          </header>
+          <form method="post" action="/builder/workspaces">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
+            <label>
+              Workspace name
+              <input name="name" value="{{.SelectedWorkspaceName}}" placeholder="MyWorkspace" autocomplete="off" required>
+            </label>
+            <label>
+              Workspace profile
+              <select
+                name="work_profile"
+                required
+                hx-get="/partials/builder/work-profile"
+                hx-target="#workspace-profile-preview"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                hx-include="[name='work_profile']">
+                <option value="">Select workspace profile</option>
+                {{range .WorkProfiles}}
+                <option value="{{.Name}}" {{if eq $.SelectedWorkProfile .Name}}selected{{end}}>{{.Name}} ({{len .Repos}} repos)</option>
+                {{end}}
+              </select>
+            </label>
+            <div id="workspace-profile-preview">
+              {{template "builder-work-profile-preview" .}}
+            </div>
+            <p class="muted">Make this workspace current, or delete it if you no longer need it.</p>
+            <button type="submit">Set Current Workspace</button>
+          </form>
+          <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
+            <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
+            <button class="secondary" type="submit">Delete Workspace</button>
+          </form>
+        </article>
+          {{end}}
+        {{else}}
+        <article>
+          <header>
+            <strong>Workspace details</strong>
           </header>
           <form method="post" action="/builder/workspaces">
             <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
@@ -147,6 +227,7 @@
           </form>
           {{end}}
         </article>
+        {{end}}
       </div>
 
     </div>

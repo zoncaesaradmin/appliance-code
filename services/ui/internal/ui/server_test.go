@@ -352,8 +352,43 @@ func TestBuilderWorkspacePagePrefillsSelectedExistingWorkspace(t *testing.T) {
 		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
 	}
 	body := pageRec.Body.String()
-	if !strings.Contains(body, `value="SecondSpace"`) || !strings.Contains(body, `value="ws_two"`) || !strings.Contains(body, "Delete Workspace") {
+	if !strings.Contains(body, "Available Workspaces") || !strings.Contains(body, `value="SecondSpace"`) || !strings.Contains(body, `value="ws_two"`) || !strings.Contains(body, "Delete Workspace") || !strings.Contains(body, "Set Current Workspace") {
 		t.Fatalf("builder page did not prefill selected workspace:\n%s", body)
+	}
+}
+
+func TestBuilderWorkspacePageHidesActionPanelForCurrentWorkspace(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_one", Name: "FirstSpace", WorkProfile: "platform-dev", Status: "ready"},
+			{ID: "ws_two", Name: "SecondSpace", WorkProfile: "platform-dev", Status: "ready"},
+		},
+		currentID: "ws_one",
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces?workspace_id=ws_one", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
+	}
+	body := pageRec.Body.String()
+	if !strings.Contains(body, "Available Workspaces") {
+		t.Fatalf("builder page missing workspace list header:\n%s", body)
+	}
+	if strings.Contains(body, `name="selected_workspace_id"`) || strings.Contains(body, "Delete Workspace") || strings.Contains(body, "Set Current Workspace") || strings.Contains(body, "Selected workspace") {
+		t.Fatalf("builder page should hide the selected-workspace action panel for the current workspace:\n%s", body)
 	}
 }
 
