@@ -149,7 +149,7 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}
-	h.Logger.WithContext(r.Context()).Infow("workspace created",
+	h.Logger.WithContext(r.Context()).Infow("workspace creation started",
 		"userID", principal.UserID,
 		"workspaceID", ws.ID,
 		"workspaceName", ws.Name,
