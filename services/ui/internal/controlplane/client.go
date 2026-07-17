@@ -10,18 +10,24 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	uilogging "appliance-code/services/ui/internal/logging"
 )
 
 type Config struct {
 	BaseURL         string
 	InternalBaseURL string
 	HTTPClient      *http.Client
+	Logger          uilogging.Logger
+	TraceHTTP       bool
 }
 
 type Client struct {
 	baseURL         string
 	internalBaseURL string
 	httpClient      *http.Client
+	logger          uilogging.Logger
+	traceHTTP       bool
 }
 
 type LoginResult struct {
@@ -105,6 +111,8 @@ func NewClient(cfg Config) *Client {
 		baseURL:         strings.TrimRight(cfg.BaseURL, "/"),
 		internalBaseURL: strings.TrimRight(cfg.InternalBaseURL, "/"),
 		httpClient:      httpClient,
+		logger:          cfg.Logger,
+		traceHTTP:       cfg.TraceHTTP,
 	}
 }
 
@@ -189,18 +197,14 @@ func (c *Client) CreateFirstAdmin(ctx context.Context, username, password, displ
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	switch resp.StatusCode {
-	case http.StatusCreated:
+	if err := c.doJSON(req, http.StatusCreated, nil); err == nil {
 		return nil
-	case http.StatusConflict:
-		return ErrAlreadyInitialized
-	default:
-		return fmt.Errorf("%s %s: got HTTP %d, want %d", req.Method, req.URL.Path, resp.StatusCode, http.StatusCreated)
+	} else {
+		var statusErr *HTTPStatusError
+		if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusConflict {
+			return ErrAlreadyInitialized
+		}
+		return err
 	}
 }
 
@@ -299,17 +303,140 @@ func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID s
 }
 
 func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {
-	resp, err := c.httpClient.Do(req)
+	body, err := c.do(req, wantStatus)
 	if err != nil {
 		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != wantStatus {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return &HTTPStatusError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	if out == nil {
 		return nil
 	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return json.Unmarshal(body, out)
+}
+
+func (c *Client) do(req *http.Request, wantStatus int) ([]byte, error) {
+	requestBody := cloneRequestBody(req)
+	start := time.Now()
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		c.trace(req, wantStatus, 0, time.Since(start), requestBody, nil, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		c.trace(req, wantStatus, resp.StatusCode, time.Since(start), requestBody, nil, readErr)
+		return nil, readErr
+	}
+	if resp.StatusCode != wantStatus {
+		statusErr := &HTTPStatusError{
+			Method:     req.Method,
+			Path:       req.URL.Path,
+			StatusCode: resp.StatusCode,
+			Body:       string(limitBytes(responseBody, 4096)),
+		}
+		c.trace(req, wantStatus, resp.StatusCode, time.Since(start), requestBody, responseBody, statusErr)
+		return nil, statusErr
+	}
+
+	c.trace(req, wantStatus, resp.StatusCode, time.Since(start), requestBody, responseBody, nil)
+	return responseBody, nil
+}
+
+func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.Duration, requestBody, responseBody []byte, callErr error) {
+	if !c.traceHTTP || c.logger == nil {
+		return
+	}
+
+	args := []any{
+		"component", "ui-controlplane-client",
+		"method", req.Method,
+		"path", req.URL.Path,
+		"wantStatus", wantStatus,
+		"status", status,
+		"duration", duration.String(),
+	}
+	if requestSummary := summarizeJSONForLog(requestBody); requestSummary != nil {
+		args = append(args, "request", requestSummary)
+	}
+	if responseSummary := summarizeJSONForLog(responseBody); responseSummary != nil {
+		args = append(args, "response", responseSummary)
+	}
+	if callErr != nil {
+		args = append(args, "error", callErr.Error())
+		c.logger.Warnw("control plane API call", args...)
+		return
+	}
+	c.logger.Infow("control plane API call", args...)
+}
+
+func cloneRequestBody(req *http.Request) []byte {
+	if req.Body == nil {
+		return nil
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		req.Body = io.NopCloser(bytes.NewReader(nil))
+		return nil
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	return body
+}
+
+func summarizeJSONForLog(body []byte) any {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return nil
+	}
+
+	var decoded any
+	if err := json.Unmarshal(body, &decoded); err == nil {
+		return redactJSONValue(decoded)
+	}
+
+	limited := limitBytes(body, 1024)
+	return map[string]any{
+		"raw":       string(limited),
+		"truncated": len(limited) < len(body),
+	}
+}
+
+func redactJSONValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, child := range typed {
+			if isSensitiveKey(key) {
+				out[key] = "[redacted]"
+				continue
+			}
+			out[key] = redactJSONValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, child := range typed {
+			out[i] = redactJSONValue(child)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func isSensitiveKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, fragment := range []string{"password", "token", "authorization", "secret", "privatekey", "private_key", "credential"} {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func limitBytes(body []byte, max int) []byte {
+	if len(body) <= max {
+		return body
+	}
+	return body[:max]
 }

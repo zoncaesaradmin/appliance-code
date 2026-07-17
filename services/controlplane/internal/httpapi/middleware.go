@@ -1,7 +1,13 @@
 package httpapi
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"io"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,7 +70,9 @@ func Recover(logger logging.Logger) func(http.Handler) http.Handler {
 // the access-log middleware can report it after the handler returns.
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status    int
+	body      bytes.Buffer
+	truncated bool
 }
 
 func (s *statusRecorder) WriteHeader(status int) {
@@ -72,16 +80,62 @@ func (s *statusRecorder) WriteHeader(status int) {
 	s.ResponseWriter.WriteHeader(status)
 }
 
+func (s *statusRecorder) Write(p []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	if !s.truncated {
+		remaining := traceBodyLimit - s.body.Len()
+		if remaining > 0 {
+			if len(p) > remaining {
+				_, _ = s.body.Write(p[:remaining])
+				s.truncated = true
+			} else {
+				_, _ = s.body.Write(p)
+			}
+		} else {
+			s.truncated = true
+		}
+	}
+	return s.ResponseWriter.Write(p)
+}
+
+func (s *statusRecorder) Flush() {
+	if flusher, ok := s.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := s.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, http.ErrNotSupported
+	}
+	return hijacker.Hijack()
+}
+
+func (s *statusRecorder) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := s.ResponseWriter.(http.Pusher)
+	if !ok {
+		return http.ErrNotSupported
+	}
+	return pusher.Push(target, opts)
+}
+
 // AccessLog logs one line per request with method, path, status, duration,
-// and request ID, at debug level to avoid flooding production logs with
-// routine traffic by default.
+// and request ID at info level so operators can confirm that the control
+// plane received and answered a request without needing a debug-only build or
+// log-level override.
 func AccessLog(logger logging.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rec, r)
-			logger.WithContext(r.Context()).Debugw("http request",
+			if logger == nil {
+				return
+			}
+			logger.WithContext(r.Context()).Infow("http request",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", rec.status,
@@ -89,6 +143,118 @@ func AccessLog(logger logging.Logger) func(http.Handler) http.Handler {
 			)
 		})
 	}
+}
+
+const traceBodyLimit = 4 * 1024
+
+// APIExchangeLog records the redacted request and response summary for public
+// REST API calls so operators can confirm exactly what reached the control
+// plane and what it returned, without relying on browser-visible UI redirects.
+func APIExchangeLog(logger logging.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if logger == nil || !shouldTraceAPIExchange(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			requestBody := cloneRequestBody(r)
+			start := time.Now()
+			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(rec, r)
+
+			logger.WithContext(r.Context()).Infow("http api exchange",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rec.status,
+				"duration", time.Since(start).String(),
+				"request", summarizeBodyForLog(requestBody),
+				"response", summarizeBodyForLog(rec.body.Bytes()),
+				"responseTruncated", rec.truncated,
+			)
+		})
+	}
+}
+
+func shouldTraceAPIExchange(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/")
+}
+
+func cloneRequestBody(r *http.Request) []byte {
+	if r.Body == nil {
+		return nil
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(nil))
+		return nil
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	return body
+}
+
+func summarizeBodyForLog(body []byte) any {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 {
+		return nil
+	}
+	if len(body) > traceBodyLimit {
+		return map[string]any{
+			"size":      len(body),
+			"truncated": true,
+		}
+	}
+
+	var decoded any
+	if err := json.Unmarshal(body, &decoded); err == nil {
+		return redactJSONValue(decoded)
+	}
+
+	limited := limitBytes(body, 1024)
+	return map[string]any{
+		"raw":       string(limited),
+		"truncated": len(limited) < len(body),
+	}
+}
+
+func redactJSONValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, child := range typed {
+			if isSensitiveTraceKey(key) {
+				out[key] = "[REDACTED]"
+				continue
+			}
+			out[key] = redactJSONValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i, child := range typed {
+			out[i] = redactJSONValue(child)
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func isSensitiveTraceKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, fragment := range []string{"password", "token", "authorization", "secret", "privatekey", "private_key", "credential", "refresh", "cookie"} {
+		if strings.Contains(normalized, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func limitBytes(body []byte, max int) []byte {
+	if len(body) <= max {
+		return body
+	}
+	return body[:max]
 }
 
 // Chain composes middleware in the order given, so Chain(a, b)(handler) runs

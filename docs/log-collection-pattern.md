@@ -374,6 +374,11 @@ Deliverables:
 - service code writes structured application logs through the shared logging
   module to `application.log`
 - startup capture remains unchanged
+- UI service emits redacted structured downstream control-plane request and
+  response traces in `application.log` by default, with
+  `APPLIANCE_UI_CONTROL_PLANE_TRACE=false` available as a temporary opt-out
+- control plane emits redacted structured API request and response traces in
+  `application.log` for `/api/v1/*` calls
 
 Acceptance:
 
@@ -455,7 +460,7 @@ After Phase 1, the operator contract should be simple:
    - `startup.log`
    - `stdout.log`
    - `stderr.log`
-   - `application.log` when Phase 2 lands
+   - `application.log`
 
 Examples:
 

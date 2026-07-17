@@ -23,3 +23,17 @@ These rules apply to all implementation and documentation in this repository.
 - This repo owns product code, the canonical Helm chart, workflow templates, compatibility evidence, and signed immutable release inputs.
 - `appliance-release` owns the one complete air-gap bundle and host lifecycle tooling.
 - Preserve modular interfaces for future change, but do not add package profiles or alternate connected/offline implementation paths in v1.
+
+## UI To API Observability Contract
+
+- When the browser talks to the UI service and the UI service talks to the control-plane API on the browser's behalf, keep that boundary explicit in code, logs, and documentation.
+- Every UI route that wraps a control-plane REST or MCP call must be documented in an operator-facing mapping document that names:
+  - the browser-visible UI route and method
+  - the UI handler/function
+  - the downstream control-plane method and path
+  - the success behavior returned to the browser, such as HTML, fragment HTML, or redirect
+- Every new UI route, UI-to-control-plane call, or modification to an existing control-plane API integration must update that mapping document in the same change.
+- Runtime observability must let an operator determine whether a browser action stopped at the UI service or reached the control-plane API.
+- The UI service and control plane must each write their code-level functional flow logs to their own durable service file under `/var/log/appliance/<service>/application.log`, not only to process stdout/stderr.
+- For browser-mediated API flows, runtime logs must show the request that reached the UI or control plane boundary and the response returned there, with enough identifiers to correlate the path across both services.
+- Request/response logging for these downstream UI-to-control-plane calls must never leak secrets, bearer tokens, passwords, refresh tokens, or private key material. Redact or omit sensitive fields by default.

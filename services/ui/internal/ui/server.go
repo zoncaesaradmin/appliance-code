@@ -6,12 +6,12 @@ import (
 	"errors"
 	"html/template"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"appliance-code/services/ui/internal/controlplane"
+	uilogging "appliance-code/services/ui/internal/logging"
 	"appliance-code/services/ui/internal/session"
 )
 
@@ -47,7 +47,7 @@ type Server struct {
 	sessions  *session.Store
 	templates *template.Template
 	staticFS  fs.FS
-	logger    *slog.Logger
+	logger    uilogging.Logger
 }
 
 type viewData struct {
@@ -79,7 +79,7 @@ type builderPageData struct {
 
 const sessionCookieName = "appliance_ui_session"
 
-func New(cfg Config, cp controlPlane, sessions *session.Store, logger *slog.Logger) (http.Handler, error) {
+func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.Logger) (http.Handler, error) {
 	if cfg.ApplianceProfile == "" {
 		cfg.ApplianceProfile = "core"
 	}
@@ -93,7 +93,11 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger *slog.Logg
 		sessions = session.NewStore(time.Now)
 	}
 	if logger == nil {
-		logger = slog.Default()
+		defaultLogger, err := uilogging.New("info")
+		if err != nil {
+			return nil, err
+		}
+		logger = defaultLogger
 	}
 
 	tpls, err := template.ParseFS(assets, "templates/*.html", "templates/partials/*.html")
@@ -124,7 +128,7 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger *slog.Logg
 	mux.HandleFunc("GET /partials/builder/work-profile", s.builderWorkProfilePartial)
 	mux.HandleFunc("GET /partials/status", s.statusPartial)
 	mux.HandleFunc("GET /partials/session", s.sessionPartial)
-	return securityHeaders(mux), nil
+	return chainMiddleware(securityHeaders(mux), logger), nil
 }
 
 func (s *Server) live(w http.ResponseWriter, _ *http.Request) {
@@ -189,16 +193,17 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.cp.Login(r.Context(), username, password)
 	if err != nil {
-		s.logger.Warn("login failed", "error", err)
+		s.logger.Warnw("login failed", "error", err, "username", username)
 		s.renderLoginError(w, r, "Invalid username or password.")
 		return
 	}
 	rec, err := s.sessions.Create(result.AccessToken, result.RefreshToken, result.AccessExpiresAt)
 	if err != nil {
-		s.logger.Error("create UI session failed", "error", err)
+		s.logger.Errorw("create UI session failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	s.logger.Infow("login succeeded", "username", username, "sessionID", rec.ID)
 	s.setSessionCookie(w, rec.ID)
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
@@ -241,28 +246,31 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 			s.renderLogin(w, r, http.StatusConflict, "Appliance is already initialized. Sign in instead.")
 			return
 		}
-		s.logger.Warn("setup create first admin failed", "error", err)
+		s.logger.Warnw("setup create first admin failed", "error", err, "username", username)
 		s.renderSetup(w, r, http.StatusBadRequest, "Could not create the first administrator. Check the username and password policy and try again.")
 		return
 	}
+	s.logger.Infow("first administrator created", "username", username)
 	result, err := s.cp.Login(r.Context(), username, password)
 	if err != nil {
-		s.logger.Warn("setup login after first admin creation failed", "error", err)
+		s.logger.Warnw("setup login after first admin creation failed", "error", err, "username", username)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 	rec, err := s.sessions.Create(result.AccessToken, result.RefreshToken, result.AccessExpiresAt)
 	if err != nil {
-		s.logger.Error("create UI session after setup failed", "error", err)
+		s.logger.Errorw("create UI session after setup failed", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	s.logger.Infow("setup completed", "username", username, "sessionID", rec.ID)
 	s.setSessionCookie(w, rec.ID)
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if rec, ok := s.currentRecord(r); ok {
+		s.logger.Infow("logout requested", "sessionID", rec.ID)
 		_ = s.cp.Logout(r.Context(), rec.AccessToken)
 		s.sessions.Delete(rec.ID)
 	}
@@ -362,18 +370,20 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace name and workspace profile are required."))
 		return
 	}
+	s.logger.Infow("builder workspace create-or-select requested", "workspaceName", name, "workProfile", workProfile)
 	workspaces, err := s.cp.ListWorkspaces(r.Context(), rec.AccessToken)
 	if err != nil {
-		s.logger.Warn("list workspaces before set current failed", "error", err)
+		s.logger.Warnw("list workspaces before set current failed", "error", err, "workspaceName", name, "workProfile", workProfile)
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not load existing workspaces."))
 		return
 	}
 	if sameName, exact := findWorkspaceByNameProfile(workspaces, name, workProfile); exact != nil {
 		if _, err := s.cp.SetCurrentWorkspace(r.Context(), rec.AccessToken, exact.ID); err != nil {
-			s.logger.Warn("set current existing builder workspace failed", "error", err)
+			s.logger.Warnw("set current existing builder workspace failed", "error", err, "workspaceID", exact.ID, "workspaceName", exact.Name, "workProfile", exact.WorkProfile)
 			s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not switch the current workspace."))
 			return
 		}
+		s.logger.Infow("builder workspace selected", "workspaceID", exact.ID, "workspaceName", exact.Name, "workProfile", exact.WorkProfile, "selectionMode", "existing")
 		http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
 		return
 	} else if sameName != nil {
@@ -384,10 +394,11 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		Name:        name,
 		WorkProfile: workProfile,
 	}); err != nil {
-		s.logger.Warn("create builder workspace failed", "error", err)
+		s.logger.Warnw("create builder workspace failed", "error", err, "workspaceName", name, "workProfile", workProfile)
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not create the workspace. Check the workspace profile configuration."))
 		return
 	}
+	s.logger.Infow("builder workspace created", "workspaceName", name, "workProfile", workProfile)
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
 }
 
@@ -413,11 +424,13 @@ func (s *Server) deleteBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Select an existing workspace before deleting it."))
 		return
 	}
+	s.logger.Infow("builder workspace delete requested", "workspaceID", workspaceID)
 	if err := s.cp.DeleteWorkspace(r.Context(), rec.AccessToken, workspaceID); err != nil {
-		s.logger.Warn("delete builder workspace failed", "error", err)
+		s.logger.Warnw("delete builder workspace failed", "error", err, "workspaceID", workspaceID)
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not delete the selected workspace."))
 		return
 	}
+	s.logger.Infow("builder workspace deleted", "workspaceID", workspaceID)
 	http.Redirect(w, r, "/builder/workspaces?workspace_id=new", http.StatusSeeOther)
 }
 
@@ -443,11 +456,13 @@ func (s *Server) setBuilderCurrentWorkspace(w http.ResponseWriter, r *http.Reque
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace ID is required."))
 		return
 	}
+	s.logger.Infow("builder current workspace set requested", "workspaceID", workspaceID)
 	if _, err := s.cp.SetCurrentWorkspace(r.Context(), rec.AccessToken, workspaceID); err != nil {
-		s.logger.Warn("set current builder workspace failed", "error", err)
+		s.logger.Warnw("set current builder workspace failed", "error", err, "workspaceID", workspaceID)
 		s.render(w, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not switch the current workspace."))
 		return
 	}
+	s.logger.Infow("builder current workspace set", "workspaceID", workspaceID)
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
 }
 
@@ -607,6 +622,7 @@ func (s *Server) sessionWithRefresh(r *http.Request, rec session.Record) (contro
 func (s *Server) refreshRecordForAPI(w http.ResponseWriter, r *http.Request, rec session.Record) (session.Record, bool) {
 	_, refreshed, err := s.sessionWithRefresh(r, rec)
 	if err != nil {
+		s.logger.Warnw("refresh UI session for API call failed", "error", err, "path", r.URL.Path)
 		s.clearSessionCookie(w)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return session.Record{}, false
@@ -701,7 +717,7 @@ func (s *Server) render(w http.ResponseWriter, status int, name string, data any
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
-		s.logger.Error("render template failed", "template", name, "error", err)
+		s.logger.Errorw("render template failed", "template", name, "error", err)
 	}
 }
 
@@ -711,5 +727,29 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusRecorder) WriteHeader(status int) {
+	s.status = status
+	s.ResponseWriter.WriteHeader(status)
+}
+
+func chainMiddleware(next http.Handler, logger uilogging.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		logger.Infow("ui request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.status,
+			"duration", time.Since(start).String(),
+		)
 	})
 }

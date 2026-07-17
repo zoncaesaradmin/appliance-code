@@ -41,6 +41,12 @@ type Config struct {
 	// local durable state.
 	DataDir string `json:"dataDir"`
 
+	// ApplicationLogPath is the fixed service-local file for structured
+	// application logs. Stdout/stderr mirroring still exists for container and
+	// crash visibility, but code-level logs also land here for operator
+	// inspection under /var/log/appliance.
+	ApplicationLogPath string `json:"applicationLogPath"`
+
 	// LogLevel is one of "debug", "info", "warn", "error". Log output format
 	// is fixed JSON via the shared platformkit/logging package, matching the
 	// convention used across all other repos.
@@ -93,6 +99,7 @@ func Default() Config {
 		PublicAddr:           "127.0.0.1:8080",
 		InternalAddr:         "127.0.0.1:8081",
 		DataDir:              "./data",
+		ApplicationLogPath:   "/var/log/appliance/control-plane/application.log",
 		LogLevel:             "info",
 		TrustedProxyCount:    0,
 		ReadHeaderTimeout:    5 * time.Second,
@@ -170,6 +177,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
 	str("DATA_DIR", &cfg.DataDir)
+	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)

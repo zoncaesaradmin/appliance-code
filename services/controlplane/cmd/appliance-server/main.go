@@ -7,8 +7,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"appliance-code/services/controlplane/internal/app"
@@ -41,6 +43,17 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	logFile, err := openApplicationLog(cfg.ApplicationLogPath)
+	if err != nil {
+		return err
+	}
+	defer logFile.Close()
+
+	logger, err = logging.NewWithWriter(cfg.LogLevel, io.MultiWriter(os.Stdout, logFile))
+	if err != nil {
+		return err
+	}
+	logger.Infow("control plane logger initialized", "applicationLogPath", cfg.ApplicationLogPath)
 
 	application, err := app.New(cfg, logger)
 	if err != nil {
@@ -51,4 +64,11 @@ func run() error {
 	defer stop()
 
 	return application.Run(ctx)
+}
+
+func openApplicationLog(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 }

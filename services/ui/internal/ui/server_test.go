@@ -2,7 +2,7 @@ package ui
 
 import (
 	"context"
-	"log/slog"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"appliance-code/services/ui/internal/controlplane"
+	uilogging "appliance-code/services/ui/internal/logging"
 	"appliance-code/services/ui/internal/session"
 )
 
@@ -144,9 +145,18 @@ func (e fakeErr) Error() string { return string(e) }
 
 const errFakeAuth = fakeErr("invalid credentials")
 
+func testLogger(t *testing.T) uilogging.Logger {
+	t.Helper()
+	logger, err := uilogging.NewWithWriter("debug", io.Discard)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+	return logger
+}
+
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
-	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}, session.NewStore(time.Now), slog.Default())
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}, session.NewStore(time.Now), testLogger(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -155,7 +165,7 @@ func newTestServer(t *testing.T) http.Handler {
 
 func newTestServerWithProfile(t *testing.T, applianceProfile string, cp *fakeControlPlane) http.Handler {
 	t.Helper()
-	handler, err := New(Config{ApplianceProfile: applianceProfile, CookieSecure: false, StaticPrefix: "/static/"}, cp, session.NewStore(time.Now), slog.Default())
+	handler, err := New(Config{ApplianceProfile: applianceProfile, CookieSecure: false, StaticPrefix: "/static/"}, cp, session.NewStore(time.Now), testLogger(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -200,7 +210,7 @@ func TestRootRouteReturnsBaseHTMLShell(t *testing.T) {
 }
 
 func TestRootRouteShowsSetupWhenUninitialized(t *testing.T) {
-	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), slog.Default())
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), testLogger(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -216,7 +226,7 @@ func TestRootRouteShowsSetupWhenUninitialized(t *testing.T) {
 }
 
 func TestSetupCreatesFirstAdminAndRedirectsToDashboard(t *testing.T) {
-	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), slog.Default())
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), testLogger(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
