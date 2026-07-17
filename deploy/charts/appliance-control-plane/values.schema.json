@@ -145,7 +145,8 @@
       "required": [
         "applianceProfile",
         "canonicalOrigin",
-        "logLevel"
+        "logLevel",
+        "workflowInstanceID"
       ],
       "allOf": [
         {
@@ -196,6 +197,9 @@
         "trustedProxyCount": {
           "type": "integer",
           "minimum": 0
+        },
+        "workflowInstanceID": {
+          "type": "string"
         },
         "buildCatalog": {
           "oneOf": [

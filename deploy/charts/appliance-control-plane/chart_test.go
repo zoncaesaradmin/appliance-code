@@ -517,6 +517,9 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "control-plane-workspaces" {
 		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want control-plane-workspaces", got)
 	}
+	if got, _ := data["APPLIANCE_WORKFLOW_INSTANCE_ID"].(string); got != "appliance" {
+		t.Fatalf("APPLIANCE_WORKFLOW_INSTANCE_ID = %q, want appliance", got)
+	}
 }
 
 func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {

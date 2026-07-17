@@ -11,6 +11,7 @@ data:
   APPLIANCE_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   APPLIANCE_TRUSTED_PROXY_COUNT: {{ .Values.config.trustedProxyCount | quote }}
   APPLIANCE_WORKFLOW_ENGINE: "argo"
+  APPLIANCE_WORKFLOW_INSTANCE_ID: {{ .Values.config.workflowInstanceID | quote }}
   APPLIANCE_BUILD_CATALOG_JSON: {{ .Values.config.buildCatalog | default dict | toJson | quote }}
   APPLIANCE_WORKSPACE_ROOT_DIR: {{ .Values.workspaceStorage.rootDir | quote }}
   APPLIANCE_WORKSPACE_CLAIM_NAME: {{ include "appliance-control-plane.workspaceClaimName" . | quote }}

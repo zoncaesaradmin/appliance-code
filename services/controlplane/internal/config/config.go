@@ -33,6 +33,7 @@ type Config struct {
 
 	BuildDefaultDeadline time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine       string           `json:"workflowEngine"`
+	WorkflowInstanceID   string           `json:"workflowInstanceID"`
 	BuildCatalog         devflows.Catalog `json:"buildCatalog"`
 	WorkspaceRootDir     string           `json:"workspaceRootDir"`
 	WorkspaceClaimName   string           `json:"workspaceClaimName"`
@@ -66,6 +67,7 @@ func Default() Config {
 		MaxBodyBytes:         1 * 1024 * 1024,
 		BuildDefaultDeadline: 30 * time.Minute,
 		WorkflowEngine:       "fake",
+		WorkflowInstanceID:   "appliance",
 		WorkspaceRootDir:     "/var/lib/zon/workspaces",
 		WorkspaceClaimName:   "appliance-workspaces",
 	}
@@ -129,6 +131,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
+	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKSPACE_ROOT_DIR", &cfg.WorkspaceRootDir)
 	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 

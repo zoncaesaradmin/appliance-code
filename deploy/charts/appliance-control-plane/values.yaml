@@ -50,6 +50,7 @@ config:
   canonicalOrigin: "https://appliance.example.internal"
   logLevel: info
   trustedProxyCount: 1
+  workflowInstanceID: appliance
   # Developer workflow catalog used by the builder profile. It is the single
   # source of truth for allowed Git sources, source credential references,
   # build targets, and pinned builder images. Keep this empty for core/storage.
