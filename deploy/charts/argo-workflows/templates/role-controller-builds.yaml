@@ -8,7 +8,13 @@ metadata:
     {{- include "argo-workflows.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["argoproj.io"]
-    resources: ["workflows", "workflows/finalizers", "workflowtaskresults"]
+    resources:
+      - workflows
+      - workflows/finalizers
+      - workflowtaskresults
+      - workflowtasksets
+      - workflowartifactgctasks
+      - workflowtemplates
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
   - apiGroups: [""]
     resources: ["pods", "pods/log", "events", "configmaps", "serviceaccounts", "secrets"]

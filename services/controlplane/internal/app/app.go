@@ -47,7 +47,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	if err != nil {
 		return nil, err
 	}
-	services, err := wireServices(cfg, resolved)
+	services, err := wireServices(cfg, resolved, logger)
 	if err != nil {
 		return nil, err
 	}

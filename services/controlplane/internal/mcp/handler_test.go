@@ -15,6 +15,7 @@ import (
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
+	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/mcp"
 	"appliance-code/services/controlplane/internal/reqauth"
 	"appliance-code/services/controlplane/internal/roles"
@@ -58,7 +59,11 @@ func newTestEnvWithCatalog(t *testing.T, profile appliance.Profile, catalog devf
 		cfg.BuildCatalog = catalog
 	}
 
-	services, err := app.WireServices(cfg)
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+	services, err := app.WireServices(cfg, logger)
 	if err != nil {
 		t.Fatalf("WireServices: %v", err)
 	}

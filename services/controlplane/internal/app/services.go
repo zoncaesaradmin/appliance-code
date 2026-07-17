@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/keys"
+	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
@@ -57,15 +58,15 @@ type Services struct {
 	Audit *audit.Recorder
 }
 
-func WireServices(cfg config.Config) (*Services, error) {
+func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
 	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
 	if err != nil {
 		return nil, fmt.Errorf("app: resolving appliance profile: %w", err)
 	}
-	return wireServices(cfg, resolved)
+	return wireServices(cfg, resolved, logger)
 }
 
-func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Services, error) {
+func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger logging.Logger) (*Services, error) {
 	db, err := sqlite.Open(cfg.SQLitePath())
 	if err != nil {
 		return nil, fmt.Errorf("app: opening storage: %w", err)
@@ -138,7 +139,11 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Servi
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
 			allowedGitHosts, cfg.BuildCatalog.BuilderImageDigests(), cfg.BuildDefaultDeadline,
 			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, cfg.BuildCatalog.SensitiveLogValues()...)
-		devflowsSvc = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, recorder)
+		devflowsSvc, err = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, logger, recorder)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: wiring developer workflows: %w", err)
+		}
 		if err := buildsSvc.ReconcileAll(ctx); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: reconciling builds: %w", err)

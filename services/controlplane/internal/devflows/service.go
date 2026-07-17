@@ -11,6 +11,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/builds"
+	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/workflows"
 )
@@ -32,10 +33,14 @@ type Service struct {
 	engine             workflows.Engine
 	workspaceRootDir   string
 	workspaceClaimName string
+	logger             logging.Logger
 	audit              *audit.Recorder
 }
 
-func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, workspaceRootDir, workspaceClaimName string, recorder *audit.Recorder) *Service {
+func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, workspaceRootDir, workspaceClaimName string, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
+	if logger == nil {
+		return nil, errors.New("devflows: logger is required")
+	}
 	return &Service{
 		catalog:            catalog,
 		workspaces:         workspaces,
@@ -44,8 +49,9 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 		engine:             engine,
 		workspaceRootDir:   strings.TrimSpace(workspaceRootDir),
 		workspaceClaimName: strings.TrimSpace(workspaceClaimName),
+		logger:             logger,
 		audit:              recorder,
-	}
+	}, nil
 }
 
 func (s *Service) Catalog() Catalog { return s.catalog }
@@ -158,6 +164,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 
 func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Workspace, job storage.Job, repos []Repo, imageDigest string) (storage.Workspace, error) {
 	startedAt := time.Now().UTC()
+	workflowName := workspacePrepareWorkflowName(job.ID)
 	if s.engine == nil {
 		reason := "workflow_engine_unavailable"
 		message := "workspace workflow engine is not configured"
@@ -167,11 +174,20 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 		ws.ReasonCode = reason
 		ws.ErrorMessage = message
 		ws.UpdatedAt = startedAt
+		s.logger.WithContext(ctx).Errorw("workspace provisioning unavailable",
+			"workspaceID", ws.ID,
+			"workspaceName", ws.Name,
+			"workProfile", ws.WorkProfile,
+			"jobID", job.ID,
+			"workflowName", workflowName,
+			"reasonCode", reason,
+			"errorMessage", message,
+		)
 		return ws, nil
 	}
 
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
-		Name:                workspacePrepareWorkflowName(job.ID),
+		Name:                workflowName,
 		Kind:                workflows.KindWorkspacePrepare,
 		BuilderImageDigest:  imageDigest,
 		Deadline:            startedAt.Add(30 * time.Minute),
@@ -203,9 +219,30 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 		ws.ReasonCode = reason
 		ws.ErrorMessage = message
 		ws.UpdatedAt = completedAt
+		s.logger.WithContext(ctx).Errorw("workspace provisioning workflow submission failed",
+			"workspaceID", ws.ID,
+			"workspaceName", ws.Name,
+			"workProfile", ws.WorkProfile,
+			"jobID", job.ID,
+			"workflowName", workflowName,
+			"repoNames", workspaceRepoNames(repos),
+			"workspaceRootDir", s.workspaceRootDir,
+			"workspaceClaimName", s.workspaceClaimName,
+			"error", submitErr,
+		)
 		return ws, nil
 	}
 	_ = s.jobs.UpdateStatus(ctx, job.ID, storage.JobStatusRunning, "", "", &completedAt, nil)
+	s.logger.WithContext(ctx).Infow("workspace provisioning workflow submitted",
+		"workspaceID", ws.ID,
+		"workspaceName", ws.Name,
+		"workProfile", ws.WorkProfile,
+		"jobID", job.ID,
+		"workflowName", workflowName,
+		"repoNames", workspaceRepoNames(repos),
+		"workspaceRootDir", s.workspaceRootDir,
+		"workspaceClaimName", s.workspaceClaimName,
+	)
 	return ws, nil
 }
 
@@ -213,6 +250,14 @@ func workspaceRepoSpecs(repos []Repo) []workflows.WorkspaceRepo {
 	out := make([]workflows.WorkspaceRepo, 0, len(repos))
 	for _, repo := range repos {
 		out = append(out, workflows.WorkspaceRepo{Name: repo.Name, URL: repo.URL, Ref: repo.DefaultRef})
+	}
+	return out
+}
+
+func workspaceRepoNames(repos []Repo) []string {
+	out := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		out = append(out, repo.Name)
 	}
 	return out
 }
@@ -574,7 +619,8 @@ func (s *Service) reconcileWorkspacePrepareJob(ctx context.Context, job storage.
 	if s.engine == nil {
 		return job, nil
 	}
-	status, err := s.engine.Status(ctx, workspacePrepareWorkflowName(job.ID))
+	workflowName := workspacePrepareWorkflowName(job.ID)
+	status, err := s.engine.Status(ctx, workflowName)
 	if errors.Is(err, workflows.ErrNotFound) {
 		completedAt := time.Now().UTC()
 		job.Status = storage.JobStatusFailed
@@ -582,6 +628,13 @@ func (s *Service) reconcileWorkspacePrepareJob(ctx context.Context, job storage.
 		job.ErrorMessage = "workspace workflow was not found"
 		job.CompletedAt = &completedAt
 		_ = s.jobs.UpdateStatus(ctx, job.ID, job.Status, job.ReasonCode, job.ErrorMessage, job.StartedAt, job.CompletedAt)
+		s.logger.WithContext(ctx).Errorw("workspace provisioning workflow missing",
+			"jobID", job.ID,
+			"workspaceID", job.WorkspaceID,
+			"workflowName", workflowName,
+			"reasonCode", job.ReasonCode,
+			"errorMessage", job.ErrorMessage,
+		)
 		_ = s.syncWorkspaceStatusFromJob(ctx, job)
 		return job, nil
 	}
@@ -622,6 +675,15 @@ func (s *Service) reconcileWorkspacePrepareJob(ctx context.Context, job storage.
 	}
 	if updated.Status != job.Status || updated.ReasonCode != job.ReasonCode || updated.ErrorMessage != job.ErrorMessage || !timePtrEqual(updated.StartedAt, job.StartedAt) || !timePtrEqual(updated.CompletedAt, job.CompletedAt) {
 		_ = s.jobs.UpdateStatus(ctx, job.ID, updated.Status, updated.ReasonCode, updated.ErrorMessage, updated.StartedAt, updated.CompletedAt)
+		s.logger.WithContext(ctx).Infow("workspace provisioning workflow state changed",
+			"jobID", job.ID,
+			"workspaceID", job.WorkspaceID,
+			"workflowName", workflowName,
+			"workflowPhase", string(status.Phase),
+			"jobStatus", string(updated.Status),
+			"reasonCode", updated.ReasonCode,
+			"errorMessage", updated.ErrorMessage,
+		)
 		job = updated
 	}
 	_ = s.syncWorkspaceStatusFromJob(ctx, job)
@@ -652,6 +714,15 @@ func (s *Service) syncWorkspaceStatusFromJob(ctx context.Context, job storage.Jo
 	if ws.Status == newStatus && ws.ReasonCode == reasonCode && ws.ErrorMessage == errorMessage {
 		return nil
 	}
+	s.logger.WithContext(ctx).Infow("workspace status reconciled",
+		"workspaceID", ws.ID,
+		"workspaceName", ws.Name,
+		"jobID", job.ID,
+		"previousStatus", string(ws.Status),
+		"status", string(newStatus),
+		"reasonCode", reasonCode,
+		"errorMessage", errorMessage,
+	)
 	return s.workspaces.UpdateStatus(ctx, ws.ID, newStatus, reasonCode, errorMessage)
 }
 

@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/storage"
 )
 
@@ -31,7 +32,11 @@ func loadConfigAndServices() (config.Config, *app.Services, error) {
 	if err != nil {
 		return config.Config{}, nil, err
 	}
-	services, err := app.WireServices(cfg)
+	logger, err := logging.NewWithWriter(cfg.LogLevel, os.Stdout)
+	if err != nil {
+		return config.Config{}, nil, err
+	}
+	services, err := app.WireServices(cfg, logger)
 	if err != nil {
 		return config.Config{}, nil, err
 	}

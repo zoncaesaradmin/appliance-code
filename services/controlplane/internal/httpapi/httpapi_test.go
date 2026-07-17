@@ -52,16 +52,15 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.BuildCatalog = catalog
 	}
 
-	services, err := app.WireServices(cfg)
-	if err != nil {
-		t.Fatalf("WireServices: %v", err)
-	}
-	t.Cleanup(func() { services.DB.Close() })
-
 	logger, err := logging.New("error")
 	if err != nil {
 		t.Fatalf("logging.New: %v", err)
 	}
+	services, err := app.WireServices(cfg, logger)
+	if err != nil {
+		t.Fatalf("WireServices: %v", err)
+	}
+	t.Cleanup(func() { services.DB.Close() })
 
 	authDeps := httpapi.AuthDeps{
 		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,

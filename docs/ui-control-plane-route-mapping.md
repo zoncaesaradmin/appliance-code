@@ -92,6 +92,15 @@ The UI route still returns `303` to the browser on success because the browser
 interaction is a post-redirect-get flow. The control-plane response body for the
 workspace create call is visible in the UI `control plane API call` log entry.
 
+The control plane also writes durable functional lifecycle events for this path
+to `/var/log/appliance/control-plane/application.log`:
+
+- `workspace provisioning workflow submitted`
+- `workspace provisioning workflow state changed`
+- `workspace status reconciled`
+- `workspace provisioning workflow submission failed`
+- `workspace provisioning workflow missing`
+
 ## Operator Debugging Notes
 
 ### Example: `POST /builder/workspaces`
@@ -127,6 +136,30 @@ service?":
    ID and request path.
 4. If needed, check durable state such as the `workspaces`, `current_workspaces`,
    and `jobs` tables for the current workspace and its provisioning job.
+
+### Following A Pending Workspace
+
+If `POST /api/v1/workspaces` returns a workspace with `status: "pending"`, the
+next places to inspect are:
+
+1. The matching control-plane `workspace provisioning workflow submitted` log
+   entry. It includes the `jobID`, `workflowName`, `workspaceName`, and trace ID.
+2. `GET /api/v1/jobs` and locate the `workspace_prepare` job for that
+   workspace. Use the returned job ID with:
+   - `GET /api/v1/jobs/{jobId}`
+   - `GET /api/v1/jobs/{jobId}/steps`
+   - `GET /api/v1/jobs/{jobId}/logs`
+3. Argo runtime state in the build namespace:
+   - `kubectl -n appliance-builds get workflows`
+   - `kubectl -n appliance-builds get pods`
+   - `kubectl -n appliance-builds logs <workspace-prepare-pod>`
+4. Workspace storage state:
+   - `kubectl -n appliance-builds get pvc,pv`
+   - inspect `/var/lib/zon/workspaces/<workspace-name>` on the host
+
+If the workflow is still running, later `GET /api/v1/workspaces` or
+`GET /api/v1/current-workspace` calls will trigger reconciliation and move the
+workspace from `pending` to `ready` or `failed`.
 
 ## Maintenance Rule
 

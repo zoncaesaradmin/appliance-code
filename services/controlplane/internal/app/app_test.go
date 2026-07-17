@@ -121,7 +121,11 @@ func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
 		}},
 	}
 
-	services, err := app.WireServices(cfg)
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+	services, err := app.WireServices(cfg, logger)
 	if err != nil {
 		t.Fatalf("initial WireServices: %v", err)
 	}
@@ -151,7 +155,7 @@ func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
 		t.Fatalf("closing first services DB: %v", err)
 	}
 
-	restarted, err := app.WireServices(cfg)
+	restarted, err := app.WireServices(cfg, logger)
 	if err != nil {
 		t.Fatalf("restart WireServices: %v", err)
 	}
