@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -18,6 +19,24 @@ import (
 )
 
 const requestIDHeader = "X-Request-Id"
+
+// TraceID assigns or propagates the per-flow trace ID so every request log,
+// API exchange record, and downstream client call can be correlated across
+// UI and control-plane boundaries.
+func TraceID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		traceID := strings.TrimSpace(r.Header.Get(ctxutil.TraceIDHeader))
+		if traceID == "" {
+			var ctx context.Context
+			ctx, traceID = ctxutil.EnsureTraceID(r.Context())
+			r = r.WithContext(ctx)
+		} else {
+			r = r.WithContext(ctxutil.WithTraceID(r.Context(), traceID))
+		}
+		w.Header().Set(ctxutil.TraceIDHeader, traceID)
+		next.ServeHTTP(w, r)
+	})
+}
 
 // requestIDFromRequest reads the request ID stashed on the request context
 // by the RequestID middleware, used by problem responses so every error

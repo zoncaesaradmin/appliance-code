@@ -12,6 +12,7 @@ import (
 	"time"
 
 	uilogging "appliance-code/services/ui/internal/logging"
+	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
 
 type Config struct {
@@ -314,6 +315,7 @@ func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {
 }
 
 func (c *Client) do(req *http.Request, wantStatus int) ([]byte, error) {
+	req = withTrace(req)
 	requestBody := cloneRequestBody(req)
 	start := time.Now()
 	resp, err := c.httpClient.Do(req)
@@ -367,10 +369,17 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 	}
 	if callErr != nil {
 		args = append(args, "error", callErr.Error())
-		c.logger.Warnw("control plane API call", args...)
+		c.logger.WithContext(req.Context()).Warnw("control plane API call", args...)
 		return
 	}
-	c.logger.Infow("control plane API call", args...)
+	c.logger.WithContext(req.Context()).Infow("control plane API call", args...)
+}
+
+func withTrace(req *http.Request) *http.Request {
+	ctx, traceID := ctxutil.EnsureTraceID(req.Context())
+	req = req.WithContext(ctx)
+	req.Header.Set(ctxutil.TraceIDHeader, traceID)
+	return req
 }
 
 func isSuppressedTracePath(path string) bool {

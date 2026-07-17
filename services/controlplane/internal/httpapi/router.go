@@ -77,7 +77,7 @@ func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "Not found", "")
 	})
 
-	chain := Chain(RequestID, AccessLog(deps.Logger), APIExchangeLog(deps.Logger), Recover(deps.Logger))
+	chain := Chain(TraceID, RequestID, AccessLog(deps.Logger), APIExchangeLog(deps.Logger), Recover(deps.Logger))
 	return chain(mux), nil
 }
 
@@ -94,7 +94,7 @@ func NewInternalMux(logger logging.Logger, checker ReadinessChecker, startup *St
 		_ = json.NewEncoder(w).Encode(version.Current())
 	})
 
-	chain := Chain(RequestID, AccessLog(logger), Recover(logger))
+	chain := Chain(TraceID, RequestID, AccessLog(logger), Recover(logger))
 	return chain(mux)
 }
 

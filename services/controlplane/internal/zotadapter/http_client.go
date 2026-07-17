@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
 
 // HTTPClient implements Client against a real zot instance's OCI
@@ -36,6 +38,9 @@ func (c *HTTPClient) get(ctx context.Context, path string, out any) error {
 	if err != nil {
 		return fmt.Errorf("zotadapter: building request for %s: %w", path, err)
 	}
+	traceCtx, traceID := ctxutil.EnsureTraceID(req.Context())
+	req = req.WithContext(traceCtx)
+	req.Header.Set(ctxutil.TraceIDHeader, traceID)
 	if c.requestEdit != nil {
 		c.requestEdit(req)
 	}

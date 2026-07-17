@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,7 @@ import (
 	"appliance-code/services/ui/internal/controlplane"
 	uilogging "appliance-code/services/ui/internal/logging"
 	"appliance-code/services/ui/internal/session"
+	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
 
 type fakeControlPlane struct {
@@ -263,6 +266,60 @@ func TestLoginCreatesOpaqueCookieAndRedirects(t *testing.T) {
 	if strings.Contains(cookies[0].Value, "access-token") || strings.Contains(cookies[0].Value, "refresh-token") {
 		t.Fatalf("cookie must be opaque, got %q", cookies[0].Value)
 	}
+}
+
+func TestUIRequestTraceIsCreatedAndLogged(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger, err := uilogging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+	handler, err := New(
+		Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"},
+		&fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"},
+		session.NewStore(time.Now),
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	traceID := rec.Header().Get(ctxutil.TraceIDHeader)
+	if traceID == "" {
+		t.Fatal("expected response trace header")
+	}
+
+	record := parseUILogRecord(t, logBuf.String(), "ui request")
+	if got := record["traceId"]; got != traceID {
+		t.Fatalf("traceId = %#v, want %q", got, traceID)
+	}
+	if got := record["path"]; got != "/login" {
+		t.Fatalf("path = %#v, want /login", got)
+	}
+}
+
+func parseUILogRecord(t *testing.T, text, message string) map[string]any {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("parse log JSON: %v\nlog=%s", err, line)
+		}
+		if record["message"] == message || record["msg"] == message {
+			return record
+		}
+	}
+	t.Fatalf("did not find log message %q in %s", message, text)
+	return nil
 }
 
 func TestDashboardAndPartialsReturnHTML(t *testing.T) {

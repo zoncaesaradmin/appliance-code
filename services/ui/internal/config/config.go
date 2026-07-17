@@ -27,7 +27,7 @@ func FromEnv() Config {
 		ControlPlaneTrace:           envBool("APPLIANCE_UI_CONTROL_PLANE_TRACE", true),
 		ApplianceProfile:            env("APPLIANCE_PROFILE", "core"),
 		CookieSecure:                envBool("APPLIANCE_UI_COOKIE_SECURE", true),
-		LogLevel:                    logLevel(env("APPLIANCE_UI_LOG_LEVEL", env("APPLIANCE_LOG_LEVEL", "info"))),
+		LogLevel:                    logLevel(env("APPLIANCE_UI_LOG_LEVEL", env("APPLIANCE_LOG_LEVEL", "debug"))),
 	}
 }
 

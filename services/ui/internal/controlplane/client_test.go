@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	uilogging "appliance-code/services/ui/internal/logging"
+	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -22,6 +23,9 @@ func TestTraceLogsWorkspaceRequestAndResponse(t *testing.T) {
 	clientHTTP := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/current-workspace" {
 			t.Fatalf("got %s %s, want POST /api/v1/current-workspace", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get(ctxutil.TraceIDHeader); got != "trace-ui-123" {
+			t.Fatalf("trace header = %q, want trace-ui-123", got)
 		}
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -42,11 +46,15 @@ func TestTraceLogsWorkspaceRequestAndResponse(t *testing.T) {
 		TraceHTTP:  true,
 	})
 
-	if _, err := client.SetCurrentWorkspace(context.Background(), "access-token", "ws_demo"); err != nil {
+	ctx := ctxutil.WithTraceID(context.Background(), "trace-ui-123")
+	if _, err := client.SetCurrentWorkspace(ctx, "access-token", "ws_demo"); err != nil {
 		t.Fatalf("SetCurrentWorkspace: %v", err)
 	}
 
 	record := parseSingleJSONLogLine(t, logBuf.String())
+	if got := record["traceId"]; got != "trace-ui-123" {
+		t.Fatalf("traceId = %#v, want trace-ui-123", got)
+	}
 	if got := record["path"]; got != "/api/v1/current-workspace" {
 		t.Fatalf("path = %#v, want /api/v1/current-workspace", got)
 	}

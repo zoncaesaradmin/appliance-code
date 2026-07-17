@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/workflows"
+	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
 
 const (
@@ -137,6 +138,9 @@ func (e *Engine) do(ctx context.Context, method, path, contentType string, body 
 	if err != nil {
 		return nil, err
 	}
+	traceCtx, traceID := ctxutil.EnsureTraceID(req.Context())
+	req = req.WithContext(traceCtx)
+	req.Header.Set(ctxutil.TraceIDHeader, traceID)
 	if e.token != "" {
 		req.Header.Set("Authorization", "Bearer "+e.token)
 	}
