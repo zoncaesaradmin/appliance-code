@@ -120,7 +120,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 			workflowEngine = workflows.NewFake()
 		case "argo":
 			var err error
-			workflowEngine, err = argo.NewInCluster(argoWorkflowNamespace, cfg.WorkflowInstanceID)
+			workflowEngine, err = argo.NewInCluster(argoWorkflowNamespace, cfg.WorkflowInstanceID, cfg.WorkflowExecutorServiceAccount)
 			if err != nil {
 				db.Close()
 				return nil, fmt.Errorf("app: wiring argo workflow engine: %w", err)

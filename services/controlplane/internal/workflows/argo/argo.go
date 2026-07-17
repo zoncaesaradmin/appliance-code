@@ -28,19 +28,21 @@ const (
 )
 
 type Config struct {
-	Namespace   string
-	InstanceID  string
-	BaseURL     string
-	BearerToken string
-	HTTPClient  *http.Client
+	Namespace              string
+	InstanceID             string
+	ExecutorServiceAccount string
+	BaseURL                string
+	BearerToken            string
+	HTTPClient             *http.Client
 }
 
 type Engine struct {
-	namespace  string
-	instanceID string
-	baseURL    string
-	token      string
-	client     *http.Client
+	namespace              string
+	instanceID             string
+	executorServiceAccount string
+	baseURL                string
+	token                  string
+	client                 *http.Client
 }
 
 func New(cfg Config) (*Engine, error) {
@@ -55,15 +57,16 @@ func New(cfg Config) (*Engine, error) {
 		client = &http.Client{Timeout: defaultTimeout}
 	}
 	return &Engine{
-		namespace:  cfg.Namespace,
-		instanceID: strings.TrimSpace(cfg.InstanceID),
-		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
-		token:      cfg.BearerToken,
-		client:     client,
+		namespace:              cfg.Namespace,
+		instanceID:             strings.TrimSpace(cfg.InstanceID),
+		executorServiceAccount: strings.TrimSpace(cfg.ExecutorServiceAccount),
+		baseURL:                strings.TrimRight(cfg.BaseURL, "/"),
+		token:                  cfg.BearerToken,
+		client:                 client,
 	}, nil
 }
 
-func NewInCluster(namespace, instanceID string) (*Engine, error) {
+func NewInCluster(namespace, instanceID, executorServiceAccount string) (*Engine, error) {
 	host := os.Getenv("KUBERNETES_SERVICE_HOST")
 	port := os.Getenv("KUBERNETES_SERVICE_PORT")
 	if host == "" || port == "" {
@@ -80,16 +83,17 @@ func NewInCluster(namespace, instanceID string) (*Engine, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12}
 	return New(Config{
-		Namespace:   namespace,
-		InstanceID:  instanceID,
-		BaseURL:     "https://" + host + ":" + port,
-		BearerToken: strings.TrimSpace(string(token)),
-		HTTPClient:  &http.Client{Transport: transport, Timeout: defaultTimeout},
+		Namespace:              namespace,
+		InstanceID:             instanceID,
+		ExecutorServiceAccount: executorServiceAccount,
+		BaseURL:                "https://" + host + ":" + port,
+		BearerToken:            strings.TrimSpace(string(token)),
+		HTTPClient:             &http.Client{Transport: transport, Timeout: defaultTimeout},
 	})
 }
 
 func (e *Engine) Submit(ctx context.Context, spec workflows.Spec) error {
-	workflow, err := workflowObject(e.namespace, e.instanceID, spec)
+	workflow, err := workflowObject(e.namespace, e.instanceID, e.executorServiceAccount, spec)
 	if err != nil {
 		return err
 	}
@@ -191,7 +195,7 @@ func mapPhase(phase string) workflows.Phase {
 	}
 }
 
-func workflowObject(namespace, instanceID string, spec workflows.Spec) (map[string]any, error) {
+func workflowObject(namespace, instanceID, executorServiceAccount string, spec workflows.Spec) (map[string]any, error) {
 	kind := spec.Kind
 	if kind == "" {
 		kind = workflows.KindBuild
@@ -204,12 +208,14 @@ func workflowObject(namespace, instanceID string, spec workflows.Spec) (map[stri
 		labels["workflows.argoproj.io/controller-instanceid"] = strings.TrimSpace(instanceID)
 	}
 	workflowSpec := map[string]any{
-		"entrypoint":         "main",
-		"serviceAccountName": "argo-workflows-argo-workflows-executor",
+		"entrypoint": "main",
 		"templates": []map[string]any{{
 			"name":      "main",
 			"container": container,
 		}},
+	}
+	if strings.TrimSpace(executorServiceAccount) != "" {
+		workflowSpec["serviceAccountName"] = strings.TrimSpace(executorServiceAccount)
 	}
 	if deadlineSeconds := workflowDeadlineSeconds(spec.Deadline); deadlineSeconds > 0 {
 		workflowSpec["activeDeadlineSeconds"] = deadlineSeconds

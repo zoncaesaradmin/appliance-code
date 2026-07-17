@@ -146,7 +146,8 @@
         "applianceProfile",
         "canonicalOrigin",
         "logLevel",
-        "workflowInstanceID"
+        "workflowInstanceID",
+        "workflowExecutorServiceAccount"
       ],
       "allOf": [
         {
@@ -200,6 +201,10 @@
         },
         "workflowInstanceID": {
           "type": "string"
+        },
+        "workflowExecutorServiceAccount": {
+          "type": "string",
+          "minLength": 1
         },
         "buildCatalog": {
           "oneOf": [

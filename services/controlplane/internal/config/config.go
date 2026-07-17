@@ -31,12 +31,13 @@ type Config struct {
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	ZotBaseURL         string `json:"zotBaseURL"`
 
-	BuildDefaultDeadline time.Duration    `json:"buildDefaultDeadline"`
-	WorkflowEngine       string           `json:"workflowEngine"`
-	WorkflowInstanceID   string           `json:"workflowInstanceID"`
-	BuildCatalog         devflows.Catalog `json:"buildCatalog"`
-	WorkspaceRootDir     string           `json:"workspaceRootDir"`
-	WorkspaceClaimName   string           `json:"workspaceClaimName"`
+	BuildDefaultDeadline           time.Duration    `json:"buildDefaultDeadline"`
+	WorkflowEngine                 string           `json:"workflowEngine"`
+	WorkflowInstanceID             string           `json:"workflowInstanceID"`
+	WorkflowExecutorServiceAccount string           `json:"workflowExecutorServiceAccount"`
+	BuildCatalog                   devflows.Catalog `json:"buildCatalog"`
+	WorkspaceRootDir               string           `json:"workspaceRootDir"`
+	WorkspaceClaimName             string           `json:"workspaceClaimName"`
 
 	ReadHeaderTimeout time.Duration `json:"readHeaderTimeout"`
 	ReadTimeout       time.Duration `json:"readTimeout"`
@@ -50,26 +51,27 @@ type Config struct {
 // Default returns the local-development default configuration.
 func Default() Config {
 	return Config{
-		ApplianceProfile:     string(appliance.ProfileCore),
-		CanonicalOrigin:      "http://localhost:8080",
-		PublicAddr:           "127.0.0.1:8080",
-		InternalAddr:         "127.0.0.1:8081",
-		DataDir:              "./data",
-		ApplicationLogPath:   "/var/log/appliance/control-plane/application.log",
-		LogLevel:             "info",
-		TrustedProxyCount:    0,
-		ReadHeaderTimeout:    5 * time.Second,
-		ReadTimeout:          30 * time.Second,
-		WriteTimeout:         30 * time.Second,
-		IdleTimeout:          60 * time.Second,
-		ShutdownTimeout:      30 * time.Second,
-		MaxHeaderBytes:       16 * 1024,
-		MaxBodyBytes:         1 * 1024 * 1024,
-		BuildDefaultDeadline: 30 * time.Minute,
-		WorkflowEngine:       "fake",
-		WorkflowInstanceID:   "appliance",
-		WorkspaceRootDir:     "/var/lib/zon/workspaces",
-		WorkspaceClaimName:   "appliance-workspaces",
+		ApplianceProfile:               string(appliance.ProfileCore),
+		CanonicalOrigin:                "http://localhost:8080",
+		PublicAddr:                     "127.0.0.1:8080",
+		InternalAddr:                   "127.0.0.1:8081",
+		DataDir:                        "./data",
+		ApplicationLogPath:             "/var/log/appliance/control-plane/application.log",
+		LogLevel:                       "info",
+		TrustedProxyCount:              0,
+		ReadHeaderTimeout:              5 * time.Second,
+		ReadTimeout:                    30 * time.Second,
+		WriteTimeout:                   30 * time.Second,
+		IdleTimeout:                    60 * time.Second,
+		ShutdownTimeout:                30 * time.Second,
+		MaxHeaderBytes:                 16 * 1024,
+		MaxBodyBytes:                   1 * 1024 * 1024,
+		BuildDefaultDeadline:           30 * time.Minute,
+		WorkflowEngine:                 "fake",
+		WorkflowInstanceID:             "appliance",
+		WorkflowExecutorServiceAccount: "appliance-argo-workflows-executor",
+		WorkspaceRootDir:               "/var/lib/zon/workspaces",
+		WorkspaceClaimName:             "appliance-workspaces",
 	}
 }
 
@@ -132,6 +134,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
+	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
 	str("WORKSPACE_ROOT_DIR", &cfg.WorkspaceRootDir)
 	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
@@ -217,6 +220,9 @@ func (c Config) Validate() error {
 		}
 		if strings.TrimSpace(c.WorkspaceClaimName) == "" {
 			errs = append(errs, "workspaceClaimName must not be empty when the build capability is enabled")
+		}
+		if strings.TrimSpace(c.WorkflowExecutorServiceAccount) == "" {
+			errs = append(errs, "workflowExecutorServiceAccount must not be empty when the build capability is enabled")
 		}
 	} else if !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {

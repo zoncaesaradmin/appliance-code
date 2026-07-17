@@ -28,7 +28,14 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	engine, err := New(Config{Namespace: "appliance-builds", InstanceID: "appliance", BaseURL: server.URL, BearerToken: "test-token", HTTPClient: server.Client()})
+	engine, err := New(Config{
+		Namespace:              "appliance-builds",
+		InstanceID:             "appliance",
+		ExecutorServiceAccount: "appliance-argo-workflows-executor",
+		BaseURL:                server.URL,
+		BearerToken:            "test-token",
+		HTTPClient:             server.Client(),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +48,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}
 	body, _ := json.Marshal(got)
 	text := string(body)
-	for _, want := range []string{"builder-git-key", "builder-git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance"} {
+	for _, want := range []string{"builder-git-key", "builder-git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workflow JSON missing %q: %s", want, text)
 		}
@@ -49,7 +56,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 }
 
 func TestSubmitRejectsCredentialWithoutKnownHosts(t *testing.T) {
-	_, err := workflowObject("appliance-builds", "", workflows.Spec{
+	_, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app",
 		TargetTag: "v1", SourceCredentialSecret: "builder-git-key", Deadline: time.Now().Add(time.Hour),
@@ -63,7 +70,7 @@ func TestSubmitRejectsCredentialWithoutKnownHosts(t *testing.T) {
 }
 
 func TestSubmitCreatesRepoScriptWorkflow(t *testing.T) {
-	got, err := workflowObject("appliance-builds", "", workflows.Spec{
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		Execution: "repo_script", ScriptPath: "scripts/build-image.sh", ContainerfilePath: "Containerfile",
 		BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
@@ -90,7 +97,7 @@ func TestSubmitCreatesRepoScriptWorkflow(t *testing.T) {
 }
 
 func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
-	got, err := workflowObject("appliance-builds", "", workflows.Spec{
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		Execution: "make_target", MakeTarget: "image", ContainerfilePath: "Containerfile",
 		BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
@@ -117,7 +124,7 @@ func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 }
 
 func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
-	got, err := workflowObject("appliance-builds", "", workflows.Spec{
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name:               "build-1",
 		BuilderImageDigest: "builder@sha256:abc",
 		SourceRepoURL:      "https://git.internal.example.com/team/app",
@@ -140,7 +147,7 @@ func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
 }
 
 func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
-	got, err := workflowObject("appliance-builds", "", workflows.Spec{
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name:               "workspace-prepare-1",
 		Kind:               workflows.KindWorkspacePrepare,
 		BuilderImageDigest: "builder@sha256:abc",

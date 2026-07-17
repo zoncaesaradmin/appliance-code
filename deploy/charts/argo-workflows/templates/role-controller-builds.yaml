@@ -16,7 +16,7 @@ rules:
       - workflowartifactgctasks
       - workflowtemplates
       - cronworkflows
-    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+    verbs: ["create", "delete", "deletecollection", "get", "list", "patch", "update", "watch"]
   - apiGroups: [""]
     resources: ["pods", "pods/log", "events", "configmaps", "serviceaccounts", "secrets"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
