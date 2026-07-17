@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -39,7 +38,7 @@ func run() error {
 		return err
 	}
 
-	logger, err := logging.New(cfg.LogLevel)
+	processLogger, err := logging.NewWithWriter(cfg.LogLevel, os.Stdout)
 	if err != nil {
 		return err
 	}
@@ -49,13 +48,13 @@ func run() error {
 	}
 	defer logFile.Close()
 
-	logger, err = logging.NewWithWriter(cfg.LogLevel, io.MultiWriter(os.Stdout, logFile))
+	appLogger, err := logging.NewWithWriter(cfg.LogLevel, logFile)
 	if err != nil {
 		return err
 	}
-	logger.Infow("control plane logger initialized", "applicationLogPath", cfg.ApplicationLogPath)
+	processLogger.Infow("control plane logger initialized", "applicationLogPath", cfg.ApplicationLogPath)
 
-	application, err := app.New(cfg, logger)
+	application, err := app.New(cfg, appLogger, processLogger)
 	if err != nil {
 		return err
 	}

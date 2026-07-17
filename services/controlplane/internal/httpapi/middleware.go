@@ -147,7 +147,7 @@ func AccessLog(logger logging.Logger) func(http.Handler) http.Handler {
 
 func shouldSuppressAccessLog(path string) bool {
 	switch path {
-	case "/health/live", "/health/ready":
+	case "/health/live", "/health/ready", "/version":
 		return true
 	default:
 		return false

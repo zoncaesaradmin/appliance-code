@@ -375,7 +375,7 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 
 func isSuppressedTracePath(path string) bool {
 	switch path {
-	case "/health/live", "/health/ready":
+	case "/health/live", "/health/ready", "/version":
 		return true
 	default:
 		return false

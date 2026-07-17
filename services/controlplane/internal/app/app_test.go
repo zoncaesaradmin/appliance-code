@@ -51,7 +51,7 @@ func TestAppStartsServesHealthAndShutsDownCleanly(t *testing.T) {
 		t.Fatalf("logging.New: %v", err)
 	}
 
-	a, err := app.New(cfg, logger)
+	a, err := app.New(cfg, logger, logger)
 	if err != nil {
 		t.Fatalf("app.New: %v", err)
 	}

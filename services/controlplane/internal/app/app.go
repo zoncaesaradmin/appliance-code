@@ -19,12 +19,13 @@ import (
 
 // App is the wired, runnable control plane process.
 type App struct {
-	cfg      config.Config
-	logger   logging.Logger
-	services *Services
-	public   *http.Server
-	internal *http.Server
-	startup  *httpapi.StartupState
+	cfg           config.Config
+	logger        logging.Logger
+	processLogger logging.Logger
+	services      *Services
+	public        *http.Server
+	internal      *http.Server
+	startup       *httpapi.StartupState
 }
 
 // readinessAdapter adapts storage.DB to httpapi.ReadinessChecker without
@@ -35,7 +36,7 @@ func (r readinessAdapter) Ready(ctx context.Context) error { return r.db.Ping(ct
 
 // New wires every service and builds the public and internal HTTP servers.
 // It does not start listening; call Run for that.
-func New(cfg config.Config, logger logging.Logger) (*App, error) {
+func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) {
 	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
 	if err != nil {
 		return nil, err
@@ -108,12 +109,13 @@ func New(cfg config.Config, logger logging.Logger) (*App, error) {
 	}
 
 	return &App{
-		cfg:      cfg,
-		logger:   logger,
-		services: services,
-		public:   public,
-		internal: internal,
-		startup:  startup,
+		cfg:           cfg,
+		logger:        logger,
+		processLogger: processLogger,
+		services:      services,
+		public:        public,
+		internal:      internal,
+		startup:       startup,
 	}, nil
 }
 
@@ -123,7 +125,9 @@ func (a *App) Run(ctx context.Context) error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		a.logger.Infow("public listener starting", "addr", a.cfg.PublicAddr)
+		if a.processLogger != nil {
+			a.processLogger.Infow("public listener starting", "addr", a.cfg.PublicAddr)
+		}
 		if err := a.public.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("public listener: %w", err)
 			return
@@ -132,7 +136,9 @@ func (a *App) Run(ctx context.Context) error {
 	}()
 
 	go func() {
-		a.logger.Infow("internal listener starting", "addr", a.cfg.InternalAddr)
+		if a.processLogger != nil {
+			a.processLogger.Infow("internal listener starting", "addr", a.cfg.InternalAddr)
+		}
 		if err := a.internal.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("internal listener: %w", err)
 			return
@@ -142,7 +148,9 @@ func (a *App) Run(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		a.logger.Info("shutdown signal received, draining")
+		if a.processLogger != nil {
+			a.processLogger.Info("shutdown signal received, draining")
+		}
 	case err := <-errCh:
 		if err != nil {
 			a.shutdown()

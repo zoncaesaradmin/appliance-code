@@ -20,6 +20,12 @@ import (
 
 func main() {
 	cfg := config.FromEnv()
+	processLogger, err := uilogging.NewWithWriter(cfg.LogLevel.String(), os.Stdout)
+	if err != nil {
+		_, _ = io.WriteString(os.Stderr, "appliance-ui: initialize process logger: "+err.Error()+"\n")
+		os.Exit(1)
+	}
+
 	logFile, err := openApplicationLog(cfg.ApplicationLogPath)
 	if err != nil {
 		_, _ = io.WriteString(os.Stderr, "appliance-ui: open application log: "+err.Error()+"\n")
@@ -27,9 +33,9 @@ func main() {
 	}
 	defer logFile.Close()
 
-	logger, err := uilogging.NewWithWriter(cfg.LogLevel.String(), io.MultiWriter(os.Stdout, logFile))
+	appLogger, err := uilogging.NewWithWriter(cfg.LogLevel.String(), logFile)
 	if err != nil {
-		_, _ = io.WriteString(os.Stderr, "appliance-ui: initialize logger: "+err.Error()+"\n")
+		_, _ = io.WriteString(os.Stderr, "appliance-ui: initialize application logger: "+err.Error()+"\n")
 		os.Exit(1)
 	}
 
@@ -37,16 +43,16 @@ func main() {
 		BaseURL:         cfg.ControlPlaneBaseURL,
 		InternalBaseURL: cfg.ControlPlaneInternalBaseURL,
 		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
-		Logger:          logger,
+		Logger:          appLogger,
 		TraceHTTP:       cfg.ControlPlaneTrace,
 	})
 	handler, err := ui.New(ui.Config{
 		ApplianceProfile: cfg.ApplianceProfile,
 		CookieSecure:     cfg.CookieSecure,
 		StaticPrefix:     "/static/",
-	}, cp, session.NewStore(time.Now), logger)
+	}, cp, session.NewStore(time.Now), appLogger)
 	if err != nil {
-		logger.Errorw("initialize UI", "error", err)
+		processLogger.Errorw("initialize UI", "error", err)
 		os.Exit(1)
 	}
 
@@ -58,7 +64,7 @@ func main() {
 
 	errs := make(chan error, 1)
 	go func() {
-		logger.Infow("starting appliance UI", "addr", cfg.Addr, "applicationLogPath", cfg.ApplicationLogPath)
+		processLogger.Infow("starting appliance UI", "addr", cfg.Addr, "applicationLogPath", cfg.ApplicationLogPath)
 		errs <- server.ListenAndServe()
 	}()
 
@@ -67,10 +73,10 @@ func main() {
 
 	select {
 	case sig := <-signals:
-		logger.Infow("shutting down appliance UI", "signal", sig.String())
+		processLogger.Infow("shutting down appliance UI", "signal", sig.String())
 	case err := <-errs:
 		if !errors.Is(err, http.ErrServerClosed) {
-			logger.Errorw("appliance UI stopped", "error", err)
+			processLogger.Errorw("appliance UI stopped", "error", err)
 			os.Exit(1)
 		}
 	}
@@ -78,7 +84,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		logger.Errorw("appliance UI shutdown failed", "error", err)
+		processLogger.Errorw("appliance UI shutdown failed", "error", err)
 		os.Exit(1)
 	}
 }
