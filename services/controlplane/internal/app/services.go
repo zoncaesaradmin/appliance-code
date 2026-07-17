@@ -23,15 +23,11 @@ import (
 	"appliance-code/services/controlplane/internal/zotadapter"
 )
 
-// SessionAudience identifies the API audience session JWTs are issued for.
 const (
 	SessionAudience       = "appliance-api"
 	argoWorkflowNamespace = "appliance-builds"
 )
 
-// Services holds every business-logic dependency shared by the HTTP server
-// and the CLI bootstrap/recovery commands, so both wire identically instead
-// of duplicating storage/service construction.
 type Services struct {
 	ApplianceProfile appliance.ResolvedProfile
 
@@ -61,10 +57,6 @@ type Services struct {
 	Audit *audit.Recorder
 }
 
-// WireServices opens storage, migrates it, seeds the built-in role/
-// permission catalog, loads key material, and constructs every business
-// service. It does not start any HTTP listener, so it is also used directly
-// by the bootstrap and recovery CLI commands.
 func WireServices(cfg config.Config) (*Services, error) {
 	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
 	if err != nil {
@@ -145,8 +137,8 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Servi
 		}
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
 			allowedGitHosts, cfg.BuildCatalog.BuilderImageDigests(), cfg.BuildDefaultDeadline,
-			cfg.BuildCatalog.SensitiveLogValues()...)
-		devflowsSvc = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, recorder)
+			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, cfg.BuildCatalog.SensitiveLogValues()...)
+		devflowsSvc = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, recorder)
 		if err := buildsSvc.ReconcileAll(ctx); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: reconciling builds: %w", err)
@@ -158,9 +150,16 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile) (*Servi
 	}
 
 	return &Services{
-		ApplianceProfile: resolved,
-		DB:               db, UserStore: userStore, RoleStore: roleStore, AuditStore: auditStore, RegistryGrantStore: registryGrantStore,
-		BuildStore: buildStore, IdempotencyStore: idempotencyStore, WorkspaceStore: workspaceStore, JobStore: jobStore,
+		ApplianceProfile:   resolved,
+		DB:                 db,
+		UserStore:          userStore,
+		RoleStore:          roleStore,
+		AuditStore:         auditStore,
+		RegistryGrantStore: registryGrantStore,
+		BuildStore:         buildStore,
+		IdempotencyStore:   idempotencyStore,
+		WorkspaceStore:     workspaceStore,
+		JobStore:           jobStore,
 		Users:              users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial),
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokens.NewService(db, tokenStore, recorder, keyMaterial),

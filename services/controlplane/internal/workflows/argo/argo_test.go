@@ -116,6 +116,62 @@ func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 	}
 }
 
+func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
+	got, err := workflowObject("appliance-builds", workflows.Spec{
+		Name:               "build-1",
+		BuilderImageDigest: "builder@sha256:abc",
+		SourceRepoURL:      "https://git.internal.example.com/team/app",
+		SourceCommitSHA:    "0123456789abcdef0123456789abcdef01234567",
+		TargetRepository:   "registry.local/users/alice/app",
+		TargetTag:          "v1",
+		WorkspaceRootDir:   "/var/lib/zon/workspaces",
+		WorkspaceClaimName: "control-plane-workspaces",
+		Deadline:           time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	text := workflowJSON(t, got)
+	for _, want := range []string{"workspace-storage", "control-plane-workspaces", "WORKSPACE_ROOT_DIR", "/var/lib/zon/workspaces"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("build workflow JSON missing %q: %s", want, text)
+		}
+	}
+}
+
+func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
+	got, err := workflowObject("appliance-builds", workflows.Spec{
+		Name:               "workspace-prepare-1",
+		Kind:               workflows.KindWorkspacePrepare,
+		BuilderImageDigest: "builder@sha256:abc",
+		WorkspaceRootDir:   "/var/lib/zon/workspaces",
+		WorkspaceClaimName: "control-plane-workspaces",
+		WorkspaceName:      "demo",
+		WorkspaceRepos: []workflows.WorkspaceRepo{
+			{Name: "platformkit", URL: "git@git.internal.example.com:team/platformkit.git", Ref: "0123456789abcdef0123456789abcdef01234567"},
+			{Name: "forgeline", URL: "https://git.internal.example.com/team/forgeline", Ref: "main"},
+		},
+		SourceCredentialSecret: "builder-git-key",
+		KnownHostsSecret:       "builder-git-known-hosts",
+		Deadline:               time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	text := workflowJSON(t, got)
+	command := workflowCommand(t, got)
+	for _, want := range []string{"workspace-storage", "control-plane-workspaces", "WORKSPACE_ROOT_DIR", "WORKSPACE_NAME", "platformkit", "forgeline"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
+		}
+	}
+	for _, want := range []string{"git clone", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout"} {
+		if !strings.Contains(command, want) {
+			t.Fatalf("workspace workflow command missing %q: %s", want, command)
+		}
+	}
+}
+
 func workflowJSON(t *testing.T, workflow map[string]any) string {
 	t.Helper()
 	body, err := json.Marshal(workflow)

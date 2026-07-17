@@ -476,6 +476,49 @@ config:
 	}
 }
 
+func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "config.applianceProfile=builder",
+		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
+		"--set", "config.buildCatalog.buildTargets[0].name=default",
+		"--set", "config.buildCatalog.buildTargets[0].repo=app",
+		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
+		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
+		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
+	)...)
+	pv := findByKindAndName(docs, "PersistentVolume", controlPlaneDeploymentName+"-workspaces")
+	if pv == nil {
+		t.Fatal("expected builder workspace PV")
+	}
+	if hostPath, _ := at(pv, "spec", "hostPath", "path").(string); hostPath != "/var/lib/zon/workspaces" {
+		t.Fatalf("workspace PV hostPath = %q, want /var/lib/zon/workspaces", hostPath)
+	}
+	pvc := findByKindAndName(docs, "PersistentVolumeClaim", controlPlaneDeploymentName+"-workspaces")
+	if pvc == nil {
+		t.Fatal("expected builder workspace PVC")
+	}
+	if ns, _ := at(pvc, "metadata", "namespace").(string); ns != "appliance-builds" {
+		t.Fatalf("workspace PVC namespace = %q, want appliance-builds", ns)
+	}
+	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "control-plane-workspaces" {
+		t.Fatalf("workspace PVC volumeName = %q, want control-plane-workspaces", volumeName)
+	}
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+	if cm == nil {
+		t.Fatal("expected control-plane ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_WORKSPACE_ROOT_DIR"].(string); got != "/var/lib/zon/workspaces" {
+		t.Fatalf("APPLIANCE_WORKSPACE_ROOT_DIR = %q, want /var/lib/zon/workspaces", got)
+	}
+	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "control-plane-workspaces" {
+		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want control-plane-workspaces", got)
+	}
+}
+
 func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",

@@ -29,13 +29,12 @@ var (
 	makeTargetRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
 )
 
-// Catalog is product configuration for developer workflows. It contains no
-// private key or token material; SSH repo access uses appliance-managed
-// Kubernetes secrets materialized only into workflow pods.
+// Catalog is product configuration for developer workflows.
 type Catalog struct {
-	WorkProfiles []WorkProfile `json:"workProfiles"`
-	Repos        []Repo        `json:"repos"`
-	BuildTargets []BuildTarget `json:"buildTargets"`
+	WorkspaceProvisionerImageDigest string        `json:"workspaceProvisionerImageDigest,omitempty"`
+	WorkProfiles                    []WorkProfile `json:"workProfiles"`
+	Repos                           []Repo        `json:"repos"`
+	BuildTargets                    []BuildTarget `json:"buildTargets"`
 }
 
 type WorkProfile struct {
@@ -75,13 +74,16 @@ type ResolvedTarget struct {
 }
 
 func (c Catalog) Empty() bool {
-	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.BuildTargets) == 0
+	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.BuildTargets) == 0 && strings.TrimSpace(c.WorkspaceProvisionerImageDigest) == ""
 }
 
 func (c Catalog) Validate() error {
 	var errs []string
 	if len(c.BuildTargets) == 0 {
 		errs = append(errs, "build catalog must declare at least one build target")
+	}
+	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest != "" && !validBuilderImageDigest(digest) {
+		errs = append(errs, "workspace provisioner image digest must be digest-pinned")
 	}
 	profiles := map[string]struct{}{}
 	for _, p := range c.WorkProfiles {
@@ -155,7 +157,6 @@ func (c Catalog) Validate() error {
 		}
 		switch target.Execution {
 		case ExecutionRepoScript:
-			// ScriptPath defaults at resolve time.
 			if target.ScriptPath != "" && !validRepoRelativePath(target.ScriptPath) {
 				errs = append(errs, fmt.Sprintf("build target %q has invalid scriptPath %q", name, target.ScriptPath))
 			}
@@ -288,6 +289,54 @@ func (c Catalog) Repo(name string) (Repo, bool) {
 		}
 	}
 	return Repo{}, false
+}
+
+func (c Catalog) ReposForProfile(workProfile string) ([]Repo, error) {
+	profile, ok := c.WorkProfile(workProfile)
+	if !ok {
+		return nil, fmt.Errorf("devflows: unknown workspace profile %q", workProfile)
+	}
+	out := make([]Repo, 0, len(profile.Repos))
+	for _, profileRepo := range profile.Repos {
+		repo, ok := c.Repo(profileRepo.Name)
+		if !ok {
+			return nil, fmt.Errorf("devflows: unknown repo %q for workspace profile %q", profileRepo.Name, workProfile)
+		}
+		out = append(out, repo)
+	}
+	return out, nil
+}
+
+func (c Catalog) WorkspaceProvisionerImageDigestForProfile(workProfile string) (string, error) {
+	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest != "" {
+		return digest, nil
+	}
+	targets, err := c.TargetsForProfile(workProfile)
+	if err != nil {
+		return "", err
+	}
+	seen := map[string]struct{}{}
+	var digests []string
+	for _, target := range targets {
+		digest := strings.TrimSpace(target.BuilderImageDigest)
+		if digest == "" {
+			continue
+		}
+		if _, ok := seen[digest]; ok {
+			continue
+		}
+		seen[digest] = struct{}{}
+		digests = append(digests, digest)
+	}
+	switch len(digests) {
+	case 0:
+		return "", fmt.Errorf("devflows: workspace profile %q does not resolve any builder image digest for workspace provisioning", workProfile)
+	case 1:
+		return digests[0], nil
+	default:
+		sort.Strings(digests)
+		return "", fmt.Errorf("devflows: workspace profile %q resolves multiple builder image digests; set workspaceProvisionerImageDigest explicitly", workProfile)
+	}
 }
 
 func (c Catalog) ProfileAllowsRepo(workProfile, repoName string) bool {

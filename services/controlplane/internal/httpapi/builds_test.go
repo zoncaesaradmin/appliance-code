@@ -172,7 +172,12 @@ func TestCancelBuild(t *testing.T) {
 	token := ts.login(t, "alice", testPassword)
 
 	fake := ts.fakeWorkflowEngine(t)
-	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
 
 	createResp := ts.doJSON(t, "POST", "/api/v1/builds", token, fmt.Sprintf(validCreateBuildBody, "alice"))
 	defer createResp.Body.Close()
@@ -233,7 +238,12 @@ func TestDeveloperWorkflowSubmitBuildByCurrentWorkspace(t *testing.T) {
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 	fake := ts.fakeWorkflowEngine(t)
-	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
 
 	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
@@ -416,6 +426,32 @@ func TestCurrentWorkspaceBuildIdempotencyKey(t *testing.T) {
 	}
 }
 
+func TestCurrentWorkspaceBuildRejectsPendingWorkspace(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
+	token := ts.login(t, "alice", testPassword)
+	fake := ts.fakeWorkflowEngine(t)
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseRunning}
+		}
+		return workflows.Status{Phase: workflows.PhaseSucceeded}
+	}
+
+	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
+	defer createWorkspace.Body.Close()
+	if createWorkspace.StatusCode != http.StatusCreated {
+		t.Fatalf("create workspace status = %d, want 201", createWorkspace.StatusCode)
+	}
+
+	submit := ts.doJSON(t, "POST", "/api/v1/current-workspace/builds", token, `{"targetName":"app","imageTag":"v1"}`)
+	defer submit.Body.Close()
+	if submit.StatusCode != http.StatusConflict {
+		t.Fatalf("submit current build while workspace pending status = %d, want 409", submit.StatusCode)
+	}
+}
+
 func TestCurrentWorkspaceBuildRejectsUnknownTarget(t *testing.T) {
 	ts := newTestServer(t)
 	ts.bootstrapAdmin(t, "admin", testPassword)
@@ -463,7 +499,12 @@ func TestJobVisibilityAndCancelHonorSelfAndAnyPermissions(t *testing.T) {
 	bobToken := ts.login(t, "bob", testPassword)
 	adminToken := ts.login(t, "admin", testPassword)
 	fake := ts.fakeWorkflowEngine(t)
-	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
 
 	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", aliceToken, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
@@ -586,7 +627,12 @@ func TestDeleteWorkspaceRejectsActiveJobs(t *testing.T) {
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 	fake := ts.fakeWorkflowEngine(t)
-	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
 
 	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
@@ -674,7 +720,12 @@ func TestDeveloperWorkflowJobFailsWhenWorkflowDisappears(t *testing.T) {
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
 	fake := ts.fakeWorkflowEngine(t)
-	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
 
 	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()

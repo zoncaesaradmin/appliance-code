@@ -46,6 +46,7 @@ type WorkspaceStore interface {
 	Create(ctx context.Context, ws Workspace) error
 	Get(ctx context.Context, id string) (Workspace, error)
 	List(ctx context.Context, filter WorkspaceFilter) ([]Workspace, error)
+	UpdateStatus(ctx context.Context, id string, status WorkspaceStatus, reasonCode, errorMessage string) error
 	MarkDeleted(ctx context.Context, id string, deletedAt time.Time) error
 	SetCurrent(ctx context.Context, userID, workspaceID string) error
 	GetCurrent(ctx context.Context, userID string) (CurrentWorkspace, error)
@@ -98,6 +99,7 @@ type Job struct {
 type JobFilter struct {
 	OwnerID     string
 	WorkspaceID string
+	Type        JobType
 	Limit       int
 }
 

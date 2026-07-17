@@ -6,15 +6,12 @@ import (
 	"sync"
 )
 
-// Fake is an in-process Engine used by every test in this codebase, per
-// the plan's local-first testing rule. By default Submit immediately marks
-// a workflow Succeeded; set Behavior to control outcomes (failure, staying
-// Running for a test to drive forward with SetStatus, and so on).
+// Fake is an in-process Engine used by every test in this codebase.
 type Fake struct {
 	mu sync.Mutex
 
-	// Behavior computes the initial status for a newly submitted spec. If
-	// nil, every submission immediately succeeds.
+	// Behavior computes the initial status for a newly submitted spec. If nil,
+	// every submission immediately succeeds.
 	Behavior func(spec Spec) Status
 
 	workflows map[string]*fakeWorkflow
@@ -26,8 +23,7 @@ type fakeWorkflow struct {
 	cancelled bool
 }
 
-// NewFake returns an empty Fake ready for tests to use and, optionally,
-// configure via Behavior.
+// NewFake returns an empty Fake ready for tests to use.
 func NewFake() *Fake {
 	return &Fake{workflows: map[string]*fakeWorkflow{}}
 }
@@ -80,12 +76,14 @@ func (f *Fake) Logs(_ context.Context, name string) (string, error) {
 	if !ok {
 		return "", ErrNotFound
 	}
+	if wf.spec.Kind == KindWorkspacePrepare {
+		return fmt.Sprintf("fake logs for workflow %s (workspace %s)", wf.spec.Name, wf.spec.WorkspaceName), nil
+	}
 	return fmt.Sprintf("fake logs for workflow %s (source %s@%s)", wf.spec.Name, wf.spec.SourceRepoURL, wf.spec.SourceCommitSHA), nil
 }
 
 // SetStatus lets a test directly drive a previously submitted workflow's
-// status forward, simulating asynchronous progress a reconciliation poll
-// would observe (e.g. Pending -> Running -> Succeeded/Failed).
+// status forward.
 func (f *Fake) SetStatus(name string, status Status) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -94,16 +92,14 @@ func (f *Fake) SetStatus(name string, status Status) {
 	}
 }
 
-// Delete removes a workflow from the fake engine, simulating an external
-// deletion of the workflow resource before the control plane reconciles it.
+// Delete removes a workflow from the fake engine.
 func (f *Fake) Delete(name string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.workflows, name)
 }
 
-// WasCancelled reports whether Cancel was called for name, for tests that
-// need to assert cancellation actually reached the engine.
+// WasCancelled reports whether Cancel was called for name.
 func (f *Fake) WasCancelled(name string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -112,8 +108,6 @@ func (f *Fake) WasCancelled(name string) bool {
 }
 
 // SubmittedSpec returns the structured workflow spec captured at Submit time.
-// It is intentionally test-oriented: production code should observe workflows
-// through Status/Logs/Cancel, not by peeking into engine internals.
 func (f *Fake) SubmittedSpec(name string) (Spec, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

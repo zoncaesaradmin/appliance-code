@@ -68,6 +68,8 @@ type Service struct {
 	allowedBuilderImages []string
 	sensitiveLogValues   []string
 	defaultDeadline      time.Duration
+	workspaceRootDir     string
+	workspaceClaimName   string
 }
 
 // NewService wires a Service from its storage, workflow-engine, and policy
@@ -75,12 +77,13 @@ type Service struct {
 func NewService(
 	db storage.DB, buildStore storage.BuildStore, idempotency storage.IdempotencyStore, engine workflows.Engine,
 	recorder *audit.Recorder, allowedGitHosts, allowedBuilderImages []string, defaultDeadline time.Duration,
-	sensitiveLogValues ...string,
+	workspaceRootDir, workspaceClaimName string, sensitiveLogValues ...string,
 ) *Service {
 	return &Service{
 		db: db, builds: buildStore, idempotency: idempotency, engine: engine, audit: recorder,
 		allowedGitHosts: allowedGitHosts, allowedBuilderImages: allowedBuilderImages,
 		sensitiveLogValues: normalizeSensitiveValues(sensitiveLogValues), defaultDeadline: defaultDeadline,
+		workspaceRootDir: strings.TrimSpace(workspaceRootDir), workspaceClaimName: strings.TrimSpace(workspaceClaimName),
 	}
 }
 
@@ -191,6 +194,7 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag,
 		SourceCredentialRef: req.SourceCredentialRef, SourceCredentialSecret: req.SourceCredentialSecret,
 		KnownHostsSecret: req.KnownHostsSecret, Deadline: build.DeadlineAt,
+		WorkspaceRootDir: s.workspaceRootDir, WorkspaceClaimName: s.workspaceClaimName,
 	})
 	completedAt := time.Now().UTC()
 	if submitErr != nil {

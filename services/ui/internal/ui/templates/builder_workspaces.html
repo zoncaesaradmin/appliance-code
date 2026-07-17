@@ -30,7 +30,7 @@
         <h2>{{.CurrentWorkspace.Name}}</h2>
         <p class="muted">Workspace profile <strong>{{.CurrentWorkspace.WorkProfile}}</strong></p>
       </div>
-      <span class="inline-pill">ready to use</span>
+      <span class="inline-pill">{{.CurrentWorkspace.Status}}</span>
     </div>
     <dl class="builder-primary-meta">
       <dt>Status</dt>
@@ -38,7 +38,13 @@
       <dt>Workspace profile</dt>
       <dd>{{.CurrentWorkspace.WorkProfile}}</dd>
     </dl>
+    {{if eq .CurrentWorkspace.Status "ready"}}
     <p class="muted">This workspace is active for builder operations. It represents one logical multi-repo workspace from the selected workspace profile. You only need to open workspace settings if you want to switch or create another one.</p>
+    {{else if eq .CurrentWorkspace.Status "failed"}}
+    <p class="muted">Workspace provisioning failed. Open the control-plane workspace job logs to inspect the failure before retrying with a new workspace.</p>
+    {{else}}
+    <p class="muted">Workspace provisioning is still running. The repos are being materialized under the shared workspace storage before build operations are allowed.</p>
+    {{end}}
     {{else}}
     <h2>No current workspace yet</h2>
     <p class="builder-attn-copy">Choose a workspace profile and create a workspace before build targets can be selected.</p>
@@ -54,8 +60,13 @@
     <p class="eyebrow">What to build</p>
     <h2>Build target selection</h2>
     {{if .CurrentWorkspace}}
+      {{if eq .CurrentWorkspace.Status "ready"}}
     <p class="muted">This area is reserved for the next step: choosing what to build from the current workspace profile.</p>
     <p class="muted">The selected workspace profile will drive which build targets appear here.</p>
+      {{else}}
+    <p class="muted">Build choices will appear after the current workspace finishes provisioning.</p>
+    <p class="muted">Refresh the workspace page to see the latest provisioning status.</p>
+      {{end}}
     {{else}}
     <p class="muted">Build choices will appear here after a current workspace is set.</p>
     {{end}}

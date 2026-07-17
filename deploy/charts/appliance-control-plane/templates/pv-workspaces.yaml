@@ -1,0 +1,25 @@
+{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "appliance-control-plane.workspaceVolumeName" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: {{ .Values.workspaceStorage.size | quote }}
+  accessModes:
+    - {{ .Values.workspaceStorage.accessMode | quote }}
+  persistentVolumeReclaimPolicy: Retain
+  {{- if .Values.workspaceStorage.storageClassName }}
+  storageClassName: {{ .Values.workspaceStorage.storageClassName | quote }}
+  {{- else }}
+  storageClassName: ""
+  {{- end }}
+  hostPath:
+    path: {{ .Values.workspaceStorage.rootDir | quote }}
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: {{ include "appliance-control-plane.argoWorkflowNamespace" . }}
+    name: {{ include "appliance-control-plane.workspaceClaimName" . }}
+{{- end }}

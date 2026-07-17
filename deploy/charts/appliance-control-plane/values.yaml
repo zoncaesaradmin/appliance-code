@@ -70,6 +70,13 @@ persistence:
   accessMode: ReadWriteOnce
   dataDir: /var/lib/appliance/data
 
+workspaceStorage:
+  enabled: true
+  storageClassName: ""
+  size: 20Gi
+  accessMode: ReadWriteOnce
+  rootDir: /var/lib/zon/workspaces # fixed host-visible workspace path, also used as the PV hostPath backing
+
 service:
   publicPort: 8080
   internalPort: 8081

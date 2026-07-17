@@ -139,6 +139,20 @@ keeps the common in-chart case aligned with the rendered internal Service name.
 {{- end -}}
 
 {{/*
+Workspace PV name for the fixed host-path builder workspace storage.
+*/}}
+{{- define "appliance-control-plane.workspaceVolumeName" -}}
+{{- printf "%s-workspaces" (include "appliance-control-plane.fullname" .) -}}
+{{- end -}}
+
+{{/*
+Workspace PVC name for builder workflow pods.
+*/}}
+{{- define "appliance-control-plane.workspaceClaimName" -}}
+{{- printf "%s-workspaces" (include "appliance-control-plane.fullname" .) -}}
+{{- end -}}
+
+{{/*
 ForwardAuth middleware name.
 */}}
 {{- define "appliance-control-plane.forwardAuthMiddlewareName" -}}

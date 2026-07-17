@@ -117,6 +117,12 @@ func (s *WorkspaceStore) List(ctx context.Context, filter storage.WorkspaceFilte
 	return out, rows.Err()
 }
 
+func (s *WorkspaceStore) UpdateStatus(ctx context.Context, id string, status storage.WorkspaceStatus, reasonCode, errorMessage string) error {
+	return execOne(ctx, s.db, `
+		UPDATE workspaces SET status = ?, reason_code = ?, error_message = ?, updated_at = ?
+		WHERE id = ?`, string(status), nullableString(reasonCode), nullableString(errorMessage), time.Now().UTC().Format(time.RFC3339Nano), id)
+}
+
 func (s *WorkspaceStore) MarkDeleted(ctx context.Context, id string, deletedAt time.Time) error {
 	return execOne(ctx, s.db, `UPDATE workspaces SET status = ?, deleted_at = ?, updated_at = ? WHERE id = ?`,
 		string(storage.WorkspaceStatusDeleted), deletedAt.UTC().Format(time.RFC3339Nano), deletedAt.UTC().Format(time.RFC3339Nano), id)
@@ -251,6 +257,10 @@ func (s *JobStore) List(ctx context.Context, filter storage.JobFilter) ([]storag
 	if filter.WorkspaceID != "" {
 		query += ` AND workspace_id = ?`
 		args = append(args, filter.WorkspaceID)
+	}
+	if filter.Type != "" {
+		query += ` AND type = ?`
+		args = append(args, string(filter.Type))
 	}
 	query += ` ORDER BY created_at DESC LIMIT ?`
 	args = append(args, limit)

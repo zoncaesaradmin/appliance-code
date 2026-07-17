@@ -20,75 +20,30 @@ import (
 // process. All fields have safe local-development defaults; production
 // deployment layers override them through environment variables.
 type Config struct {
-	// ApplianceProfile is the product-level appliance profile selected for
-	// this deployment. The control plane resolves it into appliance
-	// capabilities at startup.
 	ApplianceProfile string `json:"applianceProfile"`
+	CanonicalOrigin  string `json:"canonicalOrigin"`
+	PublicAddr       string `json:"publicAddr"`
+	InternalAddr     string `json:"internalAddr"`
+	DataDir          string `json:"dataDir"`
 
-	// CanonicalOrigin is the externally reachable origin (scheme://host[:port])
-	// used to derive absolute URLs. It must be an absolute http(s) URL with no
-	// path component.
-	CanonicalOrigin string `json:"canonicalOrigin"`
-
-	// PublicAddr is the listen address for the public-facing API/MCP surface.
-	PublicAddr string `json:"publicAddr"`
-
-	// InternalAddr is the listen address for health, version, and future
-	// metrics endpoints. It must not be exposed through public ingress.
-	InternalAddr string `json:"internalAddr"`
-
-	// DataDir is the directory holding the SQLite database file and other
-	// local durable state.
-	DataDir string `json:"dataDir"`
-
-	// ApplicationLogPath is the fixed service-local file for structured
-	// application logs. Stdout/stderr mirroring still exists for container and
-	// crash visibility, but code-level logs also land here for operator
-	// inspection under /var/log/appliance.
 	ApplicationLogPath string `json:"applicationLogPath"`
+	LogLevel           string `json:"logLevel"`
+	TrustedProxyCount  int    `json:"trustedProxyCount"`
+	ZotBaseURL         string `json:"zotBaseURL"`
 
-	// LogLevel is one of "debug", "info", "warn", "error". Log output format
-	// is fixed JSON via the shared platformkit/logging package, matching the
-	// convention used across all other repos.
-	LogLevel string `json:"logLevel"`
+	BuildDefaultDeadline time.Duration    `json:"buildDefaultDeadline"`
+	WorkflowEngine       string           `json:"workflowEngine"`
+	BuildCatalog         devflows.Catalog `json:"buildCatalog"`
+	WorkspaceRootDir     string           `json:"workspaceRootDir"`
+	WorkspaceClaimName   string           `json:"workspaceClaimName"`
 
-	// TrustedProxyCount is the number of trusted reverse-proxy hops (e.g.
-	// Traefik) whose forwarded headers are honored. Zero means no proxy is
-	// trusted and forwarded headers are ignored.
-	TrustedProxyCount int `json:"trustedProxyCount"`
-
-	// ZotBaseURL is the internal URL of the zot OCI registry data plane
-	// (e.g. "http://zot.appliance-registry.svc.cluster.local:5000"). Empty
-	// means no zot instance is available, so the repository/tag/referrer
-	// catalog endpoints run against an in-process fake with no data — the
-	// real ADR 0008 conformance evidence requires a real zot instance.
-	ZotBaseURL string `json:"zotBaseURL"`
-
-	// BuildDefaultDeadline bounds how long a build may run before it is
-	// automatically cancelled and marked timed out.
-	BuildDefaultDeadline time.Duration `json:"buildDefaultDeadline"`
-
-	// WorkflowEngine selects the workflow backend explicitly.
-	WorkflowEngine string `json:"workflowEngine"`
-
-	// BuildCatalog describes the builder-profile developer workflow catalog.
-	// It contains product-facing profile/target names and secret references,
-	// never private key or token material.
-	BuildCatalog devflows.Catalog `json:"buildCatalog"`
-
-	// ReadHeaderTimeout, ReadTimeout, WriteTimeout, and IdleTimeout bound the
-	// public HTTP server per the plan's default HTTP contract.
 	ReadHeaderTimeout time.Duration `json:"readHeaderTimeout"`
 	ReadTimeout       time.Duration `json:"readTimeout"`
 	WriteTimeout      time.Duration `json:"writeTimeout"`
 	IdleTimeout       time.Duration `json:"idleTimeout"`
-
-	// ShutdownTimeout bounds graceful drain on shutdown.
-	ShutdownTimeout time.Duration `json:"shutdownTimeout"`
-
-	// MaxHeaderBytes and MaxBodyBytes bound request sizes.
-	MaxHeaderBytes int64 `json:"maxHeaderBytes"`
-	MaxBodyBytes   int64 `json:"maxBodyBytes"`
+	ShutdownTimeout   time.Duration `json:"shutdownTimeout"`
+	MaxHeaderBytes    int64         `json:"maxHeaderBytes"`
+	MaxBodyBytes      int64         `json:"maxBodyBytes"`
 }
 
 // Default returns the local-development default configuration.
@@ -111,17 +66,13 @@ func Default() Config {
 		MaxBodyBytes:         1 * 1024 * 1024,
 		BuildDefaultDeadline: 30 * time.Minute,
 		WorkflowEngine:       "fake",
+		WorkspaceRootDir:     "/var/lib/zon/workspaces",
+		WorkspaceClaimName:   "appliance-workspaces",
 	}
 }
 
-// envPrefix namespaces every environment variable this process reads, so it
-// never collides with unrelated host environment state.
 const envPrefix = "APPLIANCE_"
 
-// Load builds a Config starting from Default, layering in an optional JSON
-// file named by APPLIANCE_CONFIG_FILE, then applying environment variable
-// overrides, and finally validating the result. It never partially applies an
-// invalid configuration: on error the returned Config is the zero value.
 func Load(environ []string) (Config, error) {
 	cfg := Default()
 	env := parseEnviron(environ)
@@ -155,9 +106,6 @@ func parseEnviron(environ []string) map[string]string {
 	return out
 }
 
-// splitNonEmpty splits a comma-separated environment value, trimming
-// whitespace and dropping empty entries so trailing commas don't produce
-// spurious blank allowlist entries.
 func loadFile(path string, cfg *Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -181,6 +129,8 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
+	str("WORKSPACE_ROOT_DIR", &cfg.WorkspaceRootDir)
+	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
 	var errs []string
 
@@ -245,8 +195,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	return nil
 }
 
-// Validate fails closed on any configuration value that would put the server
-// in an unsafe or non-functional state.
 func (c Config) Validate() error {
 	var errs []string
 
@@ -258,6 +206,14 @@ func (c Config) Validate() error {
 			errs = append(errs, "buildCatalog must not be empty when the build capability is enabled")
 		} else if err := c.BuildCatalog.Validate(); err != nil {
 			errs = append(errs, err.Error())
+		}
+		if strings.TrimSpace(c.WorkspaceRootDir) == "" {
+			errs = append(errs, "workspaceRootDir must not be empty when the build capability is enabled")
+		} else if !strings.HasPrefix(c.WorkspaceRootDir, "/") {
+			errs = append(errs, "workspaceRootDir must be an absolute path")
+		}
+		if strings.TrimSpace(c.WorkspaceClaimName) == "" {
+			errs = append(errs, "workspaceClaimName must not be empty when the build capability is enabled")
 		}
 	} else if !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {
@@ -325,13 +281,10 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// SQLitePath is the path to the control-plane database file within DataDir.
 func (c Config) SQLitePath() string {
 	return c.DataDir + "/appliance.db"
 }
 
-// KeysDir is the directory holding purpose-separated signing/digest key
-// material within DataDir. See internal/keys.
 func (c Config) KeysDir() string {
 	return c.DataDir + "/keys"
 }

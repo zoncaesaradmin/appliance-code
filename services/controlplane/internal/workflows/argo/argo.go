@@ -178,46 +178,51 @@ func mapPhase(phase string) workflows.Phase {
 }
 
 func workflowObject(namespace string, spec workflows.Spec) (map[string]any, error) {
-	if spec.Name == "" || spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" || spec.BuilderImageDigest == "" || spec.TargetRepository == "" || spec.TargetTag == "" {
-		return nil, fmt.Errorf("argo: workflow spec is missing required fields")
+	kind := spec.Kind
+	if kind == "" {
+		kind = workflows.KindBuild
 	}
-	commandScript, err := buildCommandScript(spec)
+	container, labels, err := workflowContainerSpec(kind, spec)
 	if err != nil {
 		return nil, err
 	}
-	containerfile := spec.ContainerfilePath
-	if containerfile == "" {
-		containerfile = "Containerfile"
+	workflowSpec := map[string]any{
+		"entrypoint":         "main",
+		"serviceAccountName": "argo-workflows-argo-workflows-executor",
+		"templates": []map[string]any{{
+			"name":      "main",
+			"container": container,
+		}},
 	}
-	targetImage := spec.TargetRepository + ":" + spec.TargetTag
-	deadlineSeconds := int64(0)
-	if !spec.Deadline.IsZero() {
-		until := time.Until(spec.Deadline)
-		if until <= 0 {
-			return nil, fmt.Errorf("argo: workflow deadline is already expired")
-		}
-		deadlineSeconds = int64(until.Seconds())
-		if deadlineSeconds < 1 {
-			deadlineSeconds = 1
-		}
+	if deadlineSeconds := workflowDeadlineSeconds(spec.Deadline); deadlineSeconds > 0 {
+		workflowSpec["activeDeadlineSeconds"] = deadlineSeconds
 	}
-	env := []map[string]any{
-		{"name": "SOURCE_REPO_URL", "value": spec.SourceRepoURL},
-		{"name": "SOURCE_COMMIT_SHA", "value": spec.SourceCommitSHA},
-		{"name": "CONTAINERFILE_PATH", "value": containerfile},
-		{"name": "TARGET_IMAGE", "value": targetImage},
+	if volumes, ok := container["__volumes__"].([]map[string]any); ok && len(volumes) > 0 {
+		workflowSpec["volumes"] = volumes
 	}
-	if spec.ScriptPath != "" {
-		env = append(env, map[string]any{"name": "SCRIPT_PATH", "value": spec.ScriptPath})
-	}
-	if spec.MakeTarget != "" {
-		env = append(env, map[string]any{"name": "MAKE_TARGET", "value": spec.MakeTarget})
+	delete(container, "__volumes__")
+	return map[string]any{
+		"apiVersion": "argoproj.io/v1alpha1",
+		"kind":       "Workflow",
+		"metadata": map[string]any{
+			"name":      spec.Name,
+			"namespace": namespace,
+			"labels":    labels,
+		},
+		"spec": workflowSpec,
+	}, nil
+}
+
+func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string]any, map[string]any, error) {
+	if strings.TrimSpace(spec.Name) == "" || strings.TrimSpace(spec.BuilderImageDigest) == "" {
+		return nil, nil, fmt.Errorf("argo: workflow spec is missing required fields")
 	}
 	volumeMounts := []map[string]any{}
 	volumes := []map[string]any{}
+	env := []map[string]any{}
 	if spec.SourceCredentialSecret != "" {
 		if spec.KnownHostsSecret == "" {
-			return nil, fmt.Errorf("argo: source credential workflows require known_hosts secret")
+			return nil, nil, fmt.Errorf("argo: source credential workflows require known_hosts secret")
 		}
 		volumeMounts = append(volumeMounts, map[string]any{"name": "source-credential", "mountPath": "/var/run/appliance/source-credential", "readOnly": true})
 		volumes = append(volumes, map[string]any{"name": "source-credential", "secret": map[string]any{"secretName": spec.SourceCredentialSecret, "defaultMode": 0400}})
@@ -227,6 +232,59 @@ func workflowObject(namespace string, spec workflows.Spec) (map[string]any, erro
 		sshCommand += " -o UserKnownHostsFile=/var/run/appliance/known-hosts/known_hosts"
 		env = append(env, map[string]any{"name": "GIT_SSH_COMMAND", "value": sshCommand})
 	}
+
+	labels := map[string]any{
+		"app.kubernetes.io/part-of":    "appliance",
+		"workflows.appliance.local/id": spec.Name,
+	}
+	var commandScript string
+	switch kind {
+	case workflows.KindWorkspacePrepare:
+		command, err := workspaceCommandScript(spec)
+		if err != nil {
+			return nil, nil, err
+		}
+		commandScript = command
+		labels["app.kubernetes.io/component"] = "workspace-prepare-workflow"
+		labels["workflows.appliance.local/workspace"] = spec.WorkspaceName
+		env = append(env,
+			map[string]any{"name": "WORKSPACE_ROOT_DIR", "value": spec.WorkspaceRootDir},
+			map[string]any{"name": "WORKSPACE_NAME", "value": spec.WorkspaceName},
+		)
+		volumeMounts = append(volumeMounts, map[string]any{"name": "workspace-storage", "mountPath": spec.WorkspaceRootDir})
+		volumes = append(volumes, map[string]any{"name": "workspace-storage", "persistentVolumeClaim": map[string]any{"claimName": spec.WorkspaceClaimName}})
+	default:
+		command, err := buildCommandScript(spec)
+		if err != nil {
+			return nil, nil, err
+		}
+		commandScript = command
+		labels["app.kubernetes.io/component"] = "build-workflow"
+		labels["workflows.appliance.local/build"] = spec.Name
+		containerfile := spec.ContainerfilePath
+		if containerfile == "" {
+			containerfile = "Containerfile"
+		}
+		targetImage := spec.TargetRepository + ":" + spec.TargetTag
+		env = append(env,
+			map[string]any{"name": "SOURCE_REPO_URL", "value": spec.SourceRepoURL},
+			map[string]any{"name": "SOURCE_COMMIT_SHA", "value": spec.SourceCommitSHA},
+			map[string]any{"name": "CONTAINERFILE_PATH", "value": containerfile},
+			map[string]any{"name": "TARGET_IMAGE", "value": targetImage},
+		)
+		if spec.WorkspaceRootDir != "" && spec.WorkspaceClaimName != "" {
+			env = append(env, map[string]any{"name": "WORKSPACE_ROOT_DIR", "value": spec.WorkspaceRootDir})
+			volumeMounts = append(volumeMounts, map[string]any{"name": "workspace-storage", "mountPath": spec.WorkspaceRootDir})
+			volumes = append(volumes, map[string]any{"name": "workspace-storage", "persistentVolumeClaim": map[string]any{"claimName": spec.WorkspaceClaimName}})
+		}
+		if spec.ScriptPath != "" {
+			env = append(env, map[string]any{"name": "SCRIPT_PATH", "value": spec.ScriptPath})
+		}
+		if spec.MakeTarget != "" {
+			env = append(env, map[string]any{"name": "MAKE_TARGET", "value": spec.MakeTarget})
+		}
+	}
+
 	container := map[string]any{
 		"image":           spec.BuilderImageDigest,
 		"imagePullPolicy": "IfNotPresent",
@@ -237,41 +295,33 @@ func workflowObject(namespace string, spec workflows.Spec) (map[string]any, erro
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []string{"ALL"}},
 		},
+		"__volumes__": volumes,
 	}
 	if len(volumeMounts) > 0 {
 		container["volumeMounts"] = volumeMounts
 	}
-	workflowSpec := map[string]any{
-		"entrypoint":         "build",
-		"serviceAccountName": "argo-workflows-argo-workflows-executor",
-		"templates": []map[string]any{{
-			"name":      "build",
-			"container": container,
-		}},
+	return container, labels, nil
+}
+
+func workflowDeadlineSeconds(deadline time.Time) int64 {
+	if deadline.IsZero() {
+		return 0
 	}
-	if deadlineSeconds > 0 {
-		workflowSpec["activeDeadlineSeconds"] = deadlineSeconds
+	until := time.Until(deadline)
+	if until <= 0 {
+		return 1
 	}
-	if len(volumes) > 0 {
-		workflowSpec["volumes"] = volumes
+	seconds := int64(until.Seconds())
+	if seconds < 1 {
+		seconds = 1
 	}
-	return map[string]any{
-		"apiVersion": "argoproj.io/v1alpha1",
-		"kind":       "Workflow",
-		"metadata": map[string]any{
-			"name":      spec.Name,
-			"namespace": namespace,
-			"labels": map[string]any{
-				"app.kubernetes.io/part-of":       "appliance",
-				"app.kubernetes.io/component":     "build-workflow",
-				"workflows.appliance.local/build": spec.Name,
-			},
-		},
-		"spec": workflowSpec,
-	}, nil
+	return seconds
 }
 
 func buildCommandScript(spec workflows.Spec) (string, error) {
+	if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" || spec.TargetRepository == "" || spec.TargetTag == "" {
+		return "", fmt.Errorf("argo: workflow spec is missing required build fields")
+	}
 	preamble := `mkdir -p /workspace/src
 git clone "$SOURCE_REPO_URL" /workspace/src
 git -C /workspace/src checkout "$SOURCE_COMMIT_SHA"
@@ -295,6 +345,52 @@ buildah push "$TARGET_IMAGE"`, nil
 	default:
 		return "", fmt.Errorf("argo: unsupported execution mode %q", spec.Execution)
 	}
+}
+
+func workspaceCommandScript(spec workflows.Spec) (string, error) {
+	if strings.TrimSpace(spec.WorkspaceRootDir) == "" || strings.TrimSpace(spec.WorkspaceClaimName) == "" || strings.TrimSpace(spec.WorkspaceName) == "" || len(spec.WorkspaceRepos) == 0 {
+		return "", fmt.Errorf("argo: workspace workflow spec is missing required fields")
+	}
+	var b strings.Builder
+	b.WriteString("workspace_dir=\"$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME\"\n")
+	b.WriteString("mkdir -p \"$workspace_dir\"\n")
+	b.WriteString("cd \"$workspace_dir\"\n")
+	for _, repo := range spec.WorkspaceRepos {
+		if strings.TrimSpace(repo.Name) == "" || strings.TrimSpace(repo.URL) == "" || strings.TrimSpace(repo.Ref) == "" {
+			return "", fmt.Errorf("argo: workspace repo spec is missing required fields")
+		}
+		repoDir := shellQuote(repo.Name)
+		repoURL := shellQuote(repo.URL)
+		repoRef := shellQuote(repo.Ref)
+		b.WriteString("if [ -d ")
+		b.WriteString(repoDir)
+		b.WriteString("/.git ]; then\n")
+		b.WriteString("  echo \"repo ")
+		b.WriteString(repo.Name)
+		b.WriteString(" already present; skipping\"\n")
+		b.WriteString("else\n")
+		b.WriteString("  if [ -e ")
+		b.WriteString(repoDir)
+		b.WriteString(" ]; then rm -rf ")
+		b.WriteString(repoDir)
+		b.WriteString("; fi\n")
+		b.WriteString("  git clone ")
+		b.WriteString(repoURL)
+		b.WriteString(" ")
+		b.WriteString(repoDir)
+		b.WriteString("\n")
+		b.WriteString("  git -C ")
+		b.WriteString(repoDir)
+		b.WriteString(" checkout ")
+		b.WriteString(repoRef)
+		b.WriteString("\n")
+		b.WriteString("fi\n")
+	}
+	return b.String(), nil
+}
+
+func shellQuote(v string) string {
+	return "'" + strings.ReplaceAll(v, "'", "'\"'\"'") + "'"
 }
 
 var _ workflows.Engine = (*Engine)(nil)

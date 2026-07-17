@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/storage"
+	"appliance-code/services/controlplane/internal/workflows"
 )
 
 var (
@@ -20,18 +21,31 @@ var (
 	ErrWorkspaceHasActiveJobs   = errors.New("devflows: workspace has active jobs")
 	ErrWorkspaceNameConflict    = errors.New("devflows: workspace name already exists")
 	ErrWorkspaceProfileConflict = errors.New("devflows: workspace name already exists on a different workspace profile")
+	ErrWorkspaceNotReady        = errors.New("devflows: current workspace is not ready")
 )
 
 type Service struct {
-	catalog    Catalog
-	workspaces storage.WorkspaceStore
-	jobs       storage.JobStore
-	builds     *builds.Service
-	audit      *audit.Recorder
+	catalog            Catalog
+	workspaces         storage.WorkspaceStore
+	jobs               storage.JobStore
+	builds             *builds.Service
+	engine             workflows.Engine
+	workspaceRootDir   string
+	workspaceClaimName string
+	audit              *audit.Recorder
 }
 
-func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, recorder *audit.Recorder) *Service {
-	return &Service{catalog: catalog, workspaces: workspaces, jobs: jobs, builds: buildsSvc, audit: recorder}
+func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, workspaceRootDir, workspaceClaimName string, recorder *audit.Recorder) *Service {
+	return &Service{
+		catalog:            catalog,
+		workspaces:         workspaces,
+		jobs:               jobs,
+		builds:             buildsSvc,
+		engine:             engine,
+		workspaceRootDir:   strings.TrimSpace(workspaceRootDir),
+		workspaceClaimName: strings.TrimSpace(workspaceClaimName),
+		audit:              recorder,
+	}
 }
 
 func (s *Service) Catalog() Catalog { return s.catalog }
@@ -71,9 +85,16 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if _, ok := s.catalog.WorkProfile(profile); !ok {
 		return storage.Workspace{}, fmt.Errorf("devflows: unknown workspace profile %q", req.WorkProfile)
 	}
-	resolvedProfile, _ := s.catalog.WorkProfile(profile)
-	if len(resolvedProfile.Repos) == 0 {
+	repos, err := s.catalog.ReposForProfile(profile)
+	if err != nil {
+		return storage.Workspace{}, err
+	}
+	if len(repos) == 0 {
 		return storage.Workspace{}, fmt.Errorf("devflows: workspace profile %q has no repos configured", profile)
+	}
+	provisionerImage, err := s.catalog.WorkspaceProvisionerImageDigestForProfile(profile)
+	if err != nil {
+		return storage.Workspace{}, err
 	}
 	existing, err := s.workspaces.List(ctx, storage.WorkspaceFilter{OwnerID: ownerID, Limit: 200})
 	if err != nil {
@@ -88,21 +109,121 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 		}
 		return storage.Workspace{}, ErrWorkspaceNameConflict
 	}
+
 	now := time.Now().UTC()
-	ws := storage.Workspace{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Name: name, WorkProfile: profile,
-		Status:    storage.WorkspaceStatusReady,
-		CreatedAt: now, UpdatedAt: now}
+	ws := storage.Workspace{
+		ID:          uuid.Must(uuid.NewV7()).String(),
+		OwnerID:     ownerID,
+		Name:        name,
+		WorkProfile: profile,
+		Status:      storage.WorkspaceStatusPending,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	job := storage.Job{
+		ID:          uuid.Must(uuid.NewV7()).String(),
+		OwnerID:     ownerID,
+		WorkspaceID: ws.ID,
+		Type:        storage.JobTypeWorkspacePrepare,
+		Status:      storage.JobStatusQueued,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 	if err := s.workspaces.Create(ctx, ws); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			return storage.Workspace{}, ErrWorkspaceNameConflict
 		}
 		return storage.Workspace{}, err
 	}
-	_ = s.workspaces.SetCurrent(ctx, ownerID, ws.ID)
+	if err := s.workspaces.SetCurrent(ctx, ownerID, ws.ID); err != nil {
+		return storage.Workspace{}, err
+	}
+	if err := s.jobs.Create(ctx, job); err != nil {
+		return storage.Workspace{}, err
+	}
+	_ = s.jobs.AddStep(ctx, storage.JobStep{
+		ID:        uuid.Must(uuid.NewV7()).String(),
+		JobID:     job.ID,
+		Name:      "submit-workspace-provision-workflow",
+		Status:    storage.JobStatusQueued,
+		Message:   "queued workspace provisioning workflow",
+		CreatedAt: now,
+	})
 	if s.audit != nil {
 		_ = s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.create", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess})
 	}
+
+	return s.submitWorkspaceProvision(ctx, ws, job, repos, provisionerImage)
+}
+
+func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Workspace, job storage.Job, repos []Repo, imageDigest string) (storage.Workspace, error) {
+	startedAt := time.Now().UTC()
+	if s.engine == nil {
+		reason := "workflow_engine_unavailable"
+		message := "workspace workflow engine is not configured"
+		_ = s.jobs.UpdateStatus(ctx, job.ID, storage.JobStatusFailed, reason, message, nil, &startedAt)
+		_ = s.workspaces.UpdateStatus(ctx, ws.ID, storage.WorkspaceStatusFailed, reason, message)
+		ws.Status = storage.WorkspaceStatusFailed
+		ws.ReasonCode = reason
+		ws.ErrorMessage = message
+		ws.UpdatedAt = startedAt
+		return ws, nil
+	}
+
+	submitErr := s.engine.Submit(ctx, workflows.Spec{
+		Name:                workspacePrepareWorkflowName(job.ID),
+		Kind:                workflows.KindWorkspacePrepare,
+		BuilderImageDigest:  imageDigest,
+		Deadline:            startedAt.Add(30 * time.Minute),
+		WorkspaceRootDir:    s.workspaceRootDir,
+		WorkspaceClaimName:  s.workspaceClaimName,
+		WorkspaceName:       ws.Name,
+		WorkspaceRepos:      workspaceRepoSpecs(repos),
+		SourceCredentialRef: "appliance-managed-ssh",
+		SourceCredentialSecret: func() string {
+			if anySSHSource(repos) {
+				return BuilderGitSecretName()
+			}
+			return ""
+		}(),
+		KnownHostsSecret: func() string {
+			if anySSHSource(repos) {
+				return BuilderGitKnownHostsSecretName()
+			}
+			return ""
+		}(),
+	})
+	completedAt := time.Now().UTC()
+	if submitErr != nil {
+		reason := "workflow_submit_failed"
+		message := submitErr.Error()
+		_ = s.jobs.UpdateStatus(ctx, job.ID, storage.JobStatusFailed, reason, message, nil, &completedAt)
+		_ = s.workspaces.UpdateStatus(ctx, ws.ID, storage.WorkspaceStatusFailed, reason, message)
+		ws.Status = storage.WorkspaceStatusFailed
+		ws.ReasonCode = reason
+		ws.ErrorMessage = message
+		ws.UpdatedAt = completedAt
+		return ws, nil
+	}
+	_ = s.jobs.UpdateStatus(ctx, job.ID, storage.JobStatusRunning, "", "", &completedAt, nil)
 	return ws, nil
+}
+
+func workspaceRepoSpecs(repos []Repo) []workflows.WorkspaceRepo {
+	out := make([]workflows.WorkspaceRepo, 0, len(repos))
+	for _, repo := range repos {
+		out = append(out, workflows.WorkspaceRepo{Name: repo.Name, URL: repo.URL, Ref: repo.DefaultRef})
+	}
+	return out
+}
+
+func anySSHSource(repos []Repo) bool {
+	for _, repo := range repos {
+		if isSSHSource(repo.URL) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) ListWorkspaces(ctx context.Context, ownerID string, canAny bool) ([]storage.Workspace, error) {
@@ -110,7 +231,18 @@ func (s *Service) ListWorkspaces(ctx context.Context, ownerID string, canAny boo
 	if !canAny {
 		filter.OwnerID = ownerID
 	}
-	return s.workspaces.List(ctx, filter)
+	items, err := s.workspaces.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]storage.Workspace, len(items))
+	for i, ws := range items {
+		out[i], err = s.reconcileWorkspace(ctx, ws)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) GetWorkspace(ctx context.Context, id, ownerID string, canAny bool) (storage.Workspace, error) {
@@ -121,7 +253,7 @@ func (s *Service) GetWorkspace(ctx context.Context, id, ownerID string, canAny b
 	if ws.OwnerID != ownerID && !canAny {
 		return storage.Workspace{}, storage.ErrNotFound
 	}
-	return ws, nil
+	return s.reconcileWorkspace(ctx, ws)
 }
 
 func (s *Service) DeleteWorkspace(ctx context.Context, actor audit.Actor, id, ownerID string, canAny bool) error {
@@ -162,7 +294,7 @@ func (s *Service) SetCurrentWorkspace(ctx context.Context, userID, workspaceID s
 	if err := s.workspaces.SetCurrent(ctx, userID, workspaceID); err != nil {
 		return storage.Workspace{}, err
 	}
-	return ws, nil
+	return s.reconcileWorkspace(ctx, ws)
 }
 
 func (s *Service) CurrentWorkspace(ctx context.Context, userID string) (storage.Workspace, error) {
@@ -183,7 +315,7 @@ func (s *Service) CurrentWorkspace(ctx context.Context, userID string) (storage.
 	if ws.OwnerID != userID || ws.DeletedAt != nil {
 		return storage.Workspace{}, ErrNoCurrentWorkspace
 	}
-	return ws, nil
+	return s.reconcileWorkspace(ctx, ws)
 }
 
 func (s *Service) ListBuildTargetsForCurrent(ctx context.Context, userID string) ([]BuildTarget, error) {
@@ -203,6 +335,9 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if err != nil {
 		return storage.Job{}, err
 	}
+	if ws.Status != storage.WorkspaceStatusReady {
+		return storage.Job{}, ErrWorkspaceNotReady
+	}
 	resolved, err := s.catalog.ResolveTargetForProfile(ws.WorkProfile, req.TargetName)
 	if err != nil {
 		return storage.Job{}, err
@@ -216,7 +351,7 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 		tag = renderTag(resolved.Target.ImageTagTemplate, ws, resolved.Target, sourceRef)
 	}
 	if tag == "" {
-		tag = sourceRef[:12]
+		tag = sourceRef[:min(12, len(sourceRef))]
 	}
 	buildReq := builds.CreateRequest{SourceRepoURL: resolved.Repo.URL, SourceCommitSHA: sourceRef,
 		Execution: resolved.Target.Execution, ScriptPath: resolved.Target.ScriptPath, MakeTarget: resolved.Target.MakeTarget,
@@ -230,7 +365,7 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if err != nil {
 		return storage.Job{}, err
 	}
-	existingJobs, err := s.jobs.List(ctx, storage.JobFilter{OwnerID: ownerID, WorkspaceID: ws.ID, Limit: 200})
+	existingJobs, err := s.jobs.List(ctx, storage.JobFilter{OwnerID: ownerID, WorkspaceID: ws.ID, Type: storage.JobTypeBuild, Limit: 200})
 	if err != nil {
 		return storage.Job{}, err
 	}
@@ -256,7 +391,7 @@ func (s *Service) CurrentWorkspaceBuildStatus(ctx context.Context, userID string
 	if err != nil {
 		return storage.Job{}, err
 	}
-	jobs, err := s.jobs.List(ctx, storage.JobFilter{OwnerID: userID, WorkspaceID: ws.ID, Limit: 1})
+	jobs, err := s.jobs.List(ctx, storage.JobFilter{OwnerID: userID, WorkspaceID: ws.ID, Type: storage.JobTypeBuild, Limit: 1})
 	if err != nil {
 		return storage.Job{}, err
 	}
@@ -324,8 +459,15 @@ func (s *Service) CancelJob(ctx context.Context, actor audit.Actor, id, ownerID 
 	if err != nil {
 		return storage.Job{}, err
 	}
-	if job.BuildID != "" && !job.Status.Terminal() {
+	if job.Status.Terminal() {
+		return job, nil
+	}
+	if job.BuildID != "" {
 		if _, err := s.builds.Cancel(ctx, actor, job.BuildID); err != nil {
+			return storage.Job{}, err
+		}
+	} else if job.Type == storage.JobTypeWorkspacePrepare && s.engine != nil {
+		if err := s.engine.Cancel(ctx, workspacePrepareWorkflowName(job.ID)); err != nil && !errors.Is(err, workflows.ErrNotFound) {
 			return storage.Job{}, err
 		}
 	}
@@ -344,10 +486,17 @@ func (s *Service) JobLogs(ctx context.Context, id, ownerID string, canAny bool) 
 	if err != nil {
 		return "", err
 	}
-	if job.BuildID == "" {
-		return "", nil
+	if job.BuildID != "" {
+		return s.builds.Logs(ctx, job.BuildID)
 	}
-	return s.builds.Logs(ctx, job.BuildID)
+	if job.Type == storage.JobTypeWorkspacePrepare && s.engine != nil {
+		logs, err := s.engine.Logs(ctx, workspacePrepareWorkflowName(job.ID))
+		if errors.Is(err, workflows.ErrNotFound) {
+			return "", nil
+		}
+		return logs, err
+	}
+	return "", nil
 }
 
 func (s *Service) ReconcileAll(ctx context.Context) error {
@@ -363,8 +512,50 @@ func (s *Service) ReconcileAll(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) reconcileWorkspace(ctx context.Context, ws storage.Workspace) (storage.Workspace, error) {
+	if ws.DeletedAt != nil {
+		return ws, nil
+	}
+	job, err := s.latestWorkspacePrepareJob(ctx, ws.ID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return ws, nil
+	}
+	if err != nil {
+		return storage.Workspace{}, err
+	}
+	if _, err := s.reconcileJob(ctx, job); err != nil {
+		return storage.Workspace{}, err
+	}
+	return s.workspaces.Get(ctx, ws.ID)
+}
+
+func (s *Service) latestWorkspacePrepareJob(ctx context.Context, workspaceID string) (storage.Job, error) {
+	jobs, err := s.jobs.List(ctx, storage.JobFilter{WorkspaceID: workspaceID, Type: storage.JobTypeWorkspacePrepare, Limit: 1})
+	if err != nil {
+		return storage.Job{}, err
+	}
+	if len(jobs) == 0 {
+		return storage.Job{}, storage.ErrNotFound
+	}
+	return jobs[0], nil
+}
+
 func (s *Service) reconcileJob(ctx context.Context, job storage.Job) (storage.Job, error) {
-	if job.BuildID == "" || job.Status.Terminal() {
+	if job.Status.Terminal() {
+		return job, nil
+	}
+	switch job.Type {
+	case storage.JobTypeBuild:
+		return s.reconcileBuildJob(ctx, job)
+	case storage.JobTypeWorkspacePrepare:
+		return s.reconcileWorkspacePrepareJob(ctx, job)
+	default:
+		return job, nil
+	}
+}
+
+func (s *Service) reconcileBuildJob(ctx context.Context, job storage.Job) (storage.Job, error) {
+	if job.BuildID == "" {
 		return job, nil
 	}
 	build, err := s.builds.Get(ctx, job.BuildID)
@@ -377,4 +568,100 @@ func (s *Service) reconcileJob(ctx context.Context, job storage.Job) (storage.Jo
 		job.Status, job.ReasonCode, job.ErrorMessage, job.StartedAt, job.CompletedAt = status, build.ReasonCode, build.ErrorMessage, build.StartedAt, build.CompletedAt
 	}
 	return job, nil
+}
+
+func (s *Service) reconcileWorkspacePrepareJob(ctx context.Context, job storage.Job) (storage.Job, error) {
+	if s.engine == nil {
+		return job, nil
+	}
+	status, err := s.engine.Status(ctx, workspacePrepareWorkflowName(job.ID))
+	if errors.Is(err, workflows.ErrNotFound) {
+		completedAt := time.Now().UTC()
+		job.Status = storage.JobStatusFailed
+		job.ReasonCode = "workflow_not_found"
+		job.ErrorMessage = "workspace workflow was not found"
+		job.CompletedAt = &completedAt
+		_ = s.jobs.UpdateStatus(ctx, job.ID, job.Status, job.ReasonCode, job.ErrorMessage, job.StartedAt, job.CompletedAt)
+		_ = s.syncWorkspaceStatusFromJob(ctx, job)
+		return job, nil
+	}
+	if err != nil {
+		return job, err
+	}
+
+	updated := job
+	now := time.Now().UTC()
+	switch status.Phase {
+	case workflows.PhasePending:
+		updated.Status = storage.JobStatusQueued
+		updated.ReasonCode = ""
+		updated.ErrorMessage = ""
+	case workflows.PhaseRunning:
+		updated.Status = storage.JobStatusRunning
+		updated.ReasonCode = ""
+		updated.ErrorMessage = ""
+		if updated.StartedAt == nil {
+			updated.StartedAt = &now
+		}
+	case workflows.PhaseSucceeded:
+		updated.Status = storage.JobStatusSucceeded
+		updated.ReasonCode = ""
+		updated.ErrorMessage = ""
+		if updated.StartedAt == nil {
+			updated.StartedAt = &now
+		}
+		updated.CompletedAt = &now
+	case workflows.PhaseFailed:
+		updated.Status = storage.JobStatusFailed
+		updated.ReasonCode = "workflow_failed"
+		updated.ErrorMessage = strings.TrimSpace(status.Message)
+		if updated.ErrorMessage == "" {
+			updated.ErrorMessage = "workspace workflow failed"
+		}
+		updated.CompletedAt = &now
+	}
+	if updated.Status != job.Status || updated.ReasonCode != job.ReasonCode || updated.ErrorMessage != job.ErrorMessage || !timePtrEqual(updated.StartedAt, job.StartedAt) || !timePtrEqual(updated.CompletedAt, job.CompletedAt) {
+		_ = s.jobs.UpdateStatus(ctx, job.ID, updated.Status, updated.ReasonCode, updated.ErrorMessage, updated.StartedAt, updated.CompletedAt)
+		job = updated
+	}
+	_ = s.syncWorkspaceStatusFromJob(ctx, job)
+	return job, nil
+}
+
+func (s *Service) syncWorkspaceStatusFromJob(ctx context.Context, job storage.Job) error {
+	if job.WorkspaceID == "" {
+		return nil
+	}
+	ws, err := s.workspaces.Get(ctx, job.WorkspaceID)
+	if err != nil {
+		return err
+	}
+	newStatus := ws.Status
+	reasonCode := ""
+	errorMessage := ""
+	switch job.Status {
+	case storage.JobStatusQueued, storage.JobStatusRunning:
+		newStatus = storage.WorkspaceStatusPending
+	case storage.JobStatusSucceeded:
+		newStatus = storage.WorkspaceStatusReady
+	case storage.JobStatusFailed, storage.JobStatusCancelled:
+		newStatus = storage.WorkspaceStatusFailed
+		reasonCode = job.ReasonCode
+		errorMessage = job.ErrorMessage
+	}
+	if ws.Status == newStatus && ws.ReasonCode == reasonCode && ws.ErrorMessage == errorMessage {
+		return nil
+	}
+	return s.workspaces.UpdateStatus(ctx, ws.ID, newStatus, reasonCode, errorMessage)
+}
+
+func workspacePrepareWorkflowName(jobID string) string {
+	return "workspace-prepare-" + jobID
+}
+
+func timePtrEqual(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }

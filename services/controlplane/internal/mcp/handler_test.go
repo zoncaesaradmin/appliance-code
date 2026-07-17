@@ -595,7 +595,12 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow engine is %T, want *workflows.Fake", env.services.WorkflowEngine)
 	}
-	fake.Behavior = func(spec workflows.Spec) workflows.Status { return workflows.Status{Phase: workflows.PhaseRunning} }
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseRunning}
+	}
 
 	token := env.login(t, "admin")
 	sessionID := env.initializeSession(t, token)

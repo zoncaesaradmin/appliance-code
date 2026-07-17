@@ -313,6 +313,8 @@ func (h *DeveloperWorkflowHandlers) SubmitCurrentBuild(w http.ResponseWriter, r 
 	switch {
 	case errors.Is(err, devflows.ErrNoCurrentWorkspace):
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "Current workspace not found", "")
+	case errors.Is(err, devflows.ErrWorkspaceNotReady):
+		WriteProblem(w, r, http.StatusConflict, "workspace_not_ready", "Current workspace is not ready", "Wait for workspace provisioning to finish before submitting a build.")
 	case errors.Is(err, builds.ErrIdempotencyKeyReused):
 		WriteProblem(w, r, http.StatusConflict, "idempotency_key_reused", err.Error(), "")
 	case errors.Is(err, builds.ErrIdempotencyInProgress):
