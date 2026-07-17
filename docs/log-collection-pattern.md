@@ -33,7 +33,6 @@ They now have:
 - startup scripts that mirror process `stdout` and `stderr` into:
   - `stdout.log`
   - `stderr.log`
-  - `startup.log`
 
 The Argo Workflow Controller and other third-party images are not yet moved to
 this same startup-script pattern. They still rely on normal Kubernetes runtime
@@ -127,7 +126,6 @@ Expected files inside each workload directory:
 ```text
 stdout.log
 stderr.log
-startup.log
 application.log
 ```
 
@@ -163,7 +161,6 @@ Expected files:
 ```text
 stdout.log
 stderr.log
-startup.log
 ```
 
 Application-specific log files are not a first requirement for these
@@ -187,7 +184,7 @@ This is needed for:
 The appliance log pattern must not replace `stdout`/`stderr`; it should mirror
 them into well-known files.
 
-### Rule 2. Application logs and bootstrap logs are separate concerns
+### Rule 2. Application logs and process logs are separate concerns
 
 There are two categories of logs:
 
@@ -251,9 +248,9 @@ Each startup script should:
 
 1. determine the target workload log directory
 2. create it if needed
-3. write a small `startup.log`
-4. mirror process `stdout` to `stdout.log`
-5. mirror process `stderr` to `stderr.log`
+3. mirror process `stdout` to `stdout.log`
+4. mirror process `stderr` to `stderr.log`
+5. write any startup banner to `stdout` before `exec`
 6. still preserve live container `stdout`/`stderr`
 7. `exec` the real Go binary as PID 1 behavior requires
 
@@ -353,7 +350,6 @@ Deliverables:
 - fixed host-path-backed writable mount of `/var/log/appliance` for each
   deployment
 - mirrored `stdout.log` and `stderr.log`
-- `startup.log`
 
 Acceptance:
 
@@ -457,7 +453,6 @@ After Phase 1, the operator contract should be simple:
 2. First choose the service directory.
 3. For builds, choose the workflow directory and pod directory.
 4. Check:
-   - `startup.log`
    - `stdout.log`
    - `stderr.log`
    - `application.log`

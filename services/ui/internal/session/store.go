@@ -9,6 +9,7 @@ import (
 
 type Record struct {
 	ID              string
+	Username        string
 	AccessToken     string
 	RefreshToken    string
 	AccessExpiresAt time.Time

@@ -18,13 +18,20 @@ import (
 )
 
 type fakeControlPlane struct {
-	loginCalls  int
-	initialized bool
-	adminUser   string
-	adminPass   string
-	profiles    []controlplane.WorkProfile
-	workspaces  []controlplane.Workspace
-	currentID   string
+	loginCalls               int
+	sessionCalls             int
+	versionCalls             int
+	readyCalls               int
+	listWorkProfilesCalls    int
+	listWorkspacesCalls      int
+	currentWorkspaceCalls    int
+	setCurrentWorkspaceCalls int
+	initialized              bool
+	adminUser                string
+	adminPass                string
+	profiles                 []controlplane.WorkProfile
+	workspaces               []controlplane.Workspace
+	currentID                string
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
@@ -50,14 +57,17 @@ func (f *fakeControlPlane) Refresh(context.Context, string) (controlplane.LoginR
 func (f *fakeControlPlane) Logout(context.Context, string) error { return nil }
 
 func (f *fakeControlPlane) Session(context.Context, string) (controlplane.Session, error) {
+	f.sessionCalls++
 	return controlplane.Session{UserID: "usr_admin", Username: "admin", AuthMethod: "session", Permissions: []string{"users.read"}}, nil
 }
 
 func (f *fakeControlPlane) Version(context.Context) (controlplane.Version, error) {
+	f.versionCalls++
 	return controlplane.Version{Version: "0.1.0", Commit: "abc123", BuildTime: "2026-07-12T00:00:00Z", GoVersion: "go1.26"}, nil
 }
 
 func (f *fakeControlPlane) Ready(context.Context) (controlplane.Health, error) {
+	f.readyCalls++
 	return controlplane.Health{Status: "ready"}, nil
 }
 
@@ -77,6 +87,7 @@ func (f *fakeControlPlane) CreateFirstAdmin(_ context.Context, username, passwor
 }
 
 func (f *fakeControlPlane) ListWorkProfiles(context.Context, string) ([]controlplane.WorkProfile, error) {
+	f.listWorkProfilesCalls++
 	if f.profiles == nil {
 		return []controlplane.WorkProfile{{
 			Name:        "platform-dev",
@@ -91,10 +102,12 @@ func (f *fakeControlPlane) ListWorkProfiles(context.Context, string) ([]controlp
 }
 
 func (f *fakeControlPlane) ListWorkspaces(context.Context, string) ([]controlplane.Workspace, error) {
+	f.listWorkspacesCalls++
 	return append([]controlplane.Workspace(nil), f.workspaces...), nil
 }
 
 func (f *fakeControlPlane) CurrentWorkspace(context.Context, string) (controlplane.Workspace, error) {
+	f.currentWorkspaceCalls++
 	for _, workspace := range f.workspaces {
 		if workspace.ID == f.currentID {
 			return workspace, nil
@@ -119,6 +132,7 @@ func (f *fakeControlPlane) CreateWorkspace(_ context.Context, _ string, req cont
 }
 
 func (f *fakeControlPlane) SetCurrentWorkspace(_ context.Context, _ string, workspaceID string) (controlplane.Workspace, error) {
+	f.setCurrentWorkspaceCalls++
 	for _, workspace := range f.workspaces {
 		if workspace.ID == workspaceID {
 			f.currentID = workspaceID
@@ -396,6 +410,9 @@ func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
 	if cp.currentID != "ws_demo" {
 		t.Fatalf("currentID = %q, want ws_demo", cp.currentID)
 	}
+	if cp.sessionCalls != 0 {
+		t.Fatalf("sessionCalls = %d, want 0 for builder create flow", cp.sessionCalls)
+	}
 }
 
 func TestBuilderWorkspacePagePrefillsSelectedExistingWorkspace(t *testing.T) {
@@ -427,6 +444,9 @@ func TestBuilderWorkspacePagePrefillsSelectedExistingWorkspace(t *testing.T) {
 	body := pageRec.Body.String()
 	if !strings.Contains(body, "Available Workspaces") || !strings.Contains(body, `<details class="workspace-settings " open>`) || !strings.Contains(body, `value="SecondSpace"`) || !strings.Contains(body, `value="ws_two"`) || !strings.Contains(body, "Delete Workspace") || !strings.Contains(body, "Set Workspace") {
 		t.Fatalf("builder page did not prefill selected workspace:\n%s", body)
+	}
+	if cp.versionCalls != 0 || cp.readyCalls != 0 {
+		t.Fatalf("builder page should not fetch dashboard status data, got versionCalls=%d readyCalls=%d", cp.versionCalls, cp.readyCalls)
 	}
 }
 
@@ -498,6 +518,44 @@ func TestBuilderWorkspacePageReusesExistingMatchingWorkspace(t *testing.T) {
 	}
 	if len(cp.workspaces) != 1 {
 		t.Fatalf("workspace count = %d, want 1", len(cp.workspaces))
+	}
+}
+
+func TestBuilderWorkspacePageUsesSelectedWorkspaceIDWithoutListingWorkspaces(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_one", Name: "FirstSpace", WorkProfile: "platform-dev", Status: "ready"},
+			{ID: "ws_two", Name: "SecondSpace", WorkProfile: "platform-dev", Status: "ready"},
+		},
+		currentID: "ws_one",
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	setReq := httptest.NewRequest(http.MethodPost, "/builder/workspaces", strings.NewReader("selected_workspace_id=ws_two&name=SecondSpace&work_profile=platform-dev"))
+	setReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setReq.AddCookie(cookie)
+	setRec := httptest.NewRecorder()
+	handler.ServeHTTP(setRec, setReq)
+	if setRec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", setRec.Code)
+	}
+	if cp.currentID != "ws_two" {
+		t.Fatalf("currentID = %q, want ws_two", cp.currentID)
+	}
+	if cp.setCurrentWorkspaceCalls != 1 {
+		t.Fatalf("setCurrentWorkspaceCalls = %d, want 1", cp.setCurrentWorkspaceCalls)
+	}
+	if cp.listWorkspacesCalls != 0 {
+		t.Fatalf("listWorkspacesCalls = %d, want 0 when selected workspace id is known", cp.listWorkspacesCalls)
 	}
 }
 

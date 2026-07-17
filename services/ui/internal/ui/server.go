@@ -79,6 +79,7 @@ type builderPageData struct {
 }
 
 const sessionCookieName = "appliance_ui_session"
+const accessTokenRefreshSkew = 30 * time.Second
 
 func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.Logger) (http.Handler, error) {
 	if cfg.ApplianceProfile == "" {
@@ -200,6 +201,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	rec.Username = username
+	s.sessions.Update(rec)
 	s.logger.WithContext(r.Context()).Infow("login succeeded", "username", username, "sessionID", rec.ID)
 	s.setSessionCookie(w, rec.ID)
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
@@ -260,6 +263,8 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	rec.Username = username
+	s.sessions.Update(rec)
 	s.logger.WithContext(r.Context()).Infow("setup completed", "username", username, "sessionID", rec.ID)
 	s.setSessionCookie(w, rec.ID)
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
@@ -313,7 +318,7 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 		data.StatusError = "Session check failed. Please sign in again."
 		return data
 	}
-	if refreshed.ID != "" && refreshed.AccessToken != rec.AccessToken {
+	if refreshed.ID != "" && (refreshed.AccessToken != rec.AccessToken || refreshed.Username != rec.Username) {
 		s.sessions.Update(refreshed)
 	}
 	data.Session = sessionInfo
@@ -365,6 +370,17 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 	workProfile := strings.TrimSpace(r.Form.Get("work_profile"))
 	if name == "" || workProfile == "" {
 		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Workspace name and workspace profile are required."))
+		return
+	}
+	selectedWorkspaceID := strings.TrimSpace(r.Form.Get("selected_workspace_id"))
+	if selectedWorkspaceID != "" && selectedWorkspaceID != "new" {
+		s.logger.WithContext(r.Context()).Infow("builder workspace selected by id", "workspaceID", selectedWorkspaceID)
+		if _, err := s.cp.SetCurrentWorkspace(r.Context(), rec.AccessToken, selectedWorkspaceID); err != nil {
+			s.logger.WithContext(r.Context()).Warnw("set current selected builder workspace failed", "error", err, "workspaceID", selectedWorkspaceID)
+			s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not switch the current workspace."))
+			return
+		}
+		http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
 		return
 	}
 	s.logger.WithContext(r.Context()).Infow("builder workspace create-or-select requested", "workspaceName", name, "workProfile", workProfile)
@@ -491,7 +507,7 @@ func (s *Server) builderWorkProfilePartial(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) builderPageData(r *http.Request, rec session.Record, message, formError string) builderPageData {
-	base := s.dashboardData(r, rec)
+	base := s.builderViewData(r, rec)
 	base.Title = "Builder workspaces"
 	base.CurrentPath = "/builder/workspaces"
 	base.Message = message
@@ -536,6 +552,32 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 	if data.SelectedWorkProfile != "" {
 		data.SelectedProfile = findWorkProfile(profiles, data.SelectedWorkProfile)
 	}
+	return data
+}
+
+func (s *Server) builderViewData(r *http.Request, rec session.Record) viewData {
+	data := viewData{
+		Title:            "Builder workspaces",
+		CurrentPath:      r.URL.Path,
+		ApplianceProfile: s.cfg.ApplianceProfile,
+		BuilderEnabled:   s.builderEnabled(),
+	}
+	if latest, ok := s.sessions.Get(rec.ID); ok {
+		rec = latest
+	}
+	if rec.Username != "" {
+		data.Session = controlplane.Session{Username: rec.Username}
+		return data
+	}
+	sessionInfo, refreshed, err := s.sessionWithRefresh(r, rec)
+	if err != nil {
+		data.StatusError = "Session check failed. Please sign in again."
+		return data
+	}
+	if refreshed.ID != "" && (refreshed.AccessToken != rec.AccessToken || refreshed.Username != rec.Username) {
+		s.sessions.Update(refreshed)
+	}
+	data.Session = sessionInfo
 	return data
 }
 
@@ -603,6 +645,7 @@ func isHTTPStatus(err error, status int) bool {
 func (s *Server) sessionWithRefresh(r *http.Request, rec session.Record) (controlplane.Session, session.Record, error) {
 	sessionInfo, err := s.cp.Session(r.Context(), rec.AccessToken)
 	if err == nil {
+		rec.Username = sessionInfo.Username
 		return sessionInfo, rec, nil
 	}
 	refreshed, refreshErr := s.cp.Refresh(r.Context(), rec.RefreshToken)
@@ -613,21 +656,38 @@ func (s *Server) sessionWithRefresh(r *http.Request, rec session.Record) (contro
 	rec.RefreshToken = refreshed.RefreshToken
 	rec.AccessExpiresAt = refreshed.AccessExpiresAt
 	sessionInfo, err = s.cp.Session(r.Context(), rec.AccessToken)
+	rec.Username = sessionInfo.Username
 	return sessionInfo, rec, err
 }
 
 func (s *Server) refreshRecordForAPI(w http.ResponseWriter, r *http.Request, rec session.Record) (session.Record, bool) {
-	_, refreshed, err := s.sessionWithRefresh(r, rec)
-	if err != nil {
-		s.logger.WithContext(r.Context()).Warnw("refresh UI session for API call failed", "error", err, "path", r.URL.Path)
-		s.clearSessionCookie(w)
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return session.Record{}, false
+	if latest, ok := s.sessions.Get(rec.ID); ok {
+		rec = latest
 	}
-	if refreshed.ID != "" && refreshed.AccessToken != rec.AccessToken {
-		s.sessions.Update(refreshed)
+	if shouldRefreshAccessToken(rec) {
+		refreshed, err := s.cp.Refresh(r.Context(), rec.RefreshToken)
+		if err != nil {
+			s.logger.WithContext(r.Context()).Warnw("refresh UI session for API call failed", "error", err, "path", r.URL.Path)
+			s.clearSessionCookie(w)
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return session.Record{}, false
+		}
+		rec.AccessToken = refreshed.AccessToken
+		rec.RefreshToken = refreshed.RefreshToken
+		rec.AccessExpiresAt = refreshed.AccessExpiresAt
+		s.sessions.Update(rec)
 	}
-	return refreshed, true
+	return rec, true
+}
+
+func shouldRefreshAccessToken(rec session.Record) bool {
+	if strings.TrimSpace(rec.AccessToken) == "" {
+		return true
+	}
+	if rec.AccessExpiresAt.IsZero() {
+		return false
+	}
+	return !time.Now().UTC().Add(accessTokenRefreshSkew).Before(rec.AccessExpiresAt)
 }
 
 func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int, message string) {
