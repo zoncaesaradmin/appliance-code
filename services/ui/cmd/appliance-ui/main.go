@@ -39,13 +39,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	cp := controlplane.NewClient(controlplane.Config{
+	cp, err := controlplane.NewClient(controlplane.Config{
 		BaseURL:         cfg.ControlPlaneBaseURL,
 		InternalBaseURL: cfg.ControlPlaneInternalBaseURL,
 		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
 		Logger:          appLogger,
 		TraceHTTP:       cfg.ControlPlaneTrace,
 	})
+	if err != nil {
+		processLogger.Errorw("initialize control plane client", "error", err)
+		os.Exit(1)
+	}
 	handler, err := ui.New(ui.Config{
 		ApplianceProfile: cfg.ApplianceProfile,
 		CookieSecure:     cfg.CookieSecure,

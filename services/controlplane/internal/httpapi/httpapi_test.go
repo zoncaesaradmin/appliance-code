@@ -93,7 +93,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
-		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows}
+		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, Logger: logger}
 	}
 
 	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)

@@ -34,6 +34,8 @@ These rules apply to all implementation and documentation in this repository.
 ## UI To API Observability Contract
 
 - When the browser talks to the UI service and the UI service talks to the control-plane API on the browser's behalf, keep that boundary explicit in code, logs, and documentation.
+- Loggers are mandatory runtime dependencies. Service startup or constructor wiring must fail immediately if a required logger is nil instead of silently continuing or creating ad-hoc fallback logger behavior.
+- Do not scatter `if logger != nil` or `if Logger != nil` guards through request handling or application flow code. Validate logger presence once at construction/startup time, then use it unconditionally.
 - Every UI route that wraps a control-plane REST or MCP call must be documented in an operator-facing mapping document that names:
   - the browser-visible UI route and method
   - the UI handler/function

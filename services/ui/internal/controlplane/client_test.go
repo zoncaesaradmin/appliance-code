@@ -39,12 +39,15 @@ func TestTraceLogsWorkspaceRequestAndResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithWriter: %v", err)
 	}
-	client := NewClient(Config{
+	client, err := NewClient(Config{
 		BaseURL:    "http://control-plane.test",
 		HTTPClient: clientHTTP,
 		Logger:     logger,
 		TraceHTTP:  true,
 	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 
 	ctx := ctxutil.WithTraceID(context.Background(), "trace-ui-123")
 	if _, err := client.SetCurrentWorkspace(ctx, "access-token", "ws_demo"); err != nil {
@@ -94,12 +97,15 @@ func TestTraceRedactsSensitiveLoginFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWithWriter: %v", err)
 	}
-	client := NewClient(Config{
+	client, err := NewClient(Config{
 		BaseURL:    "http://control-plane.test",
 		HTTPClient: clientHTTP,
 		Logger:     logger,
 		TraceHTTP:  true,
 	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
 
 	if _, err := client.Login(context.Background(), "admin", "super-secret"); err != nil {
 		t.Fatalf("Login: %v", err)
@@ -139,4 +145,10 @@ func parseSingleJSONLogLine(t *testing.T, text string) map[string]any {
 		t.Fatalf("parse log JSON: %v\nlog=%s", err, line)
 	}
 	return record
+}
+
+func TestNewClientRequiresLogger(t *testing.T) {
+	if _, err := NewClient(Config{BaseURL: "http://control-plane.test"}); err == nil {
+		t.Fatal("NewClient should reject nil logger")
+	}
 }

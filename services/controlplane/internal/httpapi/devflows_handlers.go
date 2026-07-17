@@ -136,14 +136,12 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 	principal, _ := PrincipalFromContext(r.Context())
 	ws, err := h.Devflows.CreateWorkspace(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), principal.UserID, devflows.CreateWorkspaceRequest{Name: req.Name, WorkProfile: req.WorkProfile})
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.WithContext(r.Context()).Warnw("create workspace failed",
-				"userID", principal.UserID,
-				"workspaceName", req.Name,
-				"workProfile", req.WorkProfile,
-				"error", err,
-			)
-		}
+		h.Logger.WithContext(r.Context()).Warnw("create workspace failed",
+			"userID", principal.UserID,
+			"workspaceName", req.Name,
+			"workProfile", req.WorkProfile,
+			"error", err,
+		)
 		if errors.Is(err, devflows.ErrWorkspaceNameConflict) || errors.Is(err, devflows.ErrWorkspaceProfileConflict) || errors.Is(err, storage.ErrConflict) {
 			WriteProblem(w, r, http.StatusConflict, "workspace_conflict", "Workspace conflict", err.Error())
 			return
@@ -151,14 +149,12 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}
-	if h.Logger != nil {
-		h.Logger.WithContext(r.Context()).Infow("workspace created",
-			"userID", principal.UserID,
-			"workspaceID", ws.ID,
-			"workspaceName", ws.Name,
-			"workProfile", ws.WorkProfile,
-		)
-	}
+	h.Logger.WithContext(r.Context()).Infow("workspace created",
+		"userID", principal.UserID,
+		"workspaceID", ws.ID,
+		"workspaceName", ws.Name,
+		"workProfile", ws.WorkProfile,
+	)
 	writeJSON(w, http.StatusCreated, toWorkspaceResponse(ws))
 }
 
@@ -196,43 +192,35 @@ func (h *DeveloperWorkflowHandlers) DeleteWorkspace(w http.ResponseWriter, r *ht
 	principal, _ := PrincipalFromContext(r.Context())
 	err := h.Devflows.DeleteWorkspace(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), r.PathValue("workspaceId"), principal.UserID, authz.HasPermission(principal.Permissions, roles.PermWorkspacesDeleteAny))
 	if errors.Is(err, storage.ErrNotFound) {
-		if h.Logger != nil {
-			h.Logger.WithContext(r.Context()).Warnw("delete workspace failed",
-				"userID", principal.UserID,
-				"workspaceID", r.PathValue("workspaceId"),
-				"error", err,
-			)
-		}
+		h.Logger.WithContext(r.Context()).Warnw("delete workspace failed",
+			"userID", principal.UserID,
+			"workspaceID", r.PathValue("workspaceId"),
+			"error", err,
+		)
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "Workspace not found", "")
 		return
 	}
 	if errors.Is(err, devflows.ErrWorkspaceHasActiveJobs) {
-		if h.Logger != nil {
-			h.Logger.WithContext(r.Context()).Warnw("delete workspace blocked by active jobs",
-				"userID", principal.UserID,
-				"workspaceID", r.PathValue("workspaceId"),
-			)
-		}
+		h.Logger.WithContext(r.Context()).Warnw("delete workspace blocked by active jobs",
+			"userID", principal.UserID,
+			"workspaceID", r.PathValue("workspaceId"),
+		)
 		WriteProblem(w, r, http.StatusConflict, "workspace_has_active_jobs", "Workspace has active jobs", "Cancel or wait for active jobs before deleting this workspace.")
 		return
 	}
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.WithContext(r.Context()).Errorw("delete workspace failed",
-				"userID", principal.UserID,
-				"workspaceID", r.PathValue("workspaceId"),
-				"error", err,
-			)
-		}
+		h.Logger.WithContext(r.Context()).Errorw("delete workspace failed",
+			"userID", principal.UserID,
+			"workspaceID", r.PathValue("workspaceId"),
+			"error", err,
+		)
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	if h.Logger != nil {
-		h.Logger.WithContext(r.Context()).Infow("workspace deleted",
-			"userID", principal.UserID,
-			"workspaceID", r.PathValue("workspaceId"),
-		)
-	}
+	h.Logger.WithContext(r.Context()).Infow("workspace deleted",
+		"userID", principal.UserID,
+		"workspaceID", r.PathValue("workspaceId"),
+	)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -263,35 +251,29 @@ func (h *DeveloperWorkflowHandlers) SetCurrentWorkspace(w http.ResponseWriter, r
 	principal, _ := PrincipalFromContext(r.Context())
 	ws, err := h.Devflows.SetCurrentWorkspace(r.Context(), principal.UserID, req.WorkspaceID)
 	if errors.Is(err, storage.ErrNotFound) {
-		if h.Logger != nil {
-			h.Logger.WithContext(r.Context()).Warnw("set current workspace failed",
-				"userID", principal.UserID,
-				"workspaceID", req.WorkspaceID,
-				"error", err,
-			)
-		}
+		h.Logger.WithContext(r.Context()).Warnw("set current workspace failed",
+			"userID", principal.UserID,
+			"workspaceID", req.WorkspaceID,
+			"error", err,
+		)
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "Workspace not found", "")
 		return
 	}
 	if err != nil {
-		if h.Logger != nil {
-			h.Logger.WithContext(r.Context()).Errorw("set current workspace failed",
-				"userID", principal.UserID,
-				"workspaceID", req.WorkspaceID,
-				"error", err,
-			)
-		}
+		h.Logger.WithContext(r.Context()).Errorw("set current workspace failed",
+			"userID", principal.UserID,
+			"workspaceID", req.WorkspaceID,
+			"error", err,
+		)
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	if h.Logger != nil {
-		h.Logger.WithContext(r.Context()).Infow("current workspace set",
-			"userID", principal.UserID,
-			"workspaceID", ws.ID,
-			"workspaceName", ws.Name,
-			"workProfile", ws.WorkProfile,
-		)
-	}
+	h.Logger.WithContext(r.Context()).Infow("current workspace set",
+		"userID", principal.UserID,
+		"workspaceID", ws.ID,
+		"workspaceName", ws.Name,
+		"workProfile", ws.WorkProfile,
+	)
 	writeJSON(w, http.StatusOK, toWorkspaceResponse(ws))
 }
 

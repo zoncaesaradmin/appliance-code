@@ -90,15 +90,11 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	if cp == nil {
 		return nil, errors.New("control plane client is required")
 	}
+	if logger == nil {
+		return nil, errors.New("ui logger is required")
+	}
 	if sessions == nil {
 		sessions = session.NewStore(time.Now)
-	}
-	if logger == nil {
-		defaultLogger, err := uilogging.New("info")
-		if err != nil {
-			return nil, err
-		}
-		logger = defaultLogger
 	}
 
 	tpls, err := template.ParseFS(assets, "templates/*.html", "templates/partials/*.html")

@@ -47,6 +47,9 @@ type wrappers struct {
 // RequirePermission/RequireAnyPermission. Everything else falls through to
 // a standard application/problem+json 404.
 func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
+	if deps.Logger == nil {
+		return nil, fmt.Errorf("logger is required")
+	}
 	mux := http.NewServeMux()
 
 	authRequired := RequireAuth(deps.Auth)
@@ -85,6 +88,9 @@ func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
 // health probes and version metadata. It must never be exposed through
 // public ingress.
 func NewInternalMux(logger logging.Logger, checker ReadinessChecker, startup *StartupState) http.Handler {
+	if logger == nil {
+		panic("httpapi.NewInternalMux: logger is required")
+	}
 	mux := http.NewServeMux()
 	RegisterHealthRoutes(mux, checker, startup)
 

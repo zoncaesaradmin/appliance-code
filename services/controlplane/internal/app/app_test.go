@@ -93,6 +93,21 @@ func TestAppStartsServesHealthAndShutsDownCleanly(t *testing.T) {
 	}
 }
 
+func TestAppNewRequiresLoggers(t *testing.T) {
+	cfg := testConfig(t)
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+
+	if _, err := app.New(cfg, nil, logger); err == nil {
+		t.Fatal("app.New should reject nil application logger")
+	}
+	if _, err := app.New(cfg, logger, nil); err == nil {
+		t.Fatal("app.New should reject nil process logger")
+	}
+}
+
 func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.ApplianceProfile = string(appliance.ProfileBuilder)

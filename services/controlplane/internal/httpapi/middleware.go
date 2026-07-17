@@ -151,7 +151,7 @@ func AccessLog(logger logging.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rec, r)
-			if logger == nil || shouldSuppressAccessLog(r.URL.Path) {
+			if shouldSuppressAccessLog(r.URL.Path) {
 				return
 			}
 			logger.WithContext(r.Context()).Infow("http request",
@@ -184,7 +184,7 @@ const traceBodyLimit = 4 * 1024
 func APIExchangeLog(logger logging.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if logger == nil || !shouldTraceAPIExchange(r.URL.Path) {
+			if !shouldTraceAPIExchange(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}

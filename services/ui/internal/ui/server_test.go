@@ -268,6 +268,12 @@ func TestLoginCreatesOpaqueCookieAndRedirects(t *testing.T) {
 	}
 }
 
+func TestNewRequiresLogger(t *testing.T) {
+	if _, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{}, session.NewStore(time.Now), nil); err == nil {
+		t.Fatal("New should reject nil logger")
+	}
+}
+
 func TestUIRequestTraceIsCreatedAndLogged(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger, err := uilogging.NewWithWriter("info", &logBuf)

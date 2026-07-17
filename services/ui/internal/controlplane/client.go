@@ -103,7 +103,10 @@ type CreateWorkspaceRequest struct {
 	WorkProfile string `json:"workProfile"`
 }
 
-func NewClient(cfg Config) *Client {
+func NewClient(cfg Config) (*Client, error) {
+	if cfg.Logger == nil {
+		return nil, errors.New("control plane client logger is required")
+	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
@@ -114,7 +117,7 @@ func NewClient(cfg Config) *Client {
 		httpClient:      httpClient,
 		logger:          cfg.Logger,
 		traceHTTP:       cfg.TraceHTTP,
-	}
+	}, nil
 }
 
 func (c *Client) Login(ctx context.Context, username, password string) (LoginResult, error) {
@@ -346,7 +349,7 @@ func (c *Client) do(req *http.Request, wantStatus int) ([]byte, error) {
 }
 
 func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.Duration, requestBody, responseBody []byte, callErr error) {
-	if !c.traceHTTP || c.logger == nil {
+	if !c.traceHTTP {
 		return
 	}
 	if isSuppressedTracePath(req.URL.Path) {
