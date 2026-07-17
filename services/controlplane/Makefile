@@ -11,6 +11,7 @@ TEST_RUN_DIR ?= $(RUN_DIR)/test-server
 TEST_PID_FILE := $(TEST_RUN_DIR)/appliance-server.pid
 TEST_LOG_DIR := $(TEST_RUN_DIR)/logs
 TEST_LOG_FILE := $(TEST_LOG_DIR)/appliance-server.log
+TEST_APPLICATION_LOG_FILE := $(TEST_LOG_DIR)/application.log
 TEST_DATA_DIR := $(TEST_RUN_DIR)/data
 TEST_CONFIG_FILE ?=
 TEST_PUBLIC_ADDR ?= 127.0.0.1:18084
@@ -92,6 +93,7 @@ test-bootstrap-init: build
 	APPLIANCE_PUBLIC_ADDR="$(TEST_PUBLIC_ADDR)" \
 	APPLIANCE_INTERNAL_ADDR="$(TEST_INTERNAL_ADDR)" \
 	APPLIANCE_CANONICAL_ORIGIN="$(TEST_CANONICAL_ORIGIN)" \
+	APPLIANCE_APPLICATION_LOG_PATH="$(TEST_APPLICATION_LOG_FILE)" \
 	./$(BINARY) bootstrap init --admin-username "$(TEST_ADMIN_USERNAME)" --admin-password-file "$(TEST_PASSWORD_FILE)"
 
 ## test-start: start the real server on dedicated local loopback test ports
@@ -107,6 +109,7 @@ test-start: build
 	APPLIANCE_PUBLIC_ADDR="$(TEST_PUBLIC_ADDR)" \
 	APPLIANCE_INTERNAL_ADDR="$(TEST_INTERNAL_ADDR)" \
 	APPLIANCE_CANONICAL_ORIGIN="$(TEST_CANONICAL_ORIGIN)" \
+	APPLIANCE_APPLICATION_LOG_PATH="$(TEST_APPLICATION_LOG_FILE)" \
 	nohup ./$(BINARY) >"$(TEST_LOG_FILE)" 2>&1 & echo $$! >"$(TEST_PID_FILE)"
 	@attempts=0; \
 	until curl -fsS "http://$(TEST_INTERNAL_ADDR)/health/ready" >/dev/null 2>&1; do \

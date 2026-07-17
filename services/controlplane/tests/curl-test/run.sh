@@ -12,6 +12,7 @@ CONFIG_FILE="${RUN_DIR}/config.json"
 PASSWORD_DIR="${RUN_DIR}/passwords"
 PID_FILE="${RUN_DIR}/appliance-server.pid"
 SERVER_LOG_FILE="${LOG_DIR}/appliance-server.log"
+APPLICATION_LOG_FILE="${LOG_DIR}/application.log"
 TEST_LOG_FILE="${LOG_DIR}/curl-test-output.log"
 QUIET_MODE="${CURL_TEST_QUIET:-0}"
 
@@ -217,6 +218,7 @@ log_step "Bootstrapping initial administrator..."
   APPLIANCE_PUBLIC_ADDR="${PUBLIC_ADDR}" \
   APPLIANCE_INTERNAL_ADDR="${INTERNAL_ADDR}" \
   APPLIANCE_CANONICAL_ORIGIN="${PUBLIC_URL}" \
+  APPLIANCE_APPLICATION_LOG_PATH="${APPLICATION_LOG_FILE}" \
   "${SERVER_BIN}" bootstrap init --admin-username "${ADMIN_USERNAME}" --admin-password-file "${PASSWORD_DIR}/admin.txt"
 )
 
@@ -228,6 +230,7 @@ log_step "Starting appliance-server on ${PUBLIC_URL}"
   APPLIANCE_PUBLIC_ADDR="${PUBLIC_ADDR}" \
   APPLIANCE_INTERNAL_ADDR="${INTERNAL_ADDR}" \
   APPLIANCE_CANONICAL_ORIGIN="${PUBLIC_URL}" \
+  APPLIANCE_APPLICATION_LOG_PATH="${APPLICATION_LOG_FILE}" \
   APPLIANCE_LOG_LEVEL="info" \
   nohup "${SERVER_BIN}" > "${SERVER_LOG_FILE}" 2>&1 &
   echo $! > "${PID_FILE}"

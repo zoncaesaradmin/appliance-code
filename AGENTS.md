@@ -24,6 +24,13 @@ These rules apply to all implementation and documentation in this repository.
 - `appliance-release` owns the one complete air-gap bundle and host lifecycle tooling.
 - Preserve modular interfaces for future change, but do not add package profiles or alternate connected/offline implementation paths in v1.
 
+## Local Verification Discipline
+
+- Any time you edit this repository, run `make verify` in this repository before considering the work complete.
+- Apply this even for small code, chart, workflow, test, Makefile, or documentation changes unless the user explicitly tells you not to run verification.
+- If `make verify` fails, fixing that failure becomes the first follow-up task before any further feature work or close-out.
+- Do not treat the task as done while `make verify` is failing. Either fix the failure or report the exact blocker and the failing log/location.
+
 ## UI To API Observability Contract
 
 - When the browser talks to the UI service and the UI service talks to the control-plane API on the browser's behalf, keep that boundary explicit in code, logs, and documentation.

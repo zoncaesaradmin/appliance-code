@@ -119,9 +119,17 @@ func defaultRenderArgs() []string {
 	return []string{"--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=traefik"}
 }
 
+const (
+	controlPlaneDeploymentName = "control-plane"
+	controlPlaneConfigMapName  = "control-plane-config"
+	controlPlaneServiceName    = "control-plane"
+	controlPlaneUIName         = "control-plane-ui"
+	controlPlaneUIConfigName   = "control-plane-ui-config"
+)
+
 func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	dep := findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane")
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
 	if dep == nil {
 		t.Fatal("expected control-plane Deployment")
 	}
@@ -137,7 +145,7 @@ func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
 
 func TestPodAndContainerSecurityHardening(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	dep := findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane")
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
 	if dep == nil {
 		t.Fatal("expected control-plane Deployment")
 	}
@@ -240,33 +248,33 @@ func TestIngressRouteOnlyReferencesPublicService(t *testing.T) {
 
 func TestUIResourcesRenderByDefault(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane-ui") == nil {
+	if findByKindAndName(docs, "Deployment", controlPlaneUIName) == nil {
 		t.Fatal("expected UI Deployment")
 	}
-	if findByKindAndName(docs, "Service", "appliance-appliance-control-plane-ui") == nil {
+	if findByKindAndName(docs, "Service", controlPlaneUIName) == nil {
 		t.Fatal("expected UI Service")
 	}
-	if findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-ui-config") == nil {
+	if findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName) == nil {
 		t.Fatal("expected UI ConfigMap")
 	}
-	if findByKindAndName(docs, "NetworkPolicy", "appliance-appliance-control-plane-ui-allow") == nil {
+	if findByKindAndName(docs, "NetworkPolicy", controlPlaneUIName+"-allow") == nil {
 		t.Fatal("expected UI NetworkPolicy")
 	}
 }
 
 func TestUIConfigMapDefaultsToRenderedControlPlaneServiceNames(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	cm := findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-ui-config")
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName)
 	if cm == nil {
 		t.Fatal("expected UI ConfigMap")
 	}
 
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://appliance-appliance-control-plane:8080" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://appliance-appliance-control-plane:8080", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://control-plane:8080" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://control-plane:8080", got)
 	}
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://appliance-appliance-control-plane-internal:8081" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://appliance-appliance-control-plane-internal:8081", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://control-plane-internal:8081" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://control-plane-internal:8081", got)
 	}
 }
 
@@ -292,9 +300,9 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		svc, _ := services[0].(map[string]any)
 		name, _ := svc["name"].(string)
 		switch {
-		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" && name == "appliance-appliance-control-plane":
+		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" && name == controlPlaneServiceName:
 			apiRouteOK = true
-		case match == "PathPrefix(`/`)" && name == "appliance-appliance-control-plane-ui":
+		case match == "PathPrefix(`/`)" && name == controlPlaneUIName:
 			uiRouteOK = true
 		}
 	}
@@ -319,10 +327,10 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	}
 	// The Deployment must still render without a dangling volume/mount
 	// reference to the now-absent PVC.
-	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane") == nil {
+	if findByKindAndName(docs, "Deployment", controlPlaneDeploymentName) == nil {
 		t.Error("control-plane Deployment should still render with persistence disabled")
 	}
-	if findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane-ui") != nil {
+	if findByKindAndName(docs, "Deployment", controlPlaneUIName) != nil {
 		t.Error("ui.enabled=false should omit the UI Deployment")
 	}
 }
@@ -340,7 +348,7 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
 		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
 	)...)
-	cm := findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-config")
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
 		t.Fatal("expected control-plane ConfigMap")
 	}
@@ -481,24 +489,24 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
 		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
 	)...)
-	dep := findByKindAndName(docs, "Deployment", "appliance-appliance-control-plane")
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
 	if dep == nil {
 		t.Fatal("expected control-plane Deployment")
 	}
 	if automount, _ := at(dep, "spec", "template", "spec", "automountServiceAccountToken").(bool); !automount {
 		t.Fatal("builder/argo deployment should mount a service account token")
 	}
-	role := findByKindAndName(docs, "Role", "appliance-appliance-control-plane-workflows")
+	role := findByKindAndName(docs, "Role", controlPlaneDeploymentName+"-workflows")
 	if role == nil {
 		t.Fatal("expected workflow Role for builder/argo")
 	}
 	if ns, _ := at(role, "metadata", "namespace").(string); ns != "appliance-builds" {
 		t.Fatalf("workflow Role namespace = %q, want appliance-builds", ns)
 	}
-	if rb := findByKindAndName(docs, "RoleBinding", "appliance-appliance-control-plane-workflows"); rb == nil {
+	if rb := findByKindAndName(docs, "RoleBinding", controlPlaneDeploymentName+"-workflows"); rb == nil {
 		t.Fatal("expected workflow RoleBinding for builder/argo")
 	}
-	cm := findByKindAndName(docs, "ConfigMap", "appliance-appliance-control-plane-config")
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
 		t.Fatal("expected control-plane ConfigMap")
 	}

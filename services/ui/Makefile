@@ -22,7 +22,7 @@ IMAGE_NAME   ?= appliance-ui
 IMAGE_TAG    ?= $(VERSION)
 IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
 
-.PHONY: build test lint coverage verify run stop clean image-local
+.PHONY: build test lint coverage verify run stop clean image-local vendor
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -33,7 +33,7 @@ test:
 
 lint:
 	go vet ./...
-	@fmt_files="$$(gofmt -l .)"; \
+	@fmt_files="$$(gofmt -l . | grep -v '^vendor/')"; \
 	if [ -n "$$fmt_files" ]; then \
 		echo "gofmt found unformatted files:"; echo "$$fmt_files"; exit 1; \
 	fi
@@ -43,6 +43,10 @@ coverage:
 	go tool cover -func=$(COVER_FILE)
 
 verify: lint test
+
+vendor:
+	GOWORK=off go mod tidy
+	GOWORK=off go mod vendor
 
 run: build
 	mkdir -p $(RUN_DIR)

@@ -1,19 +1,26 @@
 # syntax=docker/dockerfile:1
 #
-# Built only on the Linux build server/CI, inside the shared dev container.
+# Built only on the Linux build server/CI, inside the shared dev
+# container (see docs/dev-container.md) — never on a developer laptop.
 
+# Build stage: compiles a fully static binary with the same
+# version/commit/build-time ldflags as `make build`. Builds from the
+# vendored module tree (-mod=vendor), so this step needs no network
+# access at all.
 FROM docker.io/library/golang:1.26 AS build
 WORKDIR /src
 COPY . .
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
-RUN CGO_ENABLED=0 go build \
+RUN GOWORK=off CGO_ENABLED=0 go build -mod=vendor \
     -ldflags "-X appliance-code/services/ui/internal/version.Version=${VERSION} \
               -X appliance-code/services/ui/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/ui/internal/version.BuildTime=${BUILD_TIME}" \
     -o /out/appliance-ui ./cmd/appliance-ui
 
+# Final stage: small Alpine runtime with the static Go binary,
+# CA bundle, tzdata, and entrypoint.
 FROM alpine:3.24.1
 RUN set -eux; \
     apk add --no-cache bash ca-certificates tzdata; \
