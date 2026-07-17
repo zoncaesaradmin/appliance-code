@@ -95,6 +95,49 @@ func TestAPIExchangeLogRedactsRequestAndResponse(t *testing.T) {
 	}
 }
 
+func TestAccessLogSuppressesPublicAPIRequests(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger, err := logging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+
+	handler := Chain(TraceID, RequestID, AccessLog(logger))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/work-profiles", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if strings.TrimSpace(logBuf.String()) != "" {
+		t.Fatalf("expected no access log for public API request, got %s", logBuf.String())
+	}
+}
+
+func TestAccessLogKeepsNonAPIRequests(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger, err := logging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+
+	handler := Chain(TraceID, RequestID, AccessLog(logger))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/auth/check", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	record := findLogRecord(t, logBuf.String(), "http request")
+	if got := record["path"]; got != "/internal/auth/check" {
+		t.Fatalf("path = %#v, want /internal/auth/check", got)
+	}
+}
+
 func findLogRecord(t *testing.T, text, message string) map[string]any {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
