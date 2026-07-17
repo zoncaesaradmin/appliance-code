@@ -347,6 +347,9 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 	if !c.traceHTTP || c.logger == nil {
 		return
 	}
+	if isSuppressedTracePath(req.URL.Path) {
+		return
+	}
 
 	args := []any{
 		"component", "ui-controlplane-client",
@@ -368,6 +371,15 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 		return
 	}
 	c.logger.Infow("control plane API call", args...)
+}
+
+func isSuppressedTracePath(path string) bool {
+	switch path {
+	case "/health/live", "/health/ready":
+		return true
+	default:
+		return false
+	}
 }
 
 func cloneRequestBody(req *http.Request) []byte {

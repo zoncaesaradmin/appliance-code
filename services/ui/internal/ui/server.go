@@ -745,6 +745,9 @@ func chainMiddleware(next http.Handler, logger uilogging.Logger) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		if shouldSuppressUILog(r.URL.Path) {
+			return
+		}
 		logger.Infow("ui request",
 			"method", r.Method,
 			"path", r.URL.Path,
@@ -752,4 +755,13 @@ func chainMiddleware(next http.Handler, logger uilogging.Logger) http.Handler {
 			"duration", time.Since(start).String(),
 		)
 	})
+}
+
+func shouldSuppressUILog(path string) bool {
+	switch path {
+	case "/health/live", "/health/ready":
+		return true
+	default:
+		return false
+	}
 }

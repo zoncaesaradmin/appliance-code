@@ -132,7 +132,7 @@ func AccessLog(logger logging.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rec, r)
-			if logger == nil {
+			if logger == nil || shouldSuppressAccessLog(r.URL.Path) {
 				return
 			}
 			logger.WithContext(r.Context()).Infow("http request",
@@ -142,6 +142,15 @@ func AccessLog(logger logging.Logger) func(http.Handler) http.Handler {
 				"duration", time.Since(start).String(),
 			)
 		})
+	}
+}
+
+func shouldSuppressAccessLog(path string) bool {
+	switch path {
+	case "/health/live", "/health/ready":
+		return true
+	default:
+		return false
 	}
 }
 
