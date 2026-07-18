@@ -320,7 +320,6 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		"securityContext": map[string]any{
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []string{"ALL"}},
-			"runAsNonRoot":             true,
 			"seccompProfile":           map[string]any{"type": runtimeSeccomp},
 		},
 		"__volumes__": volumes,
@@ -332,7 +331,7 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 }
 
 func workflowPodSpecPatch() string {
-	return fmt.Sprintf(`{"securityContext":{"runAsNonRoot":true,"seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"seccompProfile":{"type":%s}}}]}`,
+	return fmt.Sprintf(`{"securityContext":{"seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"seccompProfile":{"type":%s}}}]}`,
 		strconv.Quote(runtimeSeccomp),
 		strconv.Quote(runtimeSeccomp),
 		strconv.Quote(runtimeSeccomp),

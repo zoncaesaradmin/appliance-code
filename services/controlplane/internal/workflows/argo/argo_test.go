@@ -48,10 +48,13 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}
 	body, _ := json.Marshal(got)
 	text := string(body)
-	for _, want := range []string{"builder-git-key", "builder-git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "runAsNonRoot", "RuntimeDefault"} {
+	for _, want := range []string{"builder-git-key", "builder-git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "RuntimeDefault"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workflow JSON missing %q: %s", want, text)
 		}
+	}
+	if strings.Contains(text, "\"runAsNonRoot\":true") {
+		t.Fatalf("workflow JSON should not force runAsNonRoot: %s", text)
 	}
 }
 
@@ -176,6 +179,9 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
+	}
+	if strings.Contains(text, "\"runAsNonRoot\":true") {
+		t.Fatalf("workspace workflow JSON should not force runAsNonRoot: %s", text)
 	}
 	for _, want := range []string{"git clone", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout"} {
 		if !strings.Contains(command, want) {
