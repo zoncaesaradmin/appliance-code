@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 const (
 	serviceAccountDir = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultTimeout    = 30 * time.Second
+	runtimeSeccomp    = "RuntimeDefault"
 )
 
 type Config struct {
@@ -208,7 +210,8 @@ func workflowObject(namespace, instanceID, executorServiceAccount string, spec w
 		labels["workflows.argoproj.io/controller-instanceid"] = strings.TrimSpace(instanceID)
 	}
 	workflowSpec := map[string]any{
-		"entrypoint": "main",
+		"entrypoint":   "main",
+		"podSpecPatch": workflowPodSpecPatch(),
 		"templates": []map[string]any{{
 			"name":      "main",
 			"container": container,
@@ -317,6 +320,8 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		"securityContext": map[string]any{
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []string{"ALL"}},
+			"runAsNonRoot":             true,
+			"seccompProfile":           map[string]any{"type": runtimeSeccomp},
 		},
 		"__volumes__": volumes,
 	}
@@ -324,6 +329,14 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		container["volumeMounts"] = volumeMounts
 	}
 	return container, labels, nil
+}
+
+func workflowPodSpecPatch() string {
+	return fmt.Sprintf(`{"securityContext":{"runAsNonRoot":true,"seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"seccompProfile":{"type":%s}}}]}`,
+		strconv.Quote(runtimeSeccomp),
+		strconv.Quote(runtimeSeccomp),
+		strconv.Quote(runtimeSeccomp),
+	)
 }
 
 func workflowDeadlineSeconds(deadline time.Time) int64 {
