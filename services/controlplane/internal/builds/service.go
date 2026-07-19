@@ -130,8 +130,8 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 	if err := ValidateSource(req.SourceRepoURL, req.SourceCommitSHA, s.allowedGitHosts); err != nil {
 		return storage.Build{}, err
 	}
-	if IsSSHSource(req.SourceRepoURL) && (req.SourceCredentialSecret == "" || req.KnownHostsSecret == "") {
-		return storage.Build{}, fmt.Errorf("builds: SSH sources require source credential and known_hosts secrets")
+	if strings.TrimSpace(req.SourceCredentialRef) != "" || strings.TrimSpace(req.SourceCredentialSecret) != "" || strings.TrimSpace(req.KnownHostsSecret) != "" {
+		return storage.Build{}, fmt.Errorf("builds: HTTPS Git sources do not accept SSH credential inputs")
 	}
 	if err := ValidateBuilderImage(req.BuilderImageDigest, s.allowedBuilderImages); err != nil {
 		return storage.Build{}, err

@@ -187,27 +187,14 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 	}
 
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
-		Name:                workflowName,
-		Kind:                workflows.KindWorkspacePrepare,
-		BuilderImageDigest:  imageDigest,
-		Deadline:            startedAt.Add(30 * time.Minute),
-		WorkspaceRootDir:    s.workspaceRootDir,
-		WorkspaceClaimName:  s.workspaceClaimName,
-		WorkspaceName:       ws.Name,
-		WorkspaceRepos:      workspaceRepoSpecs(repos),
-		SourceCredentialRef: "appliance-managed-ssh",
-		SourceCredentialSecret: func() string {
-			if anySSHSource(repos) {
-				return BuilderGitSecretName()
-			}
-			return ""
-		}(),
-		KnownHostsSecret: func() string {
-			if anySSHSource(repos) {
-				return BuilderGitKnownHostsSecretName()
-			}
-			return ""
-		}(),
+		Name:               workflowName,
+		Kind:               workflows.KindWorkspacePrepare,
+		BuilderImageDigest: imageDigest,
+		Deadline:           startedAt.Add(30 * time.Minute),
+		WorkspaceRootDir:   s.workspaceRootDir,
+		WorkspaceClaimName: s.workspaceClaimName,
+		WorkspaceName:      ws.Name,
+		WorkspaceRepos:     workspaceRepoSpecs(repos),
 	})
 	completedAt := time.Now().UTC()
 	if submitErr != nil {
@@ -260,15 +247,6 @@ func workspaceRepoNames(repos []Repo) []string {
 		out = append(out, repo.Name)
 	}
 	return out
-}
-
-func anySSHSource(repos []Repo) bool {
-	for _, repo := range repos {
-		if isSSHSource(repo.URL) {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Service) ListWorkspaces(ctx context.Context, ownerID string, canAny bool) ([]storage.Workspace, error) {
@@ -402,10 +380,6 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 		Execution: resolved.Target.Execution, ScriptPath: resolved.Target.ScriptPath, MakeTarget: resolved.Target.MakeTarget,
 		ContainerfilePath: resolved.Target.ContainerfilePath, ImageRepository: resolved.Target.ImageRepository, ImageTag: tag,
 		BuilderImageDigest: resolved.Target.BuilderImageDigest}
-	if isSSHSource(resolved.Repo.URL) {
-		buildReq.SourceCredentialSecret = BuilderGitSecretName()
-		buildReq.KnownHostsSecret = BuilderGitKnownHostsSecretName()
-	}
 	build, err := s.builds.Create(ctx, actor, ownerID, buildReq, idempotencyKey)
 	if err != nil {
 		return storage.Job{}, err

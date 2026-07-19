@@ -46,19 +46,10 @@ mean `workspace profile` to distinguish them from the product-facing
 
 ## Git Sources And Credentials
 
-Catalog repos may use HTTPS or SSH-style Git URLs, including
-`git@host:org/repo.git`. All forms are still checked against the configured Git
-host allowlist. SSH repos must declare a source credential reference, and that
-credential must include both the private-key Secret and a pinned `known_hosts`
-Secret.
-
-Source credentials are represented only as opaque catalog references to
-appliance/Kubernetes secrets. Private key material must not appear in product
-config, release bundles, API responses, MCP responses, logs, or command
-arguments. Production Argo workflows mount the selected credential secret and
-its pinned `known_hosts` secret read-only into the short-lived workflow pod that
-performs `git clone`; the control-plane pod never shells out with or stores the
-key material.
+Catalog repos must use HTTPS Git URLs. Repo hosts are still checked against the
+configured Git host allowlist. Private keys, SSH credential references,
+`known_hosts` data, tokens, and passwords do not belong in product config,
+release bundles, API responses, MCP responses, logs, or command arguments.
 
 ## RBAC
 
@@ -81,10 +72,10 @@ builder-profile deployments use the Argo workflow engine when
 
 Covered by tests:
 
-- catalog validation, duplicate workspace-profile aliases, and source credential host matching;
+- catalog validation, duplicate workspace-profile aliases, and HTTPS Git host allowlists;
 - SQLite workspace/current-workspace/job/job-step persistence;
 - builder startup requires a valid build catalog;
-- SSH and HTTPS Git source URL validation with fail-closed host allowlists;
+- HTTPS Git source URL validation with fail-closed host allowlists;
 - builder profile exposes workspace/build-target/job REST flows;
 - core profile hides developer workflow REST routes;
 - builder profile lists developer workflow MCP tools;

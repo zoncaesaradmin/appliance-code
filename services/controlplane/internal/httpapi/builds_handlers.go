@@ -7,7 +7,6 @@ import (
 
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/builds"
-	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
 )
@@ -74,10 +73,6 @@ func (h *BuildHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	buildReq := builds.CreateRequest{
 		SourceRepoURL: req.SourceRepoURL, SourceCommitSHA: req.SourceCommitSHA, ContainerfilePath: req.ContainerfilePath,
 		ImageRepository: req.ImageRepository, ImageTag: req.ImageTag, BuilderImageDigest: req.BuilderImageDigest,
-	}
-	if builds.IsSSHSource(req.SourceRepoURL) {
-		buildReq.SourceCredentialSecret = devflows.BuilderGitSecretName()
-		buildReq.KnownHostsSecret = devflows.BuilderGitKnownHostsSecretName()
 	}
 
 	build, err := h.Builds.Create(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), principal.UserID, buildReq, idempotencyKey)

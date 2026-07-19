@@ -39,13 +39,13 @@ func TestValidateBuilderImageRejectsUnapprovedDigestWhenPolicyConfigured(t *test
 	}
 }
 
-func TestValidateSourceAcceptsAllowedSSHForms(t *testing.T) {
+func TestValidateSourceRejectsSSHForms(t *testing.T) {
 	for _, repoURL := range []string{
 		"git@git.example.internal:team/repo.git",
 		"ssh://git@git.example.internal/team/repo.git",
 	} {
-		if err := ValidateSource(repoURL, "0123456789abcdef0123456789abcdef01234567", []string{"git.example.internal"}); err != nil {
-			t.Fatalf("ValidateSource(%q) returned error: %v", repoURL, err)
+		if err := ValidateSource(repoURL, "0123456789abcdef0123456789abcdef01234567", []string{"git.example.internal"}); err == nil {
+			t.Fatalf("ValidateSource(%q) unexpectedly accepted SSH source", repoURL)
 		}
 	}
 }

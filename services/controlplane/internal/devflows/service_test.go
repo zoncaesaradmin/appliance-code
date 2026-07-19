@@ -132,8 +132,8 @@ func testProvisionCatalog() Catalog {
 			},
 		}},
 		Repos: []Repo{
-			{Name: "platformkit", URL: "git@git.internal.example.com:team/platformkit.git", DefaultRef: "main"},
-			{Name: "forgeline", URL: "git@git.internal.example.com:team/forgeline.git", DefaultRef: "main"},
+			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", DefaultRef: "main"},
+			{Name: "forgeline", URL: "https://git.internal.example.com/team/forgeline.git", DefaultRef: "main"},
 		},
 		BuildTargets: []BuildTarget{{
 			Name:               "default",

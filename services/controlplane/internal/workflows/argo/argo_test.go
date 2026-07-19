@@ -39,7 +39,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = engine.Submit(t.Context(), workflows.Spec{Name: "build-1", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567", ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1", SourceCredentialSecret: "builder-git-key", KnownHostsSecret: "builder-git-known-hosts", Deadline: time.Now().Add(time.Hour)})
+	err = engine.Submit(t.Context(), workflows.Spec{Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567", ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1", Deadline: time.Now().Add(time.Hour)})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -48,27 +48,24 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}
 	body, _ := json.Marshal(got)
 	text := string(body)
-	for _, want := range []string{"builder-git-key", "builder-git-known-hosts", "GIT_SSH_COMMAND", "SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "RuntimeDefault"} {
+	for _, want := range []string{"SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10001", "fsGroup"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workflow JSON missing %q: %s", want, text)
 		}
 	}
-	if strings.Contains(text, "\"runAsNonRoot\":true") {
-		t.Fatalf("workflow JSON should not force runAsNonRoot: %s", text)
-	}
 }
 
-func TestSubmitRejectsCredentialWithoutKnownHosts(t *testing.T) {
+func TestSubmitRejectsSSHCredentialInputs(t *testing.T) {
 	_, err := workflowObject("appliance-builds", "", "", workflows.Spec{
-		Name: "build-1", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
+		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app",
 		TargetTag: "v1", SourceCredentialSecret: "builder-git-key", Deadline: time.Now().Add(time.Hour),
 	})
 	if err == nil {
-		t.Fatal("workflowObject should reject builder Git secret usage without known_hosts secret")
+		t.Fatal("workflowObject should reject SSH credential inputs")
 	}
-	if !strings.Contains(err.Error(), "known_hosts") {
-		t.Fatalf("workflowObject error = %v, want known_hosts mentioned", err)
+	if !strings.Contains(err.Error(), "HTTPS Git workflows") {
+		t.Fatalf("workflowObject error = %v, want HTTPS Git restriction mentioned", err)
 	}
 }
 
@@ -158,12 +155,10 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 		WorkspaceClaimName: "control-plane-workspaces",
 		WorkspaceName:      "demo",
 		WorkspaceRepos: []workflows.WorkspaceRepo{
-			{Name: "platformkit", URL: "git@git.internal.example.com:team/platformkit.git", Ref: "0123456789abcdef0123456789abcdef01234567"},
+			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", Ref: "0123456789abcdef0123456789abcdef01234567"},
 			{Name: "forgeline", URL: "https://git.internal.example.com/team/forgeline", Ref: "main"},
 		},
-		SourceCredentialSecret: "builder-git-key",
-		KnownHostsSecret:       "builder-git-known-hosts",
-		Deadline:               time.Now().Add(time.Hour),
+		Deadline: time.Now().Add(time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("workflowObject: %v", err)
@@ -175,13 +170,10 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
 	}
-	for _, want := range []string{"podSpecPatch", "\\\"name\\\":\\\"init\\\"", "\\\"name\\\":\\\"wait\\\"", "RuntimeDefault"} {
+	for _, want := range []string{"podSpecPatch", "\\\"name\\\":\\\"init\\\"", "\\\"name\\\":\\\"wait\\\"", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10001", "fsGroup"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
-	}
-	if strings.Contains(text, "\"runAsNonRoot\":true") {
-		t.Fatalf("workspace workflow JSON should not force runAsNonRoot: %s", text)
 	}
 	for _, want := range []string{"git clone", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout"} {
 		if !strings.Contains(command, want) {

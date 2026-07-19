@@ -41,7 +41,7 @@ func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 		ID:                 "build-new",
 		OwnerID:            userID,
 		Status:             storage.BuildStatusRunning,
-		SourceRepoURL:      "git@git.internal.example.com:team/app.git",
+		SourceRepoURL:      "https://git.internal.example.com/team/app.git",
 		SourceCommitSHA:    "0123456789abcdef0123456789abcdef01234567",
 		ContainerfilePath:  "Containerfile",
 		ImageRepository:    "users/alice/app",
@@ -58,7 +58,7 @@ func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 
 	ws := storage.Workspace{
 		ID: "workspace-new", OwnerID: userID, Name: "app", WorkProfile: "builder",
-		SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceRef: build.SourceCommitSHA,
+		SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceRef: build.SourceCommitSHA,
 		Status: storage.WorkspaceStatusReady, CreatedAt: now, UpdatedAt: now,
 	}
 	workspaces := NewWorkspaceStore(db)

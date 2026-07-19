@@ -341,7 +341,7 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
+		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
@@ -445,7 +445,7 @@ config:
 	}
 }
 
-func TestValuesSchemaAcceptsSSHCatalogRepoWithoutCredentialMapping(t *testing.T) {
+func TestValuesSchemaRejectsSSHCatalogRepo(t *testing.T) {
 	requireHelm(t)
 	valuesPath := filepath.Join(t.TempDir(), "ssh-catalog.yaml")
 	values := []byte(`
@@ -471,8 +471,8 @@ config:
 	}
 	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm lint rejected SSH catalog repo unexpectedly\n%s", out)
+	if err == nil {
+		t.Fatalf("helm lint unexpectedly accepted SSH catalog repo\n%s", out)
 	}
 }
 
@@ -482,7 +482,7 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
+		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
@@ -531,7 +531,7 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=git@git.internal.example.com:team/app.git",
+		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
 		"--set", "config.buildCatalog.buildTargets[0].name=default",
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",

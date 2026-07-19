@@ -27,6 +27,8 @@ const (
 	serviceAccountDir = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultTimeout    = 30 * time.Second
 	runtimeSeccomp    = "RuntimeDefault"
+	workflowUID       = int64(10001)
+	workflowGID       = int64(10001)
 )
 
 type Config struct {
@@ -246,17 +248,8 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 	volumeMounts := []map[string]any{}
 	volumes := []map[string]any{}
 	env := []map[string]any{}
-	if spec.SourceCredentialSecret != "" {
-		if spec.KnownHostsSecret == "" {
-			return nil, nil, fmt.Errorf("argo: source credential workflows require known_hosts secret")
-		}
-		volumeMounts = append(volumeMounts, map[string]any{"name": "source-credential", "mountPath": "/var/run/appliance/source-credential", "readOnly": true})
-		volumes = append(volumes, map[string]any{"name": "source-credential", "secret": map[string]any{"secretName": spec.SourceCredentialSecret, "defaultMode": 0400}})
-		sshCommand := "ssh -i /var/run/appliance/source-credential/ssh-privatekey -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-		volumeMounts = append(volumeMounts, map[string]any{"name": "known-hosts", "mountPath": "/var/run/appliance/known-hosts", "readOnly": true})
-		volumes = append(volumes, map[string]any{"name": "known-hosts", "secret": map[string]any{"secretName": spec.KnownHostsSecret, "defaultMode": 0444}})
-		sshCommand += " -o UserKnownHostsFile=/var/run/appliance/known-hosts/known_hosts"
-		env = append(env, map[string]any{"name": "GIT_SSH_COMMAND", "value": sshCommand})
+	if strings.TrimSpace(spec.SourceCredentialRef) != "" || strings.TrimSpace(spec.SourceCredentialSecret) != "" || strings.TrimSpace(spec.KnownHostsSecret) != "" {
+		return nil, nil, fmt.Errorf("argo: HTTPS Git workflows do not accept SSH credential inputs")
 	}
 
 	labels := map[string]any{
@@ -320,6 +313,9 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		"securityContext": map[string]any{
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []string{"ALL"}},
+			"runAsNonRoot":             true,
+			"runAsUser":                workflowUID,
+			"runAsGroup":               workflowGID,
 			"seccompProfile":           map[string]any{"type": runtimeSeccomp},
 		},
 		"__volumes__": volumes,
@@ -331,9 +327,16 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 }
 
 func workflowPodSpecPatch() string {
-	return fmt.Sprintf(`{"securityContext":{"seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"seccompProfile":{"type":%s}}}]}`,
+	return fmt.Sprintf(`{"securityContext":{"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"fsGroup":%d,"seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"seccompProfile":{"type":%s}}}]}`,
+		workflowUID,
+		workflowGID,
+		workflowGID,
 		strconv.Quote(runtimeSeccomp),
+		workflowUID,
+		workflowGID,
 		strconv.Quote(runtimeSeccomp),
+		workflowUID,
+		workflowGID,
 		strconv.Quote(runtimeSeccomp),
 	)
 }

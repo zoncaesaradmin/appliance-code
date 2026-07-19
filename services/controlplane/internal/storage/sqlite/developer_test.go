@@ -105,5 +105,5 @@ func createUser(t *testing.T, db *sqlite.DB, username string) string {
 
 func testWorkspace(ownerID, name string) storage.Workspace {
 	now := time.Now().UTC()
-	return storage.Workspace{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Name: name, WorkProfile: "builder", SourceRepoURL: "git@git.internal.example.com:team/app.git", SourceRef: "0123456789abcdef0123456789abcdef01234567", Status: storage.WorkspaceStatusReady, CreatedAt: now, UpdatedAt: now}
+	return storage.Workspace{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Name: name, WorkProfile: "builder", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceRef: "0123456789abcdef0123456789abcdef01234567", Status: storage.WorkspaceStatusReady, CreatedAt: now, UpdatedAt: now}
 }

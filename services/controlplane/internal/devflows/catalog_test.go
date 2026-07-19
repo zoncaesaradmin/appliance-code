@@ -14,7 +14,7 @@ func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 	if resolved.Target.ScriptPath != DefaultRepoScriptPath {
 		t.Errorf("ScriptPath = %q, want default", resolved.Target.ScriptPath)
 	}
-	if resolved.Repo.URL != "git@git.internal.example.com:team/app.git" {
+	if resolved.Repo.URL != "https://git.internal.example.com/team/app.git" {
 		t.Errorf("repo url = %q", resolved.Repo.URL)
 	}
 }
@@ -142,7 +142,7 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 func testCatalog() Catalog {
 	return Catalog{
 		WorkProfiles: []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		Repos:        []Repo{{Name: "app", URL: "git@git.internal.example.com:team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		Repos:        []Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
 		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
 	}
 }

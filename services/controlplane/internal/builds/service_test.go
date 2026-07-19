@@ -330,23 +330,22 @@ func TestCreateRejectsUnsupportedSourceScheme(t *testing.T) {
 	}
 }
 
-func TestCreateRejectsSSHSourceWithoutSecrets(t *testing.T) {
+func TestCreateRejectsSSHSource(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	req := validRequest()
 	req.SourceRepoURL = "git@git.internal.example.com:team/app.git"
 	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err == nil {
-		t.Error("Create should reject SSH source URLs without explicit credential and known_hosts secrets")
+		t.Error("Create should reject SSH source URLs")
 	}
 }
 
-func TestCreateAcceptsSSHSourceWithSecrets(t *testing.T) {
+func TestCreateRejectsSSHCredentialInputsForHTTPSSource(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	req := validRequest()
-	req.SourceRepoURL = "git@git.internal.example.com:team/app.git"
 	req.SourceCredentialSecret = "builder-git-key"
 	req.KnownHostsSecret = "builder-git-known-hosts"
-	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err != nil {
-		t.Fatalf("Create should accept SSH source URLs with explicit credential and known_hosts secrets: %v", err)
+	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err == nil {
+		t.Fatal("Create should reject SSH credential inputs for HTTPS sources")
 	}
 }
 

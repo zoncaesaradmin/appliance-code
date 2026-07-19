@@ -474,31 +474,16 @@ func containsName(values []string, name string) bool {
 	return false
 }
 
-func isSSHSource(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	return strings.HasPrefix(raw, "git@") || strings.HasPrefix(raw, "ssh://")
-}
-
 func sourceHost(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", fmt.Errorf("source url is required")
 	}
-	if strings.HasPrefix(raw, "git@") {
-		rest := strings.TrimPrefix(raw, "git@")
-		host, _, ok := strings.Cut(rest, ":")
-		if !ok || host == "" {
-			return "", fmt.Errorf("invalid ssh git url")
-		}
-		return strings.ToLower(host), nil
-	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", err
 	}
-	switch u.Scheme {
-	case "https", "ssh":
-	default:
+	if u.Scheme != "https" {
 		return "", fmt.Errorf("unsupported source scheme %q", u.Scheme)
 	}
 	if u.Hostname() == "" {
