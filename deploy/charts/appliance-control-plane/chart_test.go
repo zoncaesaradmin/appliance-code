@@ -552,6 +552,10 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 	if ns, _ := at(role, "metadata", "namespace").(string); ns != "appliance-builds" {
 		t.Fatalf("workflow Role namespace = %q, want appliance-builds", ns)
 	}
+	rules, _ := at(role, "rules").([]any)
+	if !roleRuleAllowsResource(rules, "secrets", "create", "get", "update") {
+		t.Fatal("workflow Role should allow create/get/update on secrets for builder Git access")
+	}
 	if rb := findByKindAndName(docs, "RoleBinding", controlPlaneDeploymentName+"-workflows"); rb == nil {
 		t.Fatal("expected workflow RoleBinding for builder/argo")
 	}
@@ -563,4 +567,42 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 	if _, ok := data["APPLIANCE_ARGO_WORKFLOW_NAMESPACE"]; ok {
 		t.Fatal("control-plane ConfigMap should not expose APPLIANCE_ARGO_WORKFLOW_NAMESPACE once the namespace is fixed in code")
 	}
+}
+
+func roleRuleAllowsResource(rules []any, resource string, verbs ...string) bool {
+	need := map[string]struct{}{}
+	for _, verb := range verbs {
+		need[verb] = struct{}{}
+	}
+	for _, rawRule := range rules {
+		rule, ok := rawRule.(map[string]any)
+		if !ok {
+			continue
+		}
+		resources, _ := rule["resources"].([]any)
+		if !containsString(resources, resource) {
+			continue
+		}
+		ruleVerbs, _ := rule["verbs"].([]any)
+		missing := false
+		for verb := range need {
+			if !containsString(ruleVerbs, verb) {
+				missing = true
+				break
+			}
+		}
+		if !missing {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []any, want string) bool {
+	for _, value := range values {
+		if got, _ := value.(string); got == want {
+			return true
+		}
+	}
+	return false
 }

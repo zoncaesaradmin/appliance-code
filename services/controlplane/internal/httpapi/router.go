@@ -310,6 +310,18 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.ListWorkProfiles), nil
 		}},
+		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DevflowsH == nil {
+				return nil, fmt.Errorf("missing developer workflow handlers")
+			}
+			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.GetBuilderGitAccess), nil
+		}},
+		{capability: appliance.CapabilityBuild, pattern: "PUT /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DevflowsH == nil {
+				return nil, fmt.Errorf("missing developer workflow handlers")
+			}
+			return w.protect(roles.PermSystemOperate, deps.DevflowsH.UpdateBuilderGitAccess), nil
+		}},
 		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/workspaces", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")

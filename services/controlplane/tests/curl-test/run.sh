@@ -271,6 +271,15 @@ assert_status 200 "GET /api/v1/auth/session"
 assert_contains "${CURL_RESPONSE_BODY}" "\"userId\"" "session response"
 assert_contains "${CURL_RESPONSE_BODY}" '"authMethod":"session"' "session response"
 
+builder_git_access_body_file="${RUN_DIR}/builder-git-access.json"
+cat > "${builder_git_access_body_file}" <<EOF
+{"host":"git.internal.example.com","username":"builder-user","token":"builder-token"}
+EOF
+curl_request PUT "${PUBLIC_URL}/api/v1/builder/git-access" "Bearer ${admin_access_token}" "${builder_git_access_body_file}"
+assert_status 200 "PUT /api/v1/builder/git-access"
+assert_contains "${CURL_RESPONSE_BODY}" '"configured":true' "builder Git access response"
+assert_contains "${CURL_RESPONSE_BODY}" '"host":"git.internal.example.com"' "builder Git access response"
+
 refresh_body_file="${RUN_DIR}/refresh.json"
 cat > "${refresh_body_file}" <<EOF
 {"refreshToken":"${admin_refresh_token}"}

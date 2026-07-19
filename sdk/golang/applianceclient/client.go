@@ -495,6 +495,33 @@ func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]Wo
 	return result.Items, nil
 }
 
+// ConfigureBuilderGitAccessRequest describes the shared HTTPS Git credential
+// stored appliance-side for builder workflows.
+type ConfigureBuilderGitAccessRequest struct {
+	Host     string `json:"host"`
+	Username string `json:"username"`
+	Token    string `json:"token"`
+}
+
+// GetBuilderGitAccess returns the shared builder Git HTTPS access status.
+func (c *Client) GetBuilderGitAccess(ctx context.Context, accessToken string) (*BuilderGitAccessStatus, error) {
+	var result BuilderGitAccessStatus
+	if err := c.do(ctx, http.MethodGet, "/api/v1/builder/git-access", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ConfigureBuilderGitAccess creates or rotates the shared builder Git HTTPS
+// credential used by workspace/build workflows.
+func (c *Client) ConfigureBuilderGitAccess(ctx context.Context, accessToken string, req ConfigureBuilderGitAccessRequest) (*BuilderGitAccessStatus, error) {
+	var result BuilderGitAccessStatus
+	if err := c.do(ctx, http.MethodPut, "/api/v1/builder/git-access", bearerCredential(accessToken), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // CreateWorkspaceRequest describes a new developer workflow workspace.
 type CreateWorkspaceRequest struct {
 	Name        string `json:"name"`

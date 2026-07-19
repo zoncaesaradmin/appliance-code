@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/workflows"
@@ -70,6 +71,7 @@ type Service struct {
 	defaultDeadline      time.Duration
 	workspaceRootDir     string
 	workspaceClaimName   string
+	builderGit           *buildergit.Service
 }
 
 // NewService wires a Service from its storage, workflow-engine, and policy
@@ -77,13 +79,14 @@ type Service struct {
 func NewService(
 	db storage.DB, buildStore storage.BuildStore, idempotency storage.IdempotencyStore, engine workflows.Engine,
 	recorder *audit.Recorder, allowedGitHosts, allowedBuilderImages []string, defaultDeadline time.Duration,
-	workspaceRootDir, workspaceClaimName string, sensitiveLogValues ...string,
+	workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, sensitiveLogValues ...string,
 ) *Service {
 	return &Service{
 		db: db, builds: buildStore, idempotency: idempotency, engine: engine, audit: recorder,
 		allowedGitHosts: allowedGitHosts, allowedBuilderImages: allowedBuilderImages,
 		sensitiveLogValues: normalizeSensitiveValues(sensitiveLogValues), defaultDeadline: defaultDeadline,
 		workspaceRootDir: strings.TrimSpace(workspaceRootDir), workspaceClaimName: strings.TrimSpace(workspaceClaimName),
+		builderGit: builderGit,
 	}
 }
 
@@ -172,6 +175,14 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		ImageRepository: imageRepo, ImageTag: req.ImageTag, BuilderImageDigest: req.BuilderImageDigest,
 		CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(s.defaultDeadline),
 	}
+	gitCredentialSecret := ""
+	if s.builderGit != nil {
+		credential, err := s.builderGit.Resolve(ctx, build.SourceRepoURL)
+		if err != nil {
+			return storage.Build{}, err
+		}
+		gitCredentialSecret = credential.SecretName
+	}
 
 	err = s.db.WithTx(ctx, func(ctx context.Context) error {
 		if err := s.builds.Create(ctx, build); err != nil {
@@ -192,6 +203,7 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		Execution: req.Execution, ScriptPath: req.ScriptPath, MakeTarget: req.MakeTarget,
 		ContainerfilePath: build.ContainerfilePath, BuilderImageDigest: build.BuilderImageDigest,
 		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag,
+		GitCredentialSecret: gitCredentialSecret,
 		SourceCredentialRef: req.SourceCredentialRef, SourceCredentialSecret: req.SourceCredentialSecret,
 		KnownHostsSecret: req.KnownHostsSecret, Deadline: build.DeadlineAt,
 		WorkspaceRootDir: s.workspaceRootDir, WorkspaceClaimName: s.workspaceClaimName,

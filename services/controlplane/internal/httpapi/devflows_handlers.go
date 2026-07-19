@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/authz"
+	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/logging"
@@ -16,8 +17,9 @@ import (
 // DeveloperWorkflowHandlers implements the ForgeLine-compatible server-side
 // developer workflow surface in appliance-native HTTP semantics.
 type DeveloperWorkflowHandlers struct {
-	Devflows *devflows.Service
-	Logger   logging.Logger
+	Devflows   *devflows.Service
+	BuilderGit *buildergit.Service
+	Logger     logging.Logger
 }
 
 // workProfileResponse keeps the ForgeLine-compatible wire name, but the
@@ -58,6 +60,20 @@ type buildTargetResponse struct {
 	MakeTarget        string   `json:"makeTarget,omitempty"`
 	ContainerfilePath string   `json:"containerfilePath"`
 	ImageRepository   string   `json:"imageRepository"`
+}
+
+type builderGitAccessStatusResponse struct {
+	Configured    bool     `json:"configured"`
+	Host          string   `json:"host,omitempty"`
+	Username      string   `json:"username,omitempty"`
+	RequiredHosts []string `json:"requiredHosts,omitempty"`
+	CanConfigure  bool     `json:"canConfigure"`
+}
+
+type updateBuilderGitAccessRequest struct {
+	Host     string `json:"host"`
+	Username string `json:"username"`
+	Token    string `json:"token"`
 }
 
 type jobResponse struct {
@@ -142,6 +158,10 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 			"workProfile", req.WorkProfile,
 			"error", err,
 		)
+		if errors.Is(err, buildergit.ErrNotConfigured) {
+			WriteProblem(w, r, http.StatusPreconditionFailed, "builder_git_access_required", "Builder Git access is not configured", "Configure builder Git HTTPS access before creating the first workspace.")
+			return
+		}
 		if errors.Is(err, devflows.ErrWorkspaceNameConflict) || errors.Is(err, devflows.ErrWorkspaceProfileConflict) || errors.Is(err, storage.ErrConflict) {
 			WriteProblem(w, r, http.StatusConflict, "workspace_conflict", "Workspace conflict", err.Error())
 			return
@@ -156,6 +176,55 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 		"workProfile", ws.WorkProfile,
 	)
 	writeJSON(w, http.StatusCreated, toWorkspaceResponse(ws))
+}
+
+func (h *DeveloperWorkflowHandlers) GetBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
+	principal, _ := PrincipalFromContext(r.Context())
+	status, err := h.BuilderGit.Status(r.Context())
+	if err != nil {
+		h.Logger.WithContext(r.Context()).Errorw("read builder Git access failed", "userID", principal.UserID, "error", err)
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, builderGitAccessStatusResponse{
+		Configured:    status.Configured,
+		Host:          status.Host,
+		Username:      status.Username,
+		RequiredHosts: status.RequiredHosts,
+		CanConfigure:  authz.HasPermission(principal.Permissions, roles.PermSystemOperate),
+	})
+}
+
+func (h *DeveloperWorkflowHandlers) UpdateBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
+	var req updateBuilderGitAccessRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		WriteValidationProblem(w, r, "invalid request body", nil)
+		return
+	}
+	principal, _ := PrincipalFromContext(r.Context())
+	status, err := h.BuilderGit.Configure(r.Context(), req.Host, req.Username, req.Token)
+	if err != nil {
+		h.Logger.WithContext(r.Context()).Warnw("update builder Git access failed",
+			"userID", principal.UserID,
+			"host", req.Host,
+			"username", req.Username,
+			"error", err,
+		)
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	h.Logger.WithContext(r.Context()).Infow("builder Git access configured",
+		"userID", principal.UserID,
+		"host", status.Host,
+		"username", status.Username,
+	)
+	writeJSON(w, http.StatusOK, builderGitAccessStatusResponse{
+		Configured:    status.Configured,
+		Host:          status.Host,
+		Username:      status.Username,
+		RequiredHosts: status.RequiredHosts,
+		CanConfigure:  true,
+	})
 }
 
 func (h *DeveloperWorkflowHandlers) ListWorkspaces(w http.ResponseWriter, r *http.Request) {

@@ -321,6 +321,13 @@ func (r *runner) run(ctx context.Context) error {
 	if repositories == nil {
 		return fmt.Errorf("list registry repositories returned nil slice")
 	}
+	if _, err := r.client.ConfigureBuilderGitAccess(ctx, adminAccess, applianceclient.ConfigureBuilderGitAccessRequest{
+		Host:     "git.internal.example.com",
+		Username: "builder-user",
+		Token:    "builder-token",
+	}); err != nil {
+		return fmt.Errorf("configure builder Git access: %w", err)
+	}
 
 	r.logger.Print("exercising build APIs")
 	build, err := r.client.CreateBuild(ctx, aliceAccess, applianceclient.CreateBuildRequest{

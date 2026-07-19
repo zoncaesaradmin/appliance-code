@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/storage"
@@ -33,11 +34,12 @@ type Service struct {
 	engine             workflows.Engine
 	workspaceRootDir   string
 	workspaceClaimName string
+	builderGit         *buildergit.Service
 	logger             logging.Logger
 	audit              *audit.Recorder
 }
 
-func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, workspaceRootDir, workspaceClaimName string, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
+func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
 	if logger == nil {
 		return nil, errors.New("devflows: logger is required")
 	}
@@ -49,6 +51,7 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 		engine:             engine,
 		workspaceRootDir:   strings.TrimSpace(workspaceRootDir),
 		workspaceClaimName: strings.TrimSpace(workspaceClaimName),
+		builderGit:         builderGit,
 		logger:             logger,
 		audit:              recorder,
 	}, nil
@@ -97,6 +100,10 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	}
 	if len(repos) == 0 {
 		return storage.Workspace{}, fmt.Errorf("devflows: workspace profile %q has no repos configured", profile)
+	}
+	gitCredentialSecret, err := s.resolveWorkspaceGitCredential(ctx, repos)
+	if err != nil {
+		return storage.Workspace{}, err
 	}
 	provisionerImage, err := s.catalog.WorkspaceProvisionerImageDigestForProfile(profile)
 	if err != nil {
@@ -159,10 +166,10 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 		_ = s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.create", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess})
 	}
 
-	return s.submitWorkspaceProvision(ctx, ws, job, repos, provisionerImage)
+	return s.submitWorkspaceProvision(ctx, ws, job, repos, provisionerImage, gitCredentialSecret)
 }
 
-func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Workspace, job storage.Job, repos []Repo, imageDigest string) (storage.Workspace, error) {
+func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Workspace, job storage.Job, repos []Repo, imageDigest, gitCredentialSecret string) (storage.Workspace, error) {
 	startedAt := time.Now().UTC()
 	workflowName := workspacePrepareWorkflowName(job.ID)
 	if s.engine == nil {
@@ -187,14 +194,15 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 	}
 
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
-		Name:               workflowName,
-		Kind:               workflows.KindWorkspacePrepare,
-		BuilderImageDigest: imageDigest,
-		Deadline:           startedAt.Add(30 * time.Minute),
-		WorkspaceRootDir:   s.workspaceRootDir,
-		WorkspaceClaimName: s.workspaceClaimName,
-		WorkspaceName:      ws.Name,
-		WorkspaceRepos:     workspaceRepoSpecs(repos),
+		Name:                workflowName,
+		Kind:                workflows.KindWorkspacePrepare,
+		BuilderImageDigest:  imageDigest,
+		GitCredentialSecret: gitCredentialSecret,
+		Deadline:            startedAt.Add(30 * time.Minute),
+		WorkspaceRootDir:    s.workspaceRootDir,
+		WorkspaceClaimName:  s.workspaceClaimName,
+		WorkspaceName:       ws.Name,
+		WorkspaceRepos:      workspaceRepoSpecs(repos),
 	})
 	completedAt := time.Now().UTC()
 	if submitErr != nil {
@@ -231,6 +239,27 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 		"workspaceClaimName", s.workspaceClaimName,
 	)
 	return ws, nil
+}
+
+func (s *Service) resolveWorkspaceGitCredential(ctx context.Context, repos []Repo) (string, error) {
+	if s.builderGit == nil {
+		return "", nil
+	}
+	secretName := ""
+	for _, repo := range repos {
+		credential, err := s.builderGit.Resolve(ctx, repo.URL)
+		if err != nil {
+			return "", err
+		}
+		if secretName == "" {
+			secretName = credential.SecretName
+			continue
+		}
+		if credential.SecretName != secretName {
+			return "", fmt.Errorf("devflows: workspace profile requires multiple Git credentials, which is not supported yet")
+		}
+	}
+	return secretName, nil
 }
 
 func workspaceRepoSpecs(repos []Repo) []workflows.WorkspaceRepo {

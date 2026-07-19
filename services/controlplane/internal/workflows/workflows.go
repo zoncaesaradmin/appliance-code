@@ -44,6 +44,7 @@ type Spec struct {
 	Name                   string
 	Kind                   Kind
 	BuilderImageDigest     string
+	GitCredentialSecret    string
 	SourceCredentialRef    string
 	SourceCredentialSecret string
 	KnownHostsSecret       string

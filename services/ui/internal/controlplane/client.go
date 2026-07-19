@@ -103,6 +103,20 @@ type CreateWorkspaceRequest struct {
 	WorkProfile string `json:"workProfile"`
 }
 
+type BuilderGitAccessStatus struct {
+	Configured    bool     `json:"configured"`
+	Host          string   `json:"host,omitempty"`
+	Username      string   `json:"username,omitempty"`
+	RequiredHosts []string `json:"requiredHosts,omitempty"`
+	CanConfigure  bool     `json:"canConfigure"`
+}
+
+type ConfigureBuilderGitAccessRequest struct {
+	Host     string `json:"host"`
+	Username string `json:"username"`
+	Token    string `json:"token"`
+}
+
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("control plane client logger is required")
@@ -304,6 +318,34 @@ func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID s
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	return c.doJSON(req, http.StatusNoContent, nil)
+}
+
+func (c *Client) BuilderGitAccess(ctx context.Context, accessToken string) (BuilderGitAccessStatus, error) {
+	var out BuilderGitAccessStatus
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/builder/git-access", nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) ConfigureBuilderGitAccess(ctx context.Context, accessToken string, in ConfigureBuilderGitAccessRequest) (BuilderGitAccessStatus, error) {
+	var out BuilderGitAccessStatus
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/api/v1/builder/git-access", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {

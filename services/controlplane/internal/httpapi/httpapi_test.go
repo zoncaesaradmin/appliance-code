@@ -61,6 +61,17 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		t.Fatalf("WireServices: %v", err)
 	}
 	t.Cleanup(func() { services.DB.Close() })
+	if profile == appliance.ProfileBuilder && services.BuilderGit != nil {
+		hosts, err := catalog.RepoHosts()
+		if err != nil {
+			t.Fatalf("catalog.RepoHosts: %v", err)
+		}
+		if len(hosts) > 0 {
+			if _, err := services.BuilderGit.Configure(t.Context(), hosts[0], "builder-user", "builder-token"); err != nil {
+				t.Fatalf("BuilderGit.Configure: %v", err)
+			}
+		}
+	}
 
 	authDeps := httpapi.AuthDeps{
 		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,
@@ -92,7 +103,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
-		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, Logger: logger}
+		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
 	}
 
 	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)

@@ -40,6 +40,8 @@ type controlPlane interface {
 	CreateWorkspace(ctx context.Context, accessToken string, req controlplane.CreateWorkspaceRequest) (controlplane.Workspace, error)
 	SetCurrentWorkspace(ctx context.Context, accessToken, workspaceID string) (controlplane.Workspace, error)
 	DeleteWorkspace(ctx context.Context, accessToken, workspaceID string) error
+	BuilderGitAccess(ctx context.Context, accessToken string) (controlplane.BuilderGitAccessStatus, error)
+	ConfigureBuilderGitAccess(ctx context.Context, accessToken string, req controlplane.ConfigureBuilderGitAccessRequest) (controlplane.BuilderGitAccessStatus, error)
 }
 
 type Server struct {
@@ -70,6 +72,7 @@ type builderPageData struct {
 	WorkProfiles          []controlplane.WorkProfile
 	Workspaces            []controlplane.Workspace
 	CurrentWorkspace      *controlplane.Workspace
+	BuilderGitAccess      controlplane.BuilderGitAccessStatus
 	OpenWorkspaceSettings bool
 	SelectedWorkspaceID   string
 	SelectedWorkspaceName string
@@ -121,6 +124,7 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	mux.HandleFunc("GET /dashboard", s.dashboard)
 	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
 	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
+	mux.HandleFunc("POST /builder/git-access", s.configureBuilderGitAccess)
 	mux.HandleFunc("POST /builder/workspaces/delete", s.deleteBuilderWorkspace)
 	mux.HandleFunc("POST /builder/current-workspace", s.setBuilderCurrentWorkspace)
 	mux.HandleFunc("GET /partials/builder/work-profile", s.builderWorkProfilePartial)
@@ -408,10 +412,55 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 		WorkProfile: workProfile,
 	}); err != nil {
 		s.logger.WithContext(r.Context()).Warnw("create builder workspace failed", "error", err, "workspaceName", name, "workProfile", workProfile)
+		if isHTTPStatus(err, http.StatusPreconditionFailed) {
+			s.render(w, r, http.StatusPreconditionFailed, "builder_workspaces.html", s.builderPageData(r, rec, "", "Configure builder Git HTTPS access before creating the first workspace."))
+			return
+		}
 		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not create the workspace. Check the workspace profile configuration."))
 		return
 	}
 	s.logger.WithContext(r.Context()).Infow("builder workspace created", "workspaceName", name, "workProfile", workProfile)
+	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+}
+
+func (s *Server) configureBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not read the submitted Git access form."))
+		return
+	}
+	host := strings.TrimSpace(r.Form.Get("git_host"))
+	username := strings.TrimSpace(r.Form.Get("git_username"))
+	token := strings.TrimSpace(r.Form.Get("git_token"))
+	if host == "" || username == "" || token == "" {
+		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Git host, username, and token are required."))
+		return
+	}
+	if _, err := s.cp.ConfigureBuilderGitAccess(r.Context(), rec.AccessToken, controlplane.ConfigureBuilderGitAccessRequest{
+		Host:     host,
+		Username: username,
+		Token:    token,
+	}); err != nil {
+		s.logger.WithContext(r.Context()).Warnw("configure builder Git access failed", "error", err, "host", host, "username", username)
+		if isHTTPStatus(err, http.StatusForbidden) {
+			s.render(w, r, http.StatusForbidden, "builder_workspaces.html", s.builderPageData(r, rec, "", "Only an administrator can configure appliance-wide builder Git access."))
+			return
+		}
+		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not save builder Git access. Check the host and token and try again."))
+		return
+	}
+	s.logger.WithContext(r.Context()).Infow("builder Git access configured", "host", host, "username", username)
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
 }
 
@@ -525,6 +574,11 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 		data.StatusError = "Workspace profiles are not available."
 		return data
 	}
+	gitAccess, err := s.cp.BuilderGitAccess(r.Context(), rec.AccessToken)
+	if err != nil {
+		data.StatusError = "Builder Git access status is not available."
+		return data
+	}
 	workspaces, err := s.cp.ListWorkspaces(r.Context(), rec.AccessToken)
 	if err != nil {
 		data.StatusError = "Workspaces are not available."
@@ -536,10 +590,11 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 	} else if !isHTTPStatus(err, http.StatusNotFound) {
 		data.StatusError = "Current workspace is not available."
 	}
+	data.BuilderGitAccess = gitAccess
 	data.WorkProfiles = profiles
 	data.Workspaces = workspaces
 	selectedID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
-	data.OpenWorkspaceSettings = data.CurrentWorkspace == nil || selectedID != "" || formError != "" || message != ""
+	data.OpenWorkspaceSettings = !gitAccess.Configured || data.CurrentWorkspace == nil || selectedID != "" || formError != "" || message != ""
 	selected, selectedIsNew := selectedBuilderWorkspace(selectedID, workspaces, data.CurrentWorkspace)
 	if selectedIsNew {
 		data.SelectedWorkspaceID = "new"

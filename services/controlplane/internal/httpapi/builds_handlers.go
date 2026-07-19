@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/authz"
+	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
@@ -83,6 +84,9 @@ func (h *BuildHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, builds.ErrIdempotencyInProgress):
 		WriteProblem(w, r, http.StatusConflict, "idempotency_in_progress", err.Error(), "")
+		return
+	case errors.Is(err, buildergit.ErrNotConfigured):
+		WriteProblem(w, r, http.StatusPreconditionFailed, "builder_git_access_required", "Builder Git access is not configured", "Configure builder Git HTTPS access before creating a build.")
 		return
 	case err != nil:
 		WriteValidationProblem(w, r, err.Error(), nil)

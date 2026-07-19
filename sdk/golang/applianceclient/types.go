@@ -156,6 +156,16 @@ type BuildTarget struct {
 	ImageRepository   string   `json:"imageRepository"`
 }
 
+// BuilderGitAccessStatus mirrors the shared appliance-side HTTPS Git access
+// configuration used by builder workflows.
+type BuilderGitAccessStatus struct {
+	Configured    bool     `json:"configured"`
+	Host          string   `json:"host,omitempty"`
+	Username      string   `json:"username,omitempty"`
+	RequiredHosts []string `json:"requiredHosts,omitempty"`
+	CanConfigure  bool     `json:"canConfigure"`
+}
+
 // Job mirrors one durable developer workflow job.
 type Job struct {
 	ID           string     `json:"id"`

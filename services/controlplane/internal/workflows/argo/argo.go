@@ -29,6 +29,7 @@ const (
 	runtimeSeccomp    = "RuntimeDefault"
 	workflowUID       = int64(10001)
 	workflowGID       = int64(10001)
+	gitCredentialDir  = "/var/run/appliance/git-access"
 )
 
 type Config struct {
@@ -251,6 +252,10 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 	if strings.TrimSpace(spec.SourceCredentialRef) != "" || strings.TrimSpace(spec.SourceCredentialSecret) != "" || strings.TrimSpace(spec.KnownHostsSecret) != "" {
 		return nil, nil, fmt.Errorf("argo: HTTPS Git workflows do not accept SSH credential inputs")
 	}
+	if strings.TrimSpace(spec.GitCredentialSecret) != "" {
+		volumeMounts = append(volumeMounts, map[string]any{"name": "git-access", "mountPath": gitCredentialDir, "readOnly": true})
+		volumes = append(volumes, map[string]any{"name": "git-access", "secret": map[string]any{"secretName": spec.GitCredentialSecret}})
+	}
 
 	labels := map[string]any{
 		"app.kubernetes.io/part-of":    "appliance",
@@ -360,8 +365,8 @@ func buildCommandScript(spec workflows.Spec) (string, error) {
 	if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" || spec.TargetRepository == "" || spec.TargetTag == "" {
 		return "", fmt.Errorf("argo: workflow spec is missing required build fields")
 	}
-	preamble := `mkdir -p /workspace/src
-git clone "$SOURCE_REPO_URL" /workspace/src
+	preamble := gitAuthPreamble(spec.GitCredentialSecret) + `mkdir -p /workspace/src
+appliance_git_clone "$SOURCE_REPO_URL" /workspace/src
 git -C /workspace/src checkout "$SOURCE_COMMIT_SHA"
 cd /workspace/src
 `
@@ -390,6 +395,7 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 		return "", fmt.Errorf("argo: workspace workflow spec is missing required fields")
 	}
 	var b strings.Builder
+	b.WriteString(gitAuthPreamble(spec.GitCredentialSecret))
 	b.WriteString("workspace_dir=\"$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME\"\n")
 	b.WriteString("mkdir -p \"$workspace_dir\"\n")
 	b.WriteString("cd \"$workspace_dir\"\n")
@@ -412,7 +418,7 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 		b.WriteString(" ]; then rm -rf ")
 		b.WriteString(repoDir)
 		b.WriteString("; fi\n")
-		b.WriteString("  git clone ")
+		b.WriteString("  appliance_git_clone ")
 		b.WriteString(repoURL)
 		b.WriteString(" ")
 		b.WriteString(repoDir)
@@ -425,6 +431,22 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 		b.WriteString("fi\n")
 	}
 	return b.String(), nil
+}
+
+func gitAuthPreamble(secretName string) string {
+	if strings.TrimSpace(secretName) == "" {
+		return "appliance_git_clone() {\n  git clone \"$1\" \"$2\"\n}\n"
+	}
+	return `appliance_git_clone() {
+  repo_url="$1"
+  dest_dir="$2"
+  git_host="$(cat ` + gitCredentialDir + `/host)"
+  git_username="$(cat ` + gitCredentialDir + `/username)"
+  git_token="$(cat ` + gitCredentialDir + `/token)"
+  auth_header="$(printf '%s:%s' "$git_username" "$git_token" | base64 | tr -d '\n')"
+  git -c "http.https://${git_host}/.extraheader=Authorization: Basic ${auth_header}" clone "$repo_url" "$dest_dir"
+}
+`
 }
 
 func shellQuote(v string) string {

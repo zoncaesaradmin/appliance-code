@@ -18,7 +18,7 @@ import (
 )
 
 func TestNewServiceRequiresLogger(t *testing.T) {
-	_, err := NewService(Catalog{}, nil, nil, nil, nil, "", "", nil, nil)
+	_, err := NewService(Catalog{}, nil, nil, nil, nil, "", "", nil, nil, nil)
 	if err == nil {
 		t.Fatal("NewService should reject a nil logger")
 	}
@@ -51,7 +51,7 @@ func TestWorkspaceProvisioningLogsSubmissionAndStatus(t *testing.T) {
 		t.Fatalf("Create user: %v", err)
 	}
 
-	svc, err := NewService(testProvisionCatalog(), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "/var/lib/zon/workspaces", "appliance-workspaces", logger, nil)
+	svc, err := NewService(testProvisionCatalog(), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "/var/lib/zon/workspaces", "appliance-workspaces", nil, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

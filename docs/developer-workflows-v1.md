@@ -52,6 +52,19 @@ configured Git host allowlist. Private keys, SSH-only credential metadata,
 tokens, and passwords do not belong in product config,
 release bundles, API responses, MCP responses, logs, or command arguments.
 
+The appliance now keeps one shared builder Git HTTPS credential as runtime
+state in the `appliance-builds` namespace rather than in the build catalog.
+
+- The control plane exposes `GET /api/v1/builder/git-access` so the UI can
+  discover whether that shared credential exists and which catalog host it is
+  expected to cover.
+- Administrators configure or rotate it through
+  `PUT /api/v1/builder/git-access`.
+- Workspace creation and direct build submission fail closed with
+  `412 Precondition Failed` until that shared credential exists.
+- Argo workspace/build workflow pods mount the resulting Kubernetes Secret and
+  use it only for HTTPS `git clone` calls.
+
 ## RBAC
 
 The RBAC model is unchanged: capabilities gate route/tool registration, and

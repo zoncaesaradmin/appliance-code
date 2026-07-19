@@ -85,7 +85,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
-		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, Logger: logger}
+		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
 	}
 
 	publicHandler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)

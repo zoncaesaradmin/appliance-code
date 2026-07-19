@@ -26,12 +26,15 @@ type fakeControlPlane struct {
 	listWorkspacesCalls      int
 	currentWorkspaceCalls    int
 	setCurrentWorkspaceCalls int
+	builderGitAccessCalls    int
+	configureGitAccessCalls  int
 	initialized              bool
 	adminUser                string
 	adminPass                string
 	profiles                 []controlplane.WorkProfile
 	workspaces               []controlplane.Workspace
 	currentID                string
+	builderGitAccess         controlplane.BuilderGitAccessStatus
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
@@ -154,6 +157,32 @@ func (f *fakeControlPlane) DeleteWorkspace(_ context.Context, _ string, workspac
 		return nil
 	}
 	return &controlplane.HTTPStatusError{Method: http.MethodDelete, Path: "/api/v1/workspaces/" + workspaceID, StatusCode: http.StatusNotFound}
+}
+
+func (f *fakeControlPlane) BuilderGitAccess(context.Context, string) (controlplane.BuilderGitAccessStatus, error) {
+	f.builderGitAccessCalls++
+	if f.builderGitAccess.Host == "" && len(f.builderGitAccess.RequiredHosts) == 0 {
+		return controlplane.BuilderGitAccessStatus{
+			Configured:    true,
+			Host:          "github.com",
+			Username:      "builder-user",
+			RequiredHosts: []string{"github.com"},
+			CanConfigure:  true,
+		}, nil
+	}
+	return f.builderGitAccess, nil
+}
+
+func (f *fakeControlPlane) ConfigureBuilderGitAccess(_ context.Context, _ string, req controlplane.ConfigureBuilderGitAccessRequest) (controlplane.BuilderGitAccessStatus, error) {
+	f.configureGitAccessCalls++
+	f.builderGitAccess = controlplane.BuilderGitAccessStatus{
+		Configured:    true,
+		Host:          req.Host,
+		Username:      req.Username,
+		RequiredHosts: []string{req.Host},
+		CanConfigure:  true,
+	}
+	return f.builderGitAccess, nil
 }
 
 type fakeErr string

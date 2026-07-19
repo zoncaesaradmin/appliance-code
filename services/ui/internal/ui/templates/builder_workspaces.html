@@ -22,6 +22,57 @@
 {{end}}
 
 <section class="builder-overview">
+  <article class="builder-primary {{if not .BuilderGitAccess.Configured}}builder-primary-attn{{end}}">
+    <p class="eyebrow">Git access</p>
+    {{if .BuilderGitAccess.Configured}}
+    <div class="builder-primary-head">
+      <div>
+        <h2>Configured</h2>
+        <p class="muted">HTTPS access is configured for <strong>{{.BuilderGitAccess.Host}}</strong> as <strong>{{.BuilderGitAccess.Username}}</strong>.</p>
+      </div>
+      <span class="inline-pill">ready</span>
+    </div>
+    <p class="muted">Workspace provisioning and builder workflows will use this appliance-wide HTTPS credential when cloning the configured repos.</p>
+    {{else}}
+    <h2>Configure builder Git access first</h2>
+    {{if .BuilderGitAccess.CanConfigure}}
+    <p class="builder-attn-copy">This appliance does not have the shared HTTPS Git credential yet. Save it once before creating the first workspace.</p>
+    {{else}}
+    <p class="builder-attn-copy">This appliance still needs an administrator to configure the shared HTTPS Git credential before any workspace can be created.</p>
+    {{end}}
+    {{if .BuilderGitAccess.RequiredHosts}}
+    <p class="muted">Current builder catalog host{{if gt (len .BuilderGitAccess.RequiredHosts) 1}}s{{end}}: {{range $index, $host := .BuilderGitAccess.RequiredHosts}}{{if $index}}, {{end}}<strong>{{$host}}</strong>{{end}}</p>
+    {{end}}
+    {{end}}
+  </article>
+
+  <article class="builder-next">
+    <p class="eyebrow">Configuration</p>
+    <h2>Shared builder credential</h2>
+    {{if .BuilderGitAccess.CanConfigure}}
+    <form method="post" action="/builder/git-access">
+      <label>
+        Git host
+        <input name="git_host" value="{{if .BuilderGitAccess.Host}}{{.BuilderGitAccess.Host}}{{else if eq (len .BuilderGitAccess.RequiredHosts) 1}}{{index .BuilderGitAccess.RequiredHosts 0}}{{end}}" placeholder="github.com" autocomplete="off" required>
+      </label>
+      <label>
+        Git username
+        <input name="git_username" value="{{.BuilderGitAccess.Username}}" placeholder="octocat or x-access-token" autocomplete="off" required>
+      </label>
+      <label>
+        Personal access token
+        <input name="git_token" type="password" placeholder="Paste the Git HTTPS token" autocomplete="off" required>
+      </label>
+      <p class="muted">This token is stored appliance-side and is reused by workspace provisioning and build workflows for the configured host only.</p>
+      <button type="submit">{{if .BuilderGitAccess.Configured}}Update Git Access{{else}}Save Git Access{{end}}</button>
+    </form>
+    {{else}}
+    <p class="muted">An administrator must complete this one-time setup. After that, developers can create workspaces normally.</p>
+    {{end}}
+  </article>
+</section>
+
+<section class="builder-overview">
   <article class="builder-primary {{if not .CurrentWorkspace}}builder-primary-attn{{end}}">
     <p class="eyebrow">Current workspace</p>
     {{if .CurrentWorkspace}}
@@ -214,6 +265,9 @@
           <header>
             <strong>Workspace details</strong>
           </header>
+          {{if not .BuilderGitAccess.Configured}}
+          <p class="muted">Workspace creation is blocked until the shared builder Git HTTPS credential is configured above.</p>
+          {{end}}
           <form method="post" action="/builder/workspaces">
             <input type="hidden" name="selected_workspace_id" value="{{.SelectedWorkspaceID}}">
             <label>
@@ -240,7 +294,7 @@
               {{template "builder-work-profile-preview" .}}
             </div>
             <p class="muted">The workspace profile defines the repos inside this logical workspace. Submitting this form will either reuse an existing matching workspace or create a new one, then set it as the current workspace.</p>
-            <button type="submit">Set Workspace</button>
+            <button type="submit" {{if not .BuilderGitAccess.Configured}}disabled{{end}}>Set Workspace</button>
           </form>
           {{if .SelectedExisting}}
           <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">

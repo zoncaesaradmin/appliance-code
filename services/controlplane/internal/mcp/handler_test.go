@@ -68,6 +68,17 @@ func newTestEnvWithCatalog(t *testing.T, profile appliance.Profile, catalog devf
 		t.Fatalf("WireServices: %v", err)
 	}
 	t.Cleanup(func() { services.DB.Close() })
+	if profile == appliance.ProfileBuilder && services.BuilderGit != nil {
+		hosts, err := catalog.RepoHosts()
+		if err != nil {
+			t.Fatalf("catalog.RepoHosts: %v", err)
+		}
+		if len(hosts) > 0 {
+			if _, err := services.BuilderGit.Configure(t.Context(), hosts[0], "builder-user", "builder-token"); err != nil {
+				t.Fatalf("BuilderGit.Configure: %v", err)
+			}
+		}
+	}
 
 	deps := reqauth.Deps{
 		Sessions: services.Sessions, Tokens: services.Tokens, Authz: services.Authz,

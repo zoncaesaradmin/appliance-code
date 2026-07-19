@@ -8,6 +8,7 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
+	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
@@ -53,6 +54,7 @@ type Services struct {
 	WorkflowEngine     workflows.Engine
 	Builds             *builds.Service
 	Devflows           *devflows.Service
+	BuilderGit         *buildergit.Service
 
 	Keys  *keys.Material
 	Audit *audit.Recorder
@@ -130,16 +132,30 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 
 	var buildsSvc *builds.Service
 	var devflowsSvc *devflows.Service
+	var builderGitSvc *buildergit.Service
 	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
 		allowedGitHosts, err := cfg.BuildCatalog.RepoHosts()
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: deriving build catalog git hosts: %w", err)
 		}
+		secretManager := buildergit.SecretManager(buildergit.NewMemorySecretManager())
+		if cfg.WorkflowEngine == "argo" {
+			secretManager, err = buildergit.NewInClusterSecretManager()
+			if err != nil {
+				db.Close()
+				return nil, fmt.Errorf("app: wiring builder Git secret manager: %w", err)
+			}
+		}
+		builderGitSvc, err = buildergit.NewService(secretManager, argoWorkflowNamespace, buildergit.DefaultSecretName, allowedGitHosts)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: wiring builder Git service: %w", err)
+		}
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
 			allowedGitHosts, cfg.BuildCatalog.BuilderImageDigests(), cfg.BuildDefaultDeadline,
-			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, cfg.BuildCatalog.SensitiveLogValues()...)
-		devflowsSvc, err = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, logger, recorder)
+			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, cfg.BuildCatalog.SensitiveLogValues()...)
+		devflowsSvc, err = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring developer workflows: %w", err)
@@ -175,6 +191,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		WorkflowEngine:     workflowEngine,
 		Builds:             buildsSvc,
 		Devflows:           devflowsSvc,
+		BuilderGit:         builderGitSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 	}, nil

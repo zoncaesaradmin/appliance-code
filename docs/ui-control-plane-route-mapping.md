@@ -67,9 +67,10 @@ Useful event names:
 | `GET /dashboard` | `dashboardData` | `GET /api/v1/auth/session`; if expired, `POST /api/v1/auth/refresh` then `GET /api/v1/auth/session`; `GET /version` on the internal listener; `GET /health/ready` on the internal listener | `200` full HTML page |
 | `GET /partials/status` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
 | `GET /partials/session` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
-| `GET /builder/workspaces` | `builderPageData` | Session check/refresh as needed; `GET /api/v1/work-profiles`; `GET /api/v1/workspaces`; `GET /api/v1/current-workspace` | `200` full HTML page |
+| `GET /builder/workspaces` | `builderPageData` | Session check/refresh as needed; `GET /api/v1/work-profiles`; `GET /api/v1/builder/git-access`; `GET /api/v1/workspaces`; `GET /api/v1/current-workspace` | `200` full HTML page |
+| `POST /builder/git-access` | `configureBuilderGitAccess` | Session check/refresh as needed; `PUT /api/v1/builder/git-access` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/workspaces` with `selected_workspace_id=<existing>` | `createBuilderWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
-| `POST /builder/workspaces` with `selected_workspace_id=new` or no selection | `createBuilderWorkspace` | Session check/refresh as needed; `GET /api/v1/workspaces`; then either `POST /api/v1/current-workspace` for an existing same-name/same-profile workspace, or `POST /api/v1/workspaces` to create a new one | `303` redirect to `/builder/workspaces` |
+| `POST /builder/workspaces` with `selected_workspace_id=new` or no selection | `createBuilderWorkspace` | Session check/refresh as needed; `GET /api/v1/workspaces`; then either `POST /api/v1/current-workspace` for an existing same-name/same-profile workspace, or `POST /api/v1/workspaces` to create a new one; if the shared Git credential is still missing, the control plane returns `412` and the UI re-renders the page with an error instead of redirecting | `303` redirect to `/builder/workspaces` on success |
 | `POST /builder/current-workspace` | `setBuilderCurrentWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/workspaces/delete` | `deleteBuilderWorkspace` | Session check/refresh as needed; `DELETE /api/v1/workspaces/{workspaceId}` | `303` redirect to `/builder/workspaces?workspace_id=new` |
 | `GET /partials/builder/work-profile` | `builderWorkProfilePartial` | Session check/refresh as needed; `GET /api/v1/work-profiles` | `200` HTML partial |
@@ -100,6 +101,25 @@ to `/var/log/appliance/control-plane/application.log`:
 - `workspace status reconciled`
 - `workspace provisioning workflow submission failed`
 - `workspace provisioning workflow missing`
+
+## Builder Git Access Flow
+
+Builder workspace and build flows now depend on one shared appliance-side HTTPS
+Git credential.
+
+- Browser users configure it through `POST /builder/git-access`.
+- The UI service translates that into `PUT /api/v1/builder/git-access`.
+- The control plane stores it in a Kubernetes Secret in `appliance-builds`.
+- Workspace creation and direct build submission return `412 Precondition Failed`
+  until that credential exists.
+
+For operators, the practical sequence is:
+
+1. Create a Git provider personal access token outside the appliance.
+2. Sign in to the appliance UI as an administrator.
+3. Open the Builder workspace page.
+4. Save `git host + git username + personal access token` once.
+5. Create the first workspace only after the builder page reports Git access as configured.
 
 ## Operator Debugging Notes
 
