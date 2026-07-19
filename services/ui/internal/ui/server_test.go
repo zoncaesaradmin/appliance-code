@@ -444,6 +444,44 @@ func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
 	}
 }
 
+func TestBuilderWorkspacePageKeepsSubmitAvailableWhenGitAccessMissing(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		builderGitAccess: controlplane.BuilderGitAccessStatus{
+			Configured:    false,
+			RequiredHosts: []string{"github.com"},
+			CanConfigure:  true,
+		},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces?workspace_id=new", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
+	}
+	body := pageRec.Body.String()
+	if !strings.Contains(body, "Workspace creation is blocked until the shared builder Git HTTPS credential is configured above.") {
+		t.Fatalf("builder page should explain the Git access prerequisite:\n%s", body)
+	}
+	if !strings.Contains(body, `<button type="submit">Set Workspace</button>`) {
+		t.Fatalf("builder page should keep the Set Workspace submit available for server-side validation:\n%s", body)
+	}
+	if strings.Contains(body, `disabled>Set Workspace</button>`) || strings.Contains(body, `disabled="">Set Workspace</button>`) {
+		t.Fatalf("builder page should not disable the Set Workspace submit:\n%s", body)
+	}
+}
+
 func TestBuilderWorkspacePagePrefillsSelectedExistingWorkspace(t *testing.T) {
 	cp := &fakeControlPlane{
 		initialized: true,

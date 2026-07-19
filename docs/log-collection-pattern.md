@@ -28,7 +28,7 @@ always-running Go services we build and ship directly:
 
 They now have:
 
-- a fixed host log root at `/var/log/appliance`
+- a fixed host log root at `/data/zon/logs`
 - service-specific subdirectories under that root
 - startup scripts that mirror process `stdout` and `stderr` into:
   - `stdout.log`
@@ -43,7 +43,7 @@ logs for now and remain a follow-on step.
 The appliance runtime log root should be:
 
 ```text
-/var/log/appliance
+/data/zon/logs
 ```
 
 This path should be fixed for v1.
@@ -98,8 +98,8 @@ For the services already migrated to the new pattern, the first host paths to
 check are:
 
 ```text
-/var/log/appliance/control-plane/
-/var/log/appliance/ui/
+/data/zon/logs/control-plane/
+/data/zon/logs/ui/
 ```
 
 ## Target Layout
@@ -109,16 +109,16 @@ check are:
 For long-running product services, use:
 
 ```text
-/var/log/appliance/<service>/
+/data/zon/logs/<service>/
 ```
 
 Examples:
 
 ```text
-/var/log/appliance/control-plane/
-/var/log/appliance/ui/
-/var/log/appliance/argo-controller/
-/var/log/appliance/zot/
+/data/zon/logs/control-plane/
+/data/zon/logs/ui/
+/data/zon/logs/argo-controller/
+/data/zon/logs/zot/
 ```
 
 Expected files inside each workload directory:
@@ -146,14 +146,14 @@ For short-lived build and related pods, use a workflow-oriented directory
 shape:
 
 ```text
-/var/log/appliance/builds/<workflow-id>/<pod-name>/
+/data/zon/logs/builds/<workflow-id>/<pod-name>/
 ```
 
 Examples:
 
 ```text
-/var/log/appliance/builds/build-019f.../buildah-main/
-/var/log/appliance/builds/build-019f.../syft-scan/
+/data/zon/logs/builds/build-019f.../buildah-main/
+/data/zon/logs/builds/build-019f.../syft-scan/
 ```
 
 Expected files:
@@ -206,11 +206,11 @@ Operators should always be able to answer:
 3. for builds, which workflow or pod instance is affected
 
 Kubernetes namespaces still matter for `kubectl logs`, but they do not need to
-be the first organizing concept inside `/var/log/appliance`.
+be the first organizing concept inside `/data/zon/logs`.
 
 ### Rule 4. The appliance owns the path
 
-The log tree under `/var/log/appliance` is part of the appliance operating
+The log tree under `/data/zon/logs` is part of the appliance operating
 contract on the target host.
 
 It should be:
@@ -220,7 +220,7 @@ It should be:
 - collected by future diagnostics/support-bundle flows
 - documented as the first operator-visible place to inspect runtime logs
 
-Because `/var/log/appliance` is a writable host path, it is also a documented
+Because `/data/zon/logs` is a writable host path, it is also a documented
 security-sensitive product interface. Ownership, setgid directory mode, and
 the shared appliance filesystem group are governed by
 [workload identity and storage security](workload-identity-and-storage-security.md).
@@ -277,23 +277,23 @@ mount. That mount is an implementation detail, not a user-facing setting.
 For v1, use one fixed host path:
 
 ```text
-/var/log/appliance
+/data/zon/logs
 ```
 
 Mount that fixed base path into the container at the same path:
 
 ```text
-/var/log/appliance
+/data/zon/logs
 ```
 
 Then let the startup script and service code write into fixed service-specific
 subdirectories, for example:
 
 ```text
-/var/log/appliance/control-plane/
-/var/log/appliance/ui/
-/var/log/appliance/argo-controller/
-/var/log/appliance/builds/
+/data/zon/logs/control-plane/
+/data/zon/logs/ui/
+/data/zon/logs/argo-controller/
+/data/zon/logs/builds/
 ```
 
 This means Helm or the deployment manifests still need to wire the mount, but
@@ -335,7 +335,7 @@ target should be one structured `application.log` per always-running service.
 Deliverables:
 
 - this document
-- final agreement on the fixed root: `/var/log/appliance`
+- final agreement on the fixed root: `/data/zon/logs`
 - final agreement on service-first organization
 
 No runtime behavior changes are required in this phase.
@@ -352,16 +352,16 @@ Deliverables:
 
 - startup script for each long-running image
 - Containerfile/Dockerfile updates to include the script
-- fixed host-path-backed writable mount of `/var/log/appliance` for each
+- fixed host-path-backed writable mount of `/data/zon/logs` for each
   deployment
 - mirrored `stdout.log` and `stderr.log`
 
 Acceptance:
 
 - `kubectl logs` still works
-- `/var/log/appliance/control-plane/stdout.log` exists
-- `/var/log/appliance/ui/stdout.log` exists
-- `/var/log/appliance/argo-controller/stdout.log` exists
+- `/data/zon/logs/control-plane/stdout.log` exists
+- `/data/zon/logs/ui/stdout.log` exists
+- `/data/zon/logs/argo-controller/stdout.log` exists
 
 ### Phase 2. Control-plane and UI application file logging
 
@@ -396,7 +396,7 @@ Scope:
 Deliverables:
 
 - workflow/pod log directory structure under
-  `/var/log/appliance/builds/<workflow-id>/<pod-name>/`
+  `/data/zon/logs/builds/<workflow-id>/<pod-name>/`
 - startup capture for those task containers where practical
 
 Acceptance:
@@ -414,8 +414,8 @@ Scope:
 
 Deliverables:
 
-- support-bundle includes selected `/var/log/appliance/**` content
-- documentation points operators first to `/var/log/appliance`
+- support-bundle includes selected `/data/zon/logs/**` content
+- documentation points operators first to `/data/zon/logs`
 - release/verify flows know how to surface log-path hints
 
 Acceptance:
@@ -431,7 +431,7 @@ Owns:
 
 - startup scripts shipped in images
 - Dockerfile/Containerfile changes
-- fixed deployment/chart mount wiring for `/var/log/appliance`
+- fixed deployment/chart mount wiring for `/data/zon/logs`
 - service code changes for structured file logging
 - documentation for runtime topology and operator debugging
 
@@ -439,7 +439,7 @@ Owns:
 
 Owns:
 
-- installer-side creation and permissioning of `/var/log/appliance`
+- installer-side creation and permissioning of `/data/zon/logs`
 - target-host documentation
 - verification/reporting hints that point operators to the log root
 
@@ -454,7 +454,7 @@ Likely follow-on ownership:
 
 After Phase 1, the operator contract should be simple:
 
-1. Runtime appliance logs live under `/var/log/appliance`.
+1. Runtime appliance logs live under `/data/zon/logs`.
 2. First choose the service directory.
 3. For builds, choose the workflow directory and pod directory.
 4. Check:
@@ -465,10 +465,10 @@ After Phase 1, the operator contract should be simple:
 Examples:
 
 ```text
-/var/log/appliance/control-plane/
-/var/log/appliance/ui/
-/var/log/appliance/argo-controller/
-/var/log/appliance/builds/
+/data/zon/logs/control-plane/
+/data/zon/logs/ui/
+/data/zon/logs/argo-controller/
+/data/zon/logs/builds/
 ```
 
 ## Deliberate Non-Goals For The First Cut

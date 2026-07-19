@@ -24,7 +24,7 @@ the registry.
 ## Storage Rules
 
 - Give each service its own PVC unless the storage is genuinely shared.
-- Keep writable host paths rare and documented. `/var/log/appliance` and the
+- Keep writable host paths rare and documented. `/data/zon/logs` and the
   host-visible workspace root `/data/zon/workspaces` are intentional product
   interfaces, not generic scratch space.
 - Use setgid directories and group-writable modes such as `2770` for shared

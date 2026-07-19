@@ -39,16 +39,16 @@ including:
 These trace events are written by the UI service itself, so operators should
 look in the UI service logs first:
 
-- `/var/log/appliance/ui/application.log`
+- `/data/zon/logs/ui/application.log`
 - `kubectl logs deploy/control-plane-ui -n appliance-system`
-- `/var/log/appliance/ui/stdout.log`
+- `/data/zon/logs/ui/stdout.log`
 
 The control plane writes its own redacted API exchange logs too. For the same
 browser action, operators can also inspect:
 
-- `/var/log/appliance/control-plane/application.log`
+- `/data/zon/logs/control-plane/application.log`
 - `kubectl logs deploy/control-plane -n appliance-system`
-- `/var/log/appliance/control-plane/stdout.log`
+- `/data/zon/logs/control-plane/stdout.log`
 
 Useful event names:
 
@@ -94,7 +94,7 @@ interaction is a post-redirect-get flow. The control-plane response body for the
 workspace create call is visible in the UI `control plane API call` log entry.
 
 The control plane also writes durable functional lifecycle events for this path
-to `/var/log/appliance/control-plane/application.log`:
+to `/data/zon/logs/control-plane/application.log`:
 
 - `workspace provisioning workflow submitted`
 - `workspace provisioning workflow state changed`

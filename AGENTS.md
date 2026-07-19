@@ -32,6 +32,8 @@ These rules apply to all implementation and documentation in this repository.
 - Use distinct per-component UIDs/GIDs and a separate shared filesystem GID for writable storage shared across components or workflow pods. The shared GID must not be the same number as a service UID.
 - Use setgid directories and group-writable modes such as `2770` for shared writable storage; never use `chmod 777` as the normal solution.
 - Give each service its own PVC unless the storage is genuinely shared. Treat every writable host mount or `hostPath` as a security-sensitive product interface that must be documented, ownership-checked, and preserved or wiped only by explicit lifecycle policy.
+- Builder workspace source trees live under `/data/zon/workspaces` and must survive factory reset by default; wipe them only when an explicit workspace-wipe lifecycle option such as `zonctl factory-reset --wipe-workspaces` is implemented, documented, and invoked.
+- Runtime service logs live under the appliance data path `/data/zon/logs/<service>/`, not under the system log tree.
 - Keep application container root filesystems read-only and mount only explicit writable paths.
 - Use root init containers only as documented, narrow ownership-preparation or migration mechanisms.
 - Validate normal workloads against Pod Security Admission, preferably the Restricted profile. Any required exception, such as a documented host-visible workspace or host log path, must be explicit.
@@ -57,7 +59,7 @@ These rules apply to all implementation and documentation in this repository.
   - the success behavior returned to the browser, such as HTML, fragment HTML, or redirect
 - Every new UI route, UI-to-control-plane call, or modification to an existing control-plane API integration must update that mapping document in the same change.
 - Runtime observability must let an operator determine whether a browser action stopped at the UI service or reached the control-plane API.
-- The UI service and control plane must each write their code-level functional flow logs to their own durable service file under `/var/log/appliance/<service>/application.log`, not only to process stdout/stderr.
+- The UI service and control plane must each write their code-level functional flow logs to their own durable service file under `/data/zon/logs/<service>/application.log`, not only to process stdout/stderr.
 - For browser-mediated API flows, runtime logs must show the request that reached the UI or control plane boundary and the response returned there, with enough identifiers to correlate the path across both services.
 - Request/response logging for these downstream UI-to-control-plane calls must never leak secrets, bearer tokens, passwords, refresh tokens, or private key material. Redact or omit sensitive fields by default.
 - UI handlers should minimize downstream control-plane calls where possible. Avoid redundant preflight fetches, repeated status reads on pages that do not display that data, and extra round-trips when the UI already has the identifier needed to perform the next API action.

@@ -29,7 +29,7 @@ spec:
           command:
             - sh
             - -c
-            - mkdir -p /var/log/appliance/argo-controller && chown 65532:20000 /var/log/appliance/argo-controller && chmod 2770 /var/log/appliance/argo-controller
+            - mkdir -p /data/zon/logs/argo-controller && chown 65532:20000 /data/zon/logs/argo-controller && chmod 2770 /data/zon/logs/argo-controller
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
@@ -41,7 +41,7 @@ spec:
               drop: ["ALL"]
           volumeMounts:
             - name: appliance-logs
-              mountPath: /var/log/appliance
+              mountPath: /data/zon/logs
       containers:
         - name: workflow-controller
           image: {{ include "argo-workflows.image" (dict "image" .Values.image.controller "Chart" .Chart) | quote }}
@@ -70,9 +70,9 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: appliance-logs
-              mountPath: /var/log/appliance
+              mountPath: /data/zon/logs
       volumes:
         - name: appliance-logs
           hostPath:
-            path: /var/log/appliance
+            path: /data/zon/logs
             type: DirectoryOrCreate

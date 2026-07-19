@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOG_ROOT="/var/log/appliance"
+LOG_ROOT="/data/zon/logs"
 SERVICE_LOG_DIR="${LOG_ROOT}/control-plane"
 STDOUT_LOG="${SERVICE_LOG_DIR}/stdout.log"
 STDERR_LOG="${SERVICE_LOG_DIR}/stderr.log"

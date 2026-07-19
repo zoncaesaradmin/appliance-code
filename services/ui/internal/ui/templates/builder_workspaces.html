@@ -294,7 +294,7 @@
               {{template "builder-work-profile-preview" .}}
             </div>
             <p class="muted">The workspace profile defines the repos inside this logical workspace. Submitting this form will either reuse an existing matching workspace or create a new one, then set it as the current workspace.</p>
-            <button type="submit" {{if not .BuilderGitAccess.Configured}}disabled{{end}}>Set Workspace</button>
+            <button type="submit">Set Workspace</button>
           </form>
           {{if .SelectedExisting}}
           <form method="post" action="/builder/workspaces/delete" class="workspace-danger-form">
