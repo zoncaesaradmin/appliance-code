@@ -48,7 +48,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}
 	body, _ := json.Marshal(got)
 	text := string(body)
-	for _, want := range []string{"SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10001", "fsGroup"} {
+	for _, want := range []string{"SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10010", "fsGroup", "20000", "OnRootMismatch"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workflow JSON missing %q: %s", want, text)
 		}
@@ -170,7 +170,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
 	}
-	for _, want := range []string{"podSpecPatch", "\\\"name\\\":\\\"init\\\"", "\\\"name\\\":\\\"wait\\\"", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10001", "fsGroup"} {
+	for _, want := range []string{"podSpecPatch", "\\\"name\\\":\\\"init\\\"", "\\\"name\\\":\\\"wait\\\"", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10010", "fsGroup", "20000", "OnRootMismatch"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}

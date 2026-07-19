@@ -127,6 +127,14 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "runAsNonRoot": { "type": "boolean" },
+        "runAsUser": { "type": "integer", "minimum": 1 },
+        "runAsGroup": { "type": "integer", "minimum": 1 },
+        "fsGroup": { "type": "integer", "minimum": 1 },
+        "fsGroupChangePolicy": {
+          "type": "string",
+          "enum": ["Always", "OnRootMismatch"]
+        },
         "seccompProfile": {
           "type": "object",
           "additionalProperties": false,
@@ -136,7 +144,14 @@
           "required": ["type"]
         }
       },
-      "required": ["seccompProfile"]
+      "required": [
+        "runAsNonRoot",
+        "runAsUser",
+        "runAsGroup",
+        "fsGroup",
+        "fsGroupChangePolicy",
+        "seccompProfile"
+      ]
     },
     "containerSecurityContext": {
       "type": "object",

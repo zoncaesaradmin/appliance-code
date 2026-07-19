@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -162,6 +163,18 @@ func TestPodAndContainerSecurityHardening(t *testing.T) {
 	if runAsNonRoot, _ := podSecCtx["runAsNonRoot"].(bool); !runAsNonRoot {
 		t.Error("pod securityContext.runAsNonRoot should be true")
 	}
+	if runAsUser, _ := podSecCtx["runAsUser"].(int); runAsUser != 10001 {
+		t.Errorf("pod securityContext.runAsUser = %d, want 10001", runAsUser)
+	}
+	if runAsGroup, _ := podSecCtx["runAsGroup"].(int); runAsGroup != 10001 {
+		t.Errorf("pod securityContext.runAsGroup = %d, want 10001", runAsGroup)
+	}
+	if fsGroup, _ := podSecCtx["fsGroup"].(int); fsGroup != 20000 {
+		t.Errorf("pod securityContext.fsGroup = %d, want 20000", fsGroup)
+	}
+	if policy, _ := podSecCtx["fsGroupChangePolicy"].(string); policy != "OnRootMismatch" {
+		t.Errorf("pod securityContext.fsGroupChangePolicy = %q, want OnRootMismatch", policy)
+	}
 	seccomp, _ := podSecCtx["seccompProfile"].(map[string]any)
 	if seccompType, _ := seccomp["type"].(string); seccompType != "RuntimeDefault" {
 		t.Errorf("pod seccompProfile.type = %q, want RuntimeDefault", seccompType)
@@ -195,6 +208,34 @@ func TestPodAndContainerSecurityHardening(t *testing.T) {
 		if container[probeName] == nil {
 			t.Errorf("container should declare %s", probeName)
 		}
+	}
+}
+
+func TestUIPodUsesDedicatedIdentityAndSharedFilesystemGroup(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	dep := findByKindAndName(docs, "Deployment", controlPlaneUIName)
+	if dep == nil {
+		t.Fatal("expected control-plane UI Deployment")
+	}
+	podSpec, ok := at(dep, "spec", "template", "spec").(map[string]any)
+	if !ok {
+		t.Fatal("could not find spec.template.spec on the UI Deployment")
+	}
+	podSecCtx, _ := podSpec["securityContext"].(map[string]any)
+	if runAsNonRoot, _ := podSecCtx["runAsNonRoot"].(bool); !runAsNonRoot {
+		t.Error("UI pod securityContext.runAsNonRoot should be true")
+	}
+	if runAsUser, _ := podSecCtx["runAsUser"].(int); runAsUser != 10002 {
+		t.Errorf("UI pod securityContext.runAsUser = %d, want 10002", runAsUser)
+	}
+	if runAsGroup, _ := podSecCtx["runAsGroup"].(int); runAsGroup != 10002 {
+		t.Errorf("UI pod securityContext.runAsGroup = %d, want 10002", runAsGroup)
+	}
+	if fsGroup, _ := podSecCtx["fsGroup"].(int); fsGroup != 20000 {
+		t.Errorf("UI pod securityContext.fsGroup = %d, want 20000", fsGroup)
+	}
+	if policy, _ := podSecCtx["fsGroupChangePolicy"].(string); policy != "OnRootMismatch" {
+		t.Errorf("UI pod securityContext.fsGroupChangePolicy = %q, want OnRootMismatch", policy)
 	}
 }
 
@@ -505,6 +546,32 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	}
 	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "control-plane-workspaces" {
 		t.Fatalf("workspace PVC volumeName = %q, want control-plane-workspaces", volumeName)
+	}
+	jobs := findByKind(docs, "Job")
+	var prepJob map[string]any
+	for _, job := range jobs {
+		name, _ := at(job, "metadata", "name").(string)
+		if strings.HasPrefix(name, "control-plane-workspace-storage-prep-") {
+			prepJob = job
+			break
+		}
+	}
+	if prepJob == nil {
+		t.Fatal("expected builder workspace storage prep Job")
+	}
+	if ns, _ := at(prepJob, "metadata", "namespace").(string); ns != "appliance-builds" {
+		t.Fatalf("workspace storage prep Job namespace = %q, want appliance-builds", ns)
+	}
+	podSpec, _ := at(prepJob, "spec", "template", "spec").(map[string]any)
+	containers, _ := podSpec["containers"].([]any)
+	container, _ := containers[0].(map[string]any)
+	secCtx, _ := container["securityContext"].(map[string]any)
+	if runAsUser, _ := secCtx["runAsUser"].(int); runAsUser != 0 {
+		t.Fatalf("workspace storage prep Job runAsUser = %d, want 0", runAsUser)
+	}
+	command, _ := container["command"].([]any)
+	if len(command) < 3 || !strings.Contains(command[2].(string), "chown 0:20000") || !strings.Contains(command[2].(string), "chmod 2770") {
+		t.Fatalf("workspace storage prep command = %v, want shared GID ownership and setgid mode", command)
 	}
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {

@@ -26,7 +26,9 @@ submission.
 - V1 workspaces are materialized onto the shared workspace PVC under the fixed
   host-visible root `/data/zon/workspaces/<workspace-name>`. Build execution
   remains a separate workflow that uses that prepared workspace state together
-  with the immutable build request fields.
+  with the immutable build request fields. Workspace ownership follows the
+  fixed numeric identity and shared filesystem group rules in
+  [workload identity and storage security](workload-identity-and-storage-security.md).
 - Operators can override the host-visible workspace root with the chart value
   `workspaceStorage.rootDir`, but ordinary installs should use the default
   `/data/zon/workspaces` so workspace source trees stay separate from

@@ -220,6 +220,11 @@ It should be:
 - collected by future diagnostics/support-bundle flows
 - documented as the first operator-visible place to inspect runtime logs
 
+Because `/var/log/appliance` is a writable host path, it is also a documented
+security-sensitive product interface. Ownership, setgid directory mode, and
+the shared appliance filesystem group are governed by
+[workload identity and storage security](workload-identity-and-storage-security.md).
+
 ## Container and Startup Pattern
 
 For each long-running deployment we should standardize this image/runtime

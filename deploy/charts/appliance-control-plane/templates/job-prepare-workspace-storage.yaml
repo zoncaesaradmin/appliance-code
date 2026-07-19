@@ -1,0 +1,48 @@
+{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}-workspace-storage-prep-{{ .Release.Revision }}
+  namespace: {{ include "appliance-control-plane.argoWorkflowNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workspace-storage-prep
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.labels" . | nindent 8 }}
+        app.kubernetes.io/component: workspace-storage-prep
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prepare-workspace-storage
+          image: alpine:3.24.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - chown 0:20000 /workspace-root && chmod 2770 /workspace-root
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["CHOWN", "FOWNER"]
+              drop: ["ALL"]
+          volumeMounts:
+            - name: workspace-root
+              mountPath: /workspace-root
+      volumes:
+        - name: workspace-root
+          hostPath:
+            path: {{ .Values.workspaceStorage.rootDir | quote }}
+            type: DirectoryOrCreate
+{{- end }}

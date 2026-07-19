@@ -23,7 +23,7 @@ spec:
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.ui.podSecurityContext | nindent 8 }}
       initContainers:
         - name: prepare-log-dir
           image: alpine:3.24.1
@@ -31,7 +31,7 @@ spec:
           command:
             - /bin/sh
             - -c
-            - mkdir -p /var/log/appliance/ui && chown 10002:10002 /var/log/appliance/ui
+            - mkdir -p /var/log/appliance/ui && chown 10002:20000 /var/log/appliance/ui && chmod 2770 /var/log/appliance/ui
           securityContext:
             runAsNonRoot: false
             runAsUser: 0

@@ -27,8 +27,9 @@ const (
 	serviceAccountDir = "/var/run/secrets/kubernetes.io/serviceaccount"
 	defaultTimeout    = 30 * time.Second
 	runtimeSeccomp    = "RuntimeDefault"
-	workflowUID       = int64(10001)
-	workflowGID       = int64(10001)
+	workflowUID       = int64(10010)
+	workflowGID       = int64(10010)
+	sharedFSGID       = int64(20000)
 	gitCredentialDir  = "/var/run/appliance/git-access"
 )
 
@@ -332,10 +333,10 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 }
 
 func workflowPodSpecPatch() string {
-	return fmt.Sprintf(`{"securityContext":{"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"fsGroup":%d,"seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"seccompProfile":{"type":%s}}}]}`,
+	return fmt.Sprintf(`{"securityContext":{"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"fsGroup":%d,"fsGroupChangePolicy":"OnRootMismatch","seccompProfile":{"type":%s}},"initContainers":[{"name":"init","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"seccompProfile":{"type":%s}}}],"containers":[{"name":"wait","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"runAsNonRoot":true,"runAsUser":%d,"runAsGroup":%d,"seccompProfile":{"type":%s}}}]}`,
 		workflowUID,
 		workflowGID,
-		workflowGID,
+		sharedFSGID,
 		strconv.Quote(runtimeSeccomp),
 		workflowUID,
 		workflowGID,

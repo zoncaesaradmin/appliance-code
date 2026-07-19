@@ -29,7 +29,7 @@ spec:
           command:
             - sh
             - -c
-            - mkdir -p /var/log/appliance/argo-controller && chown 65532:65532 /var/log/appliance/argo-controller
+            - mkdir -p /var/log/appliance/argo-controller && chown 65532:20000 /var/log/appliance/argo-controller && chmod 2770 /var/log/appliance/argo-controller
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
