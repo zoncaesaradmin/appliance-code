@@ -70,7 +70,7 @@ func Default() Config {
 		WorkflowEngine:                 "fake",
 		WorkflowInstanceID:             "appliance",
 		WorkflowExecutorServiceAccount: "appliance-argo-workflows-executor",
-		WorkspaceRootDir:               "/var/lib/zon/workspaces",
+		WorkspaceRootDir:               "/data/zon/workspaces",
 		WorkspaceClaimName:             "appliance-workspaces",
 	}
 }

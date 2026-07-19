@@ -75,7 +75,7 @@ workspaceStorage:
   storageClassName: ""
   size: 20Gi
   accessMode: ReadWriteOnce
-  rootDir: /var/lib/zon/workspaces # fixed host-visible workspace path, also used as the PV hostPath backing
+  rootDir: /data/zon/workspaces # fixed host-visible workspace path, also used as the PV hostPath backing
 
 service:
   publicPort: 8080

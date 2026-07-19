@@ -24,9 +24,13 @@ submission.
   workflow engine, while production builder-profile deployments use the Argo
   adapter through Kubernetes API calls.
 - V1 workspaces are materialized onto the shared workspace PVC under the fixed
-  host-visible root `/var/lib/zon/workspaces/<workspace-name>`. Build execution
+  host-visible root `/data/zon/workspaces/<workspace-name>`. Build execution
   remains a separate workflow that uses that prepared workspace state together
   with the immutable build request fields.
+- Operators can override the host-visible workspace root with the chart value
+  `workspaceStorage.rootDir`, but ordinary installs should use the default
+  `/data/zon/workspaces` so workspace source trees stay separate from
+  `zonctl` control state.
 - Build and job records keep the immutable source commit plus the resolved
   target artifact reference so REST and MCP clients can track the submitted
   image identity directly.
@@ -118,9 +122,10 @@ Covered by tests:
 
 ## Deferred
 
-- Admin-enabled alternate workspace storage roots. V1 keeps the builder
-  workspace PVC mounted at the fixed host-visible path `/var/lib/zon/workspaces`.
-  If additional storage roots are added later, they must be
+- Runtime/UI-managed alternate workspace storage roots. V1 keeps the ordinary
+  builder workspace PVC mounted at `/data/zon/workspaces` unless an operator
+  overrides `workspaceStorage.rootDir` at install/configuration time. If
+  additional per-user or per-workspace storage roots are added later, they must be
   explicit product config with allowlisted base paths, symlink escape checks,
   and workflow-pod mounts; the control-plane pod must not implicitly use host
   `~/.ssh` or arbitrary host filesystem paths.

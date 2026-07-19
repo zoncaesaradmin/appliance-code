@@ -51,7 +51,7 @@ func TestWorkspaceProvisioningLogsSubmissionAndStatus(t *testing.T) {
 		t.Fatalf("Create user: %v", err)
 	}
 
-	svc, err := NewService(testProvisionCatalog(), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "/var/lib/zon/workspaces", "appliance-workspaces", nil, logger, nil)
+	svc, err := NewService(testProvisionCatalog(), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "/data/zon/workspaces", "appliance-workspaces", nil, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}

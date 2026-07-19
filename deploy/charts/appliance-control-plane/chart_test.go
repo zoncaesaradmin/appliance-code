@@ -493,8 +493,8 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if pv == nil {
 		t.Fatal("expected builder workspace PV")
 	}
-	if hostPath, _ := at(pv, "spec", "hostPath", "path").(string); hostPath != "/var/lib/zon/workspaces" {
-		t.Fatalf("workspace PV hostPath = %q, want /var/lib/zon/workspaces", hostPath)
+	if hostPath, _ := at(pv, "spec", "hostPath", "path").(string); hostPath != "/data/zon/workspaces" {
+		t.Fatalf("workspace PV hostPath = %q, want /data/zon/workspaces", hostPath)
 	}
 	pvc := findByKindAndName(docs, "PersistentVolumeClaim", controlPlaneDeploymentName+"-workspaces")
 	if pvc == nil {
@@ -511,8 +511,8 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		t.Fatal("expected control-plane ConfigMap")
 	}
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_WORKSPACE_ROOT_DIR"].(string); got != "/var/lib/zon/workspaces" {
-		t.Fatalf("APPLIANCE_WORKSPACE_ROOT_DIR = %q, want /var/lib/zon/workspaces", got)
+	if got, _ := data["APPLIANCE_WORKSPACE_ROOT_DIR"].(string); got != "/data/zon/workspaces" {
+		t.Fatalf("APPLIANCE_WORKSPACE_ROOT_DIR = %q, want /data/zon/workspaces", got)
 	}
 	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "control-plane-workspaces" {
 		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want control-plane-workspaces", got)

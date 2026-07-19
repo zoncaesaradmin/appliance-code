@@ -131,7 +131,7 @@ func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
 		SourceCommitSHA:    "0123456789abcdef0123456789abcdef01234567",
 		TargetRepository:   "registry.local/users/alice/app",
 		TargetTag:          "v1",
-		WorkspaceRootDir:   "/var/lib/zon/workspaces",
+		WorkspaceRootDir:   "/data/zon/workspaces",
 		WorkspaceClaimName: "control-plane-workspaces",
 		Deadline:           time.Now().Add(time.Hour),
 	})
@@ -139,7 +139,7 @@ func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
 		t.Fatalf("workflowObject: %v", err)
 	}
 	text := workflowJSON(t, got)
-	for _, want := range []string{"workspace-storage", "control-plane-workspaces", "WORKSPACE_ROOT_DIR", "/var/lib/zon/workspaces"} {
+	for _, want := range []string{"workspace-storage", "control-plane-workspaces", "WORKSPACE_ROOT_DIR", "/data/zon/workspaces"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("build workflow JSON missing %q: %s", want, text)
 		}
@@ -151,7 +151,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 		Name:               "workspace-prepare-1",
 		Kind:               workflows.KindWorkspacePrepare,
 		BuilderImageDigest: "builder@sha256:abc",
-		WorkspaceRootDir:   "/var/lib/zon/workspaces",
+		WorkspaceRootDir:   "/data/zon/workspaces",
 		WorkspaceClaimName: "control-plane-workspaces",
 		WorkspaceName:      "demo",
 		WorkspaceRepos: []workflows.WorkspaceRepo{

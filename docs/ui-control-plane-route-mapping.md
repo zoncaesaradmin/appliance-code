@@ -175,7 +175,7 @@ next places to inspect are:
    - `kubectl -n appliance-builds logs <workspace-prepare-pod>`
 4. Workspace storage state:
    - `kubectl -n appliance-builds get pvc,pv`
-   - inspect `/var/lib/zon/workspaces/<workspace-name>` on the host
+   - inspect `/data/zon/workspaces/<workspace-name>` on the host
 
 If the workflow is still running, later `GET /api/v1/workspaces` or
 `GET /api/v1/current-workspace` calls will trigger reconciliation and move the
