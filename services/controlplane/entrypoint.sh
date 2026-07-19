@@ -8,6 +8,7 @@ STDERR_LOG="${SERVICE_LOG_DIR}/stderr.log"
 
 mkdir -p "${SERVICE_LOG_DIR}"
 touch "${STDOUT_LOG}" "${STDERR_LOG}"
+chmod 0644 "${STDOUT_LOG}" "${STDERR_LOG}"
 
 # Mirror container stdout/stderr into predictable host log files while
 # preserving the usual kubectl logs stream.

@@ -39,7 +39,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = engine.Submit(t.Context(), workflows.Spec{Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567", ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1", Deadline: time.Now().Add(time.Hour)})
+	err = engine.Submit(t.Context(), workflows.Spec{Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567", ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1", Deadline: time.Now().Add(time.Hour)})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 func TestSubmitRejectsSSHCredentialInputs(t *testing.T) {
 	_, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
-		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app",
+		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app",
 		TargetTag: "v1", SourceCredentialSecret: "source-secret-a", Deadline: time.Now().Add(time.Hour),
 	})
 	if err == nil {
@@ -73,7 +73,7 @@ func TestSubmitCreatesRepoScriptWorkflow(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		Execution: "repo_script", ScriptPath: "scripts/build-image.sh", ContainerfilePath: "Containerfile",
-		BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
 		Deadline: time.Now().Add(time.Hour),
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		Execution: "make_target", MakeTarget: "image", ContainerfilePath: "Containerfile",
-		BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
 		Deadline: time.Now().Add(time.Hour),
 	})
 	if err != nil {
@@ -126,7 +126,7 @@ func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name:               "build-1",
-		BuilderImageDigest: "builder@sha256:abc",
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 		SourceRepoURL:      "https://git.internal.example.com/team/app",
 		SourceCommitSHA:    "0123456789abcdef0123456789abcdef01234567",
 		TargetRepository:   "registry.local/users/alice/app",
@@ -150,7 +150,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name:               "workspace-prepare-1",
 		Kind:               workflows.KindWorkspacePrepare,
-		BuilderImageDigest: "builder@sha256:abc",
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 		WorkspaceRootDir:   "/data/zon/workspaces",
 		WorkspaceClaimName: "control-plane-workspaces",
 		WorkspaceName:      "demo",

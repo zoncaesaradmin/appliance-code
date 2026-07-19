@@ -31,7 +31,7 @@ spec:
           command:
             - /bin/sh
             - -c
-            - mkdir -p /data/zon/logs/ui && chown 10002:20000 /data/zon/logs/ui && chmod 2770 /data/zon/logs/ui
+            - mkdir -p /data/zon/logs/ui && chown 10002:20000 /data/zon/logs/ui && chmod 2755 /data/zon/logs/ui
           securityContext:
             runAsNonRoot: false
             runAsUser: 0

@@ -29,7 +29,7 @@ spec:
           command:
             - sh
             - -c
-            - mkdir -p /data/zon/logs/argo-controller && chown 65532:20000 /data/zon/logs/argo-controller && chmod 2770 /data/zon/logs/argo-controller
+            - mkdir -p /data/zon/logs/argo-controller && chown 65532:20000 /data/zon/logs/argo-controller && chmod 2755 /data/zon/logs/argo-controller
           securityContext:
             runAsNonRoot: false
             runAsUser: 0

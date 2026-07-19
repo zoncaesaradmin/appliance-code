@@ -405,7 +405,16 @@
     },
     "builderImageDigest": {
       "type": "string",
-      "pattern": "^.+@sha256:.+$"
+      "allOf": [
+        {
+          "pattern": "^.+@sha256:[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "pattern": "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef$"
+          }
+        }
+      ]
     },
     "buildCatalog": {
       "type": "object",

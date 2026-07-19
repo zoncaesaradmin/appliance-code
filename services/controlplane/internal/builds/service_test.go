@@ -87,7 +87,7 @@ func newHarness(t *testing.T, deadline time.Duration) *harness {
 	fake := workflows.NewFake()
 
 	svc := builds.NewService(db, buildStore, idempotencyStore, fake, recorder,
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, deadline,
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, deadline,
 		"/data/zon/workspaces", "control-plane-workspaces", nil)
 	return &harness{db: db, svc: svc, fake: fake}
 }
@@ -95,7 +95,7 @@ func newHarness(t *testing.T, deadline time.Duration) *harness {
 func validRequest() builds.CreateRequest {
 	return builds.CreateRequest{
 		SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: validCommitSHA,
-		ImageRepository: "users/alice/app", ImageTag: "v1", BuilderImageDigest: "buildah@sha256:approved",
+		ImageRepository: "users/alice/app", ImageTag: "v1", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}
 }
 
@@ -147,7 +147,7 @@ func TestCreateReflectsWorkflowFailure(t *testing.T) {
 func TestWorkflowFailureMessageRedactsSensitiveValues(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour,
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "control-plane-workspaces", nil, "source-secret-a", "source-secret-b")
 	h.fake.Behavior = func(spec workflows.Spec) workflows.Status {
 		return workflows.Status{Phase: workflows.PhaseRunning}
@@ -175,7 +175,7 @@ func TestLogsRedactSensitiveValues(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	engine := &leakingLogEngine{}
 	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), engine, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour,
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "control-plane-workspaces", nil, "source-secret-a", "source-secret-b")
 
 	build, err := svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
@@ -200,7 +200,7 @@ func TestCreateRecordsFailedBuildWhenWorkflowSubmitFails(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	submitErr := errors.New("kubernetes API unavailable")
 	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), failingSubmitEngine{err: submitErr}, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour,
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "control-plane-workspaces", nil)
 
 	build, err := svc.Create(t.Context(), systemActor(), "user-1", validRequest(), "")
@@ -255,7 +255,7 @@ func TestWorkflowDisappearsTransitionsBuildToFailed(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	missingSvc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), workflows.NewFake(), audit.NewRecorder(sqlite.NewAuditStore(h.db)),
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour,
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "control-plane-workspaces", nil)
 
 	got, err := missingSvc.Get(t.Context(), build.ID)
@@ -361,7 +361,7 @@ func TestCreateRejectsMalformedCommitSHA(t *testing.T) {
 func TestCreateRejectsUnapprovedBuilderImage(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	req := validRequest()
-	req.BuilderImageDigest = "buildah@sha256:not-approved"
+	req.BuilderImageDigest = "buildah@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 	if _, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, ""); err == nil {
 		t.Error("Create should reject a builder image outside the allowlist")
 	}
@@ -438,7 +438,7 @@ func TestRestartRecovery(t *testing.T) {
 	// operational state, SQLite holds durable state).
 	recorder := audit.NewRecorder(sqlite.NewAuditStore(h.db))
 	freshSvc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, recorder,
-		[]string{"git.internal.example.com"}, []string{"buildah@sha256:approved"}, time.Hour,
+		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "control-plane-workspaces", nil)
 
 	if err := freshSvc.ReconcileAll(t.Context()); err != nil {

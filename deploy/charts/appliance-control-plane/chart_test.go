@@ -239,6 +239,55 @@ func TestUIPodUsesDedicatedIdentityAndSharedFilesystemGroup(t *testing.T) {
 	}
 }
 
+func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	cases := []struct {
+		name       string
+		deployName string
+		serviceDir string
+		owner      string
+	}{
+		{
+			name:       "control-plane",
+			deployName: controlPlaneDeploymentName,
+			serviceDir: "/data/zon/logs/control-plane",
+			owner:      "10001:20000",
+		},
+		{
+			name:       "ui",
+			deployName: controlPlaneUIName,
+			serviceDir: "/data/zon/logs/ui",
+			owner:      "10002:20000",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dep := findByKindAndName(docs, "Deployment", tc.deployName)
+			if dep == nil {
+				t.Fatalf("expected Deployment %s", tc.deployName)
+			}
+			initContainers, _ := at(dep, "spec", "template", "spec", "initContainers").([]any)
+			if len(initContainers) == 0 {
+				t.Fatal("expected prepare-log-dir init container")
+			}
+			init, _ := initContainers[0].(map[string]any)
+			command, _ := init["command"].([]any)
+			if len(command) < 3 {
+				t.Fatalf("prepare-log-dir command = %v", command)
+			}
+			script, _ := command[2].(string)
+			for _, want := range []string{tc.serviceDir, "chown " + tc.owner, "chmod 2755"} {
+				if !strings.Contains(script, want) {
+					t.Fatalf("prepare-log-dir command = %q, want %q", script, want)
+				}
+			}
+			if strings.Contains(script, "chmod 2770") {
+				t.Fatalf("service log directory must be operator-readable, got command %q", script)
+			}
+		})
+	}
+}
+
 func TestNetworkPolicyDefaultDenyPresent(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	policies := findByKind(docs, "NetworkPolicy")
@@ -387,7 +436,7 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
 		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
-		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
+		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)...)
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
@@ -423,7 +472,7 @@ config:
         execution: repo_script
         scriptPath: ../build.sh
         imageRepository: users/alice/app
-        builderImageDigest: buildah@sha256:approved
+        builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)
@@ -505,7 +554,7 @@ config:
         repo: app
         execution: repo_script
         imageRepository: users/alice/app
-        builderImageDigest: buildah@sha256:approved
+        builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)
@@ -528,7 +577,7 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
 		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
-		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
+		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)...)
 	pv := findByKindAndName(docs, "PersistentVolume", controlPlaneDeploymentName+"-workspaces")
 	if pv == nil {
@@ -603,7 +652,7 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		"--set", "config.buildCatalog.buildTargets[0].repo=app",
 		"--set", "config.buildCatalog.buildTargets[0].execution=repo_script",
 		"--set", "config.buildCatalog.buildTargets[0].imageRepository=users/alice/app",
-		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:approved",
+		"--set", "config.buildCatalog.buildTargets[0].builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)...)
 	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
 	if dep == nil {

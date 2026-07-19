@@ -29,6 +29,11 @@ the registry.
   interfaces, not generic scratch space.
 - Use setgid directories and group-writable modes such as `2770` for shared
   writable paths.
+- Runtime service log directories under `/data/zon/logs/<service>` are an
+  operator-facing inspection interface, not general shared write storage. Keep
+  them service-owner writable, but host-user readable/traversable (`2755`) so
+  appliance operators can inspect logs without joining numeric Kubernetes
+  groups or using root for normal debugging.
 - Never use `chmod 777` as the normal ownership solution.
 - Keep application container root filesystems read-only and mount only explicit
   writable paths.

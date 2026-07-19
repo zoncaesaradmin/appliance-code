@@ -33,7 +33,7 @@ func TestValidateBuilderImageRejectsTagOnlyReference(t *testing.T) {
 }
 
 func TestValidateBuilderImageRejectsUnapprovedDigestWhenPolicyConfigured(t *testing.T) {
-	err := ValidateBuilderImage("buildah@sha256:other", []string{"buildah@sha256:approved"})
+	err := ValidateBuilderImage("buildah@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
 	if err == nil {
 		t.Fatal("ValidateBuilderImage should reject digests outside the configured allowlist")
 	}

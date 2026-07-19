@@ -225,6 +225,13 @@ security-sensitive product interface. Ownership, setgid directory mode, and
 the shared appliance filesystem group are governed by
 [workload identity and storage security](workload-identity-and-storage-security.md).
 
+Service log directories are also operator-facing. They should be owned by the
+service UID and shared appliance filesystem GID, but use mode `2755` rather
+than `2770`: service containers keep owner write access and setgid behavior,
+while host operators can traverse and read logs without being added to numeric
+Kubernetes groups. General shared writable storage such as workspaces remains
+private group-writable storage and should continue to use `2770`.
+
 ## Container and Startup Pattern
 
 For each long-running deployment we should standardize this image/runtime

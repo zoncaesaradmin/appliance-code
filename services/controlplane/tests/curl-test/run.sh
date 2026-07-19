@@ -32,7 +32,7 @@ BUILD_SOURCE_URL="https://git.internal.example.com/team/app"
 BUILD_SOURCE_SHA="0123456789abcdef0123456789abcdef01234567"
 BUILD_IMAGE_REPOSITORY="users/admin/app"
 BUILD_IMAGE_TAG="v1"
-BUILD_BUILDER_DIGEST="buildah@sha256:approved"
+BUILD_BUILDER_DIGEST="buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 rm -rf "${RUN_DIR}"
 mkdir -p "${RUN_DIR}" "${LOG_DIR}" "${BIN_DIR}" "${DATA_DIR}" "${PASSWORD_DIR}"

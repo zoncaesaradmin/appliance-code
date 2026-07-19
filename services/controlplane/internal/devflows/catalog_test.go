@@ -21,7 +21,7 @@ func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 
 func TestCatalogRejectsDuplicateAlias(t *testing.T) {
 	catalog := testCatalog()
-	catalog.BuildTargets = append(catalog.BuildTargets, BuildTarget{Name: "other", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/other", BuilderImageDigest: "buildah@sha256:approved"})
+	catalog.BuildTargets = append(catalog.BuildTargets, BuildTarget{Name: "other", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/other", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
 	if err := catalog.Validate(); err == nil {
 		t.Fatal("Validate should reject duplicate alias")
 	}
@@ -116,6 +116,12 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 				c.BuildTargets[0].BuilderImageDigest = "buildah:latest"
 			},
 		},
+		{
+			name: "placeholder builder image digest",
+			mutate: func(c *Catalog) {
+				c.BuildTargets[0].BuilderImageDigest = "registry.local/buildah@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			catalog := testCatalog()
@@ -131,6 +137,6 @@ func testCatalog() Catalog {
 	return Catalog{
 		WorkProfiles: []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
 		Repos:        []Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:approved"}},
+		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
 	}
 }

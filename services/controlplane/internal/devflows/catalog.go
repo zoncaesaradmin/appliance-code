@@ -20,10 +20,11 @@ const (
 )
 
 var (
-	nameRE       = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
-	ociRepoRE    = regexp.MustCompile(`^[a-z0-9]+([._/-][a-z0-9]+)*$`)
-	commitShaRE  = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	makeTargetRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	nameRE        = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,62}$`)
+	ociRepoRE     = regexp.MustCompile(`^[a-z0-9]+([._/-][a-z0-9]+)*$`)
+	commitShaRE   = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	makeTargetRE  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	imageDigestRE = regexp.MustCompile(`^.+@sha256:[0-9a-f]{64}$`)
 )
 
 // Catalog is product configuration for developer workflows.
@@ -453,7 +454,12 @@ func validMakeTarget(v string) bool {
 }
 
 func validBuilderImageDigest(v string) bool {
-	return strings.Contains(strings.TrimSpace(v), "@sha256:")
+	v = strings.TrimSpace(v)
+	if !imageDigestRE.MatchString(v) {
+		return false
+	}
+	_, digest, _ := strings.Cut(v, "@sha256:")
+	return digest != "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
 
 func containsName(values []string, name string) bool {

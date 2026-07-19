@@ -46,7 +46,7 @@ func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 		ContainerfilePath:  "Containerfile",
 		ImageRepository:    "users/alice/app",
 		ImageTag:           "0123456789ab",
-		BuilderImageDigest: "buildah@sha256:approved",
+		BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		WorkflowName:       "build-new-workflow",
 		CreatedAt:          now,
 		UpdatedAt:          now,

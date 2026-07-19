@@ -335,7 +335,7 @@ func (r *runner) run(ctx context.Context) error {
 		SourceCommitSHA:    "0123456789abcdef0123456789abcdef01234567",
 		ImageRepository:    "users/alice/app",
 		ImageTag:           "v1",
-		BuilderImageDigest: "buildah@sha256:approved",
+		BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	})
 	if err != nil {
 		return fmt.Errorf("create build: %w", err)

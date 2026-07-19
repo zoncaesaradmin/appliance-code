@@ -141,7 +141,7 @@ func testProvisionCatalog() Catalog {
 			Execution:          ExecutionRepoScript,
 			ContainerfilePath:  "Containerfile",
 			ImageRepository:    "users/test/app",
-			BuilderImageDigest: "buildah@sha256:approved",
+			BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		}},
 	}
 }
