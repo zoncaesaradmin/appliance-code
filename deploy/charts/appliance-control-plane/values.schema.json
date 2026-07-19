@@ -163,11 +163,15 @@
           },
           "then": {
             "required": [
-              "buildCatalog"
+              "buildCatalog",
+              "workspaceProvisionerImageDigest"
             ],
             "properties": {
               "buildCatalog": {
                 "$ref": "#/$defs/buildCatalog"
+              },
+              "workspaceProvisionerImageDigest": {
+                "$ref": "#/$defs/builderImageDigest"
               }
             }
           }
@@ -216,6 +220,9 @@
               "$ref": "#/$defs/buildCatalog"
             }
           ]
+        },
+        "workspaceProvisionerImageDigest": {
+          "type": "string"
         }
       }
     },
@@ -422,8 +429,7 @@
       "minProperties": 1,
       "required": [
         "workProfiles",
-        "repos",
-        "workspaceProvisionerImageDigest"
+        "repos"
       ],
       "properties": {
         "workProfiles": {
@@ -443,9 +449,6 @@
           "items": {
             "$ref": "#/$defs/buildTarget"
           }
-        },
-        "workspaceProvisionerImageDigest": {
-          "$ref": "#/$defs/builderImageDigest"
         }
       }
     },

@@ -32,6 +32,7 @@ type Service struct {
 	jobs               storage.JobStore
 	builds             *builds.Service
 	engine             workflows.Engine
+	provisionerImage   string
 	workspaceRootDir   string
 	workspaceClaimName string
 	builderGit         *buildergit.Service
@@ -39,7 +40,7 @@ type Service struct {
 	audit              *audit.Recorder
 }
 
-func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
+func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, provisionerImage, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
 	if logger == nil {
 		return nil, errors.New("devflows: logger is required")
 	}
@@ -49,6 +50,7 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 		jobs:               jobs,
 		builds:             buildsSvc,
 		engine:             engine,
+		provisionerImage:   strings.TrimSpace(provisionerImage),
 		workspaceRootDir:   strings.TrimSpace(workspaceRootDir),
 		workspaceClaimName: strings.TrimSpace(workspaceClaimName),
 		builderGit:         builderGit,
@@ -105,9 +107,9 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if err != nil {
 		return storage.Workspace{}, err
 	}
-	provisionerImage, err := s.catalog.WorkspaceProvisionerImageDigestForProfile(profile)
-	if err != nil {
-		return storage.Workspace{}, err
+	provisionerImage := s.provisionerImage
+	if provisionerImage == "" {
+		return storage.Workspace{}, fmt.Errorf("devflows: workspaceProvisionerImageDigest is required for workspace profile %q", profile)
 	}
 	existing, err := s.workspaces.List(ctx, storage.WorkspaceFilter{OwnerID: ownerID, Limit: 200})
 	if err != nil {

@@ -29,10 +29,9 @@ var (
 
 // Catalog is product configuration for developer workflows.
 type Catalog struct {
-	WorkspaceProvisionerImageDigest string        `json:"workspaceProvisionerImageDigest,omitempty"`
-	WorkProfiles                    []WorkProfile `json:"workProfiles"`
-	Repos                           []Repo        `json:"repos"`
-	BuildTargets                    []BuildTarget `json:"buildTargets"`
+	WorkProfiles []WorkProfile `json:"workProfiles"`
+	Repos        []Repo        `json:"repos"`
+	BuildTargets []BuildTarget `json:"buildTargets"`
 }
 
 type WorkProfile struct {
@@ -72,7 +71,7 @@ type ResolvedTarget struct {
 }
 
 func (c Catalog) Empty() bool {
-	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.BuildTargets) == 0 && strings.TrimSpace(c.WorkspaceProvisionerImageDigest) == ""
+	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.BuildTargets) == 0
 }
 
 func (c Catalog) Validate() error {
@@ -82,11 +81,6 @@ func (c Catalog) Validate() error {
 	}
 	if len(c.Repos) == 0 {
 		errs = append(errs, "build catalog must declare at least one repo")
-	}
-	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest == "" {
-		errs = append(errs, "workspaceProvisionerImageDigest is required for workspace provisioning")
-	} else if !validBuilderImageDigest(digest) {
-		errs = append(errs, "workspace provisioner image digest must be digest-pinned")
 	}
 	profiles := map[string]struct{}{}
 	for _, p := range c.WorkProfiles {
@@ -308,13 +302,6 @@ func (c Catalog) ReposForProfile(workProfile string) ([]Repo, error) {
 		out = append(out, repo)
 	}
 	return out, nil
-}
-
-func (c Catalog) WorkspaceProvisionerImageDigestForProfile(workProfile string) (string, error) {
-	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest != "" {
-		return digest, nil
-	}
-	return "", fmt.Errorf("devflows: workspaceProvisionerImageDigest is required for workspace profile %q", workProfile)
 }
 
 func (c Catalog) ProfileAllowsRepo(workProfile, repoName string) bool {

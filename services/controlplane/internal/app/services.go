@@ -155,7 +155,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
 			allowedGitHosts, cfg.BuildCatalog.BuilderImageDigests(), cfg.BuildDefaultDeadline,
 			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, cfg.BuildCatalog.SensitiveLogValues()...)
-		devflowsSvc, err = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
+		devflowsSvc, err = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceProvisionerImageDigest, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring developer workflows: %w", err)

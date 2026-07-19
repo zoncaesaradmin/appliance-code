@@ -432,7 +432,7 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.buildCatalog.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	)...)
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
@@ -443,8 +443,11 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		t.Fatalf("APPLIANCE_PROFILE = %q, want builder", got)
 	}
 	catalogJSON, _ := data["APPLIANCE_BUILD_CATALOG_JSON"].(string)
-	if catalogJSON == "" || !bytes.Contains([]byte(catalogJSON), []byte("workspaceProvisionerImageDigest")) {
+	if catalogJSON == "" || !bytes.Contains([]byte(catalogJSON), []byte("workProfiles")) {
 		t.Fatalf("APPLIANCE_BUILD_CATALOG_JSON = %q, want rendered catalog", catalogJSON)
+	}
+	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want rendered provisioner image", got)
 	}
 }
 
@@ -454,6 +457,7 @@ func TestValuesSchemaRejectsUnsafeBuildCatalogPath(t *testing.T) {
 	values := []byte(`
 config:
   applianceProfile: builder
+  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   buildCatalog:
     workProfiles:
       - name: builder
@@ -462,7 +466,6 @@ config:
     repos:
       - name: app
         url: https://git.internal.example.com/team/app.git
-    workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     buildTargets:
       - name: default
         repo: app
@@ -504,7 +507,7 @@ config:
 	}
 }
 
-func TestValuesSchemaRejectsBuilderCatalogWithoutWorkspaceProvisionerImage(t *testing.T) {
+func TestValuesSchemaRejectsBuilderWithoutWorkspaceProvisionerImage(t *testing.T) {
 	requireHelm(t)
 	valuesPath := filepath.Join(t.TempDir(), "bad-builder-catalog.yaml")
 	values := []byte(`
@@ -525,7 +528,7 @@ config:
 	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted builder catalog without workspaceProvisionerImageDigest\n%s", out)
+		t.Fatalf("helm lint unexpectedly accepted builder config without workspaceProvisionerImageDigest\n%s", out)
 	}
 	if !bytes.Contains(out, []byte("workspaceProvisionerImageDigest")) {
 		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
@@ -538,6 +541,7 @@ func TestValuesSchemaRejectsSSHCatalogRepo(t *testing.T) {
 	values := []byte(`
 config:
   applianceProfile: builder
+  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   buildCatalog:
     workProfiles:
       - name: builder
@@ -546,7 +550,6 @@ config:
     repos:
       - name: app
         url: git@git.internal.example.com:team/app.git
-    workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)
@@ -565,7 +568,7 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.buildCatalog.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	)...)
 	pv := findByKindAndName(docs, "PersistentVolume", controlPlaneDeploymentName+"-workspaces")
 	if pv == nil {
@@ -627,6 +630,9 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if got, _ := data["APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT"].(string); got != "appliance-argo-workflows-executor" {
 		t.Fatalf("APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT = %q, want appliance-argo-workflows-executor", got)
 	}
+	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want workspace provisioner image", got)
+	}
 }
 
 func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
@@ -636,7 +642,7 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.buildCatalog.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 	)...)
 	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
 	if dep == nil {

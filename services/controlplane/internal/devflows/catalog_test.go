@@ -66,17 +66,6 @@ func TestCatalogAllowsWorkspaceOnlyCatalog(t *testing.T) {
 	if err := catalog.Validate(); err != nil {
 		t.Fatalf("Validate should accept workspace-only catalogs: %v", err)
 	}
-	if digest, err := catalog.WorkspaceProvisionerImageDigestForProfile("builder"); err != nil || digest != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
-		t.Fatalf("WorkspaceProvisionerImageDigestForProfile = %q, %v", digest, err)
-	}
-}
-
-func TestCatalogRejectsMissingWorkspaceProvisionerImageDigest(t *testing.T) {
-	catalog := testCatalog()
-	catalog.WorkspaceProvisionerImageDigest = ""
-	if err := catalog.Validate(); err == nil {
-		t.Fatal("Validate should reject catalogs with no workspace provisioner image")
-	}
 }
 
 func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
@@ -146,9 +135,8 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 
 func testCatalog() Catalog {
 	return Catalog{
-		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		WorkProfiles:                    []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		Repos:                           []Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets:                    []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		WorkProfiles: []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos:        []Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
 	}
 }

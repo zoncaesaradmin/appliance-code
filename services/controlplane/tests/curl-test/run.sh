@@ -179,8 +179,8 @@ cat > "${CONFIG_FILE}" <<EOF
   "applianceProfile": "builder",
   "allowedGitSourceHosts": ["git.internal.example.com"],
   "allowedBuilderImageDigests": ["${BUILD_BUILDER_DIGEST}"],
+  "workspaceProvisionerImageDigest": "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "buildCatalog": {
-    "workspaceProvisionerImageDigest": "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "workProfiles": [
       {
         "name": "builder",

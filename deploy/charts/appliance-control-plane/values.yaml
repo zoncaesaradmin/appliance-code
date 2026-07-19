@@ -61,10 +61,13 @@ config:
   workflowInstanceID: appliance
   workflowExecutorServiceAccount: appliance-argo-workflows-executor
   # Developer workflow catalog used by the builder profile. For workspace
-  # creation this contains workspace profiles, HTTPS Git repos, and the
-  # digest-pinned workspace provisioner image. Build targets are optional and
-  # are not required to materialize workspaces. Keep this empty for core/storage.
+  # creation this contains workspace profiles and HTTPS Git repos. Build targets
+  # are optional and are not required to materialize workspaces. Keep this empty
+  # for core/storage.
   buildCatalog: {}
+  # Appliance-owned generic image used by workspace provisioning workflows.
+  # zonctl injects this from the signed bundle for the builder profile.
+  workspaceProvisionerImageDigest: ""
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects

@@ -112,10 +112,10 @@ func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.ApplianceProfile = string(appliance.ProfileBuilder)
 	cfg.WorkflowEngine = "fake"
+	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	cfg.BuildCatalog = devflows.Catalog{
-		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		WorkProfiles:                    []devflows.WorkProfile{{Name: "builder", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		Repos:                           []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos:        []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
 		BuildTargets: []devflows.BuildTarget{{
 			Name: "default", Repo: "app", Execution: devflows.ExecutionRepoScript,
 			ImageRepository: "users/alice/app", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

@@ -31,13 +31,14 @@ type Config struct {
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	ZotBaseURL         string `json:"zotBaseURL"`
 
-	BuildDefaultDeadline           time.Duration    `json:"buildDefaultDeadline"`
-	WorkflowEngine                 string           `json:"workflowEngine"`
-	WorkflowInstanceID             string           `json:"workflowInstanceID"`
-	WorkflowExecutorServiceAccount string           `json:"workflowExecutorServiceAccount"`
-	BuildCatalog                   devflows.Catalog `json:"buildCatalog"`
-	WorkspaceRootDir               string           `json:"workspaceRootDir"`
-	WorkspaceClaimName             string           `json:"workspaceClaimName"`
+	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
+	WorkflowEngine                  string           `json:"workflowEngine"`
+	WorkflowInstanceID              string           `json:"workflowInstanceID"`
+	WorkflowExecutorServiceAccount  string           `json:"workflowExecutorServiceAccount"`
+	BuildCatalog                    devflows.Catalog `json:"buildCatalog"`
+	WorkspaceProvisionerImageDigest string           `json:"workspaceProvisionerImageDigest"`
+	WorkspaceRootDir                string           `json:"workspaceRootDir"`
+	WorkspaceClaimName              string           `json:"workspaceClaimName"`
 
 	ReadHeaderTimeout time.Duration `json:"readHeaderTimeout"`
 	ReadTimeout       time.Duration `json:"readTimeout"`
@@ -135,6 +136,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
+	str("WORKSPACE_PROVISIONER_IMAGE_DIGEST", &cfg.WorkspaceProvisionerImageDigest)
 	str("WORKSPACE_ROOT_DIR", &cfg.WorkspaceRootDir)
 	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
@@ -223,6 +225,11 @@ func (c Config) Validate() error {
 		}
 		if strings.TrimSpace(c.WorkflowExecutorServiceAccount) == "" {
 			errs = append(errs, "workflowExecutorServiceAccount must not be empty when the build capability is enabled")
+		}
+		if strings.TrimSpace(c.WorkspaceProvisionerImageDigest) == "" {
+			errs = append(errs, "workspaceProvisionerImageDigest must not be empty when the build capability is enabled")
+		} else if !strings.Contains(c.WorkspaceProvisionerImageDigest, "@sha256:") {
+			errs = append(errs, "workspaceProvisionerImageDigest must be digest-pinned")
 		}
 	} else if !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {

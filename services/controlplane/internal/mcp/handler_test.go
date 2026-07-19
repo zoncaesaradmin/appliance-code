@@ -28,10 +28,9 @@ const testPassword = "a-sufficiently-long-test-password-1"
 
 func testBuildCatalog() devflows.Catalog {
 	return devflows.Catalog{
-		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		WorkProfiles:                    []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		Repos:                           []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets:                    []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos:        []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
+		BuildTargets: []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
 	}
 }
 
@@ -58,6 +57,7 @@ func newTestEnvWithCatalog(t *testing.T, profile appliance.Profile, catalog devf
 	cfg.ApplianceProfile = string(profile)
 	if profile == appliance.ProfileBuilder {
 		cfg.BuildCatalog = catalog
+		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	}
 
 	logger, err := logging.New("error")
@@ -723,7 +723,6 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 
 func TestCreateWorkspaceToolRejectsExistingNameOnDifferentWorkspaceProfile(t *testing.T) {
 	env := newTestEnvWithCatalog(t, appliance.ProfileBuilder, devflows.Catalog{
-		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		WorkProfiles: []devflows.WorkProfile{
 			{Name: "platform-dev", Description: "Platform development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
 			{Name: "firmware-dev", Description: "Firmware development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},

@@ -18,7 +18,7 @@ import (
 )
 
 func TestNewServiceRequiresLogger(t *testing.T) {
-	_, err := NewService(Catalog{}, nil, nil, nil, nil, "", "", nil, nil, nil)
+	_, err := NewService(Catalog{}, nil, nil, nil, nil, "", "", "", nil, nil, nil)
 	if err == nil {
 		t.Fatal("NewService should reject a nil logger")
 	}
@@ -51,7 +51,7 @@ func TestWorkspaceProvisioningLogsSubmissionAndStatus(t *testing.T) {
 		t.Fatalf("Create user: %v", err)
 	}
 
-	svc, err := NewService(testProvisionCatalog(), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "/data/zon/workspaces", "appliance-workspaces", nil, logger, nil)
+	svc, err := NewService(testProvisionCatalog(), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "/data/zon/workspaces", "appliance-workspaces", nil, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -135,7 +135,6 @@ func testProvisionCatalog() Catalog {
 			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", DefaultRef: "main"},
 			{Name: "forgeline", URL: "https://git.internal.example.com/team/forgeline.git", DefaultRef: "main"},
 		},
-		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		BuildTargets: []BuildTarget{{
 			Name:               "default",
 			Repo:               "forgeline",
