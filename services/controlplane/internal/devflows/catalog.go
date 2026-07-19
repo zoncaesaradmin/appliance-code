@@ -77,10 +77,15 @@ func (c Catalog) Empty() bool {
 
 func (c Catalog) Validate() error {
 	var errs []string
-	if len(c.BuildTargets) == 0 {
-		errs = append(errs, "build catalog must declare at least one build target")
+	if len(c.WorkProfiles) == 0 {
+		errs = append(errs, "build catalog must declare at least one workspace profile")
 	}
-	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest != "" && !validBuilderImageDigest(digest) {
+	if len(c.Repos) == 0 {
+		errs = append(errs, "build catalog must declare at least one repo")
+	}
+	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest == "" {
+		errs = append(errs, "workspaceProvisionerImageDigest is required for workspace provisioning")
+	} else if !validBuilderImageDigest(digest) {
 		errs = append(errs, "workspace provisioner image digest must be digest-pinned")
 	}
 	profiles := map[string]struct{}{}
@@ -309,32 +314,7 @@ func (c Catalog) WorkspaceProvisionerImageDigestForProfile(workProfile string) (
 	if digest := strings.TrimSpace(c.WorkspaceProvisionerImageDigest); digest != "" {
 		return digest, nil
 	}
-	targets, err := c.TargetsForProfile(workProfile)
-	if err != nil {
-		return "", err
-	}
-	seen := map[string]struct{}{}
-	var digests []string
-	for _, target := range targets {
-		digest := strings.TrimSpace(target.BuilderImageDigest)
-		if digest == "" {
-			continue
-		}
-		if _, ok := seen[digest]; ok {
-			continue
-		}
-		seen[digest] = struct{}{}
-		digests = append(digests, digest)
-	}
-	switch len(digests) {
-	case 0:
-		return "", fmt.Errorf("devflows: workspace profile %q does not resolve any builder image digest for workspace provisioning", workProfile)
-	case 1:
-		return digests[0], nil
-	default:
-		sort.Strings(digests)
-		return "", fmt.Errorf("devflows: workspace profile %q resolves multiple builder image digests; set workspaceProvisionerImageDigest explicitly", workProfile)
-	}
+	return "", fmt.Errorf("devflows: workspaceProvisionerImageDigest is required for workspace profile %q", workProfile)
 }
 
 func (c Catalog) ProfileAllowsRepo(workProfile, repoName string) bool {

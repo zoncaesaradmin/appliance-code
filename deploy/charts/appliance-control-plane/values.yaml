@@ -60,9 +60,10 @@ config:
   trustedProxyCount: 1
   workflowInstanceID: appliance
   workflowExecutorServiceAccount: appliance-argo-workflows-executor
-  # Developer workflow catalog used by the builder profile. It is the single
-  # source of truth for allowed HTTPS Git sources, build targets, workspace
-  # profiles, and pinned builder images. Keep this empty for core/storage.
+  # Developer workflow catalog used by the builder profile. For workspace
+  # creation this contains workspace profiles, HTTPS Git repos, and the
+  # digest-pinned workspace provisioner image. Build targets are optional and
+  # are not required to materialize workspaces. Keep this empty for core/storage.
   buildCatalog: {}
 
 secrets:

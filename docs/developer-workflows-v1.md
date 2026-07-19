@@ -16,10 +16,12 @@ submission.
   user-scoped current workspace selection, jobs, and job steps in SQLite.
 - A workspace is one logical developer workspace selected from one workspace
   profile. It is not one workspace per repo. The chosen workspace profile
-  determines the set of repos and build targets available inside that
-  workspace.
-- Build target submission resolves `current workspace + build target + tag` into
-  the existing immutable build request shape.
+  determines the set of repos materialized inside that workspace.
+- Build target modeling is intentionally separate from workspace creation. A
+  repo can have zero, one, or many future build targets, so workspace creation
+  must not require output image repositories or per-target builder images.
+- Build target submission, when configured, resolves `current workspace + build
+  target + tag` into the existing immutable build request shape.
 - Build execution uses the workflow engine interface. Local tests use the fake
   workflow engine, while production builder-profile deployments use the Argo
   adapter through Kubernetes API calls.

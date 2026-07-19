@@ -135,6 +135,7 @@ func testProvisionCatalog() Catalog {
 			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", DefaultRef: "main"},
 			{Name: "forgeline", URL: "https://git.internal.example.com/team/forgeline.git", DefaultRef: "main"},
 		},
+		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		BuildTargets: []BuildTarget{{
 			Name:               "default",
 			Repo:               "forgeline",

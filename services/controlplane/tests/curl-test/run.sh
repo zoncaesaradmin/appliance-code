@@ -180,6 +180,7 @@ cat > "${CONFIG_FILE}" <<EOF
   "allowedGitSourceHosts": ["git.internal.example.com"],
   "allowedBuilderImageDigests": ["${BUILD_BUILDER_DIGEST}"],
   "buildCatalog": {
+    "workspaceProvisionerImageDigest": "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "workProfiles": [
       {
         "name": "builder",

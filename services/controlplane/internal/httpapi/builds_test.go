@@ -679,6 +679,7 @@ func TestDeleteWorkspaceRejectsActiveJobs(t *testing.T) {
 
 func TestCreateWorkspaceRejectsExistingNameOnDifferentWorkspaceProfile(t *testing.T) {
 	ts := newTestServerWithCatalog(t, appliance.ProfileBuilder, devflows.Catalog{
+		WorkspaceProvisionerImageDigest: "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		WorkProfiles: []devflows.WorkProfile{
 			{Name: "platform-dev", Description: "Platform development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
 			{Name: "firmware-dev", Description: "Firmware development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
