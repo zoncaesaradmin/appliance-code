@@ -16,10 +16,7 @@ const (
 	ExecutionRepoScript = "repo_script"
 	ExecutionMakeTarget = "make_target"
 
-	DefaultRepoScriptPath             = "build.sh"
-	managedBuilderGitNamespace        = "appliance-builds"
-	managedBuilderGitSecretName       = "builder-git-key"
-	managedBuilderGitKnownHostsSecret = "builder-git-known-hosts"
+	DefaultRepoScriptPath = "build.sh"
 )
 
 var (
@@ -432,12 +429,6 @@ func (c Catalog) ResolveTargetForProfile(workProfile, name string) (ResolvedTarg
 func IsCommitSHA(ref string) bool {
 	return commitShaRE.MatchString(strings.ToLower(strings.TrimSpace(ref)))
 }
-
-func BuilderGitNamespace() string { return managedBuilderGitNamespace }
-
-func BuilderGitSecretName() string { return managedBuilderGitSecretName }
-
-func BuilderGitKnownHostsSecretName() string { return managedBuilderGitKnownHostsSecret }
 
 func normalizeName(v string) string { return strings.ToLower(strings.TrimSpace(v)) }
 

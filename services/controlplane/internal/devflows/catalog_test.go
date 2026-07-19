@@ -68,18 +68,6 @@ func TestCatalogRejectsMissingBuildTargets(t *testing.T) {
 	}
 }
 
-func TestBuilderGitSecretsUseManagedNames(t *testing.T) {
-	if got := BuilderGitNamespace(); got != "appliance-builds" {
-		t.Fatalf("BuilderGitNamespace() = %q, want appliance-builds", got)
-	}
-	if got := BuilderGitSecretName(); got != "builder-git-key" {
-		t.Fatalf("BuilderGitSecretName() = %q", got)
-	}
-	if got := BuilderGitKnownHostsSecretName(); got != "builder-git-known-hosts" {
-		t.Fatalf("BuilderGitKnownHostsSecretName() = %q", got)
-	}
-}
-
 func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

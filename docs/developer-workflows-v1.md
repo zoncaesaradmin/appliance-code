@@ -23,9 +23,10 @@ submission.
 - Build execution uses the workflow engine interface. Local tests use the fake
   workflow engine, while production builder-profile deployments use the Argo
   adapter through Kubernetes API calls.
-- V1 build targets are still ephemeral clone-per-build: the control-plane API
-  stores workspace metadata, then the workflow pod clones the configured source
-  at the immutable commit and executes the target's structured execution mode.
+- V1 workspaces are materialized onto the shared workspace PVC under the fixed
+  host-visible root `/var/lib/zon/workspaces/<workspace-name>`. Build execution
+  remains a separate workflow that uses that prepared workspace state together
+  with the immutable build request fields.
 - Build and job records keep the immutable source commit plus the resolved
   target artifact reference so REST and MCP clients can track the submitted
   image identity directly.
@@ -47,8 +48,8 @@ mean `workspace profile` to distinguish them from the product-facing
 ## Git Sources And Credentials
 
 Catalog repos must use HTTPS Git URLs. Repo hosts are still checked against the
-configured Git host allowlist. Private keys, SSH credential references,
-`known_hosts` data, tokens, and passwords do not belong in product config,
+configured Git host allowlist. Private keys, SSH-only credential metadata,
+tokens, and passwords do not belong in product config,
 release bundles, API responses, MCP responses, logs, or command arguments.
 
 ## RBAC
@@ -88,7 +89,7 @@ Covered by tests:
   operation when the same principal has or lacks the underlying operation
   permission;
 - workflow status messages and logs returned through REST/MCP are redacted for
-  configured source credential Secret names and private-key PEM blocks;
+  configured sensitive markers and private-key PEM blocks;
 - Argo workflow submission/status/log/cancel behavior through the Kubernetes
   API adapter;
 - local live-server e2e starts in builder profile with a valid build catalog
@@ -104,8 +105,9 @@ Covered by tests:
 
 ## Deferred
 
-- Persistent workspace PVCs; V1 starts with ephemeral clone-per-build semantics.
-- Admin-enabled server-local host-path workspaces. If added later, they must be
+- Admin-enabled alternate workspace storage roots. V1 keeps the builder
+  workspace PVC mounted at the fixed host-visible path `/var/lib/zon/workspaces`.
+  If additional storage roots are added later, they must be
   explicit product config with allowlisted base paths, symlink escape checks,
   and workflow-pod mounts; the control-plane pod must not implicitly use host
   `~/.ssh` or arbitrary host filesystem paths.

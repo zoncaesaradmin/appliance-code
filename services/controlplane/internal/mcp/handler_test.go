@@ -671,7 +671,7 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 	if artifactRef, _ := jobMap["artifactRef"].(string); artifactRef != "users/alice/app:v1" {
 		t.Fatalf("submit_build artifactRef = %q, want users/alice/app:v1", artifactRef)
 	}
-	for _, secretText := range []string{"builder-git-key", "builder-git-known-hosts"} {
+	for _, secretText := range []string{"source-secret-a", "source-secret-b"} {
 		if strings.Contains(fmt.Sprint(submitted), secretText) {
 			t.Fatalf("submit_build structured content leaked source credential material %q: %+v", secretText, submitted)
 		}
@@ -683,7 +683,7 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 	} else if artifactRef, _ := statusJob["artifactRef"].(string); artifactRef != "users/alice/app:v1" {
 		t.Fatalf("get_job_status artifactRef = %q, want users/alice/app:v1", artifactRef)
 	}
-	for _, secretText := range []string{"builder-git-key", "builder-git-known-hosts"} {
+	for _, secretText := range []string{"source-secret-a", "source-secret-b"} {
 		if strings.Contains(fmt.Sprint(status), secretText) {
 			t.Fatalf("get_job_status structured content leaked source credential material %q: %+v", secretText, status)
 		}

@@ -298,7 +298,7 @@ func TestDeveloperWorkflowSubmitBuildByCurrentWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secretText := range []string{"builder-git-key", "builder-git-known-hosts"} {
+	for _, secretText := range []string{"source-secret-a", "source-secret-b"} {
 		if strings.Contains(string(statusBody), secretText) {
 			t.Fatalf("job status response leaked source credential material %q: %s", secretText, string(statusBody))
 		}

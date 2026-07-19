@@ -59,7 +59,7 @@ func TestSubmitRejectsSSHCredentialInputs(t *testing.T) {
 	_, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app.git", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:abc", TargetRepository: "registry.local/users/alice/app",
-		TargetTag: "v1", SourceCredentialSecret: "builder-git-key", Deadline: time.Now().Add(time.Hour),
+		TargetTag: "v1", SourceCredentialSecret: "source-secret-a", Deadline: time.Now().Add(time.Hour),
 	})
 	if err == nil {
 		t.Fatal("workflowObject should reject SSH credential inputs")
