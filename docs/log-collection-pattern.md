@@ -78,7 +78,7 @@ Useful target-host commands today:
 sudo kubectl get pods -A
 sudo kubectl -n appliance-system logs deploy/control-plane
 sudo kubectl -n appliance-system logs deploy/control-plane-ui
-sudo kubectl -n workflows logs deploy/appliance-argo-workflows
+sudo kubectl -n workflows logs deploy/argo-workflows
 sudo kubectl -n appliance-builds get pods
 sudo kubectl -n appliance-builds logs <pod-name>
 sudo journalctl -u k3s -f

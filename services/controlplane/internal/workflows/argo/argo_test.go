@@ -175,7 +175,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
 	}
-	for _, want := range []string{"git clone", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout"} {
+	for _, want := range []string{"appliance_git_clone", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout"} {
 		if !strings.Contains(command, want) {
 			t.Fatalf("workspace workflow command missing %q: %s", want, command)
 		}

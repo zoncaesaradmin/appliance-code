@@ -59,7 +59,12 @@ config:
   logLevel: info
   trustedProxyCount: 1
   workflowInstanceID: appliance
-  workflowExecutorServiceAccount: appliance-argo-workflows-executor
+  # Must match the ServiceAccount the argo-workflows chart actually
+  # creates: "<argo-workflows.fullname>-executor", where fullname is
+  # pinned via that chart's own fullnameOverride: "argo-workflows".
+  # These are two independent charts with no template-level link between
+  # them, so this string has to be kept in sync by hand.
+  workflowExecutorServiceAccount: argo-workflows-executor
   # Developer workflow catalog used by the builder profile. For workspace
   # creation this contains workspace profiles and HTTPS Git repos. Build targets
   # are optional and are not required to materialize workspaces. Keep this empty

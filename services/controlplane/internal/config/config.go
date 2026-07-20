@@ -70,7 +70,7 @@ func Default() Config {
 		BuildDefaultDeadline:           30 * time.Minute,
 		WorkflowEngine:                 "fake",
 		WorkflowInstanceID:             "appliance",
-		WorkflowExecutorServiceAccount: "appliance-argo-workflows-executor",
+		WorkflowExecutorServiceAccount: "argo-workflows-executor",
 		WorkspaceRootDir:               "/data/zon/workspaces",
 		WorkspaceClaimName:             "appliance-workspaces",
 	}

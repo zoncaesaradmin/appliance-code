@@ -179,7 +179,8 @@
         "enabled": { "type": "boolean" }
       },
       "required": ["enabled"]
-    }
+    },
+    "fullnameOverride": { "type": "string" }
   },
   "required": [
     "namespace",

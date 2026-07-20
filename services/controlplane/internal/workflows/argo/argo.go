@@ -257,6 +257,10 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		volumeMounts = append(volumeMounts, map[string]any{"name": "git-access", "mountPath": gitCredentialDir, "readOnly": true})
 		volumes = append(volumes, map[string]any{"name": "git-access", "secret": map[string]any{"secretName": spec.GitCredentialSecret}})
 	}
+	env = append(env,
+		map[string]any{"name": "HOME", "value": "/tmp/appliance-home"},
+		map[string]any{"name": "GIT_TERMINAL_PROMPT", "value": "0"},
+	)
 
 	labels := map[string]any{
 		"app.kubernetes.io/part-of":    "appliance",
@@ -311,11 +315,12 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 	}
 
 	container := map[string]any{
-		"image":           spec.BuilderImageDigest,
-		"imagePullPolicy": "IfNotPresent",
-		"command":         []string{"/bin/sh", "-ceu"},
-		"args":            []string{commandScript},
-		"env":             env,
+		"image":                    spec.BuilderImageDigest,
+		"imagePullPolicy":          "IfNotPresent",
+		"command":                  []string{"/bin/sh", "-ceu"},
+		"args":                     []string{commandScript},
+		"env":                      env,
+		"terminationMessagePolicy": "FallbackToLogsOnError",
 		"securityContext": map[string]any{
 			"allowPrivilegeEscalation": false,
 			"capabilities":             map[string]any{"drop": []string{"ALL"}},
@@ -397,7 +402,12 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString(gitAuthPreamble(spec.GitCredentialSecret))
+	b.WriteString("umask 0007\n")
+	b.WriteString("mkdir -p \"$HOME\"\n")
+	b.WriteString("echo \"workspace provisioning started\"\n")
+	b.WriteString("git --version\n")
 	b.WriteString("workspace_dir=\"$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME\"\n")
+	b.WriteString("echo \"workspace directory: $workspace_dir\"\n")
 	b.WriteString("mkdir -p \"$workspace_dir\"\n")
 	b.WriteString("cd \"$workspace_dir\"\n")
 	for _, repo := range spec.WorkspaceRepos {
@@ -419,11 +429,19 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 		b.WriteString(" ]; then rm -rf ")
 		b.WriteString(repoDir)
 		b.WriteString("; fi\n")
+		b.WriteString("  echo \"cloning repo ")
+		b.WriteString(repo.Name)
+		b.WriteString("\"\n")
 		b.WriteString("  appliance_git_clone ")
 		b.WriteString(repoURL)
 		b.WriteString(" ")
 		b.WriteString(repoDir)
 		b.WriteString("\n")
+		b.WriteString("  echo \"checking out repo ")
+		b.WriteString(repo.Name)
+		b.WriteString(" ref ")
+		b.WriteString(repo.Ref)
+		b.WriteString("\"\n")
 		b.WriteString("  git -C ")
 		b.WriteString(repoDir)
 		b.WriteString(" checkout ")
@@ -436,16 +454,29 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 
 func gitAuthPreamble(secretName string) string {
 	if strings.TrimSpace(secretName) == "" {
-		return "appliance_git_clone() {\n  git clone \"$1\" \"$2\"\n}\n"
+		return "appliance_git_clone() {\n  git -c credential.helper= clone \"$1\" \"$2\"\n}\n"
 	}
 	return `appliance_git_clone() {
   repo_url="$1"
   dest_dir="$2"
+  for required_file in host username token; do
+    if [ ! -r "` + gitCredentialDir + `/${required_file}" ]; then
+      echo "missing readable Git credential field: ${required_file}" >&2
+      return 1
+    fi
+  done
   git_host="$(cat ` + gitCredentialDir + `/host)"
   git_username="$(cat ` + gitCredentialDir + `/username)"
   git_token="$(cat ` + gitCredentialDir + `/token)"
+  case "$repo_url" in
+    "https://${git_host}/"*) ;;
+    *)
+      echo "repo URL host does not match configured Git credential host" >&2
+      return 1
+      ;;
+  esac
   auth_header="$(printf '%s:%s' "$git_username" "$git_token" | base64 | tr -d '\n')"
-  git -c "http.https://${git_host}/.extraheader=Authorization: Basic ${auth_header}" clone "$repo_url" "$dest_dir"
+  git -c credential.helper= -c "http.https://${git_host}/.extraheader=Authorization: Basic ${auth_header}" clone "$repo_url" "$dest_dir"
 }
 `
 }
