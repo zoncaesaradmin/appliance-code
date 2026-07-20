@@ -402,7 +402,14 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString(gitAuthPreamble(spec.GitCredentialSecret))
-	b.WriteString("umask 0007\n")
+	// The workspace directory is intentionally host-accessible to any
+	// local user (not just the shared fsGroup) so an operator can
+	// inspect or edit cloned repo content directly — see hostdirs in
+	// appliance-ctl, which chmods the parent directory 0777 to match.
+	// A restrictive umask here would silently undo that at the
+	// individual-file level: the parent being world-writable doesn't
+	// help if every file git creates inside it is 0640.
+	b.WriteString("umask 0000\n")
 	b.WriteString("mkdir -p \"$HOME\"\n")
 	b.WriteString("echo \"workspace provisioning started\"\n")
 	b.WriteString("git --version\n")
