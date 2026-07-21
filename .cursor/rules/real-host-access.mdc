@@ -1,0 +1,40 @@
+---
+description: Real build/publish/target hosts are read-only unless the user explicitly authorizes writes
+alwaysApply: true
+---
+
+# Real Host Access Guardrail
+
+Applies to the user's real build server, publish/artifact server, and target appliance host (SSH aliases/IPs in `appliance-release.config.yaml` or equivalent).
+
+## Default: read-only
+
+- SSH/login for **inspection only** is allowed: `git status`, `git log`, `ls`, `cat`/`Read` of logs, `ctr image ls`, `kubectl get`, journal/auth logs, process checks, and similar read-only commands.
+- Do **not** modify files, content, packages, services, git state, container images, or cluster state on those hosts unless the user **explicitly asks for that write in the current turn**.
+
+## Forbidden without explicit permission
+
+- `scp`, `rsync` uploads, or any copy that writes onto a real host
+- Editing remote files (`vim`, `sed -i`, `tee`, redirects that overwrite, `StrReplace`/`Write` over SSH)
+- `git checkout` / `git restore` / `git reset` / `git clean` / `git pull` / clone/delete of checkouts on the build host when done by the agent directly (the release skill may do managed sync only when the user runs or explicitly requests the release flow)
+- Installing packages, restarting services, importing images, or changing K3s/cluster state outside a user-requested release/install/verify command
+
+## Correct change path
+
+- Edit code in the **local** git checkouts (`appliance-code`, `appliance-ctl`, `appliance-release`).
+- Commit/push (when the user asks), then let the documented release skill sync the build host from git.
+- If a remote fix seems necessary, **ask first** and wait for explicit permission; do not hotfix the server.
+
+## Release-flow exception
+
+- Running `run-release-flow.sh` / skill scripts **when the user explicitly requests that run** may perform the remote build/publish/install/verify steps those scripts own.
+- That exception does **not** authorize ad-hoc agent SSH writes outside those scripts.
+
+## Stay Inside The Repo
+
+- Limit edits to files **inside the git repositories** you were asked to work in (`appliance-code`, `appliance-ctl`, `appliance-release`).
+- Do **not** create or modify user runtime files outside the repo, including but not limited to:
+  - `~/appliance-release.config.yaml` (or `$APPLIANCE_RELEASE_CONFIG` / any personal config path)
+  - `~/build-catalog.yaml` (or any personal build-catalog path outside the repo)
+- Update only **in-repo examples and references** such as `.agents/skills/release/references/config.example.yaml` and `build-catalog.example.yaml`. Tell the user what to copy into their home/runtime config if needed.
+- Do not edit other home-directory or machine-local paths (dotfiles, secrets, SSH config, host inputs under `/home/.../ci/inputs`, etc.) unless the user explicitly asks in the current turn.
