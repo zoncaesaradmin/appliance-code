@@ -385,8 +385,8 @@ func TestCreateMountsSharedWorkspaceStorageIntoWorkflow(t *testing.T) {
 func TestCreatePassesStructuredExecutionToWorkflow(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	req := validRequest()
-	req.Execution = "make_target"
-	req.MakeTarget = "image"
+	req.Execution = "make"
+	req.Args = []string{"image"}
 	req.ContainerfilePath = "deploy/Containerfile"
 	build, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, "")
 	if err != nil {
@@ -396,7 +396,7 @@ func TestCreatePassesStructuredExecutionToWorkflow(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow spec %q was not submitted", build.WorkflowName)
 	}
-	if spec.Execution != "make_target" || spec.MakeTarget != "image" || spec.ContainerfilePath != "deploy/Containerfile" {
+	if spec.Execution != "make" || len(spec.Args) != 1 || spec.Args[0] != "image" || spec.ContainerfilePath != "deploy/Containerfile" {
 		t.Fatalf("workflow spec execution fields = %+v", spec)
 	}
 }

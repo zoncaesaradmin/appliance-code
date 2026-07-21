@@ -42,6 +42,9 @@ type controlPlane interface {
 	DeleteWorkspace(ctx context.Context, accessToken, workspaceID string) error
 	BuilderGitAccess(ctx context.Context, accessToken string) (controlplane.BuilderGitAccessStatus, error)
 	ConfigureBuilderGitAccess(ctx context.Context, accessToken string, req controlplane.ConfigureBuilderGitAccessRequest) (controlplane.BuilderGitAccessStatus, error)
+	ListCurrentBuildTargets(ctx context.Context, accessToken string) ([]controlplane.BuildTarget, error)
+	SubmitCurrentBuild(ctx context.Context, accessToken string, req controlplane.SubmitBuildRequest) (controlplane.Job, error)
+	CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (controlplane.Job, error)
 }
 
 type Server struct {
@@ -73,12 +76,35 @@ type builderPageData struct {
 	Workspaces            []controlplane.Workspace
 	CurrentWorkspace      *controlplane.Workspace
 	BuilderGitAccess      controlplane.BuilderGitAccessStatus
+	BuildTargets          []controlplane.BuildTarget
+	LatestBuild           *controlplane.Job
+	CanSubmitBuild        bool
 	OpenWorkspaceSettings bool
 	SelectedWorkspaceID   string
 	SelectedWorkspaceName string
 	SelectedWorkProfile   string
 	SelectedExisting      bool
 	SelectedProfile       *controlplane.WorkProfile
+	// WorkspaceStatusPending is true when the current workspace or any
+	// listed workspace is still "pending" (provisioning). The overview
+	// and workspace-list partials poll live (see /builder/workspaces/live)
+	// only while this is true; once every workspace reaches a terminal
+	// status, the next poll's response omits the hx-trigger and htmx
+	// stops polling on its own.
+	WorkspaceStatusPending bool
+}
+
+func workspaceStatusPending(current *controlplane.Workspace, workspaces []controlplane.Workspace) bool {
+	const statusPending = "pending"
+	if current != nil && current.Status == statusPending {
+		return true
+	}
+	for _, ws := range workspaces {
+		if ws.Status == statusPending {
+			return true
+		}
+	}
+	return false
 }
 
 const sessionCookieName = "appliance_ui_session"
@@ -125,9 +151,11 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
 	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
 	mux.HandleFunc("POST /builder/git-access", s.configureBuilderGitAccess)
+	mux.HandleFunc("POST /builder/builds", s.submitBuilderBuild)
 	mux.HandleFunc("POST /builder/workspaces/delete", s.deleteBuilderWorkspace)
 	mux.HandleFunc("POST /builder/current-workspace", s.setBuilderCurrentWorkspace)
 	mux.HandleFunc("GET /partials/builder/work-profile", s.builderWorkProfilePartial)
+	mux.HandleFunc("GET /builder/workspaces/live", s.builderWorkspaceLivePartial)
 	mux.HandleFunc("GET /partials/status", s.statusPartial)
 	mux.HandleFunc("GET /partials/session", s.sessionPartial)
 	return withTraceContext(chainMiddleware(securityHeaders(mux), logger)), nil
@@ -464,6 +492,51 @@ func (s *Server) configureBuilderGitAccess(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
 }
 
+func (s *Server) submitBuilderBuild(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not read the submitted build form."))
+		return
+	}
+	targetName := strings.TrimSpace(r.Form.Get("target_name"))
+	imageTag := strings.TrimSpace(r.Form.Get("image_tag"))
+	if targetName == "" {
+		s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Select a build target before submitting a build."))
+		return
+	}
+	job, err := s.cp.SubmitCurrentBuild(r.Context(), rec.AccessToken, controlplane.SubmitBuildRequest{
+		TargetName: targetName,
+		ImageTag:   imageTag,
+	})
+	if err != nil {
+		s.logger.WithContext(r.Context()).Warnw("submit builder build failed", "error", err, "targetName", targetName)
+		switch {
+		case isHTTPStatus(err, http.StatusPreconditionFailed):
+			s.render(w, r, http.StatusPreconditionFailed, "builder_workspaces.html", s.builderPageData(r, rec, "", "Configure builder Git HTTPS access before submitting a build."))
+		case isHTTPStatus(err, http.StatusConflict):
+			s.render(w, r, http.StatusConflict, "builder_workspaces.html", s.builderPageData(r, rec, "", "The current workspace is not ready for builds yet. Wait for provisioning to finish."))
+		case isHTTPStatus(err, http.StatusNotFound):
+			s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Unknown build target or no current workspace. Check the catalog mapping and try again."))
+		default:
+			s.render(w, r, http.StatusBadRequest, "builder_workspaces.html", s.builderPageData(r, rec, "", "Could not submit the build. Check the target name and catalog configuration."))
+		}
+		return
+	}
+	s.logger.WithContext(r.Context()).Infow("builder build submitted", "targetName", targetName, "jobID", job.ID, "artifactRef", job.ArtifactRef)
+	http.Redirect(w, r, "/builder/workspaces", http.StatusSeeOther)
+}
+
 func (s *Server) deleteBuilderWorkspace(w http.ResponseWriter, r *http.Request) {
 	if !s.builderEnabled() {
 		http.NotFound(w, r)
@@ -555,6 +628,34 @@ func (s *Server) builderWorkProfilePartial(w http.ResponseWriter, r *http.Reques
 	s.render(w, r, http.StatusOK, "builder_work_profile_preview.html", data)
 }
 
+// builderWorkspaceLivePartial serves the two workspace status regions
+// (the current-workspace overview, and the workspace list) that
+// self-poll via htmx while any workspace is still pending. It always
+// recomputes builderPageData fresh, the same as a full page load, so a
+// workspace's status transition is reflected on the very next poll tick
+// instead of only on the next full navigation.
+func (s *Server) builderWorkspaceLivePartial(w http.ResponseWriter, r *http.Request) {
+	if !s.builderEnabled() {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, refreshedOK := s.refreshRecordForAPI(w, r, rec)
+	if !refreshedOK {
+		return
+	}
+	data := s.builderPageData(r, rec, "", "")
+	switch r.URL.Query().Get("region") {
+	case "list":
+		s.render(w, r, http.StatusOK, "builder_workspace_list.html", data)
+	default:
+		s.render(w, r, http.StatusOK, "builder_workspace_overview.html", data)
+	}
+}
+
 func (s *Server) builderPageData(r *http.Request, rec session.Record, message, formError string) builderPageData {
 	base := s.builderViewData(r, rec)
 	base.Title = "Builder workspaces"
@@ -593,6 +694,23 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 	data.BuilderGitAccess = gitAccess
 	data.WorkProfiles = profiles
 	data.Workspaces = workspaces
+	data.WorkspaceStatusPending = workspaceStatusPending(data.CurrentWorkspace, workspaces)
+	if data.CurrentWorkspace != nil && data.CurrentWorkspace.Status == "ready" {
+		targets, err := s.cp.ListCurrentBuildTargets(r.Context(), rec.AccessToken)
+		if err != nil {
+			data.StatusError = "Build targets are not available."
+		} else {
+			data.BuildTargets = targets
+		}
+		if job, err := s.cp.CurrentWorkspaceBuildStatus(r.Context(), rec.AccessToken); err == nil {
+			data.LatestBuild = &job
+		} else if !isHTTPStatus(err, http.StatusNotFound) {
+			if data.StatusError == "" {
+				data.StatusError = "Latest build status is not available."
+			}
+		}
+		data.CanSubmitBuild = gitAccess.Configured && len(data.BuildTargets) > 0
+	}
 	selectedID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
 	data.OpenWorkspaceSettings = !gitAccess.Configured || data.CurrentWorkspace == nil || selectedID != "" || formError != "" || message != ""
 	selected, selectedIsNew := selectedBuilderWorkspace(selectedID, workspaces, data.CurrentWorkspace)

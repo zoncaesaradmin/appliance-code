@@ -27,7 +27,17 @@ spec:
           command:
             - /bin/sh
             - -c
-            - chown 0:20000 /workspace-root && chmod 2770 /workspace-root
+            # Mode must stay in sync with appliance-ctl's
+            # internal/hostdirs.WorkspaceDirMode: world-writable (not
+            # just group-writable) with setgid, so a normal host
+            # operator login and external rsync/scp pushes can create
+            # and edit workspace content directly, not just the pods
+            # sharing the appliance fsGroup. zonctl itself already sets
+            # this before Helm ever runs (this Job is a defense-in-depth
+            # backstop, e.g. for helm-only deploys) — the two must never
+            # disagree, or whichever runs last silently reverts the
+            # other's mode.
+            - chown 0:20000 /workspace-root && chmod 2777 /workspace-root
           securityContext:
             runAsNonRoot: false
             runAsUser: 0

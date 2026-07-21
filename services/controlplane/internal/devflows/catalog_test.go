@@ -2,6 +2,34 @@ package devflows
 
 import "testing"
 
+func TestCatalogNormalizesNestedBuildTargets(t *testing.T) {
+	catalog := Catalog{
+		WorkProfiles: []WorkProfile{{Name: "builder", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
+		Repos: []Repo{{
+			Name:       "app",
+			URL:        "https://git.internal.example.com/team/app.git",
+			DefaultRef: "main",
+			BuildTargets: []BuildTarget{
+				{Name: "app", Execution: ExecutionMake, Args: []string{"build"}, ImageRepository: "users/alice/app", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+				{Name: "app-api", Execution: ExecutionMake, Args: []string{"api"}, ImageRepository: "users/alice/app-api", BuilderImageDigest: "buildah@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+			},
+		}},
+	}
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	catalog.Normalize()
+	if len(catalog.BuildTargets) != 2 {
+		t.Fatalf("BuildTargets = %+v, want 2 after normalize", catalog.BuildTargets)
+	}
+	if catalog.Repos[0].BuildTargets != nil {
+		t.Fatalf("nested BuildTargets should be cleared after normalize: %+v", catalog.Repos[0].BuildTargets)
+	}
+	if catalog.BuildTargets[0].Repo != "app" || catalog.BuildTargets[1].Repo != "app" {
+		t.Fatalf("lifted targets missing repo: %+v", catalog.BuildTargets)
+	}
+}
+
 func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 	catalog := testCatalog()
 	if err := catalog.Validate(); err != nil {
@@ -11,8 +39,8 @@ func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveTarget: %v", err)
 	}
-	if resolved.Target.ScriptPath != DefaultRepoScriptPath {
-		t.Errorf("ScriptPath = %q, want default", resolved.Target.ScriptPath)
+	if len(resolved.Target.Args) != 1 || resolved.Target.Args[0] != DefaultScriptArg {
+		t.Errorf("Args = %#v, want [%q]", resolved.Target.Args, DefaultScriptArg)
 	}
 	if resolved.Repo.URL != "https://git.internal.example.com/team/app.git" {
 		t.Errorf("repo url = %q", resolved.Repo.URL)
@@ -21,7 +49,7 @@ func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 
 func TestCatalogRejectsDuplicateAlias(t *testing.T) {
 	catalog := testCatalog()
-	catalog.BuildTargets = append(catalog.BuildTargets, BuildTarget{Name: "other", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/other", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+	catalog.BuildTargets = append(catalog.BuildTargets, BuildTarget{Name: "other", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, ImageRepository: "users/alice/other", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
 	if err := catalog.Validate(); err == nil {
 		t.Fatal("Validate should reject duplicate alias")
 	}
@@ -76,19 +104,22 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 		{
 			name: "absolute script path",
 			mutate: func(c *Catalog) {
-				c.BuildTargets[0].ScriptPath = "/tmp/build.sh"
+				c.BuildTargets[0].Execution = ExecutionScript
+				c.BuildTargets[0].Args = []string{"/tmp/build.sh"}
 			},
 		},
 		{
 			name: "traversal script path",
 			mutate: func(c *Catalog) {
-				c.BuildTargets[0].ScriptPath = "../build.sh"
+				c.BuildTargets[0].Execution = ExecutionScript
+				c.BuildTargets[0].Args = []string{"../build.sh"}
 			},
 		},
 		{
 			name: "dot segment script path",
 			mutate: func(c *Catalog) {
-				c.BuildTargets[0].ScriptPath = "./build.sh"
+				c.BuildTargets[0].Execution = ExecutionScript
+				c.BuildTargets[0].Args = []string{"./build.sh"}
 			},
 		},
 		{
@@ -106,8 +137,8 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 		{
 			name: "unsafe make target",
 			mutate: func(c *Catalog) {
-				c.BuildTargets[0].Execution = ExecutionMakeTarget
-				c.BuildTargets[0].MakeTarget = "image && whoami"
+				c.BuildTargets[0].Execution = ExecutionMake
+				c.BuildTargets[0].Args = []string{"image && whoami"}
 			},
 		},
 		{
@@ -137,6 +168,6 @@ func testCatalog() Catalog {
 	return Catalog{
 		WorkProfiles: []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
 		Repos:        []Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, Args: []string{"build.sh"}, ImageRepository: "users/alice/app", ImageTagTemplate: "{workspace}-{target}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
 	}
 }

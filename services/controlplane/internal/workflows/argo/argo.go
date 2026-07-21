@@ -296,21 +296,40 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		}
 		targetImage := spec.TargetRepository + ":" + spec.TargetTag
 		env = append(env,
-			map[string]any{"name": "SOURCE_REPO_URL", "value": spec.SourceRepoURL},
-			map[string]any{"name": "SOURCE_COMMIT_SHA", "value": spec.SourceCommitSHA},
 			map[string]any{"name": "CONTAINERFILE_PATH", "value": containerfile},
 			map[string]any{"name": "TARGET_IMAGE", "value": targetImage},
 		)
-		if spec.WorkspaceRootDir != "" && spec.WorkspaceClaimName != "" {
-			env = append(env, map[string]any{"name": "WORKSPACE_ROOT_DIR", "value": spec.WorkspaceRootDir})
+		if strings.TrimSpace(spec.WorkspaceName) != "" && strings.TrimSpace(spec.WorkspaceRepo) != "" {
+			if strings.TrimSpace(spec.WorkspaceRootDir) == "" || strings.TrimSpace(spec.WorkspaceClaimName) == "" {
+				return nil, nil, fmt.Errorf("argo: workspace build requires workspace storage")
+			}
+			labels["workflows.appliance.local/workspace"] = spec.WorkspaceName
+			labels["workflows.appliance.local/repo"] = spec.WorkspaceRepo
+			env = append(env,
+				map[string]any{"name": "WORKSPACE_ROOT_DIR", "value": spec.WorkspaceRootDir},
+				map[string]any{"name": "WORKSPACE_NAME", "value": spec.WorkspaceName},
+				map[string]any{"name": "WORKSPACE_REPO", "value": spec.WorkspaceRepo},
+			)
 			volumeMounts = append(volumeMounts, map[string]any{"name": "workspace-storage", "mountPath": spec.WorkspaceRootDir})
 			volumes = append(volumes, map[string]any{"name": "workspace-storage", "persistentVolumeClaim": map[string]any{"claimName": spec.WorkspaceClaimName}})
+		} else {
+			env = append(env,
+				map[string]any{"name": "SOURCE_REPO_URL", "value": spec.SourceRepoURL},
+				map[string]any{"name": "SOURCE_COMMIT_SHA", "value": spec.SourceCommitSHA},
+			)
+			if spec.WorkspaceRootDir != "" && spec.WorkspaceClaimName != "" {
+				env = append(env, map[string]any{"name": "WORKSPACE_ROOT_DIR", "value": spec.WorkspaceRootDir})
+				volumeMounts = append(volumeMounts, map[string]any{"name": "workspace-storage", "mountPath": spec.WorkspaceRootDir})
+				volumes = append(volumes, map[string]any{"name": "workspace-storage", "persistentVolumeClaim": map[string]any{"claimName": spec.WorkspaceClaimName}})
+			}
 		}
-		if spec.ScriptPath != "" {
-			env = append(env, map[string]any{"name": "SCRIPT_PATH", "value": spec.ScriptPath})
-		}
-		if spec.MakeTarget != "" {
-			env = append(env, map[string]any{"name": "MAKE_TARGET", "value": spec.MakeTarget})
+		if len(spec.Args) > 0 {
+			switch strings.TrimSpace(spec.Execution) {
+			case "make", "make_target":
+				env = append(env, map[string]any{"name": "MAKE_TARGET", "value": spec.Args[0]})
+			case "script", "repo_script":
+				env = append(env, map[string]any{"name": "SCRIPT_PATH", "value": spec.Args[0]})
+			}
 		}
 	}
 
@@ -368,32 +387,57 @@ func workflowDeadlineSeconds(deadline time.Time) int64 {
 }
 
 func buildCommandScript(spec workflows.Spec) (string, error) {
-	if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" || spec.TargetRepository == "" || spec.TargetTag == "" {
+	if spec.TargetRepository == "" || spec.TargetTag == "" {
 		return "", fmt.Errorf("argo: workflow spec is missing required build fields")
 	}
-	preamble := gitAuthPreamble(spec.GitCredentialSecret) + `mkdir -p /workspace/src
+	workspaceBuild := strings.TrimSpace(spec.WorkspaceName) != "" && strings.TrimSpace(spec.WorkspaceRepo) != ""
+	var preamble string
+	if workspaceBuild {
+		if strings.TrimSpace(spec.WorkspaceRootDir) == "" {
+			return "", fmt.Errorf("argo: workspace build requires workspace root dir")
+		}
+		preamble = `repo_dir="$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME/$WORKSPACE_REPO"
+if [ ! -d "$repo_dir" ]; then
+  echo "workspace repo directory is missing: $repo_dir" >&2
+  exit 1
+fi
+cd "$repo_dir"
+`
+	} else {
+		if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" {
+			return "", fmt.Errorf("argo: workflow spec is missing required build source fields")
+		}
+		preamble = gitAuthPreamble(spec.GitCredentialSecret) + `mkdir -p /workspace/src
 appliance_git_clone "$SOURCE_REPO_URL" /workspace/src
 git -C /workspace/src checkout "$SOURCE_COMMIT_SHA"
 cd /workspace/src
 `
+	}
 	switch strings.TrimSpace(spec.Execution) {
 	case "", "containerfile":
 		return preamble + `buildah bud -f "$CONTAINERFILE_PATH" -t "$TARGET_IMAGE" .
 buildah push "$TARGET_IMAGE"`, nil
-	case "repo_script":
-		if strings.TrimSpace(spec.ScriptPath) == "" {
-			return "", fmt.Errorf("argo: repo_script execution requires script path")
+	case "script", "repo_script":
+		if firstExecutionArg(spec) == "" {
+			return "", fmt.Errorf("argo: script execution requires one args entry")
 		}
 		return preamble + `chmod +x "$SCRIPT_PATH"
 "./$SCRIPT_PATH"`, nil
-	case "make_target":
-		if strings.TrimSpace(spec.MakeTarget) == "" {
-			return "", fmt.Errorf("argo: make_target execution requires make target")
+	case "make", "make_target":
+		if firstExecutionArg(spec) == "" {
+			return "", fmt.Errorf("argo: make execution requires one args entry")
 		}
-		return preamble + `make "$MAKE_TARGET" TARGET_IMAGE="$TARGET_IMAGE" CONTAINERFILE_PATH="$CONTAINERFILE_PATH" SOURCE_COMMIT_SHA="$SOURCE_COMMIT_SHA"`, nil
+		return preamble + `make "$MAKE_TARGET" TARGET_IMAGE="$TARGET_IMAGE" CONTAINERFILE_PATH="$CONTAINERFILE_PATH"`, nil
 	default:
 		return "", fmt.Errorf("argo: unsupported execution mode %q", spec.Execution)
 	}
+}
+
+func firstExecutionArg(spec workflows.Spec) string {
+	if len(spec.Args) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(spec.Args[0])
 }
 
 func workspaceCommandScript(spec workflows.Spec) (string, error) {

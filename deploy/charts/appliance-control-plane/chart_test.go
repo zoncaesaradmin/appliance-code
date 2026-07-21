@@ -469,7 +469,8 @@ config:
     buildTargets:
       - name: default
         repo: app
-        execution: repo_script
+        execution: script
+        args: [build.sh]
         scriptPath: ../build.sh
         imageRepository: users/alice/app
         builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -610,8 +611,8 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		t.Fatalf("workspace storage prep Job runAsUser = %d, want 0", runAsUser)
 	}
 	command, _ := container["command"].([]any)
-	if len(command) < 3 || !strings.Contains(command[2].(string), "chown 0:20000") || !strings.Contains(command[2].(string), "chmod 2770") {
-		t.Fatalf("workspace storage prep command = %v, want shared GID ownership and setgid mode", command)
+	if len(command) < 3 || !strings.Contains(command[2].(string), "chown 0:20000") || !strings.Contains(command[2].(string), "chmod 2777") {
+		t.Fatalf("workspace storage prep command = %v, want shared GID ownership and world-writable setgid mode", command)
 	}
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {

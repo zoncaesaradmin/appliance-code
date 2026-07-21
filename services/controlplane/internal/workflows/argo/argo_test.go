@@ -72,7 +72,7 @@ func TestSubmitRejectsSSHCredentialInputs(t *testing.T) {
 func TestSubmitCreatesRepoScriptWorkflow(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
-		Execution: "repo_script", ScriptPath: "scripts/build-image.sh", ContainerfilePath: "Containerfile",
+		Execution: "script", Args: []string{"scripts/build-image.sh"}, ContainerfilePath: "Containerfile",
 		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
 		Deadline: time.Now().Add(time.Hour),
 	})
@@ -99,7 +99,7 @@ func TestSubmitCreatesRepoScriptWorkflow(t *testing.T) {
 func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
-		Execution: "make_target", MakeTarget: "image", ContainerfilePath: "Containerfile",
+		Execution: "make", Args: []string{"image"}, ContainerfilePath: "Containerfile",
 		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
 		Deadline: time.Now().Add(time.Hour),
 	})
@@ -120,6 +120,45 @@ func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 	}
 	if strings.Contains(text, "buildah bud") {
 		t.Fatalf("make_target workflow should not use default buildah command: %s", text)
+	}
+}
+
+func TestSubmitCreatesWorkspaceLocalBuildWorkflow(t *testing.T) {
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
+		Name:               "build-1",
+		Execution:          "make",
+		Args:               []string{"build"},
+		ContainerfilePath:  "Containerfile",
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		TargetRepository:   "registry.local/users/alice/app",
+		TargetTag:          "v1",
+		WorkspaceRootDir:   "/data/zon/workspaces",
+		WorkspaceClaimName: "control-plane-workspaces",
+		WorkspaceName:      "demo",
+		WorkspaceRepo:      "platformkit",
+		Deadline:           time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	command := workflowCommand(t, got)
+	text := workflowJSON(t, got)
+	for _, want := range []string{
+		`repo_dir="$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME/$WORKSPACE_REPO"`,
+		`cd "$repo_dir"`,
+		`make "$MAKE_TARGET"`,
+	} {
+		if !strings.Contains(command, want) {
+			t.Fatalf("workspace build command missing %q: %s", want, command)
+		}
+	}
+	if strings.Contains(command, "appliance_git_clone") || strings.Contains(command, "git -C /workspace/src checkout") {
+		t.Fatalf("workspace build must not clone source: %s", command)
+	}
+	for _, want := range []string{"WORKSPACE_NAME", "WORKSPACE_REPO", "demo", "platformkit"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("workspace build workflow JSON missing %q: %s", want, text)
+		}
 	}
 }
 

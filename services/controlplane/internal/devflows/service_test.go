@@ -138,7 +138,7 @@ func testProvisionCatalog() Catalog {
 		BuildTargets: []BuildTarget{{
 			Name:               "default",
 			Repo:               "forgeline",
-			Execution:          ExecutionRepoScript,
+			Execution:          ExecutionScript,
 			ContainerfilePath:  "Containerfile",
 			ImageRepository:    "users/test/app",
 			BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

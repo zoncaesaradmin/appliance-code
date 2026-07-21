@@ -18,35 +18,56 @@ submission.
   profile. It is not one workspace per repo. The chosen workspace profile
   determines the set of repos materialized inside that workspace.
 - Build target modeling is intentionally separate from workspace creation. A
-  repo can have zero, one, or many future build targets, so workspace creation
-  must not require output image repositories or per-target builder images.
-- Build target submission, when configured, resolves `current workspace + build
-  target + tag` into the existing immutable build request shape.
+  repo can have zero, one, or many build targets, so workspace creation must
+  not require output image repositories or per-target builder images.
+- Install-time catalogs may include optional build targets. Prefer nesting
+  them under `repos[].buildTargets`. `zonctl install` / `zonctl upgrade` and
+  the control plane flatten nested targets into the runtime `buildTargets`
+  list (filling each target's `repo` from its parent) and inject the catalog
+  into `config.buildCatalog`, deriving `allowedBuilderImageDigests` from each
+  target's digest-pinned `builderImageDigest`. Top-level `buildTargets` with
+  an explicit `repo` field remain accepted.
+- Target mapping is name/alias → one catalog entry → one execution policy.
+  One repo may expose many targets. A target whose `name` equals the repo
+  name is still an explicit mapping (typically `execution: make` with
+  `args: [build]`); it does not expand ForgeLine-style `build_components`.
+  Supported executions are `make` and `script`. Mode input is the `args` list
+  (v1: exactly one entry). Legacy `make_target`/`repo_script` plus
+  `makeTarget`/`scriptPath` are normalized into this shape at load time.
+- Current-workspace build submission resolves
+  `current workspace + build target + tag` and builds the on-disk tree at
+  `/data/zon/workspaces/<workspace-name>/<repo-name>/`. Builds do not clone
+  Git and do not use `repos[].defaultRef`. `defaultRef` is only for workspace
+  prepare/sync (branch names are fine). Other workflows may refresh that
+  workspace tree; the build workflow builds whatever is present at submit time.
+  When `imageTag` is omitted, the default is `{workspace}-{target}` unless the
+  catalog `imageTagTemplate` supplies another value using `{workspace}` /
+  `{target}`.
 - Build execution uses the workflow engine interface. Local tests use the fake
   workflow engine, while production builder-profile deployments use the Argo
   adapter through Kubernetes API calls.
 - V1 workspaces are materialized onto the shared workspace PVC under the fixed
-  host-visible root `/data/zon/workspaces/<workspace-name>`. Build execution
-  remains a separate workflow that uses that prepared workspace state together
-  with the immutable build request fields. Workspace ownership follows the
+  host-visible root `/data/zon/workspaces/<workspace-name>`. Current-workspace
+  builds run against the repo directories already present under that workspace;
+  they do not re-clone. Workspace ownership follows the
   fixed numeric identity and shared filesystem group rules in
   [workload identity and storage security](workload-identity-and-storage-security.md).
 - Operators can override the host-visible workspace root with the chart value
   `workspaceStorage.rootDir`, but ordinary installs should use the default
   `/data/zon/workspaces` so workspace source trees stay separate from
   `zonctl` control state.
-- Build and job records keep the immutable source commit plus the resolved
-  target artifact reference so REST and MCP clients can track the submitted
-  image identity directly.
-- Supported execution modes are `repo_script` and `make_target`. `repo_script`
-  runs the configured script path, defaulting to `build.sh`, with build context
-  environment variables such as `TARGET_IMAGE` and `CONTAINERFILE_PATH`.
-  `make_target` runs the configured make target with the same structured
-  variables. `scriptPath` and `containerfilePath` must be clean relative paths
-  inside the cloned repo; absolute paths, backslashes, and `.` or `..` path
-  segments are rejected.
-  Direct low-level build submissions without an execution mode keep the default
-  containerfile/buildah behavior.
+- Build and job records keep the resolved target artifact reference so REST and
+  MCP clients can track the submitted image identity. Workspace builds record
+  `workspace-local` rather than a catalog commit SHA.
+- Supported execution modes are `script` and `make`. `script` runs the path in
+  `args[0]`, defaulting to `build.sh` when legacy catalogs omit args, with build
+  context environment variables such as `TARGET_IMAGE` and `CONTAINERFILE_PATH`.
+  `make` runs `make <args[0]>` with the same structured variables.
+  `args` entries used as script paths, and `containerfilePath`, must be clean
+  relative paths inside the workspace repo directory; absolute paths,
+  backslashes, and `.` or `..` path segments are rejected.
+  Direct low-level build submissions without a workspace still use the default
+  containerfile/buildah clone path.
 
 The build-catalog and API field names keep ForgeLine-compatible keys such as
 `workProfiles`, `workProfile`, and `work_profile`. In user-facing wording, these
@@ -68,10 +89,11 @@ state in the `appliance-builds` namespace rather than in the build catalog.
   expected to cover.
 - Administrators configure or rotate it through
   `PUT /api/v1/builder/git-access`.
-- Workspace creation and direct build submission fail closed with
+- Workspace creation and workspace prepare fail closed with
   `412 Precondition Failed` until that shared credential exists.
-- Argo workspace/build workflow pods mount the resulting Kubernetes Secret and
-  use it only for HTTPS `git clone` calls.
+- Argo workspace-prepare workflow pods mount the resulting Kubernetes Secret and
+  use it only for HTTPS `git clone` calls. Current-workspace build workflows do
+  not clone and do not require that credential.
 
 ## RBAC
 

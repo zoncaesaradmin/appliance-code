@@ -284,7 +284,7 @@ func TestDeveloperWorkflowSubmitBuildByCurrentWorkspace(t *testing.T) {
 	if submittedSpec.SourceCredentialSecret != "" || submittedSpec.KnownHostsSecret != "" {
 		t.Fatalf("workflow spec unexpectedly carried SSH source credential refs: %+v", submittedSpec)
 	}
-	if submittedSpec.Execution != "repo_script" || submittedSpec.ScriptPath != "build.sh" {
+	if submittedSpec.Execution != "script" || len(submittedSpec.Args) != 1 || submittedSpec.Args[0] != "build.sh" {
 		t.Fatalf("workflow spec did not receive expected target execution fields: %+v", submittedSpec)
 	}
 
@@ -470,13 +470,20 @@ func TestCurrentWorkspaceBuildRejectsUnknownTarget(t *testing.T) {
 	}
 }
 
-func TestCurrentWorkspaceBuildRejectsMutableCatalogDefaultRef(t *testing.T) {
+func TestCurrentWorkspaceBuildUsesWorkspaceTreeWithoutCommitSHA(t *testing.T) {
 	catalog := testBuildCatalog()
 	catalog.Repos[0].DefaultRef = "main"
 	ts := newTestServerWithCatalog(t, appliance.ProfileBuilder, catalog)
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
+	fake := ts.fakeWorkflowEngine(t)
+	fake.Behavior = func(spec workflows.Spec) workflows.Status {
+		if spec.Kind == workflows.KindWorkspacePrepare {
+			return workflows.Status{Phase: workflows.PhaseSucceeded}
+		}
+		return workflows.Status{Phase: workflows.PhaseSucceeded}
+	}
 
 	createWorkspace := ts.doJSON(t, "POST", "/api/v1/workspaces", token, `{"name":"app","workProfile":"builder"}`)
 	defer createWorkspace.Body.Close()
@@ -485,8 +492,24 @@ func TestCurrentWorkspaceBuildRejectsMutableCatalogDefaultRef(t *testing.T) {
 	}
 	submit := ts.doJSON(t, "POST", "/api/v1/current-workspace/builds", token, `{"targetName":"app","imageTag":"v1"}`)
 	defer submit.Body.Close()
-	if submit.StatusCode != http.StatusBadRequest {
-		t.Fatalf("mutable source ref submit status = %d, want 400", submit.StatusCode)
+	if submit.StatusCode != http.StatusCreated {
+		t.Fatalf("workspace build submit status = %d, want 201", submit.StatusCode)
+	}
+	var job struct {
+		BuildID string `json:"buildId"`
+	}
+	if err := json.NewDecoder(submit.Body).Decode(&job); err != nil {
+		t.Fatal(err)
+	}
+	submittedSpec, ok := fake.SubmittedSpec("build-" + job.BuildID)
+	if !ok {
+		t.Fatal("expected a KindBuild workflow submission")
+	}
+	if submittedSpec.WorkspaceName != "app" || submittedSpec.WorkspaceRepo != "app" {
+		t.Fatalf("workspace build spec = %+v, want workspace name/repo app", submittedSpec)
+	}
+	if submittedSpec.SourceCommitSHA != "workspace-local" {
+		t.Fatalf("SourceCommitSHA = %q, want workspace-local", submittedSpec.SourceCommitSHA)
 	}
 }
 
@@ -687,7 +710,7 @@ func TestCreateWorkspaceRejectsExistingNameOnDifferentWorkspaceProfile(t *testin
 			{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"},
 		},
 		BuildTargets: []devflows.BuildTarget{
-			{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionRepoScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		},
 	})
 	ts.bootstrapAdmin(t, "admin", testPassword)

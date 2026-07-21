@@ -1,0 +1,45 @@
+{{define "builder_workspace_list.html"}}
+{{template "builder-workspace-list" .}}
+{{end}}
+
+{{define "builder-workspace-list"}}
+<article id="workspace-list-live"
+  {{if .WorkspaceStatusPending}}
+  hx-get="/builder/workspaces/live?region=list{{if .SelectedWorkspaceID}}&workspace_id={{.SelectedWorkspaceID}}{{end}}"
+  hx-trigger="every 3s"
+  hx-target="#workspace-list-live"
+  hx-swap="outerHTML"
+  {{end}}>
+  <header>
+    <strong>Available Workspaces</strong>
+  </header>
+  {{if .Workspaces}}
+  <div class="workspace-list">
+    {{range .Workspaces}}
+    <form method="get" action="/builder/workspaces#workspace-settings" class="workspace-row-form">
+      <input type="hidden" name="workspace_id" value="{{.ID}}">
+      <button class="workspace-row-button{{if $.CurrentWorkspace}}{{if eq $.CurrentWorkspace.ID .ID}} is-current{{end}}{{end}}" type="submit">
+        <span class="workspace-row-copy">
+          <h3>{{.Name}}</h3>
+          <p class="muted">Workspace profile {{.WorkProfile}} · {{.Status}}</p>
+        </span>
+        <span class="workspace-row-actions">
+          {{if $.CurrentWorkspace}}
+            {{if eq $.CurrentWorkspace.ID .ID}}
+            <span class="inline-pill">current</span>
+            {{end}}
+          {{end}}
+        </span>
+      </button>
+    </form>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="muted">No workspace exists yet. Start with <strong>Create new workspace</strong>.</p>
+  {{end}}
+  <form method="get" action="/builder/workspaces#workspace-settings" class="workspace-create-link">
+    <input type="hidden" name="workspace_id" value="new">
+    <button type="submit">Create new workspace</button>
+  </form>
+</article>
+{{end}}

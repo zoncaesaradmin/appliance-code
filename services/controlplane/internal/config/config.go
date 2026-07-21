@@ -116,7 +116,11 @@ func loadFile(path string, cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, cfg)
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return err
+	}
+	cfg.BuildCatalog.Normalize()
+	return nil
 }
 
 func applyEnv(cfg *Config, env map[string]string) error {
@@ -194,6 +198,8 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	if v, ok := env[envPrefix+"BUILD_CATALOG_JSON"]; ok && strings.TrimSpace(v) != "" {
 		if err := json.Unmarshal([]byte(v), &cfg.BuildCatalog); err != nil {
 			errs = append(errs, fmt.Sprintf("BUILD_CATALOG_JSON: %v", err))
+		} else {
+			cfg.BuildCatalog.Normalize()
 		}
 	}
 

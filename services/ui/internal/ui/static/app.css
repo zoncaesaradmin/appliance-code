@@ -173,6 +173,34 @@ body {
   border: 1px dashed var(--zon-border);
 }
 
+.builder-target-list {
+  list-style: none;
+  margin: 0.75rem 0 1rem;
+  padding: 0;
+}
+
+.builder-target-list li {
+  border-top: 1px solid var(--zon-border);
+  padding: 0.55rem 0;
+}
+
+.builder-target-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.builder-build-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.builder-latest-build {
+  border-top: 1px solid var(--zon-border);
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+}
+
 .builder-grid {
   align-items: start;
 }

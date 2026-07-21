@@ -56,8 +56,7 @@ type buildTargetResponse struct {
 	Description       string   `json:"description,omitempty"`
 	Repo              string   `json:"repo"`
 	Execution         string   `json:"execution"`
-	ScriptPath        string   `json:"scriptPath,omitempty"`
-	MakeTarget        string   `json:"makeTarget,omitempty"`
+	Args              []string `json:"args,omitempty"`
 	ContainerfilePath string   `json:"containerfilePath"`
 	ImageRepository   string   `json:"imageRepository"`
 }
@@ -111,7 +110,7 @@ func toWorkspaceResponse(ws storage.Workspace) workspaceResponse {
 
 func toBuildTargetResponse(t devflows.BuildTarget) buildTargetResponse {
 	return buildTargetResponse{Name: t.Name, Aliases: t.Aliases, Description: t.Description, Repo: t.Repo, Execution: t.Execution,
-		ScriptPath: t.ScriptPath, MakeTarget: t.MakeTarget, ContainerfilePath: t.ContainerfilePath, ImageRepository: t.ImageRepository}
+		Args: append([]string(nil), t.Args...), ContainerfilePath: t.ContainerfilePath, ImageRepository: t.ImageRepository}
 }
 
 func toJobResponse(job storage.Job) jobResponse {

@@ -44,6 +44,7 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 	if logger == nil {
 		return nil, errors.New("devflows: logger is required")
 	}
+	catalog.Normalize()
 	return &Service{
 		catalog:            catalog,
 		workspaces:         workspaces,
@@ -396,21 +397,24 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if err != nil {
 		return storage.Job{}, err
 	}
-	sourceRef := strings.TrimSpace(resolved.Repo.DefaultRef)
-	if !IsCommitSHA(sourceRef) {
-		return storage.Job{}, fmt.Errorf("devflows: repo %q defaultRef %q is mutable; configure an immutable commit SHA in the builder catalog", resolved.Repo.Name, sourceRef)
-	}
 	tag := strings.TrimSpace(req.ImageTag)
 	if tag == "" {
-		tag = renderTag(resolved.Target.ImageTagTemplate, ws, resolved.Target, sourceRef)
+		tag = renderTag(resolved.Target.ImageTagTemplate, ws, resolved.Target)
 	}
 	if tag == "" {
-		tag = sourceRef[:min(12, len(sourceRef))]
+		tag = ws.Name + "-" + resolved.Target.Name
 	}
-	buildReq := builds.CreateRequest{SourceRepoURL: resolved.Repo.URL, SourceCommitSHA: sourceRef,
-		Execution: resolved.Target.Execution, ScriptPath: resolved.Target.ScriptPath, MakeTarget: resolved.Target.MakeTarget,
-		ContainerfilePath: resolved.Target.ContainerfilePath, ImageRepository: resolved.Target.ImageRepository, ImageTag: tag,
-		BuilderImageDigest: resolved.Target.BuilderImageDigest}
+	buildReq := builds.CreateRequest{
+		SourceRepoURL:      resolved.Repo.URL,
+		WorkspaceName:      ws.Name,
+		WorkspaceRepo:      resolved.Repo.Name,
+		Execution:          resolved.Target.Execution,
+		Args:               append([]string(nil), resolved.Target.Args...),
+		ContainerfilePath:  resolved.Target.ContainerfilePath,
+		ImageRepository:    resolved.Target.ImageRepository,
+		ImageTag:           tag,
+		BuilderImageDigest: resolved.Target.BuilderImageDigest,
+	}
 	build, err := s.builds.Create(ctx, actor, ownerID, buildReq, idempotencyKey)
 	if err != nil {
 		return storage.Job{}, err
@@ -451,18 +455,11 @@ func (s *Service) CurrentWorkspaceBuildStatus(ctx context.Context, userID string
 	return s.reconcileJob(ctx, jobs[0])
 }
 
-func renderTag(tmpl string, ws storage.Workspace, target BuildTarget, sourceRef string) string {
+func renderTag(tmpl string, ws storage.Workspace, target BuildTarget) string {
 	if strings.TrimSpace(tmpl) == "" {
 		return ""
 	}
-	return strings.NewReplacer("{workspace}", ws.Name, "{target}", target.Name, "{commit12}", sourceRef[:min(12, len(sourceRef))]).Replace(tmpl)
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+	return strings.NewReplacer("{workspace}", ws.Name, "{target}", target.Name, "{commit12}", "").Replace(tmpl)
 }
 
 func jobStatusFromBuild(status storage.BuildStatus) storage.JobStatus {

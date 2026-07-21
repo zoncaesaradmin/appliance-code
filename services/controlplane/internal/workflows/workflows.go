@@ -53,8 +53,7 @@ type Spec struct {
 	SourceRepoURL     string
 	SourceCommitSHA   string
 	Execution         string
-	ScriptPath        string
-	MakeTarget        string
+	Args              []string
 	ContainerfilePath string
 	TargetRepository  string
 	TargetTag         string
@@ -62,6 +61,7 @@ type Spec struct {
 	WorkspaceRootDir   string
 	WorkspaceClaimName string
 	WorkspaceName      string
+	WorkspaceRepo      string
 	WorkspaceRepos     []WorkspaceRepo
 }
 

@@ -28,6 +28,9 @@ type fakeControlPlane struct {
 	setCurrentWorkspaceCalls int
 	builderGitAccessCalls    int
 	configureGitAccessCalls  int
+	listBuildTargetsCalls    int
+	submitBuildCalls         int
+	buildStatusCalls         int
 	initialized              bool
 	adminUser                string
 	adminPass                string
@@ -35,6 +38,10 @@ type fakeControlPlane struct {
 	workspaces               []controlplane.Workspace
 	currentID                string
 	builderGitAccess         controlplane.BuilderGitAccessStatus
+	buildTargets             []controlplane.BuildTarget
+	latestBuild              *controlplane.Job
+	submitBuildErr           error
+	listBuildTargetsErr      error
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
@@ -183,6 +190,43 @@ func (f *fakeControlPlane) ConfigureBuilderGitAccess(_ context.Context, _ string
 		CanConfigure:  true,
 	}
 	return f.builderGitAccess, nil
+}
+
+func (f *fakeControlPlane) ListCurrentBuildTargets(context.Context, string) ([]controlplane.BuildTarget, error) {
+	f.listBuildTargetsCalls++
+	if f.listBuildTargetsErr != nil {
+		return nil, f.listBuildTargetsErr
+	}
+	return append([]controlplane.BuildTarget(nil), f.buildTargets...), nil
+}
+
+func (f *fakeControlPlane) SubmitCurrentBuild(_ context.Context, _ string, req controlplane.SubmitBuildRequest) (controlplane.Job, error) {
+	f.submitBuildCalls++
+	if f.submitBuildErr != nil {
+		return controlplane.Job{}, f.submitBuildErr
+	}
+	job := controlplane.Job{
+		ID:          "job_build_" + req.TargetName,
+		Type:        "build",
+		Status:      "running",
+		TargetName:  req.TargetName,
+		ArtifactRef: "users/example/" + req.TargetName + ":" + req.ImageTag,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	if req.ImageTag == "" {
+		job.ArtifactRef = "users/example/" + req.TargetName + ":latest"
+	}
+	f.latestBuild = &job
+	return job, nil
+}
+
+func (f *fakeControlPlane) CurrentWorkspaceBuildStatus(context.Context, string) (controlplane.Job, error) {
+	f.buildStatusCalls++
+	if f.latestBuild == nil {
+		return controlplane.Job{}, &controlplane.HTTPStatusError{Method: http.MethodGet, Path: "/api/v1/current-workspace/build-status", StatusCode: http.StatusNotFound}
+	}
+	return *f.latestBuild, nil
 }
 
 type fakeErr string
@@ -444,6 +488,65 @@ func TestBuilderWorkspacePageCreatesAndSelectsWorkspace(t *testing.T) {
 	}
 }
 
+func TestBuilderWorkspacePagePollsLiveWhilePending(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{
+			{ID: "ws_demo", Name: "demo", WorkProfile: "platform-dev", Status: "pending"},
+		},
+		currentID: "ws_demo",
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	body := pageRec.Body.String()
+	if !strings.Contains(body, `hx-get="/builder/workspaces/live?region=overview`) {
+		t.Fatalf("expected overview region to poll live while pending:\n%s", body)
+	}
+	if !strings.Contains(body, `hx-get="/builder/workspaces/live?region=list`) {
+		t.Fatalf("expected workspace list region to poll live while pending:\n%s", body)
+	}
+
+	liveOverviewReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces/live?region=overview", nil)
+	liveOverviewReq.AddCookie(cookie)
+	liveOverviewRec := httptest.NewRecorder()
+	handler.ServeHTTP(liveOverviewRec, liveOverviewReq)
+	if liveOverviewRec.Code != http.StatusOK || !strings.Contains(liveOverviewRec.Body.String(), "pending") {
+		t.Fatalf("live overview partial = %d %q, want 200 containing pending status", liveOverviewRec.Code, liveOverviewRec.Body.String())
+	}
+
+	liveListReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces/live?region=list", nil)
+	liveListReq.AddCookie(cookie)
+	liveListRec := httptest.NewRecorder()
+	handler.ServeHTTP(liveListRec, liveListReq)
+	if liveListRec.Code != http.StatusOK || !strings.Contains(liveListRec.Body.String(), "demo") {
+		t.Fatalf("live list partial = %d %q, want 200 containing workspace demo", liveListRec.Code, liveListRec.Body.String())
+	}
+
+	// Once the workflow reaches a terminal status, the next poll response
+	// must stop asking htmx to keep polling.
+	cp.workspaces[0].Status = "ready"
+	readyReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	readyReq.AddCookie(cookie)
+	readyRec := httptest.NewRecorder()
+	handler.ServeHTTP(readyRec, readyReq)
+	readyBody := readyRec.Body.String()
+	if strings.Contains(readyBody, "hx-get=\"/builder/workspaces/live") {
+		t.Fatalf("expected polling to stop once workspace is ready:\n%s", readyBody)
+	}
+}
+
 func TestBuilderWorkspacePageKeepsSubmitAvailableWhenGitAccessMissing(t *testing.T) {
 	cp := &fakeControlPlane{
 		initialized: true,
@@ -687,6 +790,190 @@ func TestBuilderWorkspaceDeleteRemovesSelectedWorkspace(t *testing.T) {
 	}
 	if cp.currentID != "" {
 		t.Fatalf("currentID = %q, want empty", cp.currentID)
+	}
+}
+
+func TestBuilderWorkspacePageListsAndSubmitsBuilds(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{{
+			ID:          "ws_demo",
+			Name:        "demo",
+			WorkProfile: "platform-dev",
+			Status:      "ready",
+		}},
+		currentID: "ws_demo",
+		buildTargets: []controlplane.BuildTarget{
+			{Name: "platformkit", Repo: "platformkit", Execution: "make", Args: []string{"build"}, ImageRepository: "users/example/platformkit"},
+			{Name: "platformkit-api", Repo: "platformkit", Execution: "make", Args: []string{"api"}, ImageRepository: "users/example/platformkit-api"},
+		},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("builder page status = %d, want 200", pageRec.Code)
+	}
+	body := pageRec.Body.String()
+	if !strings.Contains(body, "platformkit-api") || !strings.Contains(body, "make build") || !strings.Contains(body, `action="/builder/builds"`) {
+		t.Fatalf("builder page missing build targets UI:\n%s", body)
+	}
+	if cp.listBuildTargetsCalls != 1 {
+		t.Fatalf("listBuildTargetsCalls = %d, want 1", cp.listBuildTargetsCalls)
+	}
+	if cp.buildStatusCalls != 1 {
+		t.Fatalf("buildStatusCalls = %d, want 1", cp.buildStatusCalls)
+	}
+
+	submitReq := httptest.NewRequest(http.MethodPost, "/builder/builds", strings.NewReader("target_name=platformkit&image_tag=v1"))
+	submitReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	submitReq.AddCookie(cookie)
+	submitRec := httptest.NewRecorder()
+	handler.ServeHTTP(submitRec, submitReq)
+	if submitRec.Code != http.StatusSeeOther {
+		t.Fatalf("submit status = %d, want 303", submitRec.Code)
+	}
+	if cp.submitBuildCalls != 1 {
+		t.Fatalf("submitBuildCalls = %d, want 1", cp.submitBuildCalls)
+	}
+
+	pageReq = httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	pageReq.AddCookie(cookie)
+	pageRec = httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if body := pageRec.Body.String(); !strings.Contains(body, "users/example/platformkit:v1") {
+		t.Fatalf("builder page missing latest build artifact:\n%s", body)
+	}
+}
+
+func TestBuilderWorkspacePageSkipsBuildFetchesUntilReady(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{{
+			ID:          "ws_demo",
+			Name:        "demo",
+			WorkProfile: "platform-dev",
+			Status:      "pending",
+		}},
+		currentID: "ws_demo",
+		buildTargets: []controlplane.BuildTarget{
+			{Name: "platformkit", Repo: "platformkit", Execution: "make", Args: []string{"build"}},
+		},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	pageReq := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	pageReq.AddCookie(cookie)
+	pageRec := httptest.NewRecorder()
+	handler.ServeHTTP(pageRec, pageReq)
+	if pageRec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", pageRec.Code)
+	}
+	if cp.listBuildTargetsCalls != 0 || cp.buildStatusCalls != 0 {
+		t.Fatalf("unexpected build fetches while pending: targets=%d status=%d", cp.listBuildTargetsCalls, cp.buildStatusCalls)
+	}
+	if body := pageRec.Body.String(); strings.Contains(body, `action="/builder/builds"`) {
+		t.Fatalf("pending workspace should not show submit form:\n%s", body)
+	}
+}
+
+func TestBuilderSubmitBuildRequiresGitAccess(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{{
+			ID:          "ws_demo",
+			Name:        "demo",
+			WorkProfile: "platform-dev",
+			Status:      "ready",
+		}},
+		currentID: "ws_demo",
+		builderGitAccess: controlplane.BuilderGitAccessStatus{
+			Configured:    false,
+			RequiredHosts: []string{"github.com"},
+			CanConfigure:  true,
+		},
+		buildTargets: []controlplane.BuildTarget{
+			{Name: "platformkit", Repo: "platformkit", Execution: "make", Args: []string{"build"}},
+		},
+		submitBuildErr: &controlplane.HTTPStatusError{Method: http.MethodPost, Path: "/api/v1/current-workspace/builds", StatusCode: http.StatusPreconditionFailed},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	submitReq := httptest.NewRequest(http.MethodPost, "/builder/builds", strings.NewReader("target_name=platformkit"))
+	submitReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	submitReq.AddCookie(cookie)
+	submitRec := httptest.NewRecorder()
+	handler.ServeHTTP(submitRec, submitReq)
+	if submitRec.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want 412", submitRec.Code)
+	}
+	if body := submitRec.Body.String(); !strings.Contains(body, "Configure builder Git HTTPS access") {
+		t.Fatalf("body missing git access error:\n%s", body)
+	}
+}
+
+func TestBuilderSubmitBuildRejectsUnknownTarget(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true,
+		adminUser:   "admin",
+		adminPass:   "secret",
+		workspaces: []controlplane.Workspace{{
+			ID:          "ws_demo",
+			Name:        "demo",
+			WorkProfile: "platform-dev",
+			Status:      "ready",
+		}},
+		currentID: "ws_demo",
+		buildTargets: []controlplane.BuildTarget{
+			{Name: "platformkit", Repo: "platformkit", Execution: "make", Args: []string{"build"}},
+		},
+		submitBuildErr: &controlplane.HTTPStatusError{Method: http.MethodPost, Path: "/api/v1/current-workspace/builds", StatusCode: http.StatusNotFound},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	submitReq := httptest.NewRequest(http.MethodPost, "/builder/builds", strings.NewReader("target_name=missing"))
+	submitReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	submitReq.AddCookie(cookie)
+	submitRec := httptest.NewRecorder()
+	handler.ServeHTTP(submitRec, submitReq)
+	if submitRec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", submitRec.Code)
+	}
+	if body := submitRec.Body.String(); !strings.Contains(body, "Unknown build target") {
+		t.Fatalf("body missing unknown target error:\n%s", body)
 	}
 }
 

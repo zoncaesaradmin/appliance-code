@@ -458,10 +458,11 @@ components:
           type: string
         execution:
           type: string
-        scriptPath:
-          type: string
-        makeTarget:
-          type: string
+          enum: [make, script]
+        args:
+          type: array
+          items:
+            type: string
         containerfilePath:
           type: string
         imageRepository:

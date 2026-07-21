@@ -1,0 +1,120 @@
+{{define "builder_workspace_overview.html"}}
+{{template "builder-workspace-overview" .}}
+{{end}}
+
+{{define "builder-workspace-overview"}}
+<section class="builder-overview" id="workspace-overview-live"
+  {{if .WorkspaceStatusPending}}
+  hx-get="/builder/workspaces/live?region=overview{{if .SelectedWorkspaceID}}&workspace_id={{.SelectedWorkspaceID}}{{end}}"
+  hx-trigger="every 3s"
+  hx-target="#workspace-overview-live"
+  hx-swap="outerHTML"
+  {{end}}>
+  <article class="builder-primary {{if not .CurrentWorkspace}}builder-primary-attn{{end}}">
+    <p class="eyebrow">Current workspace</p>
+    {{if .CurrentWorkspace}}
+    <div class="builder-primary-head">
+      <div>
+        <h2>{{.CurrentWorkspace.Name}}</h2>
+        <p class="muted">Workspace profile <strong>{{.CurrentWorkspace.WorkProfile}}</strong></p>
+      </div>
+      <span class="inline-pill">{{.CurrentWorkspace.Status}}</span>
+    </div>
+    <dl class="builder-primary-meta">
+      <dt>Status</dt>
+      <dd>{{.CurrentWorkspace.Status}}</dd>
+      <dt>Workspace profile</dt>
+      <dd>{{.CurrentWorkspace.WorkProfile}}</dd>
+    </dl>
+    {{if eq .CurrentWorkspace.Status "ready"}}
+    <p class="muted">This workspace is active for builder operations. It represents one logical multi-repo workspace from the selected workspace profile. You only need to open workspace settings if you want to switch or create another one.</p>
+    {{else if eq .CurrentWorkspace.Status "failed"}}
+    <p class="muted">Workspace provisioning failed. Open the control-plane workspace job logs to inspect the failure before retrying with a new workspace.</p>
+    {{else}}
+    <p class="muted">Workspace provisioning is still running. The repos are being materialized under the shared workspace storage before build operations are allowed.</p>
+    {{end}}
+    {{else}}
+    <h2>No current workspace yet</h2>
+    <p class="builder-attn-copy">Choose a workspace profile and create a workspace before build targets can be selected.</p>
+    {{if .Workspaces}}
+    <p class="muted">You already have workspace entries. Open workspace settings below to set one as current, or create a new one.</p>
+    {{else}}
+    <p class="muted">No workspace has been created yet. Start with a workspace profile, then create one compactly from the settings panel below. That workspace will include every repo configured for the chosen workspace profile.</p>
+    {{end}}
+    {{end}}
+  </article>
+
+  <article class="builder-next">
+    <p class="eyebrow">What to build</p>
+    <h2>Build targets</h2>
+    {{if .CurrentWorkspace}}
+      {{if eq .CurrentWorkspace.Status "ready"}}
+        {{if .BuildTargets}}
+    <p class="muted">Each target maps to one catalog entry and one explicit make recipe or repo script for a repo in this workspace profile.</p>
+    <ul class="builder-target-list">
+      {{range .BuildTargets}}
+      <li>
+        <strong>{{.Name}}</strong>
+        <span class="muted"> · {{.Repo}}</span>
+        {{if eq .Execution "make"}}
+        <span class="muted"> · make {{index .Args 0}}</span>
+        {{else if eq .Execution "script"}}
+        <span class="muted"> · {{index .Args 0}}</span>
+        {{end}}
+        {{if .Description}}
+        <p class="muted">{{.Description}}</p>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+          {{if .CanSubmitBuild}}
+    <form method="post" action="/builder/builds" class="builder-build-form">
+      <label>
+        Build target
+        <select name="target_name" required>
+          {{range .BuildTargets}}
+          <option value="{{.Name}}">{{.Name}} ({{.Repo}})</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        Image tag (optional)
+        <input name="image_tag" placeholder="Leave blank for catalog template" autocomplete="off">
+      </label>
+      <button type="submit">Submit build</button>
+    </form>
+          {{else if not .BuilderGitAccess.Configured}}
+    <p class="muted">Configure builder Git HTTPS access before submitting a build.</p>
+          {{end}}
+          {{if .LatestBuild}}
+    <div class="builder-latest-build">
+      <p class="eyebrow">Latest build</p>
+      <dl class="builder-primary-meta">
+        <dt>Target</dt>
+        <dd>{{.LatestBuild.TargetName}}</dd>
+        <dt>Status</dt>
+        <dd>{{.LatestBuild.Status}}</dd>
+        {{if .LatestBuild.ArtifactRef}}
+        <dt>Artifact</dt>
+        <dd>{{.LatestBuild.ArtifactRef}}</dd>
+        {{end}}
+        {{if .LatestBuild.ErrorMessage}}
+        <dt>Error</dt>
+        <dd>{{.LatestBuild.ErrorMessage}}</dd>
+        {{end}}
+      </dl>
+    </div>
+          {{end}}
+        {{else}}
+    <p class="muted">No build targets are configured for this workspace profile. Add <code>buildTargets</code> entries to the install-time build catalog to enable builds.</p>
+        {{end}}
+      {{else}}
+    <p class="muted">Build choices will appear after the current workspace finishes provisioning.</p>
+    <p class="muted">This status updates automatically as provisioning progresses.</p>
+      {{end}}
+    {{else}}
+    <p class="muted">Build choices will appear here after a current workspace is set.</p>
+    {{end}}
+  </article>
+</section>
+{{end}}

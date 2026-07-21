@@ -508,7 +508,74 @@
         },
         "defaultRef": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Branch or other ref used only by workspace prepare/sync. Build workflows do not use this field."
+        },
+        "buildTargets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nestedBuildTarget"
+          }
+        }
+      }
+    },
+    "nestedBuildTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "execution",
+        "imageRepository",
+        "builderImageDigest"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/catalogName"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/catalogName"
+          }
+        },
+        "description": {
+          "type": "string"
+        },
+        "execution": {
+          "type": "string",
+          "enum": [
+            "make",
+            "script",
+            "make_target",
+            "repo_script"
+          ]
+        },
+        "args": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "scriptPath": {
+          "type": "string"
+        },
+        "makeTarget": {
+          "type": "string"
+        },
+        "containerfilePath": {
+          "type": "string"
+        },
+        "imageRepository": {
+          "type": "string"
+        },
+        "imageTagTemplate": {
+          "type": "string"
+        },
+        "builderImageDigest": {
+          "$ref": "#/$defs/builderImageDigest"
         }
       }
     },
@@ -541,9 +608,20 @@
         "execution": {
           "type": "string",
           "enum": [
-            "repo_script",
-            "make_target"
+            "make",
+            "script",
+            "make_target",
+            "repo_script"
           ]
+        },
+        "args": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "scriptPath": {
           "$ref": "#/$defs/repoRelativePath"

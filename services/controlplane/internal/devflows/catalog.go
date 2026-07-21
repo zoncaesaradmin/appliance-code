@@ -13,10 +13,13 @@ import (
 )
 
 const (
-	ExecutionRepoScript = "repo_script"
-	ExecutionMakeTarget = "make_target"
+	ExecutionMake   = "make"
+	ExecutionScript = "script"
 
-	DefaultRepoScriptPath = "build.sh"
+	DefaultScriptArg = "build.sh"
+
+	legacyExecutionMake   = "make_target"
+	legacyExecutionScript = "repo_script"
 )
 
 var (
@@ -46,23 +49,28 @@ type ProfileRepo struct {
 }
 
 type Repo struct {
-	Name       string `json:"name"`
-	URL        string `json:"url"`
-	DefaultRef string `json:"defaultRef,omitempty"`
+	Name         string        `json:"name"`
+	URL          string        `json:"url"`
+	DefaultRef   string        `json:"defaultRef,omitempty"`
+	BuildTargets []BuildTarget `json:"buildTargets,omitempty"`
 }
 
 type BuildTarget struct {
 	Name               string   `json:"name"`
 	Aliases            []string `json:"aliases,omitempty"`
 	Description        string   `json:"description,omitempty"`
-	Repo               string   `json:"repo"`
+	Repo               string   `json:"repo,omitempty"`
 	Execution          string   `json:"execution"`
-	ScriptPath         string   `json:"scriptPath,omitempty"`
-	MakeTarget         string   `json:"makeTarget,omitempty"`
+	Args               []string `json:"args,omitempty"`
 	ContainerfilePath  string   `json:"containerfilePath,omitempty"`
 	ImageRepository    string   `json:"imageRepository"`
 	ImageTagTemplate   string   `json:"imageTagTemplate,omitempty"`
 	BuilderImageDigest string   `json:"builderImageDigest"`
+
+	// Legacy input-only fields. Accepted on unmarshal for older catalogs and
+	// cleared by Normalize into Args.
+	ScriptPath string `json:"scriptPath,omitempty"`
+	MakeTarget string `json:"makeTarget,omitempty"`
 }
 
 type ResolvedTarget struct {
@@ -71,10 +79,128 @@ type ResolvedTarget struct {
 }
 
 func (c Catalog) Empty() bool {
-	return len(c.WorkProfiles) == 0 && len(c.Repos) == 0 && len(c.BuildTargets) == 0
+	if len(c.WorkProfiles) > 0 || len(c.BuildTargets) > 0 {
+		return false
+	}
+	for _, repo := range c.Repos {
+		if len(repo.BuildTargets) > 0 {
+			return false
+		}
+	}
+	return len(c.Repos) == 0
+}
+
+// Normalize lifts repos[].buildTargets into the top-level buildTargets list
+// and fills each target's repo from its parent when omitted. Both nested and
+// top-level authoring forms are accepted; runtime code always uses the flat list.
+// It also normalizes execution to make|script and folds legacy makeTarget /
+// scriptPath fields into args.
+func (c *Catalog) Normalize() {
+	if c == nil {
+		return
+	}
+	var lifted []BuildTarget
+	for i, repo := range c.Repos {
+		repoName := normalizeName(repo.Name)
+		for _, target := range repo.BuildTargets {
+			if strings.TrimSpace(target.Repo) == "" {
+				target.Repo = repoName
+			}
+			lifted = append(lifted, target)
+		}
+		c.Repos[i].BuildTargets = nil
+	}
+	if len(lifted) > 0 {
+		c.BuildTargets = append(c.BuildTargets, lifted...)
+	}
+	for i := range c.BuildTargets {
+		normalizeTargetExecution(&c.BuildTargets[i])
+	}
+}
+
+func normalizeTargetExecution(t *BuildTarget) {
+	if t == nil {
+		return
+	}
+	execution := strings.TrimSpace(t.Execution)
+	args := compactArgs(t.Args)
+	switch execution {
+	case legacyExecutionMake, ExecutionMake:
+		t.Execution = ExecutionMake
+		if len(args) == 0 {
+			if v := strings.TrimSpace(t.MakeTarget); v != "" {
+				args = []string{v}
+			}
+		}
+	case legacyExecutionScript, ExecutionScript:
+		t.Execution = ExecutionScript
+		if len(args) == 0 {
+			if v := strings.TrimSpace(t.ScriptPath); v != "" {
+				args = []string{v}
+			} else {
+				args = []string{DefaultScriptArg}
+			}
+		}
+	default:
+		// Leave unknown execution for Validate to reject.
+		t.Execution = execution
+	}
+	t.Args = args
+	t.MakeTarget = ""
+	t.ScriptPath = ""
+}
+
+func compactArgs(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
+func (t BuildTarget) PrimaryArg() string {
+	if len(t.Args) == 0 {
+		return ""
+	}
+	return t.Args[0]
 }
 
 func (c Catalog) Validate() error {
+	normalized := c.copyForNormalize()
+	normalized.Normalize()
+	return normalized.validateNormalized()
+}
+
+func (c Catalog) copyForNormalize() Catalog {
+	out := c
+	if c.WorkProfiles != nil {
+		out.WorkProfiles = append([]WorkProfile(nil), c.WorkProfiles...)
+		for i := range out.WorkProfiles {
+			if c.WorkProfiles[i].Repos != nil {
+				out.WorkProfiles[i].Repos = append([]ProfileRepo(nil), c.WorkProfiles[i].Repos...)
+			}
+		}
+	}
+	if c.Repos != nil {
+		out.Repos = make([]Repo, len(c.Repos))
+		for i := range c.Repos {
+			out.Repos[i] = c.Repos[i]
+			if c.Repos[i].BuildTargets != nil {
+				out.Repos[i].BuildTargets = append([]BuildTarget(nil), c.Repos[i].BuildTargets...)
+			}
+		}
+	}
+	if c.BuildTargets != nil {
+		out.BuildTargets = append([]BuildTarget(nil), c.BuildTargets...)
+	}
+	return out
+}
+
+func (c Catalog) validateNormalized() error {
 	var errs []string
 	if len(c.WorkProfiles) == 0 {
 		errs = append(errs, "build catalog must declare at least one workspace profile")
@@ -153,15 +279,17 @@ func (c Catalog) Validate() error {
 			errs = append(errs, fmt.Sprintf("build target %q references unknown repo %q", name, target.Repo))
 		}
 		switch target.Execution {
-		case ExecutionRepoScript:
-			if target.ScriptPath != "" && !validRepoRelativePath(target.ScriptPath) {
-				errs = append(errs, fmt.Sprintf("build target %q has invalid scriptPath %q", name, target.ScriptPath))
+		case ExecutionScript:
+			if len(target.Args) != 1 {
+				errs = append(errs, fmt.Sprintf("build target %q script execution requires exactly one args entry", name))
+			} else if !validRepoRelativePath(target.Args[0]) {
+				errs = append(errs, fmt.Sprintf("build target %q has invalid script args entry %q", name, target.Args[0]))
 			}
-		case ExecutionMakeTarget:
-			if strings.TrimSpace(target.MakeTarget) == "" {
-				errs = append(errs, fmt.Sprintf("build target %q make_target execution requires makeTarget", name))
-			} else if !validMakeTarget(target.MakeTarget) {
-				errs = append(errs, fmt.Sprintf("build target %q has invalid makeTarget %q", name, target.MakeTarget))
+		case ExecutionMake:
+			if len(target.Args) != 1 {
+				errs = append(errs, fmt.Sprintf("build target %q make execution requires exactly one args entry", name))
+			} else if !validMakeTarget(target.Args[0]) {
+				errs = append(errs, fmt.Sprintf("build target %q has invalid make args entry %q", name, target.Args[0]))
 			}
 		default:
 			errs = append(errs, fmt.Sprintf("build target %q has unsupported execution %q", name, target.Execution))
@@ -210,9 +338,7 @@ func (c Catalog) ResolveTarget(repoName, name string) (ResolvedTarget, error) {
 		}
 		for _, repo := range c.Repos {
 			if normalizeName(repo.Name) == normalizeName(target.Repo) {
-				if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
-					target.ScriptPath = DefaultRepoScriptPath
-				}
+				normalizeTargetExecution(&target)
 				if target.ContainerfilePath == "" {
 					target.ContainerfilePath = "Containerfile"
 				}
@@ -325,9 +451,7 @@ func (c Catalog) TargetsForRepo(repoName string) []BuildTarget {
 		if normalizeName(target.Repo) != repoName {
 			continue
 		}
-		if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
-			target.ScriptPath = DefaultRepoScriptPath
-		}
+		normalizeTargetExecution(&target)
 		if target.ContainerfilePath == "" {
 			target.ContainerfilePath = "Containerfile"
 		}
@@ -350,9 +474,7 @@ func (c Catalog) TargetsForProfile(workProfile string) ([]BuildTarget, error) {
 		if _, ok := allowed[normalizeName(target.Repo)]; !ok {
 			continue
 		}
-		if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
-			target.ScriptPath = DefaultRepoScriptPath
-		}
+		normalizeTargetExecution(&target)
 		if target.ContainerfilePath == "" {
 			target.ContainerfilePath = "Containerfile"
 		}
@@ -383,9 +505,7 @@ func (c Catalog) ResolveTargetForProfile(workProfile, name string) (ResolvedTarg
 		if !ok {
 			break
 		}
-		if target.ScriptPath == "" && target.Execution == ExecutionRepoScript {
-			target.ScriptPath = DefaultRepoScriptPath
-		}
+		normalizeTargetExecution(&target)
 		if target.ContainerfilePath == "" {
 			target.ContainerfilePath = "Containerfile"
 		}

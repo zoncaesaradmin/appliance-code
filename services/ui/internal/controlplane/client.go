@@ -117,6 +117,39 @@ type ConfigureBuilderGitAccessRequest struct {
 	Token    string `json:"token"`
 }
 
+type BuildTarget struct {
+	Name              string   `json:"name"`
+	Aliases           []string `json:"aliases,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	Repo              string   `json:"repo"`
+	Execution         string   `json:"execution"`
+	Args              []string `json:"args,omitempty"`
+	ContainerfilePath string   `json:"containerfilePath"`
+	ImageRepository   string   `json:"imageRepository"`
+}
+
+type SubmitBuildRequest struct {
+	TargetName string `json:"targetName"`
+	ImageTag   string `json:"imageTag,omitempty"`
+}
+
+type Job struct {
+	ID           string     `json:"id"`
+	OwnerID      string     `json:"ownerId"`
+	WorkspaceID  string     `json:"workspaceId,omitempty"`
+	BuildID      string     `json:"buildId,omitempty"`
+	Type         string     `json:"type"`
+	Status       string     `json:"status"`
+	TargetName   string     `json:"targetName,omitempty"`
+	ArtifactRef  string     `json:"artifactRef,omitempty"`
+	ReasonCode   string     `json:"reasonCode,omitempty"`
+	ErrorMessage string     `json:"errorMessage,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+}
+
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("control plane client logger is required")
@@ -342,6 +375,49 @@ func (c *Client) ConfigureBuilderGitAccess(ctx context.Context, accessToken stri
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) ListCurrentBuildTargets(ctx context.Context, accessToken string) ([]BuildTarget, error) {
+	var result struct {
+		Items []BuildTarget `json:"items"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace/build-targets", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) SubmitCurrentBuild(ctx context.Context, accessToken string, in SubmitBuildRequest) (Job, error) {
+	var out Job
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/current-workspace/builds", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusCreated, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (Job, error) {
+	var out Job
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace/build-status", nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
 		return out, err
 	}

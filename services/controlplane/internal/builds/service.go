@@ -42,12 +42,17 @@ var ErrIdempotencyInProgress = errors.New("builds: a request with this idempoten
 // CreateRequest describes a new build. ContainerfilePath defaults to
 // "Containerfile" (a literal "Dockerfile" is accepted only as a
 // Buildah-compatible filename alias, per the plan).
+//
+// Workspace builds set WorkspaceName and WorkspaceRepo and build the
+// on-disk tree under the shared workspace PVC (no git clone). Direct
+// builds omit those fields and still clone SourceRepoURL at SourceCommitSHA.
 type CreateRequest struct {
 	SourceRepoURL          string
 	SourceCommitSHA        string
+	WorkspaceName          string
+	WorkspaceRepo          string
 	Execution              string
-	ScriptPath             string
-	MakeTarget             string
+	Args                   []string
 	ContainerfilePath      string
 	ImageRepository        string
 	ImageTag               string
@@ -130,7 +135,15 @@ func hashRequest(req CreateRequest) string {
 // is non-empty and was already used with an identical request, the
 // previously created build is returned instead of creating a duplicate.
 func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string, req CreateRequest, idempotencyKey string) (storage.Build, error) {
-	if err := ValidateSource(req.SourceRepoURL, req.SourceCommitSHA, s.allowedGitHosts); err != nil {
+	workspaceBuild := strings.TrimSpace(req.WorkspaceName) != "" && strings.TrimSpace(req.WorkspaceRepo) != ""
+	if workspaceBuild {
+		if strings.TrimSpace(s.workspaceRootDir) == "" || strings.TrimSpace(s.workspaceClaimName) == "" {
+			return storage.Build{}, fmt.Errorf("builds: workspace storage is not configured")
+		}
+		if strings.TrimSpace(req.SourceRepoURL) == "" {
+			return storage.Build{}, fmt.Errorf("builds: source repository URL is required for attribution")
+		}
+	} else if err := ValidateSource(req.SourceRepoURL, req.SourceCommitSHA, s.allowedGitHosts); err != nil {
 		return storage.Build{}, err
 	}
 	if strings.TrimSpace(req.SourceCredentialRef) != "" || strings.TrimSpace(req.SourceCredentialSecret) != "" || strings.TrimSpace(req.KnownHostsSecret) != "" {
@@ -169,14 +182,18 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 	}
 
 	now := time.Now().UTC()
+	sourceCommit := req.SourceCommitSHA
+	if workspaceBuild && sourceCommit == "" {
+		sourceCommit = "workspace-local"
+	}
 	build := storage.Build{
 		ID: uuid.Must(uuid.NewV7()).String(), OwnerID: ownerID, Status: storage.BuildStatusPending,
-		SourceRepoURL: req.SourceRepoURL, SourceCommitSHA: req.SourceCommitSHA, ContainerfilePath: containerfilePath,
+		SourceRepoURL: req.SourceRepoURL, SourceCommitSHA: sourceCommit, ContainerfilePath: containerfilePath,
 		ImageRepository: imageRepo, ImageTag: req.ImageTag, BuilderImageDigest: req.BuilderImageDigest,
 		CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(s.defaultDeadline),
 	}
 	gitCredentialSecret := ""
-	if s.builderGit != nil {
+	if !workspaceBuild && s.builderGit != nil {
 		credential, err := s.builderGit.Resolve(ctx, build.SourceRepoURL)
 		if err != nil {
 			return storage.Build{}, err
@@ -190,7 +207,13 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		}
 		return s.audit.Record(ctx, actor, audit.Event{
 			Action: "builds.create", TargetType: "build", TargetID: build.ID, Outcome: storage.AuditOutcomeSuccess,
-			Details: map[string]any{"sourceRepoURL": req.SourceRepoURL, "sourceCommitSHA": req.SourceCommitSHA, "imageRepository": imageRepo},
+			Details: map[string]any{
+				"sourceRepoURL":   req.SourceRepoURL,
+				"sourceCommitSHA": sourceCommit,
+				"imageRepository": imageRepo,
+				"workspaceName":   req.WorkspaceName,
+				"workspaceRepo":   req.WorkspaceRepo,
+			},
 		})
 	})
 	if err != nil {
@@ -199,14 +222,16 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 
 	workflowName := "build-" + build.ID
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
-		Name: workflowName, SourceRepoURL: build.SourceRepoURL, SourceCommitSHA: build.SourceCommitSHA,
-		Execution: req.Execution, ScriptPath: req.ScriptPath, MakeTarget: req.MakeTarget,
+		Name: workflowName, Kind: workflows.KindBuild,
+		SourceRepoURL: build.SourceRepoURL, SourceCommitSHA: build.SourceCommitSHA,
+		Execution: req.Execution, Args: req.Args,
 		ContainerfilePath: build.ContainerfilePath, BuilderImageDigest: build.BuilderImageDigest,
 		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag,
 		GitCredentialSecret: gitCredentialSecret,
 		SourceCredentialRef: req.SourceCredentialRef, SourceCredentialSecret: req.SourceCredentialSecret,
 		KnownHostsSecret: req.KnownHostsSecret, Deadline: build.DeadlineAt,
 		WorkspaceRootDir: s.workspaceRootDir, WorkspaceClaimName: s.workspaceClaimName,
+		WorkspaceName: req.WorkspaceName, WorkspaceRepo: req.WorkspaceRepo,
 	})
 	completedAt := time.Now().UTC()
 	if submitErr != nil {

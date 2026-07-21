@@ -150,8 +150,7 @@ type BuildTarget struct {
 	Description       string   `json:"description,omitempty"`
 	Repo              string   `json:"repo"`
 	Execution         string   `json:"execution"`
-	ScriptPath        string   `json:"scriptPath,omitempty"`
-	MakeTarget        string   `json:"makeTarget,omitempty"`
+	Args              []string `json:"args,omitempty"`
 	ContainerfilePath string   `json:"containerfilePath"`
 	ImageRepository   string   `json:"imageRepository"`
 }
