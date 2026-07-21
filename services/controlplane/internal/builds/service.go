@@ -149,6 +149,13 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 	if strings.TrimSpace(req.SourceCredentialRef) != "" || strings.TrimSpace(req.SourceCredentialSecret) != "" || strings.TrimSpace(req.KnownHostsSecret) != "" {
 		return storage.Build{}, fmt.Errorf("builds: HTTPS Git sources do not accept SSH credential inputs")
 	}
+	if len(s.allowedBuilderImages) == 1 {
+		only := s.allowedBuilderImages[0]
+		if req.BuilderImageDigest != "" && req.BuilderImageDigest != only {
+			return storage.Build{}, fmt.Errorf("builds: builderImageDigest must be the appliance builder image %q", only)
+		}
+		req.BuilderImageDigest = only
+	}
 	if err := ValidateBuilderImage(req.BuilderImageDigest, s.allowedBuilderImages); err != nil {
 		return storage.Build{}, err
 	}

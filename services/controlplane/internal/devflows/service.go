@@ -33,6 +33,7 @@ type Service struct {
 	builds             *builds.Service
 	engine             workflows.Engine
 	provisionerImage   string
+	builderImage       string
 	workspaceRootDir   string
 	workspaceClaimName string
 	builderGit         *buildergit.Service
@@ -40,7 +41,7 @@ type Service struct {
 	audit              *audit.Recorder
 }
 
-func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, provisionerImage, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
+func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, provisionerImage, builderImage, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
 	if logger == nil {
 		return nil, errors.New("devflows: logger is required")
 	}
@@ -52,6 +53,7 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 		builds:             buildsSvc,
 		engine:             engine,
 		provisionerImage:   strings.TrimSpace(provisionerImage),
+		builderImage:       strings.TrimSpace(builderImage),
 		workspaceRootDir:   strings.TrimSpace(workspaceRootDir),
 		workspaceClaimName: strings.TrimSpace(workspaceClaimName),
 		builderGit:         builderGit,
@@ -404,6 +406,13 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if tag == "" {
 		tag = ws.Name + "-" + resolved.Target.Name
 	}
+	if s.builderImage == "" {
+		return storage.Job{}, fmt.Errorf("devflows: builderImageDigest is required for builds")
+	}
+	builderImage, err := ResolveBuilderImage(resolved.Target.BuilderImageDigest, s.builderImage)
+	if err != nil {
+		return storage.Job{}, err
+	}
 	buildReq := builds.CreateRequest{
 		SourceRepoURL:      resolved.Repo.URL,
 		WorkspaceName:      ws.Name,
@@ -413,7 +422,7 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 		ContainerfilePath:  resolved.Target.ContainerfilePath,
 		ImageRepository:    resolved.Target.ImageRepository,
 		ImageTag:           tag,
-		BuilderImageDigest: resolved.Target.BuilderImageDigest,
+		BuilderImageDigest: builderImage,
 	}
 	build, err := s.builds.Create(ctx, actor, ownerID, buildReq, idempotencyKey)
 	if err != nil {

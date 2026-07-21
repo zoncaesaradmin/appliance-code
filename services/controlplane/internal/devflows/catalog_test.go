@@ -10,8 +10,8 @@ func TestCatalogNormalizesNestedBuildTargets(t *testing.T) {
 			URL:        "https://git.internal.example.com/team/app.git",
 			DefaultRef: "main",
 			BuildTargets: []BuildTarget{
-				{Name: "app", Execution: ExecutionMake, Args: []string{"build"}, ImageRepository: "users/alice/app", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
-				{Name: "app-api", Execution: ExecutionMake, Args: []string{"api"}, ImageRepository: "users/alice/app-api", BuilderImageDigest: "buildah@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+				{Name: "app", Execution: ExecutionMake, Args: []string{"build"}, ImageRepository: "users/alice/app"},
+				{Name: "app-api", Execution: ExecutionMake, Args: []string{"api"}, ImageRepository: "users/alice/app-api"},
 			},
 		}},
 	}
@@ -49,7 +49,7 @@ func TestCatalogValidatesAndResolvesAlias(t *testing.T) {
 
 func TestCatalogRejectsDuplicateAlias(t *testing.T) {
 	catalog := testCatalog()
-	catalog.BuildTargets = append(catalog.BuildTargets, BuildTarget{Name: "other", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, ImageRepository: "users/alice/other", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+	catalog.BuildTargets = append(catalog.BuildTargets, BuildTarget{Name: "other", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, ImageRepository: "users/alice/other"})
 	if err := catalog.Validate(); err == nil {
 		t.Fatal("Validate should reject duplicate alias")
 	}
@@ -142,6 +142,12 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 			},
 		},
 		{
+			name: "unknown builder image name",
+			mutate: func(c *Catalog) {
+				c.BuildTargets[0].BuilderImageDigest = "custom-builder"
+			},
+		},
+		{
 			name: "tag-only builder image",
 			mutate: func(c *Catalog) {
 				c.BuildTargets[0].BuilderImageDigest = "buildah:latest"
@@ -164,10 +170,45 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 	}
 }
 
+func TestCatalogAcceptsAutomationDevBuilderImage(t *testing.T) {
+	catalog := testCatalog()
+	catalog.BuildTargets[0].BuilderImageDigest = DefaultBuilderImageRef
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+func TestCatalogNormalizesEmptyBuilderImageToAutomationDev(t *testing.T) {
+	catalog := testCatalog()
+	catalog.Normalize()
+	if catalog.BuildTargets[0].BuilderImageDigest != DefaultBuilderImageRef {
+		t.Fatalf("BuilderImageDigest = %q, want %q", catalog.BuildTargets[0].BuilderImageDigest, DefaultBuilderImageRef)
+	}
+}
+
+func TestResolveBuilderImage(t *testing.T) {
+	appliance := "registry.local/automation-dev@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c"
+	got, err := ResolveBuilderImage(DefaultBuilderImageRef, appliance)
+	if err != nil {
+		t.Fatalf("ResolveBuilderImage: %v", err)
+	}
+	if got != appliance {
+		t.Fatalf("got %q, want appliance digest", got)
+	}
+	override := "registry.local/other@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	got, err = ResolveBuilderImage(override, appliance)
+	if err != nil {
+		t.Fatalf("ResolveBuilderImage override: %v", err)
+	}
+	if got != override {
+		t.Fatalf("override got %q, want %q", got, override)
+	}
+}
+
 func testCatalog() Catalog {
 	return Catalog{
 		WorkProfiles: []WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
 		Repos:        []Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, Args: []string{"build.sh"}, ImageRepository: "users/alice/app", ImageTagTemplate: "{workspace}-{target}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, Args: []string{"build.sh"}, ImageRepository: "users/alice/app", ImageTagTemplate: "{workspace}-{target}"}},
 	}
 }

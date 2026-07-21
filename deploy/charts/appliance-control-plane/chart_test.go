@@ -433,6 +433,7 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
 		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)...)
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
@@ -449,6 +450,9 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
 		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want rendered provisioner image", got)
 	}
+	if got, _ := data["APPLIANCE_BUILDER_IMAGE_DIGEST"].(string); got != "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+		t.Fatalf("APPLIANCE_BUILDER_IMAGE_DIGEST = %q, want rendered builder image", got)
+	}
 }
 
 func TestValuesSchemaRejectsUnsafeBuildCatalogPath(t *testing.T) {
@@ -458,6 +462,7 @@ func TestValuesSchemaRejectsUnsafeBuildCatalogPath(t *testing.T) {
 config:
   applianceProfile: builder
   workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   buildCatalog:
     workProfiles:
       - name: builder
@@ -473,7 +478,6 @@ config:
         args: [build.sh]
         scriptPath: ../build.sh
         imageRepository: users/alice/app
-        builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)
@@ -543,6 +547,7 @@ func TestValuesSchemaRejectsSSHCatalogRepo(t *testing.T) {
 config:
   applianceProfile: builder
   workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   buildCatalog:
     workProfiles:
       - name: builder
@@ -570,6 +575,7 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
 		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)...)
 	pv := findByKindAndName(docs, "PersistentVolume", controlPlaneDeploymentName+"-workspaces")
 	if pv == nil {
@@ -644,6 +650,7 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		"--set", "config.buildCatalog.repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
 		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)...)
 	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
 	if dep == nil {

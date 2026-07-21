@@ -95,6 +95,7 @@ func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
 	}
 	cfg.BuildCatalog = testBuildCatalog()
 	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("builder profile with catalog Validate: %v", err)
 	}
@@ -104,16 +105,17 @@ func testBuildCatalog() devflows.Catalog {
 	return devflows.Catalog{
 		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
 		Repos:        []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets: []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}},
+		BuildTargets: []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}"}},
 	}
 }
 
 func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
-	jsonCatalog := `{"workProfiles":[{"name":"builder","repos":[{"name":"app","enabledByDefault":true}]}],"repos":[{"name":"app","url":"https://git.internal.example.com/team/app.git","defaultRef":"0123456789abcdef0123456789abcdef01234567"}],"buildTargets":[{"name":"default","aliases":["app"],"repo":"app","execution":"script","args":["build.sh"],"imageRepository":"users/alice/app","builderImageDigest":"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}`
+	jsonCatalog := `{"workProfiles":[{"name":"builder","repos":[{"name":"app","enabledByDefault":true}]}],"repos":[{"name":"app","url":"https://git.internal.example.com/team/app.git","defaultRef":"0123456789abcdef0123456789abcdef01234567"}],"buildTargets":[{"name":"default","aliases":["app"],"repo":"app","execution":"script","args":["build.sh"],"imageRepository":"users/alice/app"}]}`
 	cfg, err := config.Load([]string{
 		"APPLIANCE_PROFILE=builder",
 		"APPLIANCE_BUILD_CATALOG_JSON=" + jsonCatalog,
 		"APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"APPLIANCE_BUILDER_IMAGE_DIGEST=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	})
 	if err != nil {
 		t.Fatalf("Load: %v", err)

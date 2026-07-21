@@ -37,6 +37,7 @@ type Config struct {
 	WorkflowExecutorServiceAccount  string           `json:"workflowExecutorServiceAccount"`
 	BuildCatalog                    devflows.Catalog `json:"buildCatalog"`
 	WorkspaceProvisionerImageDigest string           `json:"workspaceProvisionerImageDigest"`
+	BuilderImageDigest              string           `json:"builderImageDigest"`
 	WorkspaceRootDir                string           `json:"workspaceRootDir"`
 	WorkspaceClaimName              string           `json:"workspaceClaimName"`
 
@@ -141,6 +142,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
 	str("WORKSPACE_PROVISIONER_IMAGE_DIGEST", &cfg.WorkspaceProvisionerImageDigest)
+	str("BUILDER_IMAGE_DIGEST", &cfg.BuilderImageDigest)
 	str("WORKSPACE_ROOT_DIR", &cfg.WorkspaceRootDir)
 	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
@@ -236,6 +238,11 @@ func (c Config) Validate() error {
 			errs = append(errs, "workspaceProvisionerImageDigest must not be empty when the build capability is enabled")
 		} else if !strings.Contains(c.WorkspaceProvisionerImageDigest, "@sha256:") {
 			errs = append(errs, "workspaceProvisionerImageDigest must be digest-pinned")
+		}
+		if strings.TrimSpace(c.BuilderImageDigest) == "" {
+			errs = append(errs, "builderImageDigest must not be empty when the build capability is enabled")
+		} else if !strings.Contains(c.BuilderImageDigest, "@sha256:") {
+			errs = append(errs, "builderImageDigest must be digest-pinned")
 		}
 	} else if !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {

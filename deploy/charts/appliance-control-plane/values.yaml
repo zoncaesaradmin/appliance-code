@@ -73,6 +73,10 @@ config:
   # Appliance-owned generic image used by workspace provisioning workflows.
   # zonctl injects this from the signed bundle for the builder profile.
   workspaceProvisionerImageDigest: ""
+  # Single bundled builder/dev-container image used by all Argo build pods.
+  # zonctl injects this from the signed bundle (automation-dev) for the builder
+  # profile. Build catalogs must not set per-target builder digests.
+  builderImageDigest: ""
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects

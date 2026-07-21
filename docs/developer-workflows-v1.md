@@ -24,9 +24,14 @@ submission.
   them under `repos[].buildTargets`. `zonctl install` / `zonctl upgrade` and
   the control plane flatten nested targets into the runtime `buildTargets`
   list (filling each target's `repo` from its parent) and inject the catalog
-  into `config.buildCatalog`, deriving `allowedBuilderImageDigests` from each
-  target's digest-pinned `builderImageDigest`. Top-level `buildTargets` with
-  an explicit `repo` field remain accepted.
+  into `config.buildCatalog`. Top-level `buildTargets` with an explicit
+  `repo` field remain accepted. Optional per-target `builderImageDigest`
+  defaults to the short bundle name `automation-dev` (also accepted when
+  omitted). The control plane resolves that name to
+  `config.builderImageDigest`, which zonctl injects from the signed bundle's
+  packaged automation-dev OCI image. Advanced catalogs may override with a
+  digest-pinned reference that is present in the bundle; users should not
+  paste floating GHCR tags.
 - Target mapping is name/alias → one catalog entry → one execution policy.
   One repo may expose many targets. A target whose `name` equals the repo
   name is still an explicit mapping (typically `execution: make` with

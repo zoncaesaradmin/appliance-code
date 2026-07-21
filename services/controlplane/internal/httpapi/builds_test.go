@@ -27,8 +27,7 @@ const validCreateBuildBody = `{
 	"sourceRepoUrl": "https://git.internal.example.com/team/app",
 	"sourceCommitSha": "0123456789abcdef0123456789abcdef01234567",
 	"imageRepository": "users/%s/app",
-	"imageTag": "v1",
-	"builderImageDigest": "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	"imageTag": "v1"
 }`
 
 func TestCreateBuildHappyPath(t *testing.T) {
@@ -69,8 +68,7 @@ func TestCreateBuildRejectsMaliciousSource(t *testing.T) {
 		"sourceRepoUrl": "https://evil.example.com/team/app",
 		"sourceCommitSha": "0123456789abcdef0123456789abcdef01234567",
 		"imageRepository": "users/alice/app",
-		"imageTag": "v1",
-		"builderImageDigest": "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		"imageTag": "v1"
 	}`
 	resp := ts.doJSON(t, "POST", "/api/v1/builds", token, body)
 	defer resp.Body.Close()
@@ -710,7 +708,7 @@ func TestCreateWorkspaceRejectsExistingNameOnDifferentWorkspaceProfile(t *testin
 			{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"},
 		},
 		BuildTargets: []devflows.BuildTarget{
-			{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}", BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}"},
 		},
 	})
 	ts.bootstrapAdmin(t, "admin", testPassword)

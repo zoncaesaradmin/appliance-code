@@ -164,13 +164,17 @@
           "then": {
             "required": [
               "buildCatalog",
-              "workspaceProvisionerImageDigest"
+              "workspaceProvisionerImageDigest",
+              "builderImageDigest"
             ],
             "properties": {
               "buildCatalog": {
                 "$ref": "#/$defs/buildCatalog"
               },
               "workspaceProvisionerImageDigest": {
+                "$ref": "#/$defs/builderImageDigest"
+              },
+              "builderImageDigest": {
                 "$ref": "#/$defs/builderImageDigest"
               }
             }
@@ -222,6 +226,9 @@
           ]
         },
         "workspaceProvisionerImageDigest": {
+          "type": "string"
+        },
+        "builderImageDigest": {
           "type": "string"
         }
       }
@@ -423,6 +430,23 @@
         }
       ]
     },
+    "catalogBuilderImage": {
+      "type": "string",
+      "description": "Short bundle builder name (default automation-dev) or an optional digest-pinned override.",
+      "oneOf": [
+        {
+          "enum": [
+            "automation-dev",
+            "builder",
+            "dev-container",
+            "devcontainer"
+          ]
+        },
+        {
+          "$ref": "#/$defs/builderImageDigest"
+        }
+      ]
+    },
     "buildCatalog": {
       "type": "object",
       "additionalProperties": false,
@@ -525,8 +549,7 @@
       "required": [
         "name",
         "execution",
-        "imageRepository",
-        "builderImageDigest"
+        "imageRepository"
       ],
       "properties": {
         "name": {
@@ -575,7 +598,7 @@
           "type": "string"
         },
         "builderImageDigest": {
-          "$ref": "#/$defs/builderImageDigest"
+          "$ref": "#/$defs/catalogBuilderImage"
         }
       }
     },
@@ -586,8 +609,7 @@
         "name",
         "repo",
         "execution",
-        "imageRepository",
-        "builderImageDigest"
+        "imageRepository"
       ],
       "properties": {
         "name": {
@@ -640,7 +662,7 @@
           "minLength": 1
         },
         "builderImageDigest": {
-          "$ref": "#/$defs/builderImageDigest"
+          "$ref": "#/$defs/catalogBuilderImage"
         }
       }
     }

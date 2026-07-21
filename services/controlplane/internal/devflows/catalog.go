@@ -18,6 +18,11 @@ const (
 
 	DefaultScriptArg = "build.sh"
 
+	// DefaultBuilderImageRef is the user-facing catalog default for the
+	// bundled CI/dev-container builder image. Install resolves it to the
+	// digest-pinned automation-dev imageReference from the signed bundle.
+	DefaultBuilderImageRef = "automation-dev"
+
 	legacyExecutionMake   = "make_target"
 	legacyExecutionScript = "repo_script"
 )
@@ -56,16 +61,20 @@ type Repo struct {
 }
 
 type BuildTarget struct {
-	Name               string   `json:"name"`
-	Aliases            []string `json:"aliases,omitempty"`
-	Description        string   `json:"description,omitempty"`
-	Repo               string   `json:"repo,omitempty"`
-	Execution          string   `json:"execution"`
-	Args               []string `json:"args,omitempty"`
-	ContainerfilePath  string   `json:"containerfilePath,omitempty"`
-	ImageRepository    string   `json:"imageRepository"`
-	ImageTagTemplate   string   `json:"imageTagTemplate,omitempty"`
-	BuilderImageDigest string   `json:"builderImageDigest"`
+	Name              string   `json:"name"`
+	Aliases           []string `json:"aliases,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	Repo              string   `json:"repo,omitempty"`
+	Execution         string   `json:"execution"`
+	Args              []string `json:"args,omitempty"`
+	ContainerfilePath string   `json:"containerfilePath,omitempty"`
+	ImageRepository   string   `json:"imageRepository"`
+	ImageTagTemplate  string   `json:"imageTagTemplate,omitempty"`
+	// BuilderImageDigest selects the build pod image. Prefer the short bundle
+	// name "automation-dev" (default when omitted). A digest-pinned override is
+	// also accepted; symbolic names resolve at submit time to the appliance
+	// bundled builder image.
+	BuilderImageDigest string `json:"builderImageDigest,omitempty"`
 
 	// Legacy input-only fields. Accepted on unmarshal for older catalogs and
 	// cleared by Normalize into Args.
@@ -115,6 +124,9 @@ func (c *Catalog) Normalize() {
 	}
 	for i := range c.BuildTargets {
 		normalizeTargetExecution(&c.BuildTargets[i])
+		if strings.TrimSpace(c.BuildTargets[i].BuilderImageDigest) == "" {
+			c.BuildTargets[i].BuilderImageDigest = DefaultBuilderImageRef
+		}
 	}
 }
 
@@ -300,10 +312,8 @@ func (c Catalog) validateNormalized() error {
 		if !ociRepoRE.MatchString(target.ImageRepository) {
 			errs = append(errs, fmt.Sprintf("build target %q has invalid imageRepository %q", name, target.ImageRepository))
 		}
-		if strings.TrimSpace(target.BuilderImageDigest) == "" {
-			errs = append(errs, fmt.Sprintf("build target %q requires builderImageDigest", name))
-		} else if !validBuilderImageDigest(target.BuilderImageDigest) {
-			errs = append(errs, fmt.Sprintf("build target %q builderImageDigest must be digest-pinned", name))
+		if err := validateCatalogBuilderImage(target.BuilderImageDigest); err != nil {
+			errs = append(errs, fmt.Sprintf("build target %q %v", name, err))
 		}
 	}
 
@@ -382,21 +392,55 @@ func (c Catalog) RepoHosts() ([]string, error) {
 }
 
 func (c Catalog) BuilderImageDigests() []string {
-	seen := map[string]struct{}{}
-	var out []string
-	for _, target := range c.BuildTargets {
-		ref := strings.TrimSpace(target.BuilderImageDigest)
-		if ref == "" {
-			continue
+	return nil
+}
+
+// ResolveBuilderImage maps a catalog builderImageDigest value to the digests-
+// pinned image used for the Argo build pod. Empty and short names such as
+// "automation-dev" resolve to applianceBuilderDigest from install. A digest-
+// pinned override is returned unchanged for allowlist checks.
+func ResolveBuilderImage(ref, applianceBuilderDigest string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if isBundledBuilderAlias(ref) {
+		applianceBuilderDigest = strings.TrimSpace(applianceBuilderDigest)
+		if applianceBuilderDigest == "" {
+			return "", fmt.Errorf("devflows: appliance builder image is not configured")
 		}
-		if _, ok := seen[ref]; ok {
-			continue
-		}
-		seen[ref] = struct{}{}
-		out = append(out, ref)
+		return applianceBuilderDigest, nil
 	}
-	sort.Strings(out)
-	return out
+	if validPinnedBuilderImage(ref) {
+		return ref, nil
+	}
+	return "", fmt.Errorf("devflows: unknown builder image %q; use %q or a digest-pinned bundle image reference", ref, DefaultBuilderImageRef)
+}
+
+func validateCatalogBuilderImage(ref string) error {
+	ref = strings.TrimSpace(ref)
+	if isBundledBuilderAlias(ref) {
+		return nil
+	}
+	if validPinnedBuilderImage(ref) {
+		return nil
+	}
+	return fmt.Errorf("builderImageDigest %q is invalid; use %q or a digest-pinned image reference", ref, DefaultBuilderImageRef)
+}
+
+func isBundledBuilderAlias(ref string) bool {
+	switch strings.ToLower(strings.TrimSpace(ref)) {
+	case "", DefaultBuilderImageRef, "builder", "dev-container", "devcontainer":
+		return true
+	default:
+		return false
+	}
+}
+
+func validPinnedBuilderImage(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if !imageDigestRE.MatchString(ref) {
+		return false
+	}
+	_, digest, _ := strings.Cut(ref, "@sha256:")
+	return digest != "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
 
 func (c Catalog) SensitiveLogValues() []string {
@@ -538,15 +582,6 @@ func validRepoRelativePath(v string) bool {
 
 func validMakeTarget(v string) bool {
 	return makeTargetRE.MatchString(strings.TrimSpace(v))
-}
-
-func validBuilderImageDigest(v string) bool {
-	v = strings.TrimSpace(v)
-	if !imageDigestRE.MatchString(v) {
-		return false
-	}
-	_, digest, _ := strings.Cut(v, "@sha256:")
-	return digest != "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
 
 func containsName(values []string, name string) bool {

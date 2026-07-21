@@ -178,8 +178,8 @@ cat > "${CONFIG_FILE}" <<EOF
 {
   "applianceProfile": "builder",
   "allowedGitSourceHosts": ["git.internal.example.com"],
-  "allowedBuilderImageDigests": ["${BUILD_BUILDER_DIGEST}"],
   "workspaceProvisionerImageDigest": "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "builderImageDigest": "${BUILD_BUILDER_DIGEST}",
   "buildCatalog": {
     "workProfiles": [
       {
@@ -200,8 +200,7 @@ cat > "${CONFIG_FILE}" <<EOF
         "repo": "app",
         "execution": "repo_script",
         "imageRepository": "${BUILD_IMAGE_REPOSITORY}",
-        "imageTagTemplate": "{commit12}",
-        "builderImageDigest": "${BUILD_BUILDER_DIGEST}"
+        "imageTagTemplate": "{commit12}"
       }
     ]
   }
@@ -394,8 +393,7 @@ cat > "${build_body_file}" <<EOF
   "sourceRepoUrl":"${BUILD_SOURCE_URL}",
   "sourceCommitSha":"${BUILD_SOURCE_SHA}",
   "imageRepository":"${BUILD_IMAGE_REPOSITORY}",
-  "imageTag":"${BUILD_IMAGE_TAG}",
-  "builderImageDigest":"${BUILD_BUILDER_DIGEST}"
+  "imageTag":"${BUILD_IMAGE_TAG}"
 }
 EOF
 curl_request POST "${PUBLIC_URL}/api/v1/builds" "Bearer ${admin_access_token}" "${build_body_file}"
