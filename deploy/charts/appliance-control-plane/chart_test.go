@@ -595,30 +595,11 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 		t.Fatalf("workspace PVC volumeName = %q, want control-plane-workspaces", volumeName)
 	}
 	jobs := findByKind(docs, "Job")
-	var prepJob map[string]any
 	for _, job := range jobs {
 		name, _ := at(job, "metadata", "name").(string)
 		if strings.HasPrefix(name, "control-plane-workspace-storage-prep-") {
-			prepJob = job
-			break
+			t.Fatalf("workspace storage prep Job must be disabled by default (PSA restricted + helm --wait); got %q", name)
 		}
-	}
-	if prepJob == nil {
-		t.Fatal("expected builder workspace storage prep Job")
-	}
-	if ns, _ := at(prepJob, "metadata", "namespace").(string); ns != "appliance-builds" {
-		t.Fatalf("workspace storage prep Job namespace = %q, want appliance-builds", ns)
-	}
-	podSpec, _ := at(prepJob, "spec", "template", "spec").(map[string]any)
-	containers, _ := podSpec["containers"].([]any)
-	container, _ := containers[0].(map[string]any)
-	secCtx, _ := container["securityContext"].(map[string]any)
-	if runAsUser, _ := secCtx["runAsUser"].(int); runAsUser != 0 {
-		t.Fatalf("workspace storage prep Job runAsUser = %d, want 0", runAsUser)
-	}
-	command, _ := container["command"].([]any)
-	if len(command) < 3 || !strings.Contains(command[2].(string), "chown 0:20000") || !strings.Contains(command[2].(string), "chmod 2777") {
-		t.Fatalf("workspace storage prep command = %v, want shared GID ownership and world-writable setgid mode", command)
 	}
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
@@ -639,6 +620,34 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	}
 	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
 		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want workspace provisioner image", got)
+	}
+}
+
+func TestBuilderWorkspacePrepareJobOptIn(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "config.applianceProfile=builder",
+		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
+		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"--set", "workspaceStorage.prepareJob.enabled=true",
+	)...)
+	jobs := findByKind(docs, "Job")
+	var prepJob map[string]any
+	for _, job := range jobs {
+		name, _ := at(job, "metadata", "name").(string)
+		if strings.HasPrefix(name, "control-plane-workspace-storage-prep-") {
+			prepJob = job
+			break
+		}
+	}
+	if prepJob == nil {
+		t.Fatal("expected workspace storage prep Job when prepareJob.enabled=true")
+	}
+	if ns, _ := at(prepJob, "metadata", "namespace").(string); ns != "appliance-builds" {
+		t.Fatalf("workspace storage prep Job namespace = %q, want appliance-builds", ns)
 	}
 }
 

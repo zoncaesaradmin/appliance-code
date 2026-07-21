@@ -1,4 +1,4 @@
-{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
+{{- if and .Values.workspaceStorage.enabled .Values.workspaceStorage.prepareJob.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -33,10 +33,12 @@ spec:
             # operator login and external rsync/scp pushes can create
             # and edit workspace content directly, not just the pods
             # sharing the appliance fsGroup. zonctl itself already sets
-            # this before Helm ever runs (this Job is a defense-in-depth
-            # backstop, e.g. for helm-only deploys) — the two must never
-            # disagree, or whichever runs last silently reverts the
-            # other's mode.
+            # this before Helm ever runs — leave prepareJob.enabled
+            # false for the normal installer path. Enabling this Job
+            # requires a namespace that permits root + hostPath (it is
+            # incompatible with Pod Security Admission restricted) and
+            # an air-gap-available alpine image; it is only for
+            # unusual helm-only deploys outside zonctl.
             - chown 0:20000 /workspace-root && chmod 2777 /workspace-root
           securityContext:
             runAsNonRoot: false

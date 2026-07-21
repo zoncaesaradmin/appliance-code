@@ -97,6 +97,11 @@ workspaceStorage:
   size: 20Gi
   accessMode: ReadWriteOnce
   rootDir: /data/zon/workspaces # fixed host-visible workspace path, also used as the PV hostPath backing
+  # Off by default: zonctl prepares /data/zon/workspaces before Helm runs.
+  # A root+hostPath Job cannot run under Pod Security Admission restricted
+  # (appliance-builds) and would block helm --wait for the full timeout.
+  prepareJob:
+    enabled: false
 
 service:
   publicPort: 8080
