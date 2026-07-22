@@ -44,14 +44,14 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"kubernetes.io/metadata.name: appliance-system",
 		"app.kubernetes.io/name: appliance-control-plane",
 		"path: /data/zon/logs/zot", "type: DirectoryOrCreate",
-		"PathPrefix(`/v2`)", "registry-public.pem",
+		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",
 		"secretName: appliance-registry-verification-key",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{"ui:", "anonymous", "enableManagement", "scrubInterval", "search:"} {
+	for _, forbidden := range []string{"path: /v2/", "httpGet:", "ui:", "anonymous", "enableManagement", "scrubInterval", "search:"} {
 		if bytes.Contains([]byte(out), []byte(forbidden)) {
 			t.Errorf("render unexpectedly contains %q", forbidden)
 		}

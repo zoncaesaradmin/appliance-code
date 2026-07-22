@@ -117,11 +117,11 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
-            httpGet: {path: {{ .Values.probes.path }}, port: registry}
+            tcpSocket: {port: registry}
           readinessProbe:
-            httpGet: {path: {{ .Values.probes.path }}, port: registry}
+            tcpSocket: {port: registry}
           startupProbe:
-            httpGet: {path: {{ .Values.probes.path }}, port: registry}
+            tcpSocket: {port: registry}
             failureThreshold: {{ .Values.probes.startupFailureThreshold }}
             periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
           volumeMounts:

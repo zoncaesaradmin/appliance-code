@@ -73,6 +73,7 @@ resources:
     memory: 1Gi
 
 probes:
-  path: /v2/
+  # OCI token auth commonly challenges unauthenticated /v2/ requests with 401.
+  # Use a plain TCP probe so auth configuration does not flap pod health.
   startupFailureThreshold: 30
   startupPeriodSeconds: 2
