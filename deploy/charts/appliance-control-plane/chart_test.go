@@ -455,6 +455,38 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	}
 }
 
+func TestStorageProfileRendersRealZotDependency(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(), "--set", "config.applianceProfile=storage")...)
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_ZOT_BASE_URL"].(string); got != "http://appliance-registry.appliance-system.svc.cluster.local:5000" {
+		t.Fatalf("APPLIANCE_ZOT_BASE_URL = %q", got)
+	}
+	if got, _ := data["APPLIANCE_ZOT_ALLOW_FAKE"].(string); got != "false" {
+		t.Fatalf("APPLIANCE_ZOT_ALLOW_FAKE = %q, want false", got)
+	}
+	policy := findByKindAndName(docs, "NetworkPolicy", controlPlaneDeploymentName+"-allow")
+	rendered, _ := yaml.Marshal(policy)
+	if !bytes.Contains(rendered, []byte("app.kubernetes.io/name: appliance-registry")) || !bytes.Contains(rendered, []byte("port: 5000")) {
+		t.Fatalf("control-plane NetworkPolicy lacks registry-only egress:\n%s", rendered)
+	}
+}
+
+func TestValuesSchemaRejectsStorageWithoutZotURL(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "storage-without-zot.yaml")
+	if err := os.WriteFile(valuesPath, []byte("config:\n  applianceProfile: storage\n  zotBaseURL: \"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint accepted storage without Zot URL\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("zotBaseURL")) {
+		t.Fatalf("lint failed for wrong reason:\n%s", out)
+	}
+}
+
 func TestValuesSchemaRejectsUnsafeBuildCatalogPath(t *testing.T) {
 	requireHelm(t)
 	valuesPath := filepath.Join(t.TempDir(), "bad-values.yaml")

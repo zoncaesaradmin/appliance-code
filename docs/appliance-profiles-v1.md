@@ -174,6 +174,13 @@ It also owns the control-plane integrations that support those APIs,
 including registry authorization policy and zot-backed repository/tag/
 referrer access.
 
+Production `storage` and `builder` deployments must provide an absolute
+`config.zotBaseURL`, rendered as `APPLIANCE_ZOT_BASE_URL`. The control plane
+includes Zot in readiness when `artifact` is enabled and reports not-ready if
+the data plane cannot answer `/v2/`. The in-memory fake remains available only
+through the explicit local/test `APPLIANCE_ZOT_ALLOW_FAKE=true` setting; the
+production chart sets it to false.
+
 ## Enforcement Rules
 
 The API server must enforce the following rules:

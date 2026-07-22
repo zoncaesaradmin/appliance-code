@@ -179,6 +179,28 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "applianceProfile": {
+                "enum": ["builder", "storage"]
+              }
+            },
+            "required": ["applianceProfile"]
+          },
+          "then": {
+            "required": ["zotBaseURL"],
+            "properties": {
+              "zotBaseURL": {
+                "type": "string",
+                "pattern": "^https?://[^/]+$"
+              },
+              "zotAllowFake": {
+                "const": false
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -230,6 +252,12 @@
         },
         "builderImageDigest": {
           "type": "string"
+        },
+        "zotBaseURL": {
+          "type": "string"
+        },
+        "zotAllowFake": {
+          "type": "boolean"
         }
       }
     },
@@ -337,6 +365,17 @@
         },
         "traefikNamespaceLabel": {
           "type": "object"
+        },
+        "registryNamespaceLabel": {
+          "type": "object"
+        },
+        "registryPodLabels": {
+          "type": "object"
+        },
+        "registryPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         }
       }
     },

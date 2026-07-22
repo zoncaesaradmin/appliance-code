@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["replicaCount", "image", "persistence", "logs", "auth", "service"],
+  "properties": {
+    "replicaCount": {"type": "integer", "const": 1},
+    "image": {
+      "type": "object",
+      "required": ["repository", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^$|^sha256:[0-9a-f]{64}$"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["port"],
+      "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535}}
+    },
+    "persistence": {
+      "type": "object",
+      "required": ["accessMode", "size"],
+      "properties": {
+        "storageClassName": {"type": "string"},
+        "accessMode": {"const": "ReadWriteOnce"},
+        "size": {"type": "string", "minLength": 1}
+      }
+    },
+    "logs": {
+      "type": "object",
+      "required": ["hostPath", "prepare"],
+      "properties": {
+        "hostPath": {"const": "/data/zon/logs/zot"},
+        "prepare": {
+          "type": "object",
+          "required": ["enabled", "image"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "image": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "required": ["realm", "service", "publicKeySecretName", "publicKeySecretKey"],
+      "properties": {
+        "realm": {"type": "string", "pattern": "^https://[^/]+/api/v1/registry/token$"},
+        "service": {"const": "zot"},
+        "publicKeySecretName": {"type": "string", "minLength": 1},
+        "publicKeySecretKey": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

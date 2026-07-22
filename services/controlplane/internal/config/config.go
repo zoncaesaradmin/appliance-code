@@ -30,6 +30,7 @@ type Config struct {
 	LogLevel           string `json:"logLevel"`
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	ZotBaseURL         string `json:"zotBaseURL"`
+	ZotAllowFake       bool   `json:"zotAllowFake"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -61,6 +62,7 @@ func Default() Config {
 		ApplicationLogPath:             "/data/zon/logs/control-plane/application.log",
 		LogLevel:                       "info",
 		TrustedProxyCount:              0,
+		ZotAllowFake:                   true,
 		ReadHeaderTimeout:              5 * time.Second,
 		ReadTimeout:                    30 * time.Second,
 		WriteTimeout:                   30 * time.Second,
@@ -147,6 +149,15 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
 	var errs []string
+
+	if v, ok := env[envPrefix+"ZOT_ALLOW_FAKE"]; ok {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("ZOT_ALLOW_FAKE: %v", err))
+		} else {
+			cfg.ZotAllowFake = parsed
+		}
+	}
 
 	if v, ok := env[envPrefix+"TRUSTED_PROXY_COUNT"]; ok {
 		n, err := strconv.Atoi(v)
@@ -247,6 +258,15 @@ func (c Config) Validate() error {
 	} else if !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {
 			errs = append(errs, err.Error())
+		}
+	}
+	if profileErr == nil && resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+		if strings.TrimSpace(c.ZotBaseURL) == "" {
+			if !c.ZotAllowFake {
+				errs = append(errs, "zotBaseURL must not be empty when the artifact capability is enabled in production")
+			}
+		} else if u, err := url.Parse(c.ZotBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "zotBaseURL must be an absolute http(s) URL with no path")
 		}
 	}
 

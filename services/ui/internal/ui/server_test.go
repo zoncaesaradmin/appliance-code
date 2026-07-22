@@ -44,6 +44,10 @@ type fakeControlPlane struct {
 	listBuildTargetsErr      error
 	capabilities             []string
 	capabilitiesErr          error
+	registryRepositories     []string
+	registryTags             map[string][]string
+	registryReferrers        []controlplane.RegistryReferrer
+	registryGrants           []controlplane.RegistryGrant
 }
 
 func (f *fakeControlPlane) Capabilities(context.Context) ([]string, error) {
@@ -51,6 +55,38 @@ func (f *fakeControlPlane) Capabilities(context.Context) ([]string, error) {
 		return nil, f.capabilitiesErr
 	}
 	return append([]string(nil), f.capabilities...), nil
+}
+
+func (f *fakeControlPlane) ListRegistryRepositories(context.Context, string) ([]string, error) {
+	return append([]string(nil), f.registryRepositories...), nil
+}
+
+func (f *fakeControlPlane) ListRegistryTags(_ context.Context, _, repository string) ([]string, error) {
+	return append([]string(nil), f.registryTags[repository]...), nil
+}
+
+func (f *fakeControlPlane) ListRegistryReferrers(context.Context, string, string, string) ([]controlplane.RegistryReferrer, error) {
+	return append([]controlplane.RegistryReferrer(nil), f.registryReferrers...), nil
+}
+
+func (f *fakeControlPlane) ListRegistryGrants(context.Context, string) ([]controlplane.RegistryGrant, error) {
+	return append([]controlplane.RegistryGrant(nil), f.registryGrants...), nil
+}
+
+func (f *fakeControlPlane) CreateRegistryGrant(_ context.Context, _ string, req controlplane.CreateRegistryGrantRequest) (controlplane.RegistryGrant, error) {
+	grant := controlplane.RegistryGrant{ID: "grant-new", SubjectType: req.SubjectType, SubjectID: req.SubjectID, PathPrefix: req.PathPrefix, Actions: req.Actions}
+	f.registryGrants = append(f.registryGrants, grant)
+	return grant, nil
+}
+
+func (f *fakeControlPlane) DeleteRegistryGrant(_ context.Context, _, grantID string) error {
+	for i := range f.registryGrants {
+		if f.registryGrants[i].ID == grantID {
+			f.registryGrants = append(f.registryGrants[:i], f.registryGrants[i+1:]...)
+			return nil
+		}
+	}
+	return &controlplane.HTTPStatusError{StatusCode: http.StatusNotFound}
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
@@ -1022,7 +1058,13 @@ func TestBuilderWorkspacePageNotAvailableForCoreProfile(t *testing.T) {
 }
 
 func TestArtifactPageAvailableWhenCapabilityEnabled(t *testing.T) {
-	cp := &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		registryRepositories: []string{"users/admin/app"},
+		registryTags:         map[string][]string{"users/admin/app": {"latest", "v1"}},
+		registryReferrers:    []controlplane.RegistryReferrer{{Digest: "sha256:referrer", ArtifactType: "application/spdx+json"}},
+		registryGrants:       []controlplane.RegistryGrant{{ID: "grant-1", SubjectType: "user", SubjectID: "usr-1", PathPrefix: "users/admin", Actions: []string{"pull", "push"}}},
+	}
 	handler := newTestServerWithProfile(t, "storage", cp)
 
 	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
@@ -1038,7 +1080,7 @@ func TestArtifactPageAvailableWhenCapabilityEnabled(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if body := rec.Body.String(); !strings.Contains(body, "Artifact Registry") {
+	if body := rec.Body.String(); !strings.Contains(body, "Artifact Registry") || !strings.Contains(body, "users/admin/app") || !strings.Contains(body, "latest") || !strings.Contains(body, "grant-1") {
 		t.Fatalf("artifacts page body missing expected heading:\n%s", body)
 	}
 
@@ -1069,6 +1111,38 @@ func TestArtifactPageNotAvailableWithoutCapability(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestArtifactGrantAdministration(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		registryRepositories: []string{"teams/demo/app"},
+		registryTags:         map[string][]string{"teams/demo/app": {"latest"}},
+	}
+	handler := newTestServerWithProfile(t, "storage", cp)
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	createReq := httptest.NewRequest(http.MethodPost, "/artifacts/grants", strings.NewReader("subject_type=user&subject_id=usr-1&path_prefix=teams/demo&action_pull=on&action_push=on"))
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusSeeOther || len(cp.registryGrants) != 1 {
+		t.Fatalf("create grant status=%d grants=%+v", createRec.Code, cp.registryGrants)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodPost, "/artifacts/grants/delete", strings.NewReader("grant_id=grant-new"))
+	deleteReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	deleteReq.AddCookie(cookie)
+	deleteRec := httptest.NewRecorder()
+	handler.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusSeeOther || len(cp.registryGrants) != 0 {
+		t.Fatalf("delete grant status=%d grants=%+v", deleteRec.Code, cp.registryGrants)
 	}
 }
 

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: appliance-registry
+description: Hardened, offline OCI registry data plane for the Zon appliance.
+type: application
+version: 0.1.0
+appVersion: "v2.1.8"
+keywords:
+  - appliance
+  - zot
+  - registry
+home: https://github.com/zoncaesaradmin/appliance-code

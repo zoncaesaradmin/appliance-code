@@ -46,6 +46,12 @@ type controlPlane interface {
 	SubmitCurrentBuild(ctx context.Context, accessToken string, req controlplane.SubmitBuildRequest) (controlplane.Job, error)
 	CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (controlplane.Job, error)
 	Capabilities(ctx context.Context) ([]string, error)
+	ListRegistryRepositories(ctx context.Context, accessToken string) ([]string, error)
+	ListRegistryTags(ctx context.Context, accessToken, repository string) ([]string, error)
+	ListRegistryReferrers(ctx context.Context, accessToken, repository, digest string) ([]controlplane.RegistryReferrer, error)
+	ListRegistryGrants(ctx context.Context, accessToken string) ([]controlplane.RegistryGrant, error)
+	CreateRegistryGrant(ctx context.Context, accessToken string, req controlplane.CreateRegistryGrantRequest) (controlplane.RegistryGrant, error)
+	DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error
 }
 
 type Server struct {
@@ -94,6 +100,17 @@ type builderPageData struct {
 	// status, the next poll's response omits the hx-trigger and htmx
 	// stops polling on its own.
 	WorkspaceStatusPending bool
+}
+
+type artifactPageData struct {
+	viewData
+	Repositories       []string
+	SelectedRepository string
+	Tags               []string
+	SelectedDigest     string
+	Referrers          []controlplane.RegistryReferrer
+	Grants             []controlplane.RegistryGrant
+	CanManageGrants    bool
 }
 
 func workspaceStatusPending(current *controlplane.Workspace, workspaces []controlplane.Workspace) bool {
@@ -152,6 +169,8 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	mux.HandleFunc("GET /dashboard", s.dashboard)
 	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
 	mux.HandleFunc("GET /artifacts", s.artifactPage)
+	mux.HandleFunc("POST /artifacts/grants", s.createRegistryGrant)
+	mux.HandleFunc("POST /artifacts/grants/delete", s.deleteRegistryGrant)
 	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
 	mux.HandleFunc("POST /builder/git-access", s.configureBuilderGitAccess)
 	mux.HandleFunc("POST /builder/builds", s.submitBuilderBuild)
@@ -385,9 +404,6 @@ func (s *Server) builderWorkspaces(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "builder_workspaces.html", data)
 }
 
-// artifactPage is a first cut: it only confirms the Artifact capability
-// gate works end to end and gives the page a real home to land future
-// registry-browsing content on. No registry API calls are wired up yet.
 func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 	if !s.artifactEnabled(r.Context()) {
 		http.NotFound(w, r)
@@ -397,10 +413,115 @@ func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	data := s.authenticatedViewData(r, rec)
-	data.Title = "Artifacts"
-	data.CurrentPath = "/artifacts"
+	rec, ok = s.refreshRecordForAPI(w, r, rec)
+	if !ok {
+		return
+	}
+	data := s.artifactPageData(r, rec, "", "")
 	s.render(w, r, http.StatusOK, "artifacts.html", data)
+}
+
+func (s *Server) artifactPageData(r *http.Request, rec session.Record, message, formError string) artifactPageData {
+	base := s.authenticatedViewData(r, rec)
+	base.Title = "Artifacts"
+	base.CurrentPath = "/artifacts"
+	base.Message = message
+	base.Error = formError
+	data := artifactPageData{viewData: base}
+	repositories, err := s.cp.ListRegistryRepositories(r.Context(), rec.AccessToken)
+	if err != nil {
+		data.StatusError = "Registry catalog is unavailable."
+		return data
+	}
+	data.Repositories = repositories
+	data.SelectedRepository = strings.TrimSpace(r.URL.Query().Get("repository"))
+	if data.SelectedRepository == "" && len(repositories) > 0 {
+		data.SelectedRepository = repositories[0]
+	}
+	if data.SelectedRepository != "" {
+		tags, err := s.cp.ListRegistryTags(r.Context(), rec.AccessToken, data.SelectedRepository)
+		if err != nil {
+			data.StatusError = "Repository tags are unavailable."
+		} else {
+			data.Tags = tags
+		}
+	}
+	data.SelectedDigest = strings.TrimSpace(r.URL.Query().Get("digest"))
+	if data.SelectedRepository != "" && data.SelectedDigest != "" {
+		referrers, err := s.cp.ListRegistryReferrers(r.Context(), rec.AccessToken, data.SelectedRepository, data.SelectedDigest)
+		if err != nil {
+			data.StatusError = "Artifact referrers are unavailable."
+		} else {
+			data.Referrers = referrers
+		}
+	}
+	if grants, err := s.cp.ListRegistryGrants(r.Context(), rec.AccessToken); err == nil {
+		data.Grants = grants
+		data.CanManageGrants = true
+	} else if !isHTTPStatus(err, http.StatusForbidden) {
+		data.StatusError = "Registry grants are unavailable."
+	}
+	return data
+}
+
+func (s *Server) createRegistryGrant(w http.ResponseWriter, r *http.Request) {
+	if !s.artifactEnabled(r.Context()) {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, ok = s.refreshRecordForAPI(w, r, rec)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "artifacts.html", s.artifactPageData(r, rec, "", "Could not read the grant form."))
+		return
+	}
+	actions := make([]string, 0, 2)
+	for _, action := range []string{"pull", "push"} {
+		if r.Form.Has("action_" + action) {
+			actions = append(actions, action)
+		}
+	}
+	_, err := s.cp.CreateRegistryGrant(r.Context(), rec.AccessToken, controlplane.CreateRegistryGrantRequest{
+		SubjectType: strings.TrimSpace(r.Form.Get("subject_type")),
+		SubjectID:   strings.TrimSpace(r.Form.Get("subject_id")),
+		PathPrefix:  strings.TrimSpace(r.Form.Get("path_prefix")),
+		Actions:     actions,
+	})
+	if err != nil {
+		s.render(w, r, http.StatusBadRequest, "artifacts.html", s.artifactPageData(r, rec, "", "Could not create the registry grant."))
+		return
+	}
+	http.Redirect(w, r, "/artifacts", http.StatusSeeOther)
+}
+
+func (s *Server) deleteRegistryGrant(w http.ResponseWriter, r *http.Request) {
+	if !s.artifactEnabled(r.Context()) {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, ok = s.refreshRecordForAPI(w, r, rec)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil || strings.TrimSpace(r.Form.Get("grant_id")) == "" {
+		http.Error(w, "grant id is required", http.StatusBadRequest)
+		return
+	}
+	if err := s.cp.DeleteRegistryGrant(r.Context(), rec.AccessToken, strings.TrimSpace(r.Form.Get("grant_id"))); err != nil {
+		s.render(w, r, http.StatusBadRequest, "artifacts.html", s.artifactPageData(r, rec, "", "Could not delete the registry grant."))
+		return
+	}
+	http.Redirect(w, r, "/artifacts", http.StatusSeeOther)
 }
 
 func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) {

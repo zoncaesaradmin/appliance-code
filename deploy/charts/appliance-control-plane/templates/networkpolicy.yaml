@@ -59,9 +59,19 @@ spec:
           port: {{ .Values.service.internalPort }}
     {{- end }}
   egress:
-    # DNS is the only egress this policy grants; the control plane makes no
-    # other outbound calls yet. Phase 5/6 add narrowly scoped egress to zot
-    # and the Kubernetes API when those integrations land.
+    # Artifact catalog and dependency-health calls go only to the dedicated
+    # registry pod and port.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.registryNamespaceLabel | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.registryPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.registryPort }}
+    # DNS is required for the internal registry Service lookup.
     - to:
         - namespaceSelector:
             matchLabels:

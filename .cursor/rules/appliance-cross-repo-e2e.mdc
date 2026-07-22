@@ -20,7 +20,7 @@ Install:             ctr import (gets :bundled or import-DATE) → ctr image tag
 Runtime:             config.*ImageDigest == digest pin → Argo pod image (IfNotPresent)
 ```
 
-Names today: `workspace-provisioner` (alpine/git), `automation-dev` (builder).
+Names today: `workspace-provisioner` (alpine/git), `automation-dev` (builder), and `zot` (registry).
 
 Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manifest).
 
@@ -44,6 +44,17 @@ Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manif
    - Pod `image:` = provisioner digest pin
 8. **Build submit** → Argo build pod
    - `ResolveBuilderImage("automation-dev", …)` → automation-dev digest pin
+9. **Registry export and release-input** (`appliance-code`)
+   - `export-zot-image-archive.sh` selects linux/amd64, annotates
+     `registry.local/zot:bundled`, and derives `registry.local/zot@sha256:...`
+     from the archive `index.json` platform manifest.
+   - `archive-release-input.sh` publishes first-class `zotImage`, `zotChart`,
+     and compatibility `zotVersion` artifacts.
+10. **Registry install and runtime**
+   - zonctl preloads/tags the Zot digest, installs `appliance-registry`, and
+     injects `config.zotBaseURL` into the control-plane chart.
+   - control plane health/catalog calls resolve the in-cluster Zot Service;
+     Traefik exposes only `/v2`, and Zot has no background public egress.
 
 Online pulls happen **only on the build host** during bundle assembly. Target install/runtime must not need Docker Hub/GHCR.
 
@@ -57,6 +68,9 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 | Digests in Helm values | `PrepareValuesFile` | chart ConfigMap, `config.Load`, chart schema |
 | Catalog `automation-dev` alias | catalog / examples | `ResolveBuilderImage`, `builderImageReference` |
 | Offline images present | preload/tag | Argo `IfNotPresent` pods |
+| Zot archive annotation + digest | `export-zot-image-archive.sh` / `zotImage` | release assembly, zonctl preload, appliance-registry image digest |
+| Zot chart + URL | `zotChart` and registry Service | `config.zotBaseURL`, `APPLIANCE_ZOT_BASE_URL`, catalog and readiness |
+| Registry public verification key | control-plane key material Secret | Zot bearer-token verification mount |
 | Builder Git HTTPS access | UI `PUT /builder/git-access` → CP secret `builder-git-access` | `resolveWorkspaceGitCredential` → Argo mount + `GIT_ASKPASS` clone |
 | Writable tool home for builds | Argo `HOME`/`GOPATH`/`GOCACHE` under `/tmp/appliance-home` | automation-dev image ENV (`/home/vscode/...`) must be overridden |
 | Catalog make/script args | `build-catalog.example.yaml` / operator catalog | Must match real repo Makefile/scripts (forgeline: `make build`, not root `build.sh`) |
@@ -74,6 +88,7 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 - **Builder HOME/GOPATH** → `argo.workflowToolHomeEnv` + build preamble mkdir; automation-dev image ENV; platformkit/forgeline make targets
 - **Build catalog targets** → real Makefile/script paths in each product repo; `build-catalog.example.yaml`; operator `build-catalog.yaml`
 - **Workspace UID/path** → install EnsureOwnedDir; chart PVC; argo pod patch; storage invariants in all three AGENTS.md
+- **Zot image/chart/version** → release-input first-class fields; release bundle schema/validator; ctl preload/chart selection/values; control-plane URL and health; `/v2` route
 - **Only one repo** → insufficient; re-check sibling contract consumers
 
 ## Gate before saying “done”
@@ -91,4 +106,4 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 
 **ctl:** `internal/images/archive.go`, `internal/images/preload.go`, `internal/install/source.go`, `internal/install/install.go`, `internal/productconfig/productconfig.go`, `internal/releasebundle/assemble.go`
 
-**code:** `scripts/package/archive-release-input.sh`, `deploy/charts/appliance-control-plane/templates/configmap.yaml`, `values.schema.json`, `services/controlplane/internal/config/config.go`, `internal/devflows/service.go`, `internal/devflows/catalog.go`, `internal/workflows/argo/argo.go`
+**code:** `scripts/package/archive-release-input.sh`, `scripts/package/export-zot-image-archive.sh`, `deploy/charts/appliance-registry`, `deploy/charts/appliance-control-plane/templates/configmap.yaml`, `values.schema.json`, `services/controlplane/internal/config/config.go`, `internal/devflows/service.go`, `internal/devflows/catalog.go`, `internal/workflows/argo/argo.go`

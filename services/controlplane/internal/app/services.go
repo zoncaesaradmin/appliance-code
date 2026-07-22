@@ -107,8 +107,11 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		registryAuthorizer = registryauth.NewAuthorizer(registryGrantStore, roleStore)
 		if cfg.ZotBaseURL != "" {
 			zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, nil)
-		} else {
+		} else if cfg.ZotAllowFake {
 			zotClient = zotadapter.NewFake()
+		} else {
+			db.Close()
+			return nil, fmt.Errorf("app: artifact capability requires a real Zot base URL")
 		}
 	}
 

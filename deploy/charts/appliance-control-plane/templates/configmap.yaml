@@ -16,6 +16,8 @@ data:
   APPLIANCE_BUILD_CATALOG_JSON: {{ .Values.config.buildCatalog | default dict | toJson | quote }}
   APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST: {{ .Values.config.workspaceProvisionerImageDigest | quote }}
   APPLIANCE_BUILDER_IMAGE_DIGEST: {{ .Values.config.builderImageDigest | quote }}
+  APPLIANCE_ZOT_BASE_URL: {{ .Values.config.zotBaseURL | quote }}
+  APPLIANCE_ZOT_ALLOW_FAKE: {{ .Values.config.zotAllowFake | quote }}
   APPLIANCE_WORKSPACE_ROOT_DIR: {{ .Values.workspaceStorage.rootDir | quote }}
   APPLIANCE_WORKSPACE_CLAIM_NAME: {{ include "appliance-control-plane.workspaceClaimName" . | quote }}
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}

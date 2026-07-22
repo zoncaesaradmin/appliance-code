@@ -2,6 +2,7 @@ BACKEND_DIR := services/controlplane
 UI_DIR      := services/ui
 SDK_DIR     := sdk/golang/applianceclient
 CHART_DIR   := deploy/charts/appliance-control-plane
+REGISTRY_CHART_DIR := deploy/charts/appliance-registry
 E2E_DIR     := e2etests
 VERIFY_LOG_DIR := $(CURDIR)/.run/logs
 VERIFY_BUILD_LOG := $(VERIFY_LOG_DIR)/verify-build.log
@@ -12,7 +13,7 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(SDK_DIR) $(CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(E2E_DIR)
 CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)"; printf '%s' "$$raw" | sed 's/[^A-Za-z0-9_.-]/-/g')
 
 # Per-developer overrides (dev-container image/tag, engine, cache paths).
@@ -54,7 +55,7 @@ DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-argo-controller-image-archive package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-argo-controller-image-archive package-zot-image-archive package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -168,6 +169,8 @@ stop:
 dev-k3s:
 	@$(MAKE) -C $(CHART_DIR) lint
 	@$(MAKE) -C $(CHART_DIR) template
+	@$(MAKE) -C $(REGISTRY_CHART_DIR) lint
+	@$(MAKE) -C $(REGISTRY_CHART_DIR) template
 
 ## clean: remove build/run/coverage artifacts from every module
 clean:
@@ -203,6 +206,15 @@ package-argo-controller-image-archive:
 		$${ARGO_CONTROLLER_BASE_IMAGE:+--base-image "$${ARGO_CONTROLLER_BASE_IMAGE}"} \
 		$${ARGO_VERSION:+--image-tag "$${ARGO_VERSION}"}
 
+## package-zot-image-archive: export the pinned upstream Zot image using the
+## canonical bundled annotation and platform-manifest digest reference.
+package-zot-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/zot.tar}"; \
+	bash ./scripts/package/export-zot-image-archive.sh \
+		--out-file "$$out_file" \
+		$${ZOT_SOURCE_IMAGE:+--source-image "$${ZOT_SOURCE_IMAGE}"} \
+		$${ZOT_VERSION:+--zot-version "$${ZOT_VERSION}"}
+
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.
 ## ARGO_CRDS_DIR is required: the Argo Workflows chart is always packaged
@@ -218,6 +230,9 @@ package-release-input-tar:
 	ui_image="$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
 	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
+	zot_version="$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
+	zot_image="$${ZOT_IMAGE:-$(CURDIR)/.run/zot-$$zot_version.tar}"; \
+	zot_reference_file="$(CURDIR)/.run/zot-$$zot_version.reference"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
 	argo_controller_image_ref="localhost/appliance-argo-controller:$$argo_version"; \
@@ -231,6 +246,14 @@ package-release-input-tar:
 		ARGO_CONTROLLER_IMAGE="$$argo_controller_image"; \
 		ARGO_CONTROLLER_IMAGE_REFERENCE="$${ARGO_CONTROLLER_IMAGE_REFERENCE:-$$argo_controller_image_ref}"; \
 	fi; \
+	if [ -z "$${ZOT_IMAGE:-}" ]; then \
+		bash ./scripts/package/export-zot-image-archive.sh \
+			--out-file "$$zot_image" \
+			--reference-out-file "$$zot_reference_file" \
+			--zot-version "$$zot_version" \
+			$${ZOT_SOURCE_IMAGE:+--source-image "$${ZOT_SOURCE_IMAGE}"}; \
+		ZOT_IMAGE_REFERENCE="$$(tr -d '\r\n' < "$$zot_reference_file")"; \
+	fi; \
 	bash ./scripts/package/archive-release-input.sh \
 		--out-file "$${OUT_FILE}" \
 		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
@@ -239,6 +262,9 @@ package-release-input-tar:
 		--control-plane-image-reference "$$control_plane_image_ref" \
 		--ui-image "$$ui_image" \
 		--ui-image-reference "$$ui_image_ref" \
+		--zot-image "$$zot_image" \
+		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
+		--zot-version "$$zot_version" \
 		--k3s-version "$${K3S_VERSION}" \
 		$${RELEASE_ID:+--release-id "$${RELEASE_ID}"} \
 		$${CHART_VERSION:+--chart-version "$${CHART_VERSION}"} \

@@ -21,6 +21,11 @@ Options:
   --ui-image PATH                  Appliance UI image archive. Required.
   --ui-image-reference REF         Canonical UI image reference contained in
                                    the OCI archive.
+  --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
+  --zot-image-reference REF        Canonical registry.local/zot@sha256:...
+                                   platform-manifest reference.
+  --zot-version VERSION            Zot compatibility version. Defaults to the
+                                   appliance-registry chart appVersion.
   --extra-oci-image PATH           Repeatable additional OCI image archive to
                                    include in release-input, for example a
                                    builder task image required by a profile.
@@ -53,6 +58,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
 ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/argo-workflows"
+ZOT_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
@@ -63,6 +69,9 @@ CONTROL_PLANE_IMAGE=""
 CONTROL_PLANE_IMAGE_REFERENCE=""
 UI_IMAGE=""
 UI_IMAGE_REFERENCE=""
+ZOT_IMAGE=""
+ZOT_IMAGE_REFERENCE=""
+ZOT_VERSION=""
 ARGO_VERSION=""
 ARGO_CONTROLLER_IMAGE=""
 ARGO_CONTROLLER_IMAGE_REFERENCE=""
@@ -111,6 +120,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ui-image-reference)
       UI_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --zot-image)
+      ZOT_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --zot-image-reference)
+      ZOT_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --zot-version)
+      ZOT_VERSION="${2:-}"
       shift 2
       ;;
     --extra-oci-image)
@@ -199,6 +220,53 @@ if [[ ! -f "${UI_IMAGE}" ]]; then
   echo "archive-release-input: UI image not found: ${UI_IMAGE}" >&2
   exit 1
 fi
+if [[ -n "${ZOT_IMAGE}" && ! -f "${ZOT_IMAGE}" ]]; then
+  echo "archive-release-input: Zot image not found: ${ZOT_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${ZOT_IMAGE}" || -n "${ZOT_IMAGE_REFERENCE}" ]]; then
+  if [[ -z "${ZOT_IMAGE}" || -z "${ZOT_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: --zot-image and --zot-image-reference must be provided together" >&2
+    exit 2
+  fi
+  if [[ ! "${ZOT_IMAGE_REFERENCE}" =~ ^registry\.local/zot@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --zot-image-reference must be registry.local/zot@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "archive-release-input: python3 is required to validate the Zot OCI archive contract" >&2
+    exit 1
+  fi
+  python3 - "${ZOT_IMAGE}" "${ZOT_IMAGE_REFERENCE}" <<'PY'
+import json
+import sys
+import tarfile
+
+archive, reference = sys.argv[1:]
+with tarfile.open(archive, "r:*") as tf:
+    member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
+    if member is None:
+        raise SystemExit("archive-release-input: Zot OCI archive has no index.json")
+    stream = tf.extractfile(member)
+    if stream is None:
+        raise SystemExit("archive-release-input: Zot OCI index.json is not a regular file")
+    index = json.load(stream)
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"archive-release-input: Zot OCI index must contain one platform manifest, found {len(manifests)}")
+descriptor = manifests[0]
+annotation = descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name")
+if annotation != "registry.local/zot:bundled":
+    raise SystemExit(f"archive-release-input: Zot OCI annotation is {annotation!r}, want 'registry.local/zot:bundled'")
+digest = descriptor.get("digest", "")
+if reference != "registry.local/zot@" + digest:
+    raise SystemExit(f"archive-release-input: Zot image reference {reference!r} does not match index digest {digest!r}")
+PY
+fi
+if [[ ! -d "${ZOT_CHART_DIR}" ]]; then
+  echo "archive-release-input: missing appliance-registry chart: ${ZOT_CHART_DIR}" >&2
+  exit 1
+fi
 if [[ -n "${ARGO_CONTROLLER_IMAGE}" && ! -f "${ARGO_CONTROLLER_IMAGE}" ]]; then
   echo "archive-release-input: Argo controller image not found: ${ARGO_CONTROLLER_IMAGE}" >&2
   exit 1
@@ -211,18 +279,20 @@ if [[ ${#EXTRA_OCI_IMAGES[@]} -ne ${#EXTRA_OCI_IMAGE_REFERENCES[@]} ]]; then
   echo "archive-release-input: every --extra-oci-image must have a matching --extra-oci-image-reference" >&2
   exit 2
 fi
-for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
-  if [[ ! -f "${extra_image}" ]]; then
-    echo "archive-release-input: extra OCI image not found: ${extra_image}" >&2
-    exit 1
-  fi
-done
-for extra_ref in "${EXTRA_OCI_IMAGE_REFERENCES[@]}"; do
-  if [[ -z "${extra_ref}" ]]; then
-    echo "archive-release-input: --extra-oci-image-reference must not be empty" >&2
-    exit 2
-  fi
-done
+if [[ ${#EXTRA_OCI_IMAGES[@]} -gt 0 ]]; then
+  for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
+    if [[ ! -f "${extra_image}" ]]; then
+      echo "archive-release-input: extra OCI image not found: ${extra_image}" >&2
+      exit 1
+    fi
+  done
+  for extra_ref in "${EXTRA_OCI_IMAGE_REFERENCES[@]}"; do
+    if [[ -z "${extra_ref}" ]]; then
+      echo "archive-release-input: --extra-oci-image-reference must not be empty" >&2
+      exit 2
+    fi
+  done
+fi
 if [[ -n "${ARGO_CRDS_DIR}" && ! -d "${ARGO_CRDS_DIR}" ]]; then
   echo "archive-release-input: Argo CRDs directory not found: ${ARGO_CRDS_DIR}" >&2
   exit 1
@@ -247,6 +317,13 @@ fi
 
 if [[ -z "${CHART_VERSION}" ]]; then
   CHART_VERSION="${CODE_VERSION}"
+fi
+if [[ -z "${ZOT_VERSION}" ]]; then
+  ZOT_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${ZOT_CHART_DIR}/Chart.yaml")"
+fi
+if [[ -z "${ZOT_VERSION}" ]]; then
+  echo "archive-release-input: unable to derive zotVersion from ${ZOT_CHART_DIR}/Chart.yaml" >&2
+  exit 1
 fi
 if [[ -z "${RELEASE_ID}" ]]; then
   RELEASE_ID="local-${CODE_VERSION}-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -316,14 +393,20 @@ copy_dir_or_empty() {
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 UI_BASENAME="$(basename "${UI_IMAGE}")"
+ZOT_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 ARGO_CHART_ARCHIVE="argo-workflows-chart-${CODE_VERSION}.tgz"
+ZOT_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
 
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
+if [[ -n "${ZOT_IMAGE}" ]]; then
+  ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
+  cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
+fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
 ARGO_CONTROLLER_BASENAME=""
@@ -337,15 +420,21 @@ if [[ -n "${ARGO_EXECUTOR_IMAGE}" ]]; then
   ARGO_EXECUTOR_BASENAME="$(basename "${ARGO_EXECUTOR_IMAGE}")"
   cp "${ARGO_EXECUTOR_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}"
 fi
-for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
-  extra_basename="$(basename "${extra_image}")"
-  EXTRA_OCI_BASENAMES+=("${extra_basename}")
-  cp "${extra_image}" "${RELEASE_INPUT_DIR}/${extra_basename}"
-done
+if [[ ${#EXTRA_OCI_IMAGES[@]} -gt 0 ]]; then
+  for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
+    extra_basename="$(basename "${extra_image}")"
+    EXTRA_OCI_BASENAMES+=("${extra_basename}")
+    cp "${extra_image}" "${RELEASE_INPUT_DIR}/${extra_basename}"
+  done
+fi
 
 mkdir -p "${TMP_DIR}/appliance-chart"
 cp -R "${CHART_DIR}/." "${TMP_DIR}/appliance-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" appliance-chart
+
+mkdir -p "${TMP_DIR}/appliance-registry-chart"
+cp -R "${ZOT_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
+tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" appliance-registry-chart
 
 if [[ -d "${ARGO_CHART_DIR}" ]]; then
   mkdir -p "${TMP_DIR}/argo-workflows-chart"
@@ -361,6 +450,7 @@ fi
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
+  printf ',\n  "zotVersion": "%s"' "${ZOT_VERSION}"
   if [[ -n "${ARGO_VERSION}" ]]; then
     printf ',\n  "argoVersion": "%s"' "${ARGO_VERSION}"
   fi
@@ -389,6 +479,7 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
     "${CONTROL_PLANE_BASENAME}" \
     "${UI_BASENAME}" \
     "${CHART_ARCHIVE}" \
+    "${ZOT_CHART_ARCHIVE}" \
     "${CONFIG_SCHEMA_BASENAME}" \
     "${COMPATIBILITY_BASENAME}"
   do
@@ -397,15 +488,20 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -f "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" | sed 's/^sha256://')" "${ARGO_CHART_ARCHIVE}"
   fi
+  if [[ -n "${ZOT_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}" | sed 's/^sha256://')" "${ZOT_BASENAME}"
+  fi
   if [[ -n "${ARGO_CONTROLLER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${ARGO_CONTROLLER_BASENAME}"
   fi
   if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" | sed 's/^sha256://')" "${ARGO_EXECUTOR_BASENAME}"
   fi
-  for extra_basename in "${EXTRA_OCI_BASENAMES[@]}"; do
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${extra_basename}" | sed 's/^sha256://')" "${extra_basename}"
-  done
+  if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
+    for extra_basename in "${EXTRA_OCI_BASENAMES[@]}"; do
+      printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${extra_basename}" | sed 's/^sha256://')" "${extra_basename}"
+    done
+  fi
 } >"${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}"
 
 render_file_artifact() {
@@ -445,6 +541,13 @@ fi
 ARGO_COMPATIBILITY_JSON=""
 if [[ -n "${ARGO_VERSION}" ]]; then
   ARGO_COMPATIBILITY_JSON=', "argoVersion": "'"${ARGO_VERSION}"'"'
+fi
+ZOT_COMPATIBILITY_JSON=', "zotVersion": "'"${ZOT_VERSION}"'"'
+
+OPTIONAL_ZOT_IMAGE_JSON=""
+if [[ -n "${ZOT_BASENAME}" ]]; then
+  OPTIONAL_ZOT_IMAGE_JSON=',
+    "zotImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}" "${ZOT_BASENAME}" "${ZOT_IMAGE_REFERENCE}")"
 fi
 
 OPTIONAL_ARGO_ARTIFACTS_JSON=""
@@ -490,6 +593,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
     "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
+    "zotChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" "${ZOT_CHART_ARCHIVE}")${OPTIONAL_ZOT_IMAGE_JSON},
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
     "checksums": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}" "${CHECKSUMS_BASENAME}"),
@@ -500,7 +604,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${ZOT_COMPATIBILITY_JSON}${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

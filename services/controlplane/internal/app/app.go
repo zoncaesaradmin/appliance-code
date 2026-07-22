@@ -30,9 +30,22 @@ type App struct {
 
 // readinessAdapter adapts storage.DB to httpapi.ReadinessChecker without
 // exposing the rest of the storage surface to the HTTP layer.
-type readinessAdapter struct{ db storage.DB }
+type readinessAdapter struct {
+	db  storage.DB
+	zot interface{ Health(context.Context) error }
+}
 
-func (r readinessAdapter) Ready(ctx context.Context) error { return r.db.Ping(ctx) }
+func (r readinessAdapter) Ready(ctx context.Context) error {
+	if err := r.db.Ping(ctx); err != nil {
+		return err
+	}
+	if r.zot != nil {
+		if err := r.zot.Health(ctx); err != nil {
+			return fmt.Errorf("zot dependency: %w", err)
+		}
+	}
+	return nil
+}
 
 // New wires every service and builds the public and internal HTTP servers.
 // It does not start listening; call Run for that.
@@ -94,7 +107,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		services.DB.Close()
 		return nil, fmt.Errorf("building public mux: %w", err)
 	}
-	internalHandler := httpapi.NewInternalMux(logger, readinessAdapter{db: services.DB}, startup)
+	internalHandler := httpapi.NewInternalMux(logger, readinessAdapter{db: services.DB, zot: services.Zot}, startup)
 
 	public := &http.Server{
 		Addr:              cfg.PublicAddr,

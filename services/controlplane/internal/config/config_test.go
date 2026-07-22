@@ -101,6 +101,38 @@ func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
 	}
 }
 
+func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
+	for _, profile := range []string{"storage", "builder"} {
+		t.Run(profile, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.ApplianceProfile = profile
+			cfg.ZotAllowFake = false
+			if profile == "builder" {
+				cfg.BuildCatalog = testBuildCatalog()
+				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+				cfg.BuilderImageDigest = "automation-dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			}
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "zotBaseURL") {
+				t.Fatalf("Validate without Zot URL = %v, want zotBaseURL error", err)
+			}
+			cfg.ZotBaseURL = "http://appliance-registry.appliance-system.svc.cluster.local:5000"
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("Validate with real Zot URL: %v", err)
+			}
+		})
+	}
+}
+
+func TestArtifactProfileAllowsExplicitFakeZotForLocalTests(t *testing.T) {
+	cfg := config.Default()
+	cfg.ApplianceProfile = "storage"
+	cfg.ZotAllowFake = true
+	cfg.ZotBaseURL = ""
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("explicit local fake Zot should remain valid: %v", err)
+	}
+}
+
 func testBuildCatalog() devflows.Catalog {
 	return devflows.Catalog{
 		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},

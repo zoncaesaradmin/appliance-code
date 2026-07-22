@@ -77,6 +77,10 @@ config:
   # zonctl injects this from the signed bundle (automation-dev) for the builder
   # profile. Build catalogs must not set per-target builder digests.
   builderImageDigest: ""
+  # Internal Zot data-plane endpoint. Artifact-bearing production profiles
+  # fail closed if this is empty; local tests may explicitly enable fake Zot.
+  zotBaseURL: "http://appliance-registry.appliance-system.svc.cluster.local:5000"
+  zotAllowFake: false
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects
@@ -162,6 +166,11 @@ networkPolicy:
   # default-denies but grants no ingress at all, which is safe-by-default
   # but non-functional until configured for the target cluster.
   traefikNamespaceLabel: {}
+  registryNamespaceLabel:
+    kubernetes.io/metadata.name: appliance-system
+  registryPodLabels:
+    app.kubernetes.io/name: appliance-registry
+  registryPort: 5000
 
 probes:
   livenessPath: /health/live

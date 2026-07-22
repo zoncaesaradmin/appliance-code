@@ -4,7 +4,7 @@
   <div>
     <p class="eyebrow">Artifacts</p>
     <h1>Artifact Registry</h1>
-    <p class="muted">This appliance has the Artifact capability enabled, so it runs its own image registry for build output and other artifacts.</p>
+    <p class="muted">Browse the appliance OCI registry and administer repository-prefix grants.</p>
   </div>
   <form method="post" action="/logout">
     <button class="secondary" type="submit">Sign out</button>
@@ -14,12 +14,76 @@
 {{if .StatusError}}
 <article class="notice error" role="alert">{{.StatusError}}</article>
 {{end}}
+{{if .Error}}<article class="notice error" role="alert">{{.Error}}</article>{{end}}
+{{if .Message}}<article class="notice" role="status">{{.Message}}</article>{{end}}
 
 <article>
   <header>
-    <strong>Registry</strong>
+    <strong>Repositories</strong>
   </header>
-  <p class="muted">Repository and tag browsing will be added here next. For now, this page confirms the Artifact capability is enabled and reachable.</p>
+  {{if .Repositories}}
+  <form method="get" action="/artifacts">
+    <label>Repository
+      <select name="repository">
+        {{range .Repositories}}<option value="{{.}}" {{if eq . $.SelectedRepository}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <button type="submit">Browse</button>
+  </form>
+  {{else}}<p class="muted">No repositories are visible to this account.</p>{{end}}
+
+  {{if .SelectedRepository}}
+  <h3>Tags for <code>{{.SelectedRepository}}</code></h3>
+  {{if .Tags}}<ul>{{range .Tags}}<li><code>{{.}}</code></li>{{end}}</ul>
+  {{else}}<p class="muted">No tags.</p>{{end}}
+  <form method="get" action="/artifacts">
+    <input type="hidden" name="repository" value="{{.SelectedRepository}}">
+    <label>Manifest digest for referrers
+      <input name="digest" value="{{.SelectedDigest}}" placeholder="sha256:…">
+    </label>
+    <button type="submit">List referrers</button>
+  </form>
+  {{if .SelectedDigest}}
+    {{if .Referrers}}<ul>{{range .Referrers}}<li><code>{{.Digest}}</code> — {{.ArtifactType}} ({{.Size}} bytes)</li>{{end}}</ul>
+    {{else}}<p class="muted">No referrers found.</p>{{end}}
+  {{end}}
+  {{end}}
 </article>
+
+<article>
+  <header><strong>Push from a workstation</strong></header>
+  <p>Create an appliance API token, then use it as the registry password. Interactive appliance passwords are never accepted by the registry.</p>
+  <pre><code>podman login &lt;appliance-host&gt; --username &lt;username&gt; --password-stdin
+podman push &lt;local-image&gt; &lt;appliance-host&gt;/users/&lt;username&gt;/&lt;repository&gt;:&lt;tag&gt;</code></pre>
+  <p class="muted">Pipe the API token to <code>podman login</code> on standard input. Do not place tokens in command arguments or shell history.</p>
+</article>
+
+{{if .CanManageGrants}}
+<article>
+  <header><strong>Registry grants</strong></header>
+  {{if .Grants}}
+  <ul>
+    {{range .Grants}}
+    <li><code>{{.ID}}</code> {{.SubjectType}} <code>{{.SubjectID}}</code> → <code>{{.PathPrefix}}</code> ({{range $i, $a := .Actions}}{{if $i}}, {{end}}{{$a}}{{end}})
+      <form method="post" action="/artifacts/grants/delete" style="display:inline">
+        <input type="hidden" name="grant_id" value="{{.ID}}">
+        <button class="secondary" type="submit">Delete</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}<p class="muted">No explicit grants.</p>{{end}}
+  <form method="post" action="/artifacts/grants">
+    <label>Subject type
+      <select name="subject_type"><option value="user">User</option><option value="role">Role</option></select>
+    </label>
+    <label>Subject ID <input name="subject_id" required></label>
+    <label>Repository path prefix <input name="path_prefix" placeholder="teams/example" required></label>
+    <label><input type="checkbox" name="action_pull" checked> Pull</label>
+    <label><input type="checkbox" name="action_push"> Push</label>
+    <button type="submit">Create grant</button>
+  </form>
+</article>
+{{end}}
 {{template "layout-end" .}}
 {{end}}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -150,6 +151,29 @@ type Job struct {
 	CompletedAt  *time.Time `json:"completedAt,omitempty"`
 }
 
+type RegistryReferrer struct {
+	MediaType    string `json:"mediaType"`
+	Digest       string `json:"digest"`
+	Size         int64  `json:"size"`
+	ArtifactType string `json:"artifactType,omitempty"`
+}
+
+type RegistryGrant struct {
+	ID          string    `json:"id"`
+	SubjectType string    `json:"subjectType"`
+	SubjectID   string    `json:"subjectId"`
+	PathPrefix  string    `json:"pathPrefix"`
+	Actions     []string  `json:"actions"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+type CreateRegistryGrantRequest struct {
+	SubjectType string   `json:"subjectType"`
+	SubjectID   string   `json:"subjectId"`
+	PathPrefix  string   `json:"pathPrefix"`
+	Actions     []string `json:"actions"`
+}
+
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("control plane client logger is required")
@@ -288,6 +312,100 @@ func (c *Client) Capabilities(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return result.Capabilities, nil
+}
+
+func (c *Client) ListRegistryRepositories(ctx context.Context, accessToken string) ([]string, error) {
+	var result struct {
+		Items []string `json:"items"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/registry/repositories", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) ListRegistryTags(ctx context.Context, accessToken, repository string) ([]string, error) {
+	var result struct {
+		Items []string `json:"items"`
+	}
+	path := "/api/v1/registry/repositories/" + repositoryPath(repository) + "/tags"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) ListRegistryReferrers(ctx context.Context, accessToken, repository, digest string) ([]RegistryReferrer, error) {
+	var result struct {
+		Items []RegistryReferrer `json:"items"`
+	}
+	path := "/api/v1/registry/repositories/" + repositoryPath(repository) + "/referrers?digest=" + url.QueryEscape(digest)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) ListRegistryGrants(ctx context.Context, accessToken string) ([]RegistryGrant, error) {
+	var result struct {
+		Items []RegistryGrant `json:"items"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/registry/grants", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) CreateRegistryGrant(ctx context.Context, accessToken string, in CreateRegistryGrantRequest) (RegistryGrant, error) {
+	var out RegistryGrant
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/registry/grants", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusCreated, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/registry/grants/"+url.PathEscape(grantID), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return c.doJSON(req, http.StatusNoContent, nil)
+}
+
+func repositoryPath(repository string) string {
+	parts := strings.Split(repository, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	return strings.Join(parts, "/")
 }
 
 func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]WorkProfile, error) {
