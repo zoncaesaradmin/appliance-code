@@ -63,7 +63,7 @@
         Personal access token
         <input name="git_token" type="password" placeholder="Paste the Git HTTPS token" autocomplete="off" required>
       </label>
-      <p class="muted">This token is stored appliance-side and is reused by workspace provisioning and build workflows for the configured host only.</p>
+      <p class="muted">Use a forge username or <code>x-access-token</code> plus a personal access token that can read the catalog repos. Appliance login credentials are not valid here. The token is stored appliance-side and reused only for HTTPS clones against the configured host.</p>
       <button type="submit">{{if .BuilderGitAccess.Configured}}Update Git Access{{else}}Save Git Access{{end}}</button>
     </form>
     {{else}}

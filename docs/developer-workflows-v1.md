@@ -71,8 +71,16 @@ submission.
   `args` entries used as script paths, and `containerfilePath`, must be clean
   relative paths inside the workspace repo directory; absolute paths,
   backslashes, and `.` or `..` path segments are rejected.
+  Prefer `execution: make` with a real Makefile target when the repo has one
+  (for example forgeline `build`, not a bare root `build.sh`). Script args must
+  name a file that exists in the checkout (for example `scripts/build.sh`).
   Direct low-level build submissions without a workspace still use the default
   containerfile/buildah clone path.
+
+Build workflow pods override builder-image home/cache paths (`HOME`, `GOPATH`,
+`GOCACHE`, `GOMODCACHE`, and related vars) to writable directories under
+`/tmp/appliance-home` so non-root workflow UIDs are not blocked by image ENV
+values such as `/home/vscode/go`.
 
 The build-catalog and API field names keep ForgeLine-compatible keys such as
 `workProfiles`, `workProfile`, and `work_profile`. In user-facing wording, these
@@ -97,8 +105,13 @@ state in the `appliance-builds` namespace rather than in the build catalog.
 - Workspace creation and workspace prepare fail closed with
   `412 Precondition Failed` until that shared credential exists.
 - Argo workspace-prepare workflow pods mount the resulting Kubernetes Secret and
-  use it only for HTTPS `git clone` calls. Current-workspace build workflows do
+  use `GIT_ASKPASS` (not interactive prompts or brittle `http.extraHeader`
+  config) for HTTPS `git clone` calls. Current-workspace build workflows do
   not clone and do not require that credential.
+- The Git host must match the catalog (for example `github.com`). Username is
+  typically the Git forge username or `x-access-token`; the token must be a
+  forge personal access token that can read every repo in the workspace
+  profile. Appliance login usernames/passwords are not Git credentials.
 
 ## RBAC
 

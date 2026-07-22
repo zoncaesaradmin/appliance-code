@@ -31,6 +31,10 @@ const (
 	workflowGID       = int64(10010)
 	sharedFSGID       = int64(20000)
 	gitCredentialDir  = "/var/run/appliance/git-access"
+	// applianceHome is the writable per-pod home for non-root workflow UIDs.
+	// Builder images such as automation-dev bake GOPATH under /home/vscode,
+	// which is not writable when runAsUser is the appliance workflow UID.
+	applianceHome = "/tmp/appliance-home"
 )
 
 type Config struct {
@@ -253,14 +257,14 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 	if strings.TrimSpace(spec.SourceCredentialRef) != "" || strings.TrimSpace(spec.SourceCredentialSecret) != "" || strings.TrimSpace(spec.KnownHostsSecret) != "" {
 		return nil, nil, fmt.Errorf("argo: HTTPS Git workflows do not accept SSH credential inputs")
 	}
+	if kind == workflows.KindWorkspacePrepare && strings.TrimSpace(spec.GitCredentialSecret) == "" {
+		return nil, nil, fmt.Errorf("argo: workspace prepare requires builder Git HTTPS credentials")
+	}
 	if strings.TrimSpace(spec.GitCredentialSecret) != "" {
 		volumeMounts = append(volumeMounts, map[string]any{"name": "git-access", "mountPath": gitCredentialDir, "readOnly": true})
 		volumes = append(volumes, map[string]any{"name": "git-access", "secret": map[string]any{"secretName": spec.GitCredentialSecret}})
 	}
-	env = append(env,
-		map[string]any{"name": "HOME", "value": "/tmp/appliance-home"},
-		map[string]any{"name": "GIT_TERMINAL_PROMPT", "value": "0"},
-	)
+	env = append(env, workflowToolHomeEnv()...)
 
 	labels := map[string]any{
 		"app.kubernetes.io/part-of":    "appliance",
@@ -386,6 +390,22 @@ func workflowDeadlineSeconds(deadline time.Time) int64 {
 	return seconds
 }
 
+func workflowToolHomeEnv() []map[string]any {
+	return []map[string]any{
+		{"name": "HOME", "value": applianceHome},
+		{"name": "GOPATH", "value": applianceHome + "/go"},
+		{"name": "GOCACHE", "value": applianceHome + "/go-cache"},
+		{"name": "GOMODCACHE", "value": applianceHome + "/go/pkg/mod"},
+		{"name": "GOTMPDIR", "value": applianceHome + "/go-tmp"},
+		{"name": "XDG_CACHE_HOME", "value": applianceHome + "/cache"},
+		{"name": "GIT_TERMINAL_PROMPT", "value": "0"},
+	}
+}
+
+func ensureToolHomeScript() string {
+	return "mkdir -p \"$HOME\" \"$GOPATH\" \"$GOCACHE\" \"$GOMODCACHE\" \"$GOTMPDIR\" \"$XDG_CACHE_HOME\"\n"
+}
+
 func buildCommandScript(spec workflows.Spec) (string, error) {
 	if spec.TargetRepository == "" || spec.TargetTag == "" {
 		return "", fmt.Errorf("argo: workflow spec is missing required build fields")
@@ -396,7 +416,7 @@ func buildCommandScript(spec workflows.Spec) (string, error) {
 		if strings.TrimSpace(spec.WorkspaceRootDir) == "" {
 			return "", fmt.Errorf("argo: workspace build requires workspace root dir")
 		}
-		preamble = `repo_dir="$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME/$WORKSPACE_REPO"
+		preamble = ensureToolHomeScript() + `repo_dir="$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME/$WORKSPACE_REPO"
 if [ ! -d "$repo_dir" ]; then
   echo "workspace repo directory is missing: $repo_dir" >&2
   exit 1
@@ -407,7 +427,7 @@ cd "$repo_dir"
 		if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" {
 			return "", fmt.Errorf("argo: workflow spec is missing required build source fields")
 		}
-		preamble = gitAuthPreamble(spec.GitCredentialSecret) + `mkdir -p /workspace/src
+		preamble = gitAuthPreamble(spec.GitCredentialSecret) + ensureToolHomeScript() + `mkdir -p /workspace/src
 appliance_git_clone "$SOURCE_REPO_URL" /workspace/src
 git -C /workspace/src checkout "$SOURCE_COMMIT_SHA"
 cd /workspace/src
@@ -454,7 +474,7 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 	// individual-file level: the parent being world-writable doesn't
 	// help if every file git creates inside it is 0640.
 	b.WriteString("umask 0000\n")
-	b.WriteString("mkdir -p \"$HOME\"\n")
+	b.WriteString(ensureToolHomeScript())
 	b.WriteString("echo \"workspace provisioning started\"\n")
 	b.WriteString("git --version\n")
 	b.WriteString("workspace_dir=\"$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME\"\n")
@@ -505,8 +525,14 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 
 func gitAuthPreamble(secretName string) string {
 	if strings.TrimSpace(secretName) == "" {
+		// Unauthenticated clone is only for unit tests; production workspace
+		// prepare and HTTPS build clones require a mounted builder Git secret.
 		return "appliance_git_clone() {\n  git -c credential.helper= clone \"$1\" \"$2\"\n}\n"
 	}
+	// Prefer GIT_ASKPASS over http.<url>.extraHeader. The extraHeader form is
+	// easy to mis-apply across Git versions and, on auth failure, collapses into
+	// the misleading "could not read Username ... terminal prompts disabled"
+	// error that looks like credentials were never configured.
 	return `appliance_git_clone() {
   repo_url="$1"
   dest_dir="$2"
@@ -516,18 +542,36 @@ func gitAuthPreamble(secretName string) string {
       return 1
     fi
   done
-  git_host="$(cat ` + gitCredentialDir + `/host)"
-  git_username="$(cat ` + gitCredentialDir + `/username)"
-  git_token="$(cat ` + gitCredentialDir + `/token)"
+  git_host="$(tr -d '\n\r' < "` + gitCredentialDir + `/host")"
   case "$repo_url" in
     "https://${git_host}/"*) ;;
     *)
-      echo "repo URL host does not match configured Git credential host" >&2
+      echo "repo URL host does not match configured Git credential host (${git_host})" >&2
       return 1
       ;;
   esac
-  auth_header="$(printf '%s:%s' "$git_username" "$git_token" | base64 | tr -d '\n')"
-  git -c credential.helper= -c "http.https://${git_host}/.extraheader=Authorization: Basic ${auth_header}" clone "$repo_url" "$dest_dir"
+  mkdir -p "$HOME"
+  askpass="$HOME/appliance-git-askpass.sh"
+  cat > "$askpass" <<'ASKPASS'
+#!/bin/sh
+case "$1" in
+  *Username*|*username*)
+    tr -d '\n\r' < "` + gitCredentialDir + `/username"
+    exit 0
+    ;;
+  *Password*|*password*)
+    tr -d '\n\r' < "` + gitCredentialDir + `/token"
+    exit 0
+    ;;
+esac
+echo "unexpected Git askpass prompt: $1" >&2
+exit 1
+ASKPASS
+  chmod 700 "$askpass"
+  if ! GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone "$repo_url" "$dest_dir"; then
+    echo "Git HTTPS clone failed for host ${git_host}. Confirm builder Git access username/token can read the repository, then retry." >&2
+    return 1
+  fi
 }
 `
 }
