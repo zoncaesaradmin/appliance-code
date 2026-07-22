@@ -51,8 +51,14 @@ done
 if [[ -z "${ZOT_VERSION}" ]]; then
   ZOT_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${CHART_YAML}")"
 fi
+# Accept chart form v2.1.8 or compatibility form 2.1.8; GHCR tags use the v prefix.
+ZOT_VERSION="${ZOT_VERSION#v}"
+if [[ -z "${ZOT_VERSION}" ]]; then
+  echo "export-zot-image-archive: unable to derive zot version from ${CHART_YAML}" >&2
+  exit 1
+fi
 if [[ -z "${SOURCE_IMAGE}" ]]; then
-  SOURCE_IMAGE="ghcr.io/project-zot/zot-linux-amd64:${ZOT_VERSION}"
+  SOURCE_IMAGE="ghcr.io/project-zot/zot-linux-amd64:v${ZOT_VERSION}"
 fi
 
 mkdir -p "$(dirname "${OUT_FILE}")"

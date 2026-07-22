@@ -321,6 +321,8 @@ fi
 if [[ -z "${ZOT_VERSION}" ]]; then
   ZOT_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${ZOT_CHART_DIR}/Chart.yaml")"
 fi
+# compatibility.zotVersion is unprefixed; Chart.yaml appVersion may be v2.1.8.
+ZOT_VERSION="${ZOT_VERSION#v}"
 if [[ -z "${ZOT_VERSION}" ]]; then
   echo "archive-release-input: unable to derive zotVersion from ${ZOT_CHART_DIR}/Chart.yaml" >&2
   exit 1
