@@ -8,7 +8,7 @@ image:
 
 namespace:
   create: false
-  name: appliance-system
+  name: registry
 
 service:
   port: 5000
@@ -19,6 +19,8 @@ persistence:
   size: 100Gi
 
 logs:
+  # Host-visible service log directory. zonctl prepares ownership before
+  # Helm apply; the chart mounts this path directly (not the parent tree).
   hostPath: /data/zon/logs/zot
   prepare:
     enabled: false
@@ -29,7 +31,8 @@ auth:
   # origin. OCI clients require an absolute bearer-token realm.
   realm: https://appliance.example.internal/api/v1/registry/token
   service: zot
-  publicKeySecretName: appliance-keys
+  # Public-only verification Secret published by zonctl; never mount appliance-keys.
+  publicKeySecretName: appliance-registry-verification-key
   publicKeySecretKey: registry_ed25519_public.pem
 
 ingress:
@@ -41,6 +44,8 @@ ingress:
 networkPolicy:
   enabled: true
   traefikNamespaceLabel: {}
+  controlPlaneNamespaceLabel:
+    kubernetes.io/metadata.name: appliance-system
   controlPlanePodLabels:
     app.kubernetes.io/name: appliance-control-plane
 

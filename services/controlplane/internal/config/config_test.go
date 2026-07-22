@@ -115,7 +115,7 @@ func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "zotBaseURL") {
 				t.Fatalf("Validate without Zot URL = %v, want zotBaseURL error", err)
 			}
-			cfg.ZotBaseURL = "http://appliance-registry.appliance-system.svc.cluster.local:5000"
+			cfg.ZotBaseURL = "http://appliance-registry.registry.svc.cluster.local:5000"
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("Validate with real Zot URL: %v", err)
 			}

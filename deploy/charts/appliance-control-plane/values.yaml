@@ -79,7 +79,7 @@ config:
   builderImageDigest: ""
   # Internal Zot data-plane endpoint. Artifact-bearing production profiles
   # fail closed if this is empty; local tests may explicitly enable fake Zot.
-  zotBaseURL: "http://appliance-registry.appliance-system.svc.cluster.local:5000"
+  zotBaseURL: "http://appliance-registry.registry.svc.cluster.local:5000"
   zotAllowFake: false
 
 secrets:
@@ -166,8 +166,9 @@ networkPolicy:
   # default-denies but grants no ingress at all, which is safe-by-default
   # but non-functional until configured for the target cluster.
   traefikNamespaceLabel: {}
+  # Zot runs in the dedicated registry namespace (not appliance-system).
   registryNamespaceLabel:
-    kubernetes.io/metadata.name: appliance-system
+    kubernetes.io/metadata.name: registry
   registryPodLabels:
     app.kubernetes.io/name: appliance-registry
   registryPort: 5000

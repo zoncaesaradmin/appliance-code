@@ -102,7 +102,7 @@ spec:
               drop: ["ALL"]
           volumeMounts:
             - name: logs
-              mountPath: /data/zon/logs
+              mountPath: /data/zon/logs/zot
       {{- end }}
       containers:
         - name: zot
@@ -145,8 +145,8 @@ spec:
             claimName: {{ include "appliance-registry.fullname" . }}-data
         - name: logs
           hostPath:
-            path: {{ .Values.logs.hostPath | dir }}
-            type: Directory
+            path: {{ .Values.logs.hostPath }}
+            type: DirectoryOrCreate
         - name: tmp
           emptyDir: {}
 {{- if .Values.networkPolicy.enabled }}
@@ -172,7 +172,10 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.controlPlaneNamespaceLabel | nindent 14 }}
+          podSelector:
             matchLabels:
               {{- toYaml .Values.networkPolicy.controlPlanePodLabels | nindent 14 }}
       ports:

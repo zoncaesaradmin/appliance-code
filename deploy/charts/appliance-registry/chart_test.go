@@ -34,14 +34,18 @@ func render(t *testing.T, args ...string) string {
 }
 
 func TestHardenedRegistryRender(t *testing.T) {
-	out := render(t, "--set", "logs.prepare.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=traefik")
+	out := render(t, "--set", "logs.prepare.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
 	for _, want := range []string{
 		"runAsUser: 10003", "runAsGroup: 10003", "fsGroup: 20000",
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"mountPath: /var/lib/registry", "mountPath: /var/log/zot", "mountPath: /tmp",
 		"accessModes:\n    - ReadWriteOnce", "chmod 2755 /data/zon/logs/zot",
 		"kind: NetworkPolicy", "name: appliance-registry-default-deny",
+		"kubernetes.io/metadata.name: appliance-system",
+		"app.kubernetes.io/name: appliance-control-plane",
+		"path: /data/zon/logs/zot", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem",
+		"secretName: appliance-registry-verification-key",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
