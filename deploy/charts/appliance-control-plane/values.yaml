@@ -101,9 +101,11 @@ workspaceStorage:
   size: 20Gi
   accessMode: ReadWriteOnce
   rootDir: /data/zon/workspaces # fixed host-visible workspace path, also used as the PV hostPath backing
-  # Off by default: zonctl prepares /data/zon/workspaces before Helm runs.
-  # A root+hostPath Job cannot run under Pod Security Admission restricted
-  # (appliance-builds) and would block helm --wait for the full timeout.
+  # zonctl prepares /data/zon/workspaces before Helm runs. Keep this false:
+  # the chart no longer ships a helper Job for helm-only ownership prep,
+  # because that path depended on a separate root+hostPath container image and
+  # was incompatible with both Restricted PSA and the appliance's offline
+  # install contract.
   prepareJob:
     enabled: false
 

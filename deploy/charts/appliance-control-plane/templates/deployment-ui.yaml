@@ -24,26 +24,6 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.ui.podSecurityContext | nindent 8 }}
-      initContainers:
-        - name: prepare-log-dir
-          image: alpine:3.24.1
-          imagePullPolicy: IfNotPresent
-          command:
-            - /bin/sh
-            - -c
-            - mkdir -p /data/zon/logs/ui && chown 10002:20000 /data/zon/logs/ui && chmod 2755 /data/zon/logs/ui
-          securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            runAsGroup: 0
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
-              drop: ["ALL"]
-          volumeMounts:
-            - name: appliance-logs
-              mountPath: /data/zon/logs
       containers:
         - name: appliance-ui
           image: {{ include "appliance-control-plane.uiImage" . }}

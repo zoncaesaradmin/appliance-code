@@ -22,26 +22,6 @@ spec:
       automountServiceAccountToken: true
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:
-        - name: prepare-log-dir
-          image: alpine:3.24.1
-          imagePullPolicy: IfNotPresent
-          command:
-            - sh
-            - -c
-            - mkdir -p /data/zon/logs/argo-controller && chown 65532:20000 /data/zon/logs/argo-controller && chmod 2755 /data/zon/logs/argo-controller
-          securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            runAsGroup: 0
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
-              drop: ["ALL"]
-          volumeMounts:
-            - name: appliance-logs
-              mountPath: /data/zon/logs
       containers:
         - name: workflow-controller
           image: {{ include "argo-workflows.image" (dict "image" .Values.image.controller "Chart" .Chart) | quote }}

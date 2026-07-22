@@ -244,20 +244,14 @@ func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
 	cases := []struct {
 		name       string
 		deployName string
-		serviceDir string
-		owner      string
 	}{
 		{
 			name:       "control-plane",
 			deployName: controlPlaneDeploymentName,
-			serviceDir: "/data/zon/logs/control-plane",
-			owner:      "10001:20000",
 		},
 		{
 			name:       "ui",
 			deployName: controlPlaneUIName,
-			serviceDir: "/data/zon/logs/ui",
-			owner:      "10002:20000",
 		},
 	}
 	for _, tc := range cases {
@@ -266,25 +260,45 @@ func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
 			if dep == nil {
 				t.Fatalf("expected Deployment %s", tc.deployName)
 			}
-			initContainers, _ := at(dep, "spec", "template", "spec", "initContainers").([]any)
-			if len(initContainers) == 0 {
-				t.Fatal("expected prepare-log-dir init container")
+			if initContainers, _ := at(dep, "spec", "template", "spec", "initContainers").([]any); len(initContainers) != 0 {
+				t.Fatalf("expected no installer-bypassing init containers, got %v", initContainers)
 			}
-			init, _ := initContainers[0].(map[string]any)
-			command, _ := init["command"].([]any)
-			if len(command) < 3 {
-				t.Fatalf("prepare-log-dir command = %v", command)
-			}
-			script, _ := command[2].(string)
-			for _, want := range []string{tc.serviceDir, "chown " + tc.owner, "chmod 2755"} {
-				if !strings.Contains(script, want) {
-					t.Fatalf("prepare-log-dir command = %q, want %q", script, want)
+			volumes, _ := at(dep, "spec", "template", "spec", "volumes").([]any)
+			var sawLogsVolume bool
+			for _, raw := range volumes {
+				volume, _ := raw.(map[string]any)
+				if name, _ := volume["name"].(string); name == "appliance-logs" {
+					if path, _ := at(volume, "hostPath", "path").(string); path != "/data/zon/logs" {
+						t.Fatalf("appliance-logs hostPath = %q, want /data/zon/logs", path)
+					}
+					sawLogsVolume = true
 				}
 			}
-			if strings.Contains(script, "chmod 2770") {
-				t.Fatalf("service log directory must be operator-readable, got command %q", script)
+			if !sawLogsVolume {
+				t.Fatal("expected appliance-logs hostPath volume")
 			}
 		})
+	}
+}
+
+func TestRenderedChartContainsNoExternalHelperImages(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "config.applianceProfile=builder",
+		"--set", "config.buildCatalog.workProfiles[0].name=builder",
+		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].name=app",
+		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
+		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)...)
+	rendered, err := yaml.Marshal(docs)
+	if err != nil {
+		t.Fatalf("marshal rendered manifests: %v", err)
+	}
+	for _, forbidden := range []string{"alpine:3.24.1", "prepare-log-dir"} {
+		if bytes.Contains(rendered, []byte(forbidden)) {
+			t.Fatalf("rendered manifests must not contain %q:\n%s", forbidden, rendered)
+		}
 	}
 }
 
@@ -657,8 +671,9 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	}
 }
 
-func TestBuilderWorkspacePrepareJobOptIn(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
+func TestBuilderWorkspacePrepareJobOptInFailsFast(t *testing.T) {
+	requireHelm(t)
+	extraArgs := append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
@@ -667,21 +682,14 @@ func TestBuilderWorkspacePrepareJobOptIn(t *testing.T) {
 		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"--set", "workspaceStorage.prepareJob.enabled=true",
-	)...)
-	jobs := findByKind(docs, "Job")
-	var prepJob map[string]any
-	for _, job := range jobs {
-		name, _ := at(job, "metadata", "name").(string)
-		if strings.HasPrefix(name, "control-plane-workspace-storage-prep-") {
-			prepJob = job
-			break
-		}
+	)
+	args := append([]string{"template", "appliance", chartDir(t), "--namespace", "appliance"}, extraArgs...)
+	out, err := exec.Command("helm", args...).CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm template unexpectedly accepted workspaceStorage.prepareJob.enabled=true\n%s", out)
 	}
-	if prepJob == nil {
-		t.Fatal("expected workspace storage prep Job when prepareJob.enabled=true")
-	}
-	if ns, _ := at(prepJob, "metadata", "namespace").(string); ns != "appliance-builds" {
-		t.Fatalf("workspace storage prep Job namespace = %q, want appliance-builds", ns)
+	if !bytes.Contains(out, []byte("workspaceStorage.prepareJob.enabled is not supported")) {
+		t.Fatalf("helm template failed for the wrong reason:\n%s", out)
 	}
 }
 
