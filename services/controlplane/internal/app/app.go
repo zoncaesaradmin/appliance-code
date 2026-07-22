@@ -60,10 +60,11 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		Users: services.Users, Roles: services.Roles,
 	}
 	deps := httpapi.Deps{
-		Logger: logger,
-		Auth:   authDeps,
-		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
-		SetupH: &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
+		Logger:        logger,
+		Auth:          authDeps,
+		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions},
+		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
+		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},

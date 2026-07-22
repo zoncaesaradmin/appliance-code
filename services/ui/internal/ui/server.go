@@ -45,6 +45,7 @@ type controlPlane interface {
 	ListCurrentBuildTargets(ctx context.Context, accessToken string) ([]controlplane.BuildTarget, error)
 	SubmitCurrentBuild(ctx context.Context, accessToken string, req controlplane.SubmitBuildRequest) (controlplane.Job, error)
 	CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (controlplane.Job, error)
+	Capabilities(ctx context.Context) ([]string, error)
 }
 
 type Server struct {
@@ -61,6 +62,7 @@ type viewData struct {
 	CurrentPath      string
 	ApplianceProfile string
 	BuilderEnabled   bool
+	ArtifactEnabled  bool
 	Error            string
 	Message          string
 	Session          controlplane.Session
@@ -149,6 +151,7 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /dashboard", s.dashboard)
 	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
+	mux.HandleFunc("GET /artifacts", s.artifactPage)
 	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
 	mux.HandleFunc("POST /builder/git-access", s.configureBuilderGitAccess)
 	mux.HandleFunc("POST /builder/builds", s.submitBuilderBuild)
@@ -343,7 +346,8 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 		Title:            "Dashboard",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
-		BuilderEnabled:   s.builderEnabled(),
+		BuilderEnabled:   s.builderEnabled(r.Context()),
+		ArtifactEnabled:  s.artifactEnabled(r.Context()),
 	}
 	sessionInfo, refreshed, err := s.sessionWithRefresh(r, rec)
 	if err != nil {
@@ -369,7 +373,7 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 }
 
 func (s *Server) builderWorkspaces(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -381,8 +385,26 @@ func (s *Server) builderWorkspaces(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "builder_workspaces.html", data)
 }
 
+// artifactPage is a first cut: it only confirms the Artifact capability
+// gate works end to end and gives the page a real home to land future
+// registry-browsing content on. No registry API calls are wired up yet.
+func (s *Server) artifactPage(w http.ResponseWriter, r *http.Request) {
+	if !s.artifactEnabled(r.Context()) {
+		http.NotFound(w, r)
+		return
+	}
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	data := s.authenticatedViewData(r, rec)
+	data.Title = "Artifacts"
+	data.CurrentPath = "/artifacts"
+	s.render(w, r, http.StatusOK, "artifacts.html", data)
+}
+
 func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -452,7 +474,7 @@ func (s *Server) createBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) configureBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -493,7 +515,7 @@ func (s *Server) configureBuilderGitAccess(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) submitBuilderBuild(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -538,7 +560,7 @@ func (s *Server) submitBuilderBuild(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteBuilderWorkspace(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -570,7 +592,7 @@ func (s *Server) deleteBuilderWorkspace(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) setBuilderCurrentWorkspace(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -602,7 +624,7 @@ func (s *Server) setBuilderCurrentWorkspace(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) builderWorkProfilePartial(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -635,7 +657,7 @@ func (s *Server) builderWorkProfilePartial(w http.ResponseWriter, r *http.Reques
 // workspace's status transition is reflected on the very next poll tick
 // instead of only on the next full navigation.
 func (s *Server) builderWorkspaceLivePartial(w http.ResponseWriter, r *http.Request) {
-	if !s.builderEnabled() {
+	if !s.builderEnabled(r.Context()) {
 		http.NotFound(w, r)
 		return
 	}
@@ -657,7 +679,7 @@ func (s *Server) builderWorkspaceLivePartial(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) builderPageData(r *http.Request, rec session.Record, message, formError string) builderPageData {
-	base := s.builderViewData(r, rec)
+	base := s.authenticatedViewData(r, rec)
 	base.Title = "Builder workspaces"
 	base.CurrentPath = "/builder/workspaces"
 	base.Message = message
@@ -728,12 +750,15 @@ func (s *Server) builderPageData(r *http.Request, rec session.Record, message, f
 	return data
 }
 
-func (s *Server) builderViewData(r *http.Request, rec session.Record) viewData {
+// authenticatedViewData builds the common base viewData shared by every
+// authenticated page; callers set their own Title/CurrentPath after
+// calling this.
+func (s *Server) authenticatedViewData(r *http.Request, rec session.Record) viewData {
 	data := viewData{
-		Title:            "Builder workspaces",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
-		BuilderEnabled:   s.builderEnabled(),
+		BuilderEnabled:   s.builderEnabled(r.Context()),
+		ArtifactEnabled:  s.artifactEnabled(r.Context()),
 	}
 	if latest, ok := s.sessions.Get(rec.ID); ok {
 		rec = latest
@@ -806,8 +831,35 @@ func normalizeWorkspaceKey(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }
 
-func (s *Server) builderEnabled() bool {
-	return s.cfg.ApplianceProfile == "builder"
+// hasCapability reports whether the running appliance instance's
+// resolved capability set (fetched live from the control plane, not
+// derived from a profile name here) includes capability. It fails
+// closed: any error reaching the control plane hides the gated feature
+// rather than risk showing it when it isn't actually enabled. This is
+// deliberately not cached — every other page-load in this service
+// (workspaces, work-profiles, git access) is already re-fetched fresh
+// on each request, and the capability set only changes on a profile
+// change, which requires a redeploy anyway.
+func (s *Server) hasCapability(ctx context.Context, capability string) bool {
+	capabilities, err := s.cp.Capabilities(ctx)
+	if err != nil {
+		s.logger.WithContext(ctx).Warnw("capabilities check failed", "error", err, "capability", capability)
+		return false
+	}
+	for _, c := range capabilities {
+		if c == capability {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) builderEnabled(ctx context.Context) bool {
+	return s.hasCapability(ctx, "build")
+}
+
+func (s *Server) artifactEnabled(ctx context.Context) bool {
+	return s.hasCapability(ctx, "artifact")
 }
 
 func isHTTPStatus(err error, status int) bool {
@@ -868,7 +920,8 @@ func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int,
 		Title:            "Sign in",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
-		BuilderEnabled:   s.builderEnabled(),
+		BuilderEnabled:   s.builderEnabled(r.Context()),
+		ArtifactEnabled:  s.artifactEnabled(r.Context()),
 		Error:            message,
 	})
 }
@@ -878,7 +931,8 @@ func (s *Server) renderSetup(w http.ResponseWriter, r *http.Request, status int,
 		Title:            "Create first administrator",
 		CurrentPath:      r.URL.Path,
 		ApplianceProfile: s.cfg.ApplianceProfile,
-		BuilderEnabled:   s.builderEnabled(),
+		BuilderEnabled:   s.builderEnabled(r.Context()),
+		ArtifactEnabled:  s.artifactEnabled(r.Context()),
 		Error:            message,
 		SetupNeeded:      true,
 	})

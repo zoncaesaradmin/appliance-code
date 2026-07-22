@@ -80,10 +80,11 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		Users: services.Users, Roles: services.Roles,
 	}
 	deps := httpapi.Deps{
-		Logger: logger,
-		Auth:   authDeps,
-		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions},
-		SetupH: &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
+		Logger:        logger,
+		Auth:          authDeps,
+		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions},
+		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
+		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
@@ -185,6 +186,36 @@ func (ts *testServer) doJSONWithHeaders(t *testing.T, method, path, bearer, body
 }
 
 const testPassword = "a-sufficiently-long-test-password-1"
+
+func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
+	cases := []struct {
+		profile appliance.Profile
+		want    []string
+	}{
+		{appliance.ProfileCore, []string{"base", "workflows"}},
+		{appliance.ProfileBuilder, []string{"artifact", "base", "build", "workflows"}},
+		{appliance.ProfileStorage, []string{"artifact", "base"}},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.profile), func(t *testing.T) {
+			ts := newTestServerWithProfile(t, tc.profile)
+			resp := ts.doJSON(t, "GET", "/api/v1/capabilities", "", "")
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("capabilities status = %d, want 200", resp.StatusCode)
+			}
+			var body struct {
+				Capabilities []string `json:"capabilities"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode capabilities: %v", err)
+			}
+			if fmt.Sprint(body.Capabilities) != fmt.Sprint(tc.want) {
+				t.Fatalf("capabilities for profile %q = %v, want %v", tc.profile, body.Capabilities, tc.want)
+			}
+		})
+	}
+}
 
 func TestSetupStatusAndFirstAdminFlow(t *testing.T) {
 	ts := newTestServer(t)

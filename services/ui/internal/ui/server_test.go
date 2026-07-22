@@ -42,6 +42,15 @@ type fakeControlPlane struct {
 	latestBuild              *controlplane.Job
 	submitBuildErr           error
 	listBuildTargetsErr      error
+	capabilities             []string
+	capabilitiesErr          error
+}
+
+func (f *fakeControlPlane) Capabilities(context.Context) ([]string, error) {
+	if f.capabilitiesErr != nil {
+		return nil, f.capabilitiesErr
+	}
+	return append([]string(nil), f.capabilities...), nil
 }
 
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
@@ -246,15 +255,33 @@ func testLogger(t *testing.T) uilogging.Logger {
 
 func newTestServer(t *testing.T) http.Handler {
 	t.Helper()
-	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}, session.NewStore(time.Now), testLogger(t))
+	handler, err := New(Config{ApplianceProfile: "core", CookieSecure: false, StaticPrefix: "/static/"}, &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret", capabilities: capabilitiesForProfile("core")}, session.NewStore(time.Now), testLogger(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	return handler
 }
 
+// capabilitiesForProfile mirrors, for test purposes only, what the real
+// control plane's appliance.profileCatalog resolves for each profile —
+// tests pick a profile string and get the matching capability set the
+// fake control plane reports, the same way a real deployment would.
+func capabilitiesForProfile(profile string) []string {
+	switch profile {
+	case "builder":
+		return []string{"artifact", "base", "build", "workflows"}
+	case "storage":
+		return []string{"artifact", "base"}
+	default:
+		return []string{"base", "workflows"}
+	}
+}
+
 func newTestServerWithProfile(t *testing.T, applianceProfile string, cp *fakeControlPlane) http.Handler {
 	t.Helper()
+	if cp.capabilities == nil && cp.capabilitiesErr == nil {
+		cp.capabilities = capabilitiesForProfile(applianceProfile)
+	}
 	handler, err := New(Config{ApplianceProfile: applianceProfile, CookieSecure: false, StaticPrefix: "/static/"}, cp, session.NewStore(time.Now), testLogger(t))
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -991,6 +1018,83 @@ func TestBuilderWorkspacePageNotAvailableForCoreProfile(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestArtifactPageAvailableWhenCapabilityEnabled(t *testing.T) {
+	cp := &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}
+	handler := newTestServerWithProfile(t, "storage", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	req := httptest.NewRequest(http.MethodGet, "/artifacts", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "Artifact Registry") {
+		t.Fatalf("artifacts page body missing expected heading:\n%s", body)
+	}
+
+	// The Storage profile carries Artifact but not Build (per
+	// appliance-code's profileCatalog) — the nav should reflect exactly
+	// that capability set, not a "storage means no builder tools at all"
+	// assumption baked into a profile-string check.
+	navReq := httptest.NewRequest(http.MethodGet, "/artifacts", nil)
+	navReq.AddCookie(cookie)
+	navRec := httptest.NewRecorder()
+	handler.ServeHTTP(navRec, navReq)
+	if body := navRec.Body.String(); strings.Contains(body, `href="/builder/workspaces"`) {
+		t.Fatalf("storage profile has no build capability, should not show the Builder nav link:\n%s", body)
+	}
+}
+
+func TestArtifactPageNotAvailableWithoutCapability(t *testing.T) {
+	handler := newTestServer(t) // core profile: base + workflows only, no artifact
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	req := httptest.NewRequest(http.MethodGet, "/artifacts", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestBuilderProfileWithoutBuildCapabilityHidesBuilderPage(t *testing.T) {
+	// A profile literally named "builder" whose reported capability set
+	// doesn't actually include "build" must still be gated off — proving
+	// the check is genuinely capability-based rather than a disguised
+	// profile-string comparison.
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		capabilities: []string{"base", "workflows"},
+	}
+	handler := newTestServerWithProfile(t, "builder", cp)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookie := loginRec.Result().Cookies()[0]
+
+	req := httptest.NewRequest(http.MethodGet, "/builder/workspaces", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (capability absent despite profile name)", rec.Code)
 	}
 }
 

@@ -1,0 +1,25 @@
+{{define "artifacts.html"}}
+{{template "layout-start" .}}
+<section class="dashboard-heading">
+  <div>
+    <p class="eyebrow">Artifacts</p>
+    <h1>Artifact Registry</h1>
+    <p class="muted">This appliance has the Artifact capability enabled, so it runs its own image registry for build output and other artifacts.</p>
+  </div>
+  <form method="post" action="/logout">
+    <button class="secondary" type="submit">Sign out</button>
+  </form>
+</section>
+
+{{if .StatusError}}
+<article class="notice error" role="alert">{{.StatusError}}</article>
+{{end}}
+
+<article>
+  <header>
+    <strong>Registry</strong>
+  </header>
+  <p class="muted">Repository and tag browsing will be added here next. For now, this page confirms the Artifact capability is enabled and reachable.</p>
+</article>
+{{template "layout-end" .}}
+{{end}}

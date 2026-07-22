@@ -271,6 +271,25 @@ func (c *Client) Ready(ctx context.Context) (Health, error) {
 	return out, nil
 }
 
+// Capabilities reports the resolved capability set for the running
+// appliance instance (e.g. "base", "workflows", "build", "artifact") —
+// what the profile actually enables, not the profile name itself. It's
+// a public, unauthenticated endpoint (like SetupStatus), always
+// available regardless of profile since CapabilityBase is universal.
+func (c *Client) Capabilities(ctx context.Context) ([]string, error) {
+	var result struct {
+		Capabilities []string `json:"capabilities"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/capabilities", nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Capabilities, nil
+}
+
 func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]WorkProfile, error) {
 	var result struct {
 		Items []WorkProfile `json:"items"`

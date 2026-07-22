@@ -19,6 +19,9 @@
         {{if .BuilderEnabled}}
         <a class="{{if eq .CurrentPath "/builder/workspaces"}}active{{end}}" href="/builder/workspaces">Builder</a>
         {{end}}
+        {{if .ArtifactEnabled}}
+        <a class="{{if eq .CurrentPath "/artifacts"}}active{{end}}" href="/artifacts">Artifacts</a>
+        {{end}}
         {{end}}
       </nav>
       {{if .Session.Username}}
