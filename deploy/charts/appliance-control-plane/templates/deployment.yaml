@@ -89,4 +89,6 @@ spec:
         - name: keys
           secret:
             secretName: {{ .Values.secrets.keysSecretName }}
-            defaultMode: 0400
+            # The control-plane runs as non-root, so the mounted key files must
+            # be group-readable to the pod fsGroup rather than owner-only.
+            defaultMode: 0440

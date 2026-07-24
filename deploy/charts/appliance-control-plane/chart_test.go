@@ -281,6 +281,27 @@ func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
 	}
 }
 
+func TestKeySecretVolumeIsReadableByNonRootControlPlane(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
+	}
+	volumes, _ := at(dep, "spec", "template", "spec", "volumes").([]any)
+	for _, raw := range volumes {
+		volume, _ := raw.(map[string]any)
+		if name, _ := volume["name"].(string); name != "keys" {
+			continue
+		}
+		mode, _ := at(volume, "secret", "defaultMode").(int)
+		if mode != 0o440 {
+			t.Fatalf("keys secret defaultMode = %#o, want 0440 so the non-root control-plane can read mounted keys", mode)
+		}
+		return
+	}
+	t.Fatal("expected keys secret volume on control-plane Deployment")
+}
+
 func TestRenderedChartContainsNoExternalHelperImages(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
