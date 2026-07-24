@@ -242,11 +242,15 @@ func internalZotAccess(path string) ([]registryauth.AccessEntry, error) {
 	case path == "/v2" || path == "/v2/":
 		return nil, nil
 	case path == "/v2/_catalog":
-		// Our zot deployment serves catalog reads anonymously. Attaching the
-		// non-standard internal "registry:catalog:*" token shape makes zot
-		// reject the request, while the same deployment accepts anonymous
-		// catalog reads and repository-scoped tokens for repo endpoints.
-		return nil, nil
+		// The in-cluster Zot service challenges catalog reads with the
+		// repository::pull scope shape. A registry-scoped catalog token is
+		// rejected there, even though the public ingress path may allow
+		// anonymous catalog reads.
+		return []registryauth.AccessEntry{{
+			Type:    "repository",
+			Name:    "",
+			Actions: []string{"pull"},
+		}}, nil
 	case strings.HasSuffix(path, "/tags/list"):
 		return pullAccessForZotPath(path, "/tags/list")
 	case strings.Contains(path, "/referrers/"):

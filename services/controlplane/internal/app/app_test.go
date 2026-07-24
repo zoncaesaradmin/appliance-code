@@ -345,8 +345,17 @@ func TestStorageProfileRegistryClientUsesInternalBearerAuth(t *testing.T) {
 	if len(tags) != 1 || tags[0] != "v1" {
 		t.Fatalf("tags = %v", tags)
 	}
-	if seenAuthCatalog != "" {
-		t.Fatalf("catalog request should not carry bearer auth, got %q", seenAuthCatalog)
+	if seenAuthCatalog == "" {
+		t.Fatalf("catalog request should carry bearer auth")
+	}
+	catalogClaims := decodeBearerClaims(t, seenAuthCatalog)
+	if access := catalogClaims["access"].([]any); len(access) != 1 {
+		t.Fatalf("catalog access = %v", access)
+	} else {
+		entry := access[0].(map[string]any)
+		if entry["type"] != "repository" || entry["name"] != "" {
+			t.Fatalf("catalog access entry = %v", entry)
+		}
 	}
 	if seenAuthTags == "" {
 		t.Fatalf("tags request should carry bearer auth")
