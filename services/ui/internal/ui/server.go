@@ -190,6 +190,7 @@ func (s *Server) live(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.cp.Ready(r.Context()); err != nil {
+		s.logger.WithContext(r.Context()).Warnw("UI readiness check failed", "error", err.Error())
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return
 	}

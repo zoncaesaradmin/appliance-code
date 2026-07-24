@@ -607,9 +607,7 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 	if !c.traceHTTP {
 		return
 	}
-	if isSuppressedTracePath(req.URL.Path) {
-		return
-	}
+	suppressedPath := isSuppressedTracePath(req.URL.Path)
 
 	args := []any{
 		"component", "ui-controlplane-client",
@@ -628,6 +626,9 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 	if callErr != nil {
 		args = append(args, "error", callErr.Error())
 		c.logger.WithContext(req.Context()).Warnw("control plane API call", args...)
+		return
+	}
+	if suppressedPath {
 		return
 	}
 	c.logger.WithContext(req.Context()).Infow("control plane API call", args...)

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync/atomic"
+
+	"appliance-code/services/controlplane/internal/logging"
 )
 
 // ReadinessChecker reports whether the server can currently accept its
@@ -29,7 +31,7 @@ func (s *StartupState) Started() bool { return s.done.Load() }
 // RegisterHealthRoutes registers liveness, readiness, and startup probes on
 // mux. These must only be reachable on the internal listener, never through
 // public ingress, per the plan's health-endpoint requirement.
-func RegisterHealthRoutes(mux *http.ServeMux, checker ReadinessChecker, startup *StartupState) {
+func RegisterHealthRoutes(mux *http.ServeMux, logger logging.Logger, checker ReadinessChecker, startup *StartupState) {
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) {
 		// Liveness proves only that the process event loop is healthy; it
 		// must not fail because a dependency is unavailable.
@@ -50,6 +52,9 @@ func RegisterHealthRoutes(mux *http.ServeMux, checker ReadinessChecker, startup 
 			return
 		}
 		if err := checker.Ready(r.Context()); err != nil {
+			if logger != nil {
+				logger.WithContext(r.Context()).Warnw("readiness check failed", "error", err.Error())
+			}
 			writeHealthStatus(w, http.StatusServiceUnavailable, "not ready")
 			return
 		}

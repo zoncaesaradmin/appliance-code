@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -131,6 +132,46 @@ func TestTraceRedactsSensitiveLoginFields(t *testing.T) {
 	}
 	if got := response["refreshToken"]; got != "[redacted]" {
 		t.Fatalf("response.refreshToken = %#v, want [redacted]", got)
+	}
+}
+
+func TestTraceLogsFailedReadinessCallsEvenWhenHealthPathsAreNormallySuppressed(t *testing.T) {
+	clientHTTP := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodGet || r.URL.Path != "/health/ready" {
+			t.Fatalf("got %s %s, want GET /health/ready", r.Method, r.URL.Path)
+		}
+		return nil, errors.New("dial tcp 10.0.0.42:8081: connect: connection refused")
+	})}
+
+	var logBuf bytes.Buffer
+	logger, err := uilogging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+	client, err := NewClient(Config{
+		BaseURL:         "http://control-plane.test",
+		InternalBaseURL: "http://control-plane-internal.test",
+		HTTPClient:      clientHTTP,
+		Logger:          logger,
+		TraceHTTP:       true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	if _, err := client.Ready(context.Background()); err == nil {
+		t.Fatal("Ready should fail when the internal control-plane endpoint is unreachable")
+	}
+
+	record := parseSingleJSONLogLine(t, logBuf.String())
+	if got := record["path"]; got != "/health/ready" {
+		t.Fatalf("path = %#v, want /health/ready", got)
+	}
+	if got := record["message"]; got != "control plane API call" {
+		t.Fatalf("message = %#v, want control plane API call", got)
+	}
+	if got := record["level"]; got != "warn" {
+		t.Fatalf("level = %#v, want warn", got)
 	}
 }
 

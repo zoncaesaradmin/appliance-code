@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,6 +47,23 @@ func testConfig(t *testing.T) config.Config {
 		t.Fatalf("test config invalid: %v", err)
 	}
 	return cfg
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *lockedBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *lockedBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
 }
 
 func TestAppStartsServesHealthAndShutsDownCleanly(t *testing.T) {
@@ -220,6 +239,60 @@ func TestStorageProfileReadinessAcceptsRegistryAuthChallenge(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not return within 5s of shutdown signal")
+	}
+}
+
+func TestStorageProfileReadinessLogsDependencyFailures(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(t)
+	cfg.ApplianceProfile = string(appliance.ProfileStorage)
+	cfg.ZotBaseURL = srv.URL
+	cfg.ZotAllowFake = false
+
+	var logBuf lockedBuffer
+	logger, err := logging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("logging.NewWithWriter: %v", err)
+	}
+
+	a, err := app.New(cfg, logger, logger)
+	if err != nil {
+		t.Fatalf("app.New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+	waitForListener(t, cfg.InternalAddr)
+
+	resp, err := http.Get("http://" + cfg.InternalAddr + "/health/ready")
+	if err != nil {
+		t.Fatalf("GET /health/ready: %v", err)
+	}
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("/health/ready status = %d, want 503", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return within 5s of shutdown signal")
+	}
+
+	if !strings.Contains(logBuf.String(), "readiness check failed") || !strings.Contains(logBuf.String(), "zot dependency") {
+		t.Fatalf("expected readiness failure to be logged, got:\n%s", logBuf.String())
 	}
 }
 

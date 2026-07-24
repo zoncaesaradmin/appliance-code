@@ -93,7 +93,7 @@ func NewInternalMux(logger logging.Logger, checker ReadinessChecker, startup *St
 		panic("httpapi.NewInternalMux: logger is required")
 	}
 	mux := http.NewServeMux()
-	RegisterHealthRoutes(mux, checker, startup)
+	RegisterHealthRoutes(mux, logger, checker, startup)
 
 	mux.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

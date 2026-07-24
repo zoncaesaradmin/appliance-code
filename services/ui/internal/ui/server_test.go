@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,7 @@ type fakeControlPlane struct {
 	submitBuildCalls         int
 	buildStatusCalls         int
 	initialized              bool
+	readyErr                 error
 	adminUser                string
 	adminPass                string
 	profiles                 []controlplane.WorkProfile
@@ -123,6 +125,9 @@ func (f *fakeControlPlane) Version(context.Context) (controlplane.Version, error
 
 func (f *fakeControlPlane) Ready(context.Context) (controlplane.Health, error) {
 	f.readyCalls++
+	if f.readyErr != nil {
+		return controlplane.Health{}, f.readyErr
+	}
 	return controlplane.Health{Status: "ready"}, nil
 }
 
@@ -1194,6 +1199,38 @@ func TestHealthRoutesReturnPlainText(t *testing.T) {
 		if body := rec.Body.String(); !strings.Contains(body, tc.want) {
 			t.Fatalf("%s body missing %q:\n%s", tc.path, tc.want, body)
 		}
+	}
+}
+
+func TestHealthReadyLogsFailureCause(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger, err := uilogging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+	handler, err := New(
+		Config{ApplianceProfile: "storage", CookieSecure: false, StaticPrefix: "/static/"},
+		&fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret", readyErr: errors.New("zot dependency: connect: connection refused")},
+		session.NewStore(time.Now),
+		logger,
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+
+	record := parseUILogRecord(t, logBuf.String(), "UI readiness check failed")
+	if got := record["level"]; got != "warn" {
+		t.Fatalf("level = %#v, want warn", got)
+	}
+	if got := record["error"]; got != "zot dependency: connect: connection refused" {
+		t.Fatalf("error = %#v, want zot dependency failure", got)
 	}
 }
 
