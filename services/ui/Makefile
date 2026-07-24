@@ -18,6 +18,10 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
 
 ENGINE_BIN   ?= buildah
 BUILD_ENGINE ?= $(ENGINE_BIN) bud
+BUILD_CACHE_FLAGS ?=
+ifeq ($(BUILD_NO_CACHE),1)
+BUILD_CACHE_FLAGS += --no-cache
+endif
 IMAGE_NAME   ?= appliance-ui
 IMAGE_TAG    ?= $(VERSION)
 IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
@@ -70,7 +74,7 @@ stop:
 	fi
 
 image-local:
-	$(BUILD_ENGINE) \
+	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \

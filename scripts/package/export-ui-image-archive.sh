@@ -21,11 +21,13 @@ EOF
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 UI_DIR="${REPO_ROOT}/services/ui"
+VERIFY_SCRIPT="${SCRIPT_DIR}/verify-oci-archive-build-metadata.py"
 
 OUT_FILE=""
 IMAGE_TAG=""
 IMAGE_NAME="appliance-ui"
 LOCAL_IMAGE_PREFIX="localhost"
+BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
 sanitize_tag() {
   printf '%s' "$1" | sed 's/[^A-Za-z0-9_.-]/-/g'
@@ -76,18 +78,40 @@ if [[ -z "${IMAGE_TAG}" ]]; then
   exit 1
 fi
 IMAGE_TAG="$(sanitize_tag "${IMAGE_TAG}")"
+COMMIT="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || true)"
+if [[ -z "${COMMIT}" ]]; then
+  echo "export-ui-image-archive: unable to derive commit from repo state" >&2
+  exit 1
+fi
 
 mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-make -C "${UI_DIR}" image-local IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" IMAGE_TAG="${IMAGE_TAG}"
+make -C "${UI_DIR}" image-local \
+  IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
+  IMAGE_TAG="${IMAGE_TAG}" \
+  VERSION="${IMAGE_TAG}" \
+  COMMIT="${COMMIT}" \
+  BUILD_TIME="${BUILD_TIME}" \
+  BUILD_NO_CACHE=1
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
+python3 "${VERIFY_SCRIPT}" \
+  --archive "${OUT_FILE}" \
+  --binary-path "appliance-ui" \
+  --expect-version "${IMAGE_TAG}" \
+  --expect-commit "${COMMIT}" \
+  --expect-build-time "${BUILD_TIME}" \
+  --label "ui"
 
 echo "created UI image archive:"
 echo "  ${OUT_FILE}"
 echo "built image tag:"
 echo "  ${IMAGE_TAG}"
+echo "built commit:"
+echo "  ${COMMIT}"
+echo "built at:"
+echo "  ${BUILD_TIME}"
 echo "version source:"
 echo "  appliance-code repo state"

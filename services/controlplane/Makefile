@@ -43,6 +43,10 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
 # creation entirely — see docs/dev-container.md.
 ENGINE_BIN   ?= buildah
 BUILD_ENGINE ?= $(ENGINE_BIN) bud
+BUILD_CACHE_FLAGS ?=
+ifeq ($(BUILD_NO_CACHE),1)
+BUILD_CACHE_FLAGS += --no-cache
+endif
 IMAGE_NAME   ?= appliance-control-plane
 # Defaults to VERSION (git describe); override explicitly, e.g.
 # `make image IMAGE_TAG=v0.1.0`.
@@ -206,7 +210,7 @@ stop:
 ## image-local: build the release-engineering control-plane container image
 ## into local container storage without pushing it anywhere
 image-local:
-	$(BUILD_ENGINE) \
+	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
@@ -230,7 +234,7 @@ image:
 		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
 		exit 1; \
 	fi
-	$(BUILD_ENGINE) \
+	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg BUILD_TIME=$(BUILD_TIME) \
