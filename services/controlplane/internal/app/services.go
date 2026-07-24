@@ -242,11 +242,11 @@ func internalZotAccess(path string) ([]registryauth.AccessEntry, error) {
 	case path == "/v2" || path == "/v2/":
 		return nil, nil
 	case path == "/v2/_catalog":
-		return []registryauth.AccessEntry{{
-			Type:    "registry",
-			Name:    "catalog",
-			Actions: []string{"*"},
-		}}, nil
+		// Our zot deployment serves catalog reads anonymously. Attaching the
+		// non-standard internal "registry:catalog:*" token shape makes zot
+		// reject the request, while the same deployment accepts anonymous
+		// catalog reads and repository-scoped tokens for repo endpoints.
+		return nil, nil
 	case strings.HasSuffix(path, "/tags/list"):
 		return pullAccessForZotPath(path, "/tags/list")
 	case strings.Contains(path, "/referrers/"):
