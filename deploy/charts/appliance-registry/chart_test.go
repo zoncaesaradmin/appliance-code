@@ -42,7 +42,7 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"accessModes:\n    - ReadWriteOnce", "chmod 2755 /data/zon/logs/zot",
 		"kind: NetworkPolicy", "name: appliance-registry-default-deny",
 		"kubernetes.io/metadata.name: appliance-system",
-		"app.kubernetes.io/name: appliance-control-plane",
+		"app.kubernetes.io/name: control-plane",
 		"path: /data/zon/logs/zot", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",
 		"secretName: appliance-registry-verification-key",
