@@ -2,10 +2,13 @@ package app_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -177,6 +180,141 @@ func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
 	if reconciledJob.Status != storage.JobStatusFailed || reconciledJob.ReasonCode != "deadline_exceeded" {
 		t.Fatalf("job after startup reconciliation = status %q reason %q, want failed/deadline_exceeded", reconciledJob.Status, reconciledJob.ReasonCode)
 	}
+}
+
+func TestStorageProfileReadinessAcceptsRegistryAuthChallenge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(t)
+	cfg.ApplianceProfile = string(appliance.ProfileStorage)
+	cfg.ZotBaseURL = srv.URL
+	cfg.ZotAllowFake = false
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+
+	a, err := app.New(cfg, logger, logger)
+	if err != nil {
+		t.Fatalf("app.New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+	waitForListener(t, cfg.InternalAddr)
+
+	assertStatus(t, "http://"+cfg.InternalAddr+"/health/ready", http.StatusOK)
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return within 5s of shutdown signal")
+	}
+}
+
+func TestStorageProfileRegistryClientUsesInternalBearerAuth(t *testing.T) {
+	var seenAuthCatalog, seenAuthTags string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/_catalog":
+			seenAuthCatalog = r.Header.Get("Authorization")
+			if seenAuthCatalog == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"repositories": []string{"users/alice/app"}})
+		case "/v2/users/alice/app/tags/list":
+			seenAuthTags = r.Header.Get("Authorization")
+			if seenAuthTags == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"name": "users/alice/app", "tags": []string{"v1"}})
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := testConfig(t)
+	cfg.ApplianceProfile = string(appliance.ProfileStorage)
+	cfg.ZotBaseURL = srv.URL
+	cfg.ZotAllowFake = false
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+
+	services, err := app.WireServices(cfg, logger)
+	if err != nil {
+		t.Fatalf("WireServices: %v", err)
+	}
+	defer services.DB.Close()
+
+	repos, err := services.Zot.ListRepositories(t.Context())
+	if err != nil {
+		t.Fatalf("ListRepositories: %v", err)
+	}
+	if len(repos) != 1 || repos[0] != "users/alice/app" {
+		t.Fatalf("repositories = %v", repos)
+	}
+	tags, err := services.Zot.ListTags(t.Context(), "users/alice/app")
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if len(tags) != 1 || tags[0] != "v1" {
+		t.Fatalf("tags = %v", tags)
+	}
+	if seenAuthCatalog == "" || seenAuthTags == "" {
+		t.Fatalf("expected bearer auth on zot requests, got catalog=%q tags=%q", seenAuthCatalog, seenAuthTags)
+	}
+	catalogClaims := decodeBearerClaims(t, seenAuthCatalog)
+	if access := catalogClaims["access"].([]any); len(access) != 1 {
+		t.Fatalf("catalog access = %v", access)
+	} else {
+		entry := access[0].(map[string]any)
+		if entry["type"] != "registry" || entry["name"] != "catalog" {
+			t.Fatalf("catalog access entry = %v", entry)
+		}
+	}
+	tagsClaims := decodeBearerClaims(t, seenAuthTags)
+	if access := tagsClaims["access"].([]any); len(access) != 1 {
+		t.Fatalf("tags access = %v", access)
+	} else {
+		entry := access[0].(map[string]any)
+		if entry["type"] != "repository" || entry["name"] != "users/alice/app" {
+			t.Fatalf("tags access entry = %v", entry)
+		}
+	}
+}
+
+func decodeBearerClaims(t *testing.T, auth string) map[string]any {
+	t.Helper()
+	raw := strings.TrimPrefix(auth, "Bearer ")
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		t.Fatalf("invalid bearer token %q", auth)
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode bearer payload: %v", err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		t.Fatalf("unmarshal bearer payload: %v", err)
+	}
+	return claims
 }
 
 func waitForListener(t *testing.T, addr string) {

@@ -3,7 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
@@ -29,6 +33,8 @@ import (
 const (
 	SessionAudience       = "appliance-api"
 	argoWorkflowNamespace = "appliance-builds"
+	zotAudience           = "zot"
+	internalZotSubject    = "appliance-control-plane"
 )
 
 type Services struct {
@@ -106,7 +112,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
 		registryAuthorizer = registryauth.NewAuthorizer(registryGrantStore, roleStore)
 		if cfg.ZotBaseURL != "" {
-			zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, nil)
+			zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, newInternalZotRequestEditor(keyMaterial, cfg.CanonicalOrigin))
 		} else if cfg.ZotAllowFake {
 			zotClient = zotadapter.NewFake()
 		} else {
@@ -203,4 +209,78 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Keys:               keyMaterial,
 		Audit:              recorder,
 	}, nil
+}
+
+func newInternalZotRequestEditor(keyMaterial *keys.Material, issuer string) func(*http.Request) error {
+	return func(req *http.Request) error {
+		access, err := internalZotAccess(req.URL.Path)
+		if err != nil {
+			return err
+		}
+		if len(access) == 0 {
+			return nil
+		}
+		token, _, err := registryauth.IssueToken(
+			keyMaterial.RegistryPrivateKey,
+			keyMaterial.RegistryKeyID,
+			issuer,
+			internalZotSubject,
+			zotAudience,
+			uuid.Must(uuid.NewV7()).String(),
+			access,
+		)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	}
+}
+
+func internalZotAccess(path string) ([]registryauth.AccessEntry, error) {
+	switch {
+	case path == "/v2" || path == "/v2/":
+		return nil, nil
+	case path == "/v2/_catalog":
+		return []registryauth.AccessEntry{{
+			Type:    "registry",
+			Name:    "catalog",
+			Actions: []string{"*"},
+		}}, nil
+	case strings.HasSuffix(path, "/tags/list"):
+		return pullAccessForZotPath(path, "/tags/list")
+	case strings.Contains(path, "/referrers/"):
+		return pullAccessForZotPath(path, "/referrers/")
+	default:
+		return nil, fmt.Errorf("unsupported zot path %q", path)
+	}
+}
+
+func pullAccessForZotPath(path, suffix string) ([]registryauth.AccessEntry, error) {
+	repoPath := strings.TrimPrefix(path, "/v2/")
+	if repoPath == path {
+		return nil, fmt.Errorf("unsupported zot path %q", path)
+	}
+	if strings.HasSuffix(path, suffix) {
+		repoPath = strings.TrimSuffix(repoPath, suffix)
+	} else {
+		idx := strings.Index(repoPath, suffix)
+		if idx < 0 {
+			return nil, fmt.Errorf("unsupported zot path %q", path)
+		}
+		repoPath = repoPath[:idx]
+	}
+	repository, err := url.PathUnescape(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("unescape repository path %q: %w", repoPath, err)
+	}
+	repository, err = registryauth.NormalizeRepositoryName(repository)
+	if err != nil {
+		return nil, err
+	}
+	return []registryauth.AccessEntry{{
+		Type:    "repository",
+		Name:    repository,
+		Actions: []string{"pull"},
+	}}, nil
 }

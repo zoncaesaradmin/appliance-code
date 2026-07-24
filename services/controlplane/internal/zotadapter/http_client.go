@@ -19,35 +19,45 @@ import (
 type HTTPClient struct {
 	baseURL     string
 	httpClient  *http.Client
-	requestEdit func(*http.Request)
+	requestEdit func(*http.Request) error
 }
 
 // NewHTTPClient builds an HTTPClient for the zot instance at baseURL (e.g.
 // "http://zot.appliance-registry.svc.cluster.local:5000"). requestEditor,
 // if non-nil, is called on every outgoing request to attach whatever
 // internal credential this zot deployment requires.
-func NewHTTPClient(baseURL string, hc *http.Client, requestEditor func(*http.Request)) *HTTPClient {
+func NewHTTPClient(baseURL string, hc *http.Client, requestEditor func(*http.Request) error) *HTTPClient {
 	if hc == nil {
 		hc = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &HTTPClient{baseURL: strings.TrimSuffix(baseURL, "/"), httpClient: hc, requestEdit: requestEditor}
 }
 
-func (c *HTTPClient) get(ctx context.Context, path string, out any) error {
+func (c *HTTPClient) request(ctx context.Context, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
-		return fmt.Errorf("zotadapter: building request for %s: %w", path, err)
+		return nil, fmt.Errorf("zotadapter: building request for %s: %w", path, err)
 	}
 	traceCtx, traceID := ctxutil.EnsureTraceID(req.Context())
 	req = req.WithContext(traceCtx)
 	req.Header.Set(ctxutil.TraceIDHeader, traceID)
 	if c.requestEdit != nil {
-		c.requestEdit(req)
+		if err := c.requestEdit(req); err != nil {
+			return nil, fmt.Errorf("zotadapter: authorizing %s: %w", path, err)
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("zotadapter: calling %s: %w", path, err)
+		return nil, fmt.Errorf("zotadapter: calling %s: %w", path, err)
+	}
+	return resp, nil
+}
+
+func (c *HTTPClient) get(ctx context.Context, path string, out any) error {
+	resp, err := c.request(ctx, path)
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -99,5 +109,13 @@ func (c *HTTPClient) ListReferrers(ctx context.Context, repository, digest strin
 }
 
 func (c *HTTPClient) Health(ctx context.Context) error {
-	return c.get(ctx, "/v2/", nil)
+	resp, err := c.request(ctx, "/v2/")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
+		return nil
+	}
+	return fmt.Errorf("zotadapter: /v2/ returned status %d", resp.StatusCode)
 }

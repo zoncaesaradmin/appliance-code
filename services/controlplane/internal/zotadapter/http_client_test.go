@@ -78,8 +78,9 @@ func TestHTTPClientRequestEditorIsApplied(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, func(req *http.Request) {
+	client := zotadapter.NewHTTPClient(srv.URL, nil, func(req *http.Request) error {
 		req.Header.Set("Authorization", "Bearer internal-credential")
+		return nil
 	})
 	if _, err := client.ListRepositories(t.Context()); err != nil {
 		t.Fatalf("ListRepositories: %v", err)
@@ -101,6 +102,18 @@ func TestHTTPClientHealth(t *testing.T) {
 	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
 	if err := client.Health(t.Context()); err != nil {
 		t.Errorf("Health: %v", err)
+	}
+}
+
+func TestHTTPClientHealthAcceptsUnauthorizedChallenge(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	if err := client.Health(t.Context()); err != nil {
+		t.Fatalf("Health: %v", err)
 	}
 }
 
