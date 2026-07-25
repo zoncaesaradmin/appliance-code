@@ -50,6 +50,24 @@ func TestHardenedDNSRender(t *testing.T) {
 		"file /etc/coredns/zones/db.local", "forward . 1.1.1.1 8.8.8.8",
 		"appliance 3600 IN A 192.0.2.10",
 		"path: /health", "path: /ready",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render missing %q", want)
+		}
+	}
+	if strings.Contains(out, "kind: Namespace") {
+		t.Error("default render must not own Namespace; zonctl EnsureNamespace creates it")
+	}
+	for _, forbidden := range []string{"chmod 777", "privileged: true"} {
+		if bytes.Contains([]byte(out), []byte(forbidden)) {
+			t.Errorf("render unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
+func TestNamespaceCreateRendersPSALabels(t *testing.T) {
+	out := render(t, "--set", "namespace.create=true")
+	for _, want := range []string{
 		"kind: Namespace",
 		"pod-security.kubernetes.io/enforce: privileged",
 		"pod-security.kubernetes.io/audit: privileged",
@@ -57,11 +75,6 @@ func TestHardenedDNSRender(t *testing.T) {
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
-		}
-	}
-	for _, forbidden := range []string{"chmod 777", "privileged: true"} {
-		if bytes.Contains([]byte(out), []byte(forbidden)) {
-			t.Errorf("render unexpectedly contains %q", forbidden)
 		}
 	}
 }

@@ -7,9 +7,10 @@ image:
   pullPolicy: IfNotPresent
 
 namespace:
-  # Installer-owned values flip create=true so the dns namespace is labeled
-  # for the hostNetwork PSA exception before the Deployment is applied.
-  create: true
+  # Default false: zonctl creates and PSA-labels the dns namespace before
+  # Helm runs. Setting create=true is only for standalone helm installs
+  # where the Namespace object should be release-owned.
+  create: false
   name: dns
 
 service:
