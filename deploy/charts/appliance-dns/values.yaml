@@ -1,0 +1,74 @@
+replicaCount: 1
+
+image:
+  repository: registry.local/coredns
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+namespace:
+  create: false
+  name: dns
+
+service:
+  # ClusterIP for in-cluster diagnostics; LAN clients use hostNetwork :53.
+  port: 53
+
+# hostNetwork is required so LAN clients can reach UDP/TCP 53 on the appliance
+# node. This is an explicit Pod Security Admission exception for the dns
+# namespace only; application containers remain non-root (UID 10004) with
+# NET_BIND_SERVICE.
+hostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+upstreamResolvers:
+  - 1.1.1.1
+  - 8.8.8.8
+
+localZone:
+  name: appliance.local
+  # Installer replaces these with the appliance hostname and LAN IP.
+  hostname: appliance
+  ipv4: 127.0.0.1
+
+logs:
+  hostPath: /data/zon/logs/dns
+  prepare:
+    enabled: false
+    image: registry.local/busybox:bundled
+
+networkPolicy:
+  enabled: true
+  # hostNetwork pods still get a NetworkPolicy for documentation and
+  # in-namespace diagnostics; LAN UDP/TCP 53 arrives via the host stack.
+  allowDNSFromAnywhere: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10004
+  runAsGroup: 10004
+  fsGroup: 20000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+    add: ["NET_BIND_SERVICE"]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: "500m"
+    memory: 256Mi
+
+probes:
+  healthPort: 8080
+  readyPort: 8181
+  startupFailureThreshold: 30
+  startupPeriodSeconds: 2

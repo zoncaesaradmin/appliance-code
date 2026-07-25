@@ -313,6 +313,10 @@ func capabilitiesForProfile(profile string) []string {
 		return []string{"artifact", "base", "build", "workflows"}
 	case "storage":
 		return []string{"artifact", "base"}
+	case "lan-dns":
+		return []string{"base", "dns"}
+	case "storage-lan-dns":
+		return []string{"artifact", "base", "dns"}
 	default:
 		return []string{"base", "workflows"}
 	}

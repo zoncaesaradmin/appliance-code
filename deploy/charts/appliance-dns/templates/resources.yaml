@@ -1,0 +1,185 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "appliance-dns.fullname" . }}-config
+  namespace: {{ include "appliance-dns.namespace" . }}
+  labels:
+    {{- include "appliance-dns.labels" . | nindent 4 }}
+data:
+  Corefile: |
+    .:53 {
+        errors
+        log
+        health :{{ .Values.probes.healthPort }}
+        ready :{{ .Values.probes.readyPort }}
+        file /etc/coredns/zones/db.local {{ .Values.localZone.name }}
+        forward . {{ join " " .Values.upstreamResolvers }}
+        cache 30
+        loop
+        reload
+        loadbalance
+    }
+  db.local: |
+    $ORIGIN {{ .Values.localZone.name }}.
+    @   3600 IN SOA ns.{{ .Values.localZone.name }}. hostmaster.{{ .Values.localZone.name }}. (
+            1 7200 3600 1209600 3600 )
+        3600 IN NS ns.{{ .Values.localZone.name }}.
+    ns  3600 IN A {{ .Values.localZone.ipv4 }}
+    {{ .Values.localZone.hostname }} 3600 IN A {{ .Values.localZone.ipv4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-dns.fullname" . }}
+  namespace: {{ include "appliance-dns.namespace" . }}
+  labels:
+    {{- include "appliance-dns.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "appliance-dns.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: dns-udp
+      port: {{ .Values.service.port }}
+      targetPort: dns-udp
+      protocol: UDP
+    - name: dns-tcp
+      port: {{ .Values.service.port }}
+      targetPort: dns-tcp
+      protocol: TCP
+    - name: health
+      port: {{ .Values.probes.healthPort }}
+      targetPort: health
+      protocol: TCP
+    - name: ready
+      port: {{ .Values.probes.readyPort }}
+      targetPort: ready
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-dns.fullname" . }}
+  namespace: {{ include "appliance-dns.namespace" . }}
+  labels:
+    {{- include "appliance-dns.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "appliance-dns.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-dns.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.logs.prepare.enabled }}
+      initContainers:
+        - name: prepare-log-dir
+          image: {{ .Values.logs.prepare.image }}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "mkdir -p /data/zon/logs/dns && chown 10004:20000 /data/zon/logs/dns && chmod 2755 /data/zon/logs/dns"]
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
+              drop: ["ALL"]
+          volumeMounts:
+            - name: logs
+              mountPath: /data/zon/logs/dns
+      {{- end }}
+      containers:
+        - name: coredns
+          image: {{ include "appliance-dns.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-conf", "/etc/coredns/Corefile"]
+          ports:
+            - name: dns-udp
+              containerPort: {{ .Values.service.port }}
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.probes.healthPort }}
+              protocol: TCP
+            - name: ready
+              containerPort: {{ .Values.probes.readyPort }}
+              protocol: TCP
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: {path: /health, port: health}
+          readinessProbe:
+            httpGet: {path: /ready, port: ready}
+          startupProbe:
+            httpGet: {path: /ready, port: ready}
+            failureThreshold: {{ .Values.probes.startupFailureThreshold }}
+            periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/coredns, readOnly: true}
+            - {name: logs, mountPath: /var/log/coredns}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "appliance-dns.fullname" . }}-config
+            items:
+              - key: Corefile
+                path: Corefile
+              - key: db.local
+                path: zones/db.local
+        - name: logs
+          hostPath:
+            path: {{ .Values.logs.hostPath }}
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir: {}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-dns.fullname" . }}-default-deny
+  namespace: {{ include "appliance-dns.namespace" . }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-dns.fullname" . }}-allow
+  namespace: {{ include "appliance-dns.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "appliance-dns.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    {{- if .Values.networkPolicy.allowDNSFromAnywhere }}
+    - ports:
+        - {protocol: UDP, port: {{ .Values.service.port }}}
+        - {protocol: TCP, port: {{ .Values.service.port }}}
+    {{- end }}
+    - ports:
+        - {protocol: TCP, port: {{ .Values.probes.healthPort }}}
+        - {protocol: TCP, port: {{ .Values.probes.readyPort }}}
+  egress:
+    # Upstream recursive resolvers and DNS to them.
+    - ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+{{- end }}

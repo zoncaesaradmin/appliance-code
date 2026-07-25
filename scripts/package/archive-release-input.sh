@@ -26,6 +26,11 @@ Options:
                                    platform-manifest reference.
   --zot-version VERSION            Zot compatibility version. Defaults to the
                                    appliance-registry chart appVersion.
+  --dns-image PATH                 Pinned CoreDNS linux/amd64 OCI archive.
+  --dns-image-reference REF        Canonical registry.local/coredns@sha256:...
+                                   platform-manifest reference.
+  --dns-version VERSION            DNS compatibility version. Defaults to the
+                                   appliance-dns chart appVersion.
   --extra-oci-image PATH           Repeatable additional OCI image archive to
                                    include in release-input, for example a
                                    builder task image required by a profile.
@@ -59,6 +64,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
 ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/argo-workflows"
 ZOT_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
+DNS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-dns"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
@@ -72,6 +78,9 @@ UI_IMAGE_REFERENCE=""
 ZOT_IMAGE=""
 ZOT_IMAGE_REFERENCE=""
 ZOT_VERSION=""
+DNS_IMAGE=""
+DNS_IMAGE_REFERENCE=""
+DNS_VERSION=""
 ARGO_VERSION=""
 ARGO_CONTROLLER_IMAGE=""
 ARGO_CONTROLLER_IMAGE_REFERENCE=""
@@ -132,6 +141,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --zot-version)
       ZOT_VERSION="${2:-}"
+      shift 2
+      ;;
+    --dns-image)
+      DNS_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --dns-image-reference)
+      DNS_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --dns-version)
+      DNS_VERSION="${2:-}"
       shift 2
       ;;
     --extra-oci-image)
@@ -267,6 +288,53 @@ if [[ ! -d "${ZOT_CHART_DIR}" ]]; then
   echo "archive-release-input: missing appliance-registry chart: ${ZOT_CHART_DIR}" >&2
   exit 1
 fi
+if [[ -n "${DNS_IMAGE}" && ! -f "${DNS_IMAGE}" ]]; then
+  echo "archive-release-input: CoreDNS image not found: ${DNS_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${DNS_IMAGE}" || -n "${DNS_IMAGE_REFERENCE}" ]]; then
+  if [[ -z "${DNS_IMAGE}" || -z "${DNS_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: --dns-image and --dns-image-reference must be provided together" >&2
+    exit 2
+  fi
+  if [[ ! "${DNS_IMAGE_REFERENCE}" =~ ^registry\.local/coredns@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --dns-image-reference must be registry.local/coredns@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "archive-release-input: python3 is required to validate the CoreDNS OCI archive contract" >&2
+    exit 1
+  fi
+  python3 - "${DNS_IMAGE}" "${DNS_IMAGE_REFERENCE}" <<'PY'
+import json
+import sys
+import tarfile
+
+archive, reference = sys.argv[1:]
+with tarfile.open(archive, "r:*") as tf:
+    member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
+    if member is None:
+        raise SystemExit("archive-release-input: CoreDNS OCI archive has no index.json")
+    stream = tf.extractfile(member)
+    if stream is None:
+        raise SystemExit("archive-release-input: CoreDNS OCI index.json is not a regular file")
+    index = json.load(stream)
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"archive-release-input: CoreDNS OCI index must contain one platform manifest, found {len(manifests)}")
+descriptor = manifests[0]
+annotation = descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name")
+if annotation != "registry.local/coredns:bundled":
+    raise SystemExit(f"archive-release-input: CoreDNS OCI annotation is {annotation!r}, want 'registry.local/coredns:bundled'")
+digest = descriptor.get("digest", "")
+if reference != "registry.local/coredns@" + digest:
+    raise SystemExit(f"archive-release-input: CoreDNS image reference {reference!r} does not match index digest {digest!r}")
+PY
+fi
+if [[ ! -d "${DNS_CHART_DIR}" ]]; then
+  echo "archive-release-input: missing appliance-dns chart: ${DNS_CHART_DIR}" >&2
+  exit 1
+fi
 if [[ -n "${ARGO_CONTROLLER_IMAGE}" && ! -f "${ARGO_CONTROLLER_IMAGE}" ]]; then
   echo "archive-release-input: Argo controller image not found: ${ARGO_CONTROLLER_IMAGE}" >&2
   exit 1
@@ -325,6 +393,15 @@ fi
 ZOT_VERSION="${ZOT_VERSION#v}"
 if [[ -z "${ZOT_VERSION}" ]]; then
   echo "archive-release-input: unable to derive zotVersion from ${ZOT_CHART_DIR}/Chart.yaml" >&2
+  exit 1
+fi
+if [[ -z "${DNS_VERSION}" ]]; then
+  DNS_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${DNS_CHART_DIR}/Chart.yaml")"
+fi
+# compatibility.dnsVersion is unprefixed; Chart.yaml appVersion may be v1.14.4.
+DNS_VERSION="${DNS_VERSION#v}"
+if [[ -z "${DNS_VERSION}" ]]; then
+  echo "archive-release-input: unable to derive dnsVersion from ${DNS_CHART_DIR}/Chart.yaml" >&2
   exit 1
 fi
 if [[ -z "${RELEASE_ID}" ]]; then
@@ -396,9 +473,11 @@ copy_dir_or_empty() {
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 UI_BASENAME="$(basename "${UI_IMAGE}")"
 ZOT_BASENAME=""
+DNS_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 ARGO_CHART_ARCHIVE="argo-workflows-chart-${CODE_VERSION}.tgz"
 ZOT_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
+DNS_CHART_ARCHIVE="appliance-dns-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
@@ -408,6 +487,10 @@ cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 if [[ -n "${ZOT_IMAGE}" ]]; then
   ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
   cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
+fi
+if [[ -n "${DNS_IMAGE}" ]]; then
+  DNS_BASENAME="$(basename "${DNS_IMAGE}")"
+  cp "${DNS_IMAGE}" "${RELEASE_INPUT_DIR}/${DNS_BASENAME}"
 fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
@@ -438,6 +521,10 @@ mkdir -p "${TMP_DIR}/appliance-registry-chart"
 cp -R "${ZOT_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" appliance-registry-chart
 
+mkdir -p "${TMP_DIR}/appliance-dns-chart"
+cp -R "${DNS_CHART_DIR}/." "${TMP_DIR}/appliance-dns-chart/"
+tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" appliance-dns-chart
+
 if [[ -d "${ARGO_CHART_DIR}" ]]; then
   mkdir -p "${TMP_DIR}/argo-workflows-chart"
   cp -R "${ARGO_CHART_DIR}/." "${TMP_DIR}/argo-workflows-chart/"
@@ -453,6 +540,7 @@ fi
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
   printf ',\n  "zotVersion": "%s"' "${ZOT_VERSION}"
+  printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
   if [[ -n "${ARGO_VERSION}" ]]; then
     printf ',\n  "argoVersion": "%s"' "${ARGO_VERSION}"
   fi
@@ -482,6 +570,7 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
     "${UI_BASENAME}" \
     "${CHART_ARCHIVE}" \
     "${ZOT_CHART_ARCHIVE}" \
+    "${DNS_CHART_ARCHIVE}" \
     "${CONFIG_SCHEMA_BASENAME}" \
     "${COMPATIBILITY_BASENAME}"
   do
@@ -492,6 +581,9 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   fi
   if [[ -n "${ZOT_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}" | sed 's/^sha256://')" "${ZOT_BASENAME}"
+  fi
+  if [[ -n "${DNS_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" | sed 's/^sha256://')" "${DNS_BASENAME}"
   fi
   if [[ -n "${ARGO_CONTROLLER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${ARGO_CONTROLLER_BASENAME}"
@@ -545,11 +637,18 @@ if [[ -n "${ARGO_VERSION}" ]]; then
   ARGO_COMPATIBILITY_JSON=', "argoVersion": "'"${ARGO_VERSION}"'"'
 fi
 ZOT_COMPATIBILITY_JSON=', "zotVersion": "'"${ZOT_VERSION}"'"'
+DNS_COMPATIBILITY_JSON=', "dnsVersion": "'"${DNS_VERSION}"'"'
 
 OPTIONAL_ZOT_IMAGE_JSON=""
 if [[ -n "${ZOT_BASENAME}" ]]; then
   OPTIONAL_ZOT_IMAGE_JSON=',
     "zotImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}" "${ZOT_BASENAME}" "${ZOT_IMAGE_REFERENCE}")"
+fi
+
+OPTIONAL_DNS_IMAGE_JSON=""
+if [[ -n "${DNS_BASENAME}" ]]; then
+  OPTIONAL_DNS_IMAGE_JSON=',
+    "dnsImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" "${DNS_BASENAME}" "${DNS_IMAGE_REFERENCE}")"
 fi
 
 OPTIONAL_ARGO_ARTIFACTS_JSON=""
@@ -596,6 +695,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "zotChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" "${ZOT_CHART_ARCHIVE}")${OPTIONAL_ZOT_IMAGE_JSON},
+    "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON},
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
     "checksums": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}" "${CHECKSUMS_BASENAME}"),
@@ -606,7 +706,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${ZOT_COMPATIBILITY_JSON}${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${ZOT_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

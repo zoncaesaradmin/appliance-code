@@ -102,7 +102,7 @@ func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
 }
 
 func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
-	for _, profile := range []string{"storage", "builder"} {
+	for _, profile := range []string{"storage", "builder", "storage-lan-dns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
@@ -112,12 +112,35 @@ func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
 				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 				cfg.BuilderImageDigest = "automation-dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			}
+			if profile == "storage-lan-dns" {
+				cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+			}
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "zotBaseURL") {
 				t.Fatalf("Validate without Zot URL = %v, want zotBaseURL error", err)
 			}
 			cfg.ZotBaseURL = "http://appliance-registry.registry.svc.cluster.local:5000"
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("Validate with real Zot URL: %v", err)
+			}
+		})
+	}
+}
+
+func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
+	for _, profile := range []string{"lan-dns", "storage-lan-dns"} {
+		t.Run(profile, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.ApplianceProfile = profile
+			cfg.DNSReadyURL = ""
+			if profile == "storage-lan-dns" {
+				cfg.ZotAllowFake = true
+			}
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "dnsReadyURL") {
+				t.Fatalf("Validate without DNS ready URL = %v, want dnsReadyURL error", err)
+			}
+			cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("Validate with DNS ready URL: %v", err)
 			}
 		})
 	}

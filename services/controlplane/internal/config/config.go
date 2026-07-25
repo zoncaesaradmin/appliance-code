@@ -31,6 +31,7 @@ type Config struct {
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	ZotBaseURL         string `json:"zotBaseURL"`
 	ZotAllowFake       bool   `json:"zotAllowFake"`
+	DNSReadyURL        string `json:"dnsReadyURL"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -140,6 +141,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
+	str("DNS_READY_URL", &cfg.DNSReadyURL)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
@@ -267,6 +269,13 @@ func (c Config) Validate() error {
 			}
 		} else if u, err := url.Parse(c.ZotBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "zotBaseURL must be an absolute http(s) URL with no path")
+		}
+	}
+	if profileErr == nil && resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
+		if strings.TrimSpace(c.DNSReadyURL) == "" {
+			errs = append(errs, "dnsReadyURL must not be empty when the dns capability is enabled")
+		} else if u, err := url.Parse(c.DNSReadyURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, "dnsReadyURL must be an absolute http(s) URL")
 		}
 	}
 

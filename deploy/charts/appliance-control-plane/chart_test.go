@@ -11,6 +11,7 @@ package chart
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -490,37 +491,92 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	}
 }
 
-func TestStorageProfileRendersRealZotDependency(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(), "--set", "config.applianceProfile=storage")...)
-	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
-	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_ZOT_BASE_URL"].(string); got != "http://appliance-registry.registry.svc.cluster.local:5000" {
-		t.Fatalf("APPLIANCE_ZOT_BASE_URL = %q", got)
-	}
-	if got, _ := data["APPLIANCE_ZOT_ALLOW_FAKE"].(string); got != "false" {
-		t.Fatalf("APPLIANCE_ZOT_ALLOW_FAKE = %q, want false", got)
-	}
-	policy := findByKindAndName(docs, "NetworkPolicy", controlPlaneDeploymentName+"-allow")
-	rendered, _ := yaml.Marshal(policy)
-	if !bytes.Contains(rendered, []byte("app.kubernetes.io/name: appliance-registry")) ||
-		!bytes.Contains(rendered, []byte("kubernetes.io/metadata.name: registry")) ||
-		!bytes.Contains(rendered, []byte("port: 5000")) {
-		t.Fatalf("control-plane NetworkPolicy lacks registry-only egress:\n%s", rendered)
+func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
+	for _, profile := range []string{"storage", "storage-lan-dns"} {
+		t.Run(profile, func(t *testing.T) {
+			args := append(defaultRenderArgs(), "--set", "config.applianceProfile="+profile)
+			if profile == "storage-lan-dns" {
+				args = append(args, "--set", "config.dnsReadyURL=http://appliance-dns.dns.svc.cluster.local:8181/ready")
+			}
+			docs := renderChart(t, args...)
+			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+			data, _ := at(cm, "data").(map[string]any)
+			if got, _ := data["APPLIANCE_ZOT_BASE_URL"].(string); got != "http://appliance-registry.registry.svc.cluster.local:5000" {
+				t.Fatalf("APPLIANCE_ZOT_BASE_URL = %q", got)
+			}
+			if got, _ := data["APPLIANCE_ZOT_ALLOW_FAKE"].(string); got != "false" {
+				t.Fatalf("APPLIANCE_ZOT_ALLOW_FAKE = %q, want false", got)
+			}
+			policy := findByKindAndName(docs, "NetworkPolicy", controlPlaneDeploymentName+"-allow")
+			rendered, _ := yaml.Marshal(policy)
+			if !bytes.Contains(rendered, []byte("app.kubernetes.io/name: appliance-registry")) ||
+				!bytes.Contains(rendered, []byte("kubernetes.io/metadata.name: registry")) ||
+				!bytes.Contains(rendered, []byte("port: 5000")) {
+				t.Fatalf("control-plane NetworkPolicy lacks registry-only egress:\n%s", rendered)
+			}
+		})
 	}
 }
 
-func TestValuesSchemaRejectsStorageWithoutZotURL(t *testing.T) {
+func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
+	for _, profile := range []string{"lan-dns", "storage-lan-dns"} {
+		t.Run(profile, func(t *testing.T) {
+			docs := renderChart(t, append(defaultRenderArgs(),
+				"--set", "config.applianceProfile="+profile,
+				"--set", "config.dnsReadyURL=http://appliance-dns.dns.svc.cluster.local:8181/ready",
+			)...)
+			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+			data, _ := at(cm, "data").(map[string]any)
+			if got, _ := data["APPLIANCE_DNS_READY_URL"].(string); got != "http://appliance-dns.dns.svc.cluster.local:8181/ready" {
+				t.Fatalf("APPLIANCE_DNS_READY_URL = %q", got)
+			}
+		})
+	}
+}
+
+func TestValuesSchemaRejectsArtifactProfilesWithoutZotURL(t *testing.T) {
 	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "storage-without-zot.yaml")
-	if err := os.WriteFile(valuesPath, []byte("config:\n  applianceProfile: storage\n  zotBaseURL: \"\"\n"), 0o600); err != nil {
-		t.Fatal(err)
+	for _, profile := range []string{"storage", "storage-lan-dns"} {
+		t.Run(profile, func(t *testing.T) {
+			valuesPath := filepath.Join(t.TempDir(), profile+"-without-zot.yaml")
+			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  zotBaseURL: \"\"\n", profile)
+			if profile == "storage-lan-dns" {
+				values += "  dnsReadyURL: \"http://appliance-dns.dns.svc.cluster.local:8181/ready\"\n"
+			}
+			if err := os.WriteFile(valuesPath, []byte(values), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			out, err := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("helm lint accepted %s without Zot URL\n%s", profile, out)
+			}
+			if !bytes.Contains(out, []byte("zotBaseURL")) {
+				t.Fatalf("lint failed for wrong reason:\n%s", out)
+			}
+		})
 	}
-	out, err := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath).CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint accepted storage without Zot URL\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("zotBaseURL")) {
-		t.Fatalf("lint failed for wrong reason:\n%s", out)
+}
+
+func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
+	requireHelm(t)
+	for _, profile := range []string{"lan-dns", "storage-lan-dns"} {
+		t.Run(profile, func(t *testing.T) {
+			valuesPath := filepath.Join(t.TempDir(), profile+"-without-dns.yaml")
+			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  dnsReadyURL: \"\"\n", profile)
+			if profile == "storage-lan-dns" {
+				values += "  zotBaseURL: \"http://appliance-registry.registry.svc.cluster.local:5000\"\n  zotAllowFake: false\n"
+			}
+			if err := os.WriteFile(valuesPath, []byte(values), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			out, err := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("helm lint accepted %s without dnsReadyURL\n%s", profile, out)
+			}
+			if !bytes.Contains(out, []byte("dnsReadyURL")) {
+				t.Fatalf("lint failed for wrong reason:\n%s", out)
+			}
+		})
 	}
 }
 

@@ -68,7 +68,8 @@ config:
   # Developer workflow catalog used by the builder profile. For workspace
   # creation this contains workspace profiles and HTTPS Git repos. Build targets
   # are optional and are not required to materialize workspaces. Keep this empty
-  # for core/storage.
+  # for non-builder profiles such as core, storage, lan-dns, and
+  # storage-lan-dns.
   buildCatalog: {}
   # Appliance-owned generic image used by workspace provisioning workflows.
   # zonctl injects this from the signed bundle for the builder profile.
@@ -78,9 +79,14 @@ config:
   # profile. Build catalogs must not set per-target builder digests.
   builderImageDigest: ""
   # Internal Zot data-plane endpoint. Artifact-bearing production profiles
-  # fail closed if this is empty; local tests may explicitly enable fake Zot.
+  # (builder, storage, storage-lan-dns) fail closed if this is empty; local
+  # tests may explicitly enable fake Zot.
   zotBaseURL: "http://appliance-registry.registry.svc.cluster.local:5000"
   zotAllowFake: false
+  # CoreDNS ready-plugin URL. DNS-bearing profiles (lan-dns, storage-lan-dns)
+  # fail closed at control-plane startup when this is empty so the appliance
+  # never reports dns-capable while the LAN DNS release is missing.
+  dnsReadyURL: ""
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects

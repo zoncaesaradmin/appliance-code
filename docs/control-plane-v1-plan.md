@@ -1605,11 +1605,31 @@ Pin exact revisions in ADRs and the release compatibility manifest. Initial base
 
 ## Notes For Future Profiles
 
-Do not productize appliance profiles yet, but keep the domain model ready for combinations such as:
+The control-plane model now productizes five named appliance profiles:
+
+- `core`
+- `builder`
+- `storage`
+- `lan-dns`
+- `storage-lan-dns`
+
+That expansion should remain centralized behind one profile-to-capability
+mapping table rather than scattered profile-name checks.
+
+Near-term combinations already covered by the current model are:
 
 - artifact server only
 - build server only
 - combined build + artifact server
-- future application-control workloads
+- LAN DNS only
+- combined artifact + LAN DNS
 
-The cleanest way to leave room for this is to model capabilities as feature modules behind one control plane, rather than as separate identity or API stacks.
+The `dns` capability is intentionally introduced before the DNS workload
+itself. That lets install/config/reporting flows recognize DNS-bearing
+profiles now while the actual DNS service pod, readiness, and runtime
+behavior land as a later slice. See
+[lan-dns-profile-phasing.md](lan-dns-profile-phasing.md).
+
+The cleanest way to leave room for later expansion is still to model
+capabilities as feature modules behind one control plane, rather than as
+separate identity or API stacks.

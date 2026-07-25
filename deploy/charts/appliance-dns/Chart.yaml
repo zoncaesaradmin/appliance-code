@@ -1,0 +1,11 @@
+apiVersion: v2
+name: appliance-dns
+description: Hardened LAN DNS data plane (CoreDNS) for the Zon appliance.
+type: application
+version: 0.1.0
+appVersion: "v1.14.4"
+keywords:
+  - appliance
+  - dns
+  - coredns
+home: https://github.com/zoncaesaradmin/appliance-code

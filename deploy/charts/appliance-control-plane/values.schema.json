@@ -184,7 +184,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["builder", "storage"]
+                "enum": ["builder", "storage", "storage-lan-dns"]
               }
             },
             "required": ["applianceProfile"]
@@ -201,6 +201,25 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "applianceProfile": {
+                "enum": ["lan-dns", "storage-lan-dns"]
+              }
+            },
+            "required": ["applianceProfile"]
+          },
+          "then": {
+            "required": ["dnsReadyURL"],
+            "properties": {
+              "dnsReadyURL": {
+                "type": "string",
+                "pattern": "^https?://[^\\s]+$"
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -209,7 +228,9 @@
           "enum": [
             "core",
             "builder",
-            "storage"
+            "storage",
+            "lan-dns",
+            "storage-lan-dns"
           ]
         },
         "canonicalOrigin": {
@@ -258,6 +279,9 @@
         },
         "zotAllowFake": {
           "type": "boolean"
+        },
+        "dnsReadyURL": {
+          "type": "string"
         }
       }
     },

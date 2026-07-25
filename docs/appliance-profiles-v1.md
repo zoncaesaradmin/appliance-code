@@ -55,6 +55,7 @@ The initial v1 appliance capabilities are:
 | `workflows` | Workflow substrate awareness and workflow-dependent module activation for v1 and future expansion |
 | `build` | Build APIs and build service/module behavior |
 | `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by zot |
+| `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for `lan-dns` / `storage-lan-dns` readiness |
 
 Notes:
 
@@ -74,6 +75,8 @@ The initial v1 appliance profiles are:
 | `core` | Yes | `base`, `workflows` |
 | `builder` | No | `base`, `workflows`, `build`, `artifact` |
 | `storage` | No | `base`, `artifact` |
+| `lan-dns` | No | `base`, `dns` |
+| `storage-lan-dns` | No | `base`, `artifact`, `dns` |
 
 Notes:
 
@@ -99,6 +102,7 @@ The v1 dependency set is:
 | `workflows` | `base` |
 | `build` | `base`, `workflows`, `artifact` |
 | `artifact` | `base` |
+| `dns` | `base` |
 
 Rules:
 
@@ -181,6 +185,20 @@ the data plane cannot answer `/v2/`. The in-memory fake remains available only
 through the explicit local/test `APPLIANCE_ZOT_ALLOW_FAKE=true` setting; the
 production chart sets it to false.
 
+Production `storage-lan-dns` deployments follow the same artifact contract,
+because they still enable the `artifact` capability even though they do not
+enable workflows or build.
+
+### `dns`
+
+`dns` is now part of the centralized profile-to-capability model so the
+product can cleanly distinguish DNS-bearing profiles from non-DNS profiles.
+
+In this phase it does not yet introduce a standalone public REST surface,
+independent service pod, or installer-owned DNS workload. It is present so
+profile resolution, reporting, and future release tooling can reason about DNS
+profiles without inventing a second profile model later.
+
 ## Enforcement Rules
 
 The API server must enforce the following rules:
@@ -213,7 +231,9 @@ capabilities locally.
 
 The complete v1 bundle still ships the full topology, including Argo and
 zot. Appliance profiles change control-plane activation and exposure rules,
-not the release-bundle shape.
+not the release-bundle shape. In this phase, DNS-bearing profiles only change
+profile/capability resolution and downstream install-time decisions; they do
+not yet add a separate DNS runtime workload.
 
 ## Implementation Direction
 

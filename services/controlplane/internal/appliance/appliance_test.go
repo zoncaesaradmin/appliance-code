@@ -46,6 +46,50 @@ func TestResolveProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("lan-dns", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("lan-dns")
+		if err != nil {
+			t.Fatalf("ResolveProfile(lan-dns): %v", err)
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
+			t.Fatal("lan-dns should enable base")
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
+			t.Fatal("lan-dns should enable dns")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+			t.Fatal("lan-dns should not enable artifact")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
+			t.Fatal("lan-dns should not enable workflows")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+			t.Fatal("lan-dns should not enable build")
+		}
+	})
+
+	t.Run("storage-lan-dns", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("storage-lan-dns")
+		if err != nil {
+			t.Fatalf("ResolveProfile(storage-lan-dns): %v", err)
+		}
+		for _, capability := range []appliance.Capability{
+			appliance.CapabilityBase,
+			appliance.CapabilityArtifact,
+			appliance.CapabilityDNS,
+		} {
+			if !resolved.Capabilities.Enabled(capability) {
+				t.Fatalf("storage-lan-dns should enable %q", capability)
+			}
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
+			t.Fatal("storage-lan-dns should not enable workflows")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+			t.Fatal("storage-lan-dns should not enable build")
+		}
+	})
+
 	t.Run("unknown", func(t *testing.T) {
 		if _, err := appliance.ResolveProfile("does-not-exist"); err == nil {
 			t.Fatal("ResolveProfile should reject an unknown profile")

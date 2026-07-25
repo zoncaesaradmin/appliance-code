@@ -10,9 +10,11 @@ import (
 type Profile string
 
 const (
-	ProfileCore    Profile = "core"
-	ProfileBuilder Profile = "builder"
-	ProfileStorage Profile = "storage"
+	ProfileCore          Profile = "core"
+	ProfileBuilder       Profile = "builder"
+	ProfileStorage       Profile = "storage"
+	ProfileLANDNS        Profile = "lan-dns"
+	ProfileStorageLANDNS Profile = "storage-lan-dns"
 )
 
 // Capability is the implementation-facing appliance capability name resolved
@@ -24,6 +26,7 @@ const (
 	CapabilityWorkflows Capability = "workflows"
 	CapabilityBuild     Capability = "build"
 	CapabilityArtifact  Capability = "artifact"
+	CapabilityDNS       Capability = "dns"
 )
 
 type capabilityDefinition struct {
@@ -35,12 +38,15 @@ var capabilityCatalog = map[Capability]capabilityDefinition{
 	CapabilityWorkflows: {Dependencies: []Capability{CapabilityBase}},
 	CapabilityBuild:     {Dependencies: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityArtifact}},
 	CapabilityArtifact:  {Dependencies: []Capability{CapabilityBase}},
+	CapabilityDNS:       {Dependencies: []Capability{CapabilityBase}},
 }
 
 var profileCatalog = map[Profile][]Capability{
-	ProfileCore:    {CapabilityBase, CapabilityWorkflows},
-	ProfileBuilder: {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact},
-	ProfileStorage: {CapabilityBase, CapabilityArtifact},
+	ProfileCore:          {CapabilityBase, CapabilityWorkflows},
+	ProfileBuilder:       {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact},
+	ProfileStorage:       {CapabilityBase, CapabilityArtifact},
+	ProfileLANDNS:        {CapabilityBase, CapabilityDNS},
+	ProfileStorageLANDNS: {CapabilityBase, CapabilityArtifact, CapabilityDNS},
 }
 
 // Set is the resolved enabled capability set for one appliance instance.
