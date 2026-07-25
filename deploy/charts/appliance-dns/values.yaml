@@ -7,7 +7,9 @@ image:
   pullPolicy: IfNotPresent
 
 namespace:
-  create: false
+  # Installer-owned values flip create=true so the dns namespace is labeled
+  # for the hostNetwork PSA exception before the Deployment is applied.
+  create: true
   name: dns
 
 service:

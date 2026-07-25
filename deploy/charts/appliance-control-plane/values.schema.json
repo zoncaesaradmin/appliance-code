@@ -400,6 +400,17 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 65535
+        },
+        "dnsNamespaceLabel": {
+          "type": "object"
+        },
+        "dnsPodLabels": {
+          "type": "object"
+        },
+        "dnsReadyPort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
         }
       }
     },

@@ -180,6 +180,11 @@ networkPolicy:
   registryPodLabels:
     app.kubernetes.io/name: appliance-registry
   registryPort: 5000
+  # Populated by zonctl for dns-capable profiles so CP can probe CoreDNS
+  # readiness. Left empty (no egress rule) when DNS is not installed.
+  dnsNamespaceLabel: {}
+  dnsPodLabels: {}
+  dnsReadyPort: 8181
 
 probes:
   livenessPath: /health/live

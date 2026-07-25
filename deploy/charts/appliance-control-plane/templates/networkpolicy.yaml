@@ -71,7 +71,21 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.networkPolicy.registryPort }}
-    # DNS is required for the internal registry Service lookup.
+    {{- $dnsNS := index .Values.networkPolicy.dnsNamespaceLabel "kubernetes.io/metadata.name" | default "" }}
+    {{- if $dnsNS }}
+    # LAN DNS readiness probe (CoreDNS :8181) for dns-capable profiles.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dnsNamespaceLabel | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dnsPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.dnsReadyPort }}
+    {{- end }}
+    # Cluster DNS is required for Service name lookup (registry, dns, …).
     - to:
         - namespaceSelector:
             matchLabels:

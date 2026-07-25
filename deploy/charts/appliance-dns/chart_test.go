@@ -50,6 +50,10 @@ func TestHardenedDNSRender(t *testing.T) {
 		"file /etc/coredns/zones/db.local", "forward . 1.1.1.1 8.8.8.8",
 		"appliance 3600 IN A 192.0.2.10",
 		"path: /health", "path: /ready",
+		"kind: Namespace",
+		"pod-security.kubernetes.io/enforce: privileged",
+		"pod-security.kubernetes.io/audit: privileged",
+		"pod-security.kubernetes.io/warn: privileged",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)

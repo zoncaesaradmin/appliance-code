@@ -1,0 +1,13 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "appliance-dns.namespace" . }}
+  labels:
+    {{- include "appliance-dns.labels" . | nindent 4 }}
+    # hostNetwork + NET_BIND_SERVICE for LAN :53 is an explicit product
+    # exception; Restricted PSA would reject this workload.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+{{- end }}
