@@ -36,6 +36,7 @@ func render(t *testing.T, args ...string) string {
 func TestHardenedRegistryRender(t *testing.T) {
 	out := render(t, "--set", "logs.prepare.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
 	for _, want := range []string{
+		"kind: Deployment\nmetadata:\n  name: artifact-registry",
 		"runAsUser: 10003", "runAsGroup: 10003", "fsGroup: 20000",
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"mountPath: /var/lib/registry", "mountPath: /var/log/zot", "mountPath: /tmp",

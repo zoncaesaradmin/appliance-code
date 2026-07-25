@@ -66,7 +66,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "appliance-registry.fullname" . }}
+  name: {{ include "appliance-registry.deploymentName" . }}
   namespace: {{ include "appliance-registry.namespace" . }}
   labels:
     {{- include "appliance-registry.labels" . | nindent 4 }}

@@ -6,6 +6,10 @@
 {{- default "appliance-registry" .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "appliance-registry.deploymentName" -}}
+{{- default "artifact-registry" .Values.deploymentNameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "appliance-registry.namespace" -}}
 {{- default .Release.Namespace .Values.namespace.name -}}
 {{- end -}}
