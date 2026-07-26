@@ -1,5 +1,5 @@
 // Package landnspublish lets any appliance (base capability) publish a LAN
-// A record to a remote lan-dns appliance's DNS records API.
+// A record to a remote landns appliance's DNS records API.
 package landnspublish
 
 import (

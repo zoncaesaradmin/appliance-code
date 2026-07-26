@@ -75,14 +75,14 @@ ServiceAccount name.
 Whether the control plane should get API access for Argo workflow submission.
 */}}
 {{- define "appliance-control-plane.argoWorkflowEnabled" -}}
-{{- if eq .Values.config.applianceProfile "builder" -}}true{{- else -}}false{{- end -}}
+{{- if or (eq .Values.config.applianceProfile "builder") (eq .Values.config.applianceProfile "builder-landns") (eq .Values.config.applianceProfile "builder-storage-landns") -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*
 Whether the control plane manages LAN DNS zone ConfigMap sync.
 */}}
 {{- define "appliance-control-plane.dnsAdminEnabled" -}}
-{{- if or (eq .Values.config.applianceProfile "lan-dns") (eq .Values.config.applianceProfile "storage-lan-dns") -}}true{{- else -}}false{{- end -}}
+{{- if or (eq .Values.config.applianceProfile "landns") (eq .Values.config.applianceProfile "storage-landns") (eq .Values.config.applianceProfile "builder-landns") (eq .Values.config.applianceProfile "builder-storage-landns") -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*

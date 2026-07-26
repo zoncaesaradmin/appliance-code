@@ -20,7 +20,7 @@ spec:
         - name: {{ include "appliance-control-plane.fullname" . }}
           port: {{ .Values.service.publicPort }}
     {{- if .Values.ui.enabled }}
-    # Exclude /v2 so non-artifact profiles (core, lan-dns) do not serve the UI
+    # Exclude /v2 so non-artifact profiles (core, landns) do not serve the UI
     # for OCI registry paths. When the registry IngressRoute is installed it
     # owns PathPrefix(`/v2`); otherwise Traefik returns 404.
     - match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/v2`)" $hostMatch }}

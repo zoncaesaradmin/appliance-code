@@ -68,24 +68,25 @@ config:
   # Developer workflow catalog used by the builder profile. For workspace
   # creation this contains workspace profiles and HTTPS Git repos. Build targets
   # are optional and are not required to materialize workspaces. Keep this empty
-  # for non-builder profiles such as core, storage, lan-dns, and
-  # storage-lan-dns.
+  # for non-build profiles such as core, storage, landns, and
+  # storage-landns.
   buildCatalog: {}
   # Appliance-owned generic image used by workspace provisioning workflows.
-  # zonctl injects this from the signed bundle for the builder profile.
+  # zonctl injects this from the signed bundle for build-capable profiles.
   workspaceProvisionerImageDigest: ""
   # Single bundled builder/dev-container image used by all Argo build pods.
-  # zonctl injects this from the signed bundle (automation-dev) for the builder
-  # profile. Build catalogs must not set per-target builder digests.
+  # zonctl injects this from the signed bundle (automation-dev) for
+  # build-capable profiles. Build catalogs must not set per-target builder digests.
   builderImageDigest: ""
   # Internal Zot data-plane endpoint. Artifact-bearing production profiles
-  # (builder, storage, storage-lan-dns) fail closed if this is empty; local
-  # tests may explicitly enable fake Zot.
+  # (builder, storage, storage-landns, builder-landns, builder-storage-landns)
+  # fail closed if this is empty; local tests may explicitly enable fake Zot.
   zotBaseURL: "http://appliance-registry.registry.svc.cluster.local:5000"
   zotAllowFake: false
-  # CoreDNS ready-plugin URL. DNS-bearing profiles (lan-dns, storage-lan-dns)
-  # fail closed at control-plane startup when this is empty so the appliance
-  # never reports dns-capable while the LAN DNS release is missing.
+  # CoreDNS ready-plugin URL. DNS-bearing profiles (landns, storage-landns,
+  # builder-landns, builder-storage-landns) fail closed at control-plane
+  # startup when this is empty so the appliance never reports dns-capable
+  # while the LAN DNS release is missing.
   dnsReadyURL: ""
   # LAN DNS zone ownership (control plane is source of truth; CoreDNS serves
   # a materialized ConfigMap zone file). Product A records are not seeded at

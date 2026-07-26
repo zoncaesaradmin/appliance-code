@@ -365,10 +365,12 @@ func capabilitiesForProfile(profile string) []string {
 		return []string{"artifact", "base", "build", "workflows"}
 	case "storage":
 		return []string{"artifact", "base"}
-	case "lan-dns":
+	case "landns":
 		return []string{"base", "dns"}
-	case "storage-lan-dns":
+	case "storage-landns":
 		return []string{"artifact", "base", "dns"}
+	case "builder-landns", "builder-storage-landns":
+		return []string{"artifact", "base", "build", "dns", "workflows"}
 	default:
 		return []string{"base", "workflows"}
 	}
@@ -1351,7 +1353,7 @@ func TestDNSPageAvailableWhenCapabilityEnabled(t *testing.T) {
 			{Name: "peer1", FQDN: "peer1.appliance.internal", IPv4: "192.0.2.30", TTL: 60, Source: "peer", Owner: "usr_peer", UpdatedAt: now},
 		},
 	}
-	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	handler := newTestServerWithProfile(t, "landns", cp)
 	cookie := loginTestCookie(t, handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/dns", nil)
@@ -1405,7 +1407,7 @@ func TestDNSPageReadOnlyWithoutWritePermission(t *testing.T) {
 			{Name: "registry1", FQDN: "registry1.appliance.internal", IPv4: "192.0.2.20", TTL: 300, Source: "admin", UpdatedAt: time.Now().UTC()},
 		},
 	}
-	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	handler := newTestServerWithProfile(t, "landns", cp)
 	cookie := loginTestCookie(t, handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/dns", nil)
@@ -1432,7 +1434,7 @@ func TestDNSRecordUpsertAndDelete(t *testing.T) {
 		initialized: true, adminUser: "admin", adminPass: "secret",
 		sessionPermissions: []string{"dns.records.read", "dns.records.write"},
 	}
-	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	handler := newTestServerWithProfile(t, "landns", cp)
 	cookie := loginTestCookie(t, handler)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/dns/records", strings.NewReader("name=registry1&ipv4=192.0.2.20&ttl=300"))
@@ -1459,7 +1461,7 @@ func TestDNSRecordUpsertForbiddenWithoutWritePermission(t *testing.T) {
 		initialized: true, adminUser: "admin", adminPass: "secret",
 		sessionPermissions: []string{"dns.records.read"},
 	}
-	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	handler := newTestServerWithProfile(t, "landns", cp)
 	cookie := loginTestCookie(t, handler)
 
 	createReq := httptest.NewRequest(http.MethodPost, "/dns/records", strings.NewReader("name=registry1&ipv4=192.0.2.20&ttl=300"))

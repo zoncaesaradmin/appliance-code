@@ -102,17 +102,19 @@ func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
 }
 
 func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
-	for _, profile := range []string{"storage", "builder", "storage-lan-dns"} {
+	for _, profile := range []string{"storage", "builder", "storage-landns", "builder-landns", "builder-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
 			cfg.ZotAllowFake = false
-			if profile == "builder" {
+			switch profile {
+			case "builder", "builder-landns", "builder-storage-landns":
 				cfg.BuildCatalog = testBuildCatalog()
 				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 				cfg.BuilderImageDigest = "automation-dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			}
-			if profile == "storage-lan-dns" {
+			switch profile {
+			case "storage-landns", "builder-landns", "builder-storage-landns":
 				cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
 			}
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "zotBaseURL") {
@@ -127,13 +129,19 @@ func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
 }
 
 func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
-	for _, profile := range []string{"lan-dns", "storage-lan-dns"} {
+	for _, profile := range []string{"landns", "storage-landns", "builder-landns", "builder-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
 			cfg.DNSReadyURL = ""
-			if profile == "storage-lan-dns" {
+			switch profile {
+			case "storage-landns":
 				cfg.ZotAllowFake = true
+			case "builder-landns", "builder-storage-landns":
+				cfg.ZotAllowFake = true
+				cfg.BuildCatalog = testBuildCatalog()
+				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+				cfg.BuilderImageDigest = "automation-dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			}
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "dnsReadyURL") {
 				t.Fatalf("Validate without DNS ready URL = %v, want dnsReadyURL error", err)

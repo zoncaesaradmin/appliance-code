@@ -492,10 +492,10 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 }
 
 func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
-	for _, profile := range []string{"storage", "storage-lan-dns"} {
+	for _, profile := range []string{"storage", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			args := append(defaultRenderArgs(), "--set", "config.applianceProfile="+profile)
-			if profile == "storage-lan-dns" {
+			if profile == "storage-landns" {
 				args = append(args, "--set", "config.dnsReadyURL=http://appliance-dns.dns.svc.cluster.local:8181/ready")
 			}
 			docs := renderChart(t, args...)
@@ -519,12 +519,24 @@ func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
 }
 
 func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
-	for _, profile := range []string{"lan-dns", "storage-lan-dns"} {
+	for _, profile := range []string{"landns", "storage-landns", "builder-landns", "builder-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
-			docs := renderChart(t, append(defaultRenderArgs(),
+			args := append(defaultRenderArgs(),
 				"--set", "config.applianceProfile="+profile,
 				"--set", "config.dnsReadyURL=http://appliance-dns.dns.svc.cluster.local:8181/ready",
-			)...)
+			)
+			switch profile {
+			case "builder-landns", "builder-storage-landns":
+				args = append(args,
+					"--set", "config.buildCatalog.workProfiles[0].name=builder",
+					"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
+					"--set", "config.buildCatalog.repos[0].name=app",
+					"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
+					"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				)
+			}
+			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 			data, _ := at(cm, "data").(map[string]any)
 			if got, _ := data["APPLIANCE_DNS_READY_URL"].(string); got != "http://appliance-dns.dns.svc.cluster.local:8181/ready" {
@@ -548,17 +560,22 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 			if got, _ := at(sa, "automountServiceAccountToken").(bool); !got {
 				t.Fatalf("dns profiles must automount the service account token")
 			}
+			if profile == "builder-landns" || profile == "builder-storage-landns" {
+				if findByKindAndName(docs, "Role", controlPlaneDeploymentName+"-workflows") == nil {
+					t.Fatalf("expected workflow Role for build+dns profile %s", profile)
+				}
+			}
 		})
 	}
 }
 
 func TestValuesSchemaRejectsArtifactProfilesWithoutZotURL(t *testing.T) {
 	requireHelm(t)
-	for _, profile := range []string{"storage", "storage-lan-dns"} {
+	for _, profile := range []string{"storage", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			valuesPath := filepath.Join(t.TempDir(), profile+"-without-zot.yaml")
 			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  zotBaseURL: \"\"\n", profile)
-			if profile == "storage-lan-dns" {
+			if profile == "storage-landns" {
 				values += "  dnsReadyURL: \"http://appliance-dns.dns.svc.cluster.local:8181/ready\"\n"
 			}
 			if err := os.WriteFile(valuesPath, []byte(values), 0o600); err != nil {
@@ -577,12 +594,27 @@ func TestValuesSchemaRejectsArtifactProfilesWithoutZotURL(t *testing.T) {
 
 func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
 	requireHelm(t)
-	for _, profile := range []string{"lan-dns", "storage-lan-dns"} {
+	for _, profile := range []string{"landns", "storage-landns", "builder-landns", "builder-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			valuesPath := filepath.Join(t.TempDir(), profile+"-without-dns.yaml")
 			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  dnsReadyURL: \"\"\n", profile)
-			if profile == "storage-lan-dns" {
+			switch profile {
+			case "storage-landns":
 				values += "  zotBaseURL: \"http://appliance-registry.registry.svc.cluster.local:5000\"\n  zotAllowFake: false\n"
+			case "builder-landns", "builder-storage-landns":
+				values += `  zotBaseURL: "http://appliance-registry.registry.svc.cluster.local:5000"
+  zotAllowFake: false
+  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  buildCatalog:
+    workProfiles:
+      - name: builder
+        repos:
+          - name: app
+    repos:
+      - name: app
+        url: https://git.internal.example.com/team/app.git
+`
 			}
 			if err := os.WriteFile(valuesPath, []byte(values), 0o600); err != nil {
 				t.Fatal(err)

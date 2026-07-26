@@ -10,11 +10,13 @@ import (
 type Profile string
 
 const (
-	ProfileCore          Profile = "core"
-	ProfileBuilder       Profile = "builder"
-	ProfileStorage       Profile = "storage"
-	ProfileLANDNS        Profile = "lan-dns"
-	ProfileStorageLANDNS Profile = "storage-lan-dns"
+	ProfileCore                 Profile = "core"
+	ProfileBuilder              Profile = "builder"
+	ProfileStorage              Profile = "storage"
+	ProfileLANDNS               Profile = "landns"
+	ProfileStorageLANDNS        Profile = "storage-landns"
+	ProfileBuilderLANDNS        Profile = "builder-landns"
+	ProfileBuilderStorageLANDNS Profile = "builder-storage-landns"
 )
 
 // Capability is the implementation-facing appliance capability name resolved
@@ -47,6 +49,11 @@ var profileCatalog = map[Profile][]Capability{
 	ProfileStorage:       {CapabilityBase, CapabilityArtifact},
 	ProfileLANDNS:        {CapabilityBase, CapabilityDNS},
 	ProfileStorageLANDNS: {CapabilityBase, CapabilityArtifact, CapabilityDNS},
+	// builder ∪ landns (registry/artifact already comes with builder).
+	ProfileBuilderLANDNS: {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
+	// builder ∪ storage ∪ registry ∪ dns — same capability union as
+	// builder-landns (storage/registry add no capabilities beyond builder).
+	ProfileBuilderStorageLANDNS: {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
 }
 
 // Set is the resolved enabled capability set for one appliance instance.

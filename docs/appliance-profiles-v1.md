@@ -55,7 +55,7 @@ The initial v1 appliance capabilities are:
 | `workflows` | Workflow substrate awareness and workflow-dependent module activation for v1 and future expansion |
 | `build` | Build APIs and build service/module behavior |
 | `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by zot |
-| `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for `lan-dns` / `storage-lan-dns` readiness |
+| `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
 
 Notes:
 
@@ -75,12 +75,18 @@ The initial v1 appliance profiles are:
 | `core` | Yes | `base`, `workflows` |
 | `builder` | No | `base`, `workflows`, `build`, `artifact` |
 | `storage` | No | `base`, `artifact` |
-| `lan-dns` | No | `base`, `dns` |
-| `storage-lan-dns` | No | `base`, `artifact`, `dns` |
+| `landns` | No | `base`, `dns` |
+| `storage-landns` | No | `base`, `artifact`, `dns` |
+| `builder-landns` | No | `base`, `workflows`, `build`, `artifact`, `dns` |
+| `builder-storage-landns` | No | `base`, `workflows`, `build`, `artifact`, `dns` |
 
 Notes:
 
 - `core` is the default v1 product profile.
+- `builder-landns` is builder ∪ landns. `builder-storage-landns` is the
+  product name for builder ∪ storage/registry ∪ dns; both resolve to the
+  same capability set because storage/registry are already covered by
+  builder's `artifact` capability.
 - The mapping from appliance profiles to appliance capabilities is not a
   permanent public truth table. It is the v1 mapping and may evolve in later
   versions.
@@ -185,7 +191,7 @@ the data plane cannot answer `/v2/`. The in-memory fake remains available only
 through the explicit local/test `APPLIANCE_ZOT_ALLOW_FAKE=true` setting; the
 production chart sets it to false.
 
-Production `storage-lan-dns` deployments follow the same artifact contract,
+Production `storage-landns` deployments follow the same artifact contract,
 because they still enable the `artifact` capability even though they do not
 enable workflows or build.
 
@@ -206,7 +212,7 @@ Every profile also exposes the base-capability helper
 `POST /api/v1/dns/publish` (permission `dns.publish`) so a non-dns
 appliance can publish its name/IP to a remote DNS appliance without
 install-time DNS mutation. Operator curl cookbook:
-`appliance-release` `docs/lan-dns-usage.md`.
+`appliance-release` `docs/landns-usage.md`.
 
 ## Enforcement Rules
 

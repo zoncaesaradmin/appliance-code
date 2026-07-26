@@ -17,7 +17,7 @@ paths:
       description: >
         Base-capability helper available on every appliance profile. The local
         control plane calls PUT /api/v1/dns/records/{name} on the remote
-        lan-dns (or storage-lan-dns) appliance using the supplied API token.
+        DNS-bearing appliance (landns / storage-landns / builder-landns / builder-storage-landns) using the supplied API token.
         Installers never write DNS records; use this API or call the DNS
         appliance records API directly. Requires dns.publish.
       operationId: publishDNSRecord
@@ -74,8 +74,7 @@ paths:
       summary: List LAN DNS A records
       description: >
         Lists A records in the appliance.internal zone. Requires the dns
-        capability and dns.records.read. Available on lan-dns /
-        storage-lan-dns profiles only.
+        capability and dns.records.read. Available on DNS-bearing profiles only.
       operationId: listDNSRecords
       responses:
         "200":

@@ -8,7 +8,7 @@ profiles.
 Phase 1 adds:
 
 - internal capability name: `dns`
-- product-facing profile names: `lan-dns`, `storage-lan-dns`
+- product-facing profile names: `landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`
 - centralized profile-to-capability mapping in the control plane and CLI
 - install-time and verification-time gating based on the resolved capability
   set
@@ -53,7 +53,7 @@ Phase 3 makes the DNS appliance useful for other hosts on the LAN:
   (permission `dns.publish`). Installers never write DNS records.
 
 Operator curl cookbook (setup, direct DNS API, peer publish):
-`appliance-release` `docs/lan-dns-usage.md`.
+`appliance-release` `docs/landns-usage.md`.
 
 Still out of scope: multi-node HA CoreDNS, replacing kube-system CoreDNS, and
 DHCP/router integration.

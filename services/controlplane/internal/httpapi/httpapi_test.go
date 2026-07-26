@@ -48,12 +48,16 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.ApplianceProfile = string(profile)
-	if profile == appliance.ProfileBuilder {
+	resolved, err := appliance.ResolveProfile(string(profile))
+	if err != nil {
+		t.Fatalf("ResolveProfile(%s): %v", profile, err)
+	}
+	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
 		cfg.BuildCatalog = catalog
 		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
-	if profile == appliance.ProfileLANDNS || profile == appliance.ProfileStorageLANDNS {
+	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
 		cfg.DNSAllowFakeZoneSync = true
 	}
@@ -67,7 +71,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		t.Fatalf("WireServices: %v", err)
 	}
 	t.Cleanup(func() { services.DB.Close() })
-	if profile == appliance.ProfileBuilder && services.BuilderGit != nil {
+	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) && services.BuilderGit != nil {
 		hosts, err := catalog.RepoHosts()
 		if err != nil {
 			t.Fatalf("catalog.RepoHosts: %v", err)
@@ -205,6 +209,8 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		{appliance.ProfileStorage, []string{"artifact", "base"}},
 		{appliance.ProfileLANDNS, []string{"base", "dns"}},
 		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns"}},
+		{appliance.ProfileBuilderLANDNS, []string{"artifact", "base", "build", "dns", "workflows"}},
+		{appliance.ProfileBuilderStorageLANDNS, []string{"artifact", "base", "build", "dns", "workflows"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
