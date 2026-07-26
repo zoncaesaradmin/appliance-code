@@ -20,10 +20,11 @@ spec:
         - name: {{ include "appliance-control-plane.fullname" . }}
           port: {{ .Values.service.publicPort }}
     {{- if .Values.ui.enabled }}
-    # Exclude /v2 so non-artifact profiles (core, landns) do not serve the UI
-    # for OCI registry paths. When the registry IngressRoute is installed it
-    # owns PathPrefix(`/v2`); otherwise Traefik returns 404.
-    - match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/v2`)" $hostMatch }}
+    # Exclude /v2 and /files so non-artifact profiles (core, landns) do not
+    # serve the UI for those paths. When the registry chart is installed it
+    # owns PathPrefix(`/v2`) and PathPrefix(`/files`); otherwise Traefik
+    # returns 404.
+    - match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" $hostMatch }}
       kind: Rule
       services:
         - name: {{ include "appliance-control-plane.uiServiceName" . }}

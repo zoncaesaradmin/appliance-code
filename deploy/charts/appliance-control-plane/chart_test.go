@@ -428,7 +428,7 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		switch {
 		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" && name == controlPlaneServiceName:
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" && name == controlPlaneUIName:
 			uiRouteOK = true
 		}
 	}
