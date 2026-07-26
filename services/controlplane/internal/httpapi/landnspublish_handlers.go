@@ -7,9 +7,9 @@ import (
 	"appliance-code/services/controlplane/internal/landnspublish"
 )
 
-// LANDNSPublishHandlers implements the base-capability outbound LAN DNS
-// publish surface. Any appliance can call this; it proxies to a remote
-// lan-dns appliance's PUT /api/v1/dns/records/{name}.
+// LANDNSPublishHandlers implements the base-capability outbound DNS
+// publish surface (POST /api/v1/dns/publish). Any appliance can call this;
+// it proxies to a remote DNS appliance's PUT /api/v1/dns/records/{name}.
 type LANDNSPublishHandlers struct {
 	Client *landnspublish.Client
 }

@@ -203,7 +203,7 @@ SQLite is the source of truth; the control plane materializes the zone into
 the CoreDNS ConfigMap. The UI exposes `/dns` when the capability is enabled.
 
 Every profile also exposes the base-capability helper
-`POST /api/v1/lan-dns/publish` (permission `lan_dns.publish`) so a non-dns
+`POST /api/v1/dns/publish` (permission `dns.publish`) so a non-dns
 appliance can publish its name/IP to a remote DNS appliance without
 install-time DNS mutation. Operator curl cookbook:
 `appliance-release` `docs/lan-dns-usage.md`.

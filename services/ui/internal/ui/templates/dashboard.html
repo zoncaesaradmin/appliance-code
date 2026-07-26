@@ -28,5 +28,14 @@
   <a href="/builder/workspaces" role="button">Open builder workspaces</a>
 </article>
 {{end}}
+
+{{if .DNSEnabled}}
+<article class="builder-callout">
+  <p class="eyebrow">LAN DNS</p>
+  <h2>Manage appliance.internal names</h2>
+  <p class="muted">Add A records for hosts on your LAN, or review peer-registered names served by this appliance.</p>
+  <a href="/dns" role="button">Open DNS records</a>
+</article>
+{{end}}
 {{template "layout-end" .}}
 {{end}}

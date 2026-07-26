@@ -47,8 +47,8 @@ Phase 3 makes the DNS appliance useful for other hosts on the LAN:
 - Zone sync patches CoreDNS ConfigMap `db.local`; CoreDNS `reload` serves it
 - UI `/dns` for admin CRUD
 - Peer publish (base capability on every appliance):
-  `POST /api/v1/lan-dns/publish` with remote DNS URL + token + name + ipv4
-  (permission `lan_dns.publish`). Installers never write DNS records.
+  `POST /api/v1/dns/publish` with remote DNS URL + token + name + ipv4
+  (permission `dns.publish`). Installers never write DNS records.
 
 Operator curl cookbook (setup, direct DNS API, peer publish):
 `appliance-release` `docs/lan-dns-usage.md`.

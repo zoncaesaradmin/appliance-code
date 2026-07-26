@@ -82,9 +82,9 @@ const (
 	PermDNSRecordsWrite    = "dns.records.write"
 	PermDNSRecordsRegister = "dns.records.register"
 
-	// PermLANDNSPublish lets any appliance (base capability) publish its
-	// name/IP to a remote lan-dns appliance via POST /api/v1/lan-dns/publish.
-	PermLANDNSPublish = "lan_dns.publish"
+	// PermDNSPublish lets any appliance (base capability) publish its
+	// name/IP to a remote DNS appliance via POST /api/v1/dns/publish.
+	PermDNSPublish = "dns.publish"
 
 	PermMCPInvoke = "mcp.invoke"
 
@@ -146,7 +146,7 @@ var AllPermissions = []storage.Permission{
 	{Name: PermDNSRecordsRead, Description: "Read LAN DNS A records"},
 	{Name: PermDNSRecordsWrite, Description: "Create, update, or delete any LAN DNS A record"},
 	{Name: PermDNSRecordsRegister, Description: "Register or renew owned LAN DNS A records"},
-	{Name: PermLANDNSPublish, Description: "Publish this appliance's DNS name and IP to a remote LAN DNS appliance"},
+	{Name: PermDNSPublish, Description: "Publish this appliance's DNS name and IP to a remote DNS appliance"},
 
 	{Name: PermMCPInvoke, Description: "Invoke MCP tools"},
 
@@ -215,7 +215,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermArtifactsRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRegister,
-			PermLANDNSPublish,
+			PermDNSPublish,
 		},
 	},
 }

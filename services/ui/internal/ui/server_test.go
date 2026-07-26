@@ -50,6 +50,13 @@ type fakeControlPlane struct {
 	registryTags             map[string][]string
 	registryReferrers        []controlplane.RegistryReferrer
 	registryGrants           []controlplane.RegistryGrant
+	sessionPermissions       []string
+	dnsRecords               []controlplane.DNSRecord
+	upsertDNSCalls           int
+	lastUpsertDNSName        string
+	lastUpsertDNSReq         controlplane.UpsertDNSRecordRequest
+	deleteDNSCalls           int
+	lastDeleteDNSName        string
 }
 
 func (f *fakeControlPlane) Capabilities(context.Context) ([]string, error) {
@@ -92,14 +99,43 @@ func (f *fakeControlPlane) DeleteRegistryGrant(_ context.Context, _, grantID str
 }
 
 func (f *fakeControlPlane) ListDNSRecords(context.Context, string) (controlplane.DNSRecordsResult, error) {
-	return controlplane.DNSRecordsResult{Zone: "appliance.internal"}, nil
+	return controlplane.DNSRecordsResult{
+		Zone:  "appliance.internal",
+		Items: append([]controlplane.DNSRecord(nil), f.dnsRecords...),
+	}, nil
 }
 
 func (f *fakeControlPlane) UpsertDNSRecord(_ context.Context, _ string, name string, req controlplane.UpsertDNSRecordRequest) (controlplane.DNSRecord, error) {
-	return controlplane.DNSRecord{Name: name, FQDN: name + ".appliance.internal", IPv4: req.IPv4, TTL: req.TTL, Source: "admin"}, nil
+	f.upsertDNSCalls++
+	f.lastUpsertDNSName = name
+	f.lastUpsertDNSReq = req
+	rec := controlplane.DNSRecord{
+		Name: name, FQDN: name + ".appliance.internal", IPv4: req.IPv4, TTL: req.TTL, Source: "admin",
+		UpdatedAt: time.Now().UTC(),
+	}
+	replaced := false
+	for i := range f.dnsRecords {
+		if f.dnsRecords[i].Name == name {
+			f.dnsRecords[i] = rec
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		f.dnsRecords = append(f.dnsRecords, rec)
+	}
+	return rec, nil
 }
 
-func (f *fakeControlPlane) DeleteDNSRecord(context.Context, string, string) error {
+func (f *fakeControlPlane) DeleteDNSRecord(_ context.Context, _, name string) error {
+	f.deleteDNSCalls++
+	f.lastDeleteDNSName = name
+	for i := range f.dnsRecords {
+		if f.dnsRecords[i].Name == name {
+			f.dnsRecords = append(f.dnsRecords[:i], f.dnsRecords[i+1:]...)
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -127,7 +163,11 @@ func (f *fakeControlPlane) Logout(context.Context, string) error { return nil }
 
 func (f *fakeControlPlane) Session(context.Context, string) (controlplane.Session, error) {
 	f.sessionCalls++
-	return controlplane.Session{UserID: "usr_admin", Username: "admin", AuthMethod: "session", Permissions: []string{"users.read"}}, nil
+	perms := f.sessionPermissions
+	if perms == nil {
+		perms = []string{"users.read"}
+	}
+	return controlplane.Session{UserID: "usr_admin", Username: "admin", AuthMethod: "session", Permissions: append([]string(nil), perms...)}, nil
 }
 
 func (f *fakeControlPlane) Version(context.Context) (controlplane.Version, error) {
@@ -1285,5 +1325,152 @@ func TestStaticAssetsAreServedLocally(t *testing.T) {
 		if body := rec.Body.String(); !strings.Contains(body, tc.want) {
 			t.Fatalf("%s body missing %q", tc.path, tc.want)
 		}
+	}
+}
+
+func loginTestCookie(t *testing.T, handler http.Handler) *http.Cookie {
+	t.Helper()
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader("username=admin&password=secret"))
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginRec := httptest.NewRecorder()
+	handler.ServeHTTP(loginRec, loginReq)
+	cookies := loginRec.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("expected session cookie after login, status=%d", loginRec.Code)
+	}
+	return cookies[0]
+}
+
+func TestDNSPageAvailableWhenCapabilityEnabled(t *testing.T) {
+	now := time.Now().UTC()
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		sessionPermissions: []string{"dns.records.read", "dns.records.write"},
+		dnsRecords: []controlplane.DNSRecord{
+			{Name: "registry1", FQDN: "registry1.appliance.internal", IPv4: "192.0.2.20", TTL: 300, Source: "admin", UpdatedAt: now},
+			{Name: "peer1", FQDN: "peer1.appliance.internal", IPv4: "192.0.2.30", TTL: 60, Source: "peer", Owner: "usr_peer", UpdatedAt: now},
+		},
+	}
+	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	cookie := loginTestCookie(t, handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/dns", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"LAN DNS Records",
+		"registry1.appliance.internal",
+		"192.0.2.20",
+		"peer1.appliance.internal",
+		"Add or update record",
+		`href="/dns"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dns page missing %q:\n%s", want, body)
+		}
+	}
+
+	dashReq := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	dashReq.AddCookie(cookie)
+	dashRec := httptest.NewRecorder()
+	handler.ServeHTTP(dashRec, dashReq)
+	if body := dashRec.Body.String(); !strings.Contains(body, "Open DNS records") {
+		t.Fatalf("dashboard missing DNS callout:\n%s", body)
+	}
+}
+
+func TestDNSPageNotAvailableWithoutCapability(t *testing.T) {
+	handler := newTestServer(t) // core: no dns
+	cookie := loginTestCookie(t, handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/dns", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestDNSPageReadOnlyWithoutWritePermission(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		sessionPermissions: []string{"dns.records.read"},
+		dnsRecords: []controlplane.DNSRecord{
+			{Name: "registry1", FQDN: "registry1.appliance.internal", IPv4: "192.0.2.20", TTL: 300, Source: "admin", UpdatedAt: time.Now().UTC()},
+		},
+	}
+	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	cookie := loginTestCookie(t, handler)
+
+	req := httptest.NewRequest(http.MethodGet, "/dns", nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "registry1.appliance.internal") {
+		t.Fatalf("expected record list:\n%s", body)
+	}
+	if strings.Contains(body, "Add or update record") || strings.Contains(body, ">Delete<") {
+		t.Fatalf("read-only session should not see manage controls:\n%s", body)
+	}
+	if !strings.Contains(body, "cannot add or delete") {
+		t.Fatalf("expected read-only notice:\n%s", body)
+	}
+}
+
+func TestDNSRecordUpsertAndDelete(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		sessionPermissions: []string{"dns.records.read", "dns.records.write"},
+	}
+	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	cookie := loginTestCookie(t, handler)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/dns/records", strings.NewReader("name=registry1&ipv4=192.0.2.20&ttl=300"))
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusSeeOther || cp.upsertDNSCalls != 1 || cp.lastUpsertDNSName != "registry1" || cp.lastUpsertDNSReq.IPv4 != "192.0.2.20" {
+		t.Fatalf("upsert status=%d calls=%d name=%q req=%+v", createRec.Code, cp.upsertDNSCalls, cp.lastUpsertDNSName, cp.lastUpsertDNSReq)
+	}
+
+	deleteReq := httptest.NewRequest(http.MethodPost, "/dns/records/delete", strings.NewReader("name=registry1"))
+	deleteReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	deleteReq.AddCookie(cookie)
+	deleteRec := httptest.NewRecorder()
+	handler.ServeHTTP(deleteRec, deleteReq)
+	if deleteRec.Code != http.StatusSeeOther || cp.deleteDNSCalls != 1 || cp.lastDeleteDNSName != "registry1" {
+		t.Fatalf("delete status=%d calls=%d name=%q", deleteRec.Code, cp.deleteDNSCalls, cp.lastDeleteDNSName)
+	}
+}
+
+func TestDNSRecordUpsertForbiddenWithoutWritePermission(t *testing.T) {
+	cp := &fakeControlPlane{
+		initialized: true, adminUser: "admin", adminPass: "secret",
+		sessionPermissions: []string{"dns.records.read"},
+	}
+	handler := newTestServerWithProfile(t, "lan-dns", cp)
+	cookie := loginTestCookie(t, handler)
+
+	createReq := httptest.NewRequest(http.MethodPost, "/dns/records", strings.NewReader("name=registry1&ipv4=192.0.2.20&ttl=300"))
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", createRec.Code)
+	}
+	if cp.upsertDNSCalls != 0 {
+		t.Fatalf("expected no upsert call, got %d", cp.upsertDNSCalls)
 	}
 }

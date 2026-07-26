@@ -33,7 +33,7 @@ func TestLANDNSPublish_ProxiesToRemoteDNSAppliance(t *testing.T) {
 		"ttl":             60,
 	}
 	payload, _ := json.Marshal(body)
-	resp := ts.doJSON(t, http.MethodPost, "/api/v1/lan-dns/publish", token, string(payload))
+	resp := ts.doJSON(t, http.MethodPost, "/api/v1/dns/publish", token, string(payload))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
@@ -53,7 +53,7 @@ func TestLANDNSPublish_RequiresPermission(t *testing.T) {
 	_ = ts.createUserWithRole(t, "viewer", testPassword, roles.ViewerRoleID)
 	token := ts.login(t, "viewer", testPassword)
 
-	resp := ts.doJSON(t, http.MethodPost, "/api/v1/lan-dns/publish", token, `{
+	resp := ts.doJSON(t, http.MethodPost, "/api/v1/dns/publish", token, `{
 		"dnsApplianceURL":"https://dns.example",
 		"apiToken":"tok",
 		"name":"registry1",

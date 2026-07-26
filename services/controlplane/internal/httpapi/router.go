@@ -281,13 +281,13 @@ func publicRoutes() []publicRoute {
 			}
 			return deps.MCPHandler, nil
 		}},
-		// Outbound publish to a remote lan-dns appliance. Available on every
+		// Outbound publish to a remote DNS appliance. Available on every
 		// profile (base); does not require local dns capability.
-		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/lan-dns/publish", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/dns/publish", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.LANDNSPublishH == nil {
-				return nil, fmt.Errorf("missing lan-dns publish handlers")
+				return nil, fmt.Errorf("missing dns publish handlers")
 			}
-			return w.protect(roles.PermLANDNSPublish, deps.LANDNSPublishH.Publish), nil
+			return w.protect(roles.PermDNSPublish, deps.LANDNSPublishH.Publish), nil
 		}},
 		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.RegistryH == nil {

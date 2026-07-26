@@ -11,16 +11,16 @@ servers:
 security:
   - bearerAuth: []
 paths:
-  /api/v1/lan-dns/publish:
+  /api/v1/dns/publish:
     post:
-      summary: Publish a LAN DNS name to a remote DNS appliance
+      summary: Publish a DNS name to a remote DNS appliance
       description: >
         Base-capability helper available on every appliance profile. The local
         control plane calls PUT /api/v1/dns/records/{name} on the remote
         lan-dns (or storage-lan-dns) appliance using the supplied API token.
         Installers never write DNS records; use this API or call the DNS
-        appliance records API directly. Requires lan_dns.publish.
-      operationId: publishLANDNSRecord
+        appliance records API directly. Requires dns.publish.
+      operationId: publishDNSRecord
       requestBody:
         required: true
         content:

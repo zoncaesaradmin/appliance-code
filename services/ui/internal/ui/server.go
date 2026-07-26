@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"io/fs"
@@ -123,6 +124,9 @@ type dnsPageData struct {
 	Zone             string
 	Records          []controlplane.DNSRecord
 	CanManageRecords bool
+	FormName         string
+	FormIPv4         string
+	FormTTL          string
 }
 
 func workspaceStatusPending(current *controlplane.Workspace, workspaces []controlplane.Workspace) bool {
@@ -1012,7 +1016,29 @@ func (s *Server) dnsPageData(r *http.Request, rec session.Record, message, formE
 	base.CurrentPath = "/dns"
 	base.Message = message
 	base.Error = formError
-	data := dnsPageData{viewData: base, Zone: "appliance.internal"}
+	data := dnsPageData{
+		viewData: base,
+		Zone:     "appliance.internal",
+		FormName: strings.TrimSpace(r.URL.Query().Get("name")),
+		FormIPv4: strings.TrimSpace(r.URL.Query().Get("ipv4")),
+		FormTTL:  strings.TrimSpace(r.URL.Query().Get("ttl")),
+	}
+	if data.FormTTL == "" {
+		data.FormTTL = "300"
+	}
+
+	sessionInfo, refreshed, sessErr := s.sessionWithRefresh(r, rec)
+	if sessErr != nil {
+		data.StatusError = "Session check failed. Please sign in again."
+		return data
+	}
+	if refreshed.ID != "" && (refreshed.AccessToken != rec.AccessToken || refreshed.Username != rec.Username) {
+		s.sessions.Update(refreshed)
+		rec = refreshed
+	}
+	data.Session = sessionInfo
+	data.CanManageRecords = sessionHasPermission(sessionInfo.Permissions, "dns.records.write")
+
 	result, err := s.cp.ListDNSRecords(r.Context(), rec.AccessToken)
 	if err != nil {
 		var httpErr *controlplane.HTTPStatusError
@@ -1029,9 +1055,6 @@ func (s *Server) dnsPageData(r *http.Request, rec session.Record, message, formE
 	}
 	data.Zone = result.Zone
 	data.Records = result.Items
-	// Show manage controls after a successful list; the API still enforces
-	// dns.records.write on mutate.
-	data.CanManageRecords = true
 	return data
 }
 
@@ -1048,18 +1071,37 @@ func (s *Server) upsertDNSRecord(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not read the DNS record form."))
 		return
 	}
+	sessionInfo, refreshed, sessErr := s.sessionWithRefresh(r, rec)
+	if sessErr != nil {
+		s.render(w, r, http.StatusUnauthorized, "dns.html", s.dnsPageData(r, rec, "", "Session check failed. Please sign in again."))
+		return
+	}
+	if refreshed.ID != "" {
+		s.sessions.Update(refreshed)
+		rec = refreshed
+	}
+	if !sessionHasPermission(sessionInfo.Permissions, "dns.records.write") {
+		s.render(w, r, http.StatusForbidden, "dns.html", s.dnsPageData(r, rec, "", "You do not have permission to manage DNS records."))
+		return
+	}
 	ttl := 300
 	if raw := strings.TrimSpace(r.FormValue("ttl")); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil {
 			ttl = parsed
 		}
 	}
-	_, err := s.cp.UpsertDNSRecord(r.Context(), rec.AccessToken, r.FormValue("name"), controlplane.UpsertDNSRecordRequest{
-		IPv4: r.FormValue("ipv4"),
+	name := strings.TrimSpace(r.FormValue("name"))
+	ipv4 := strings.TrimSpace(r.FormValue("ipv4"))
+	_, err := s.cp.UpsertDNSRecord(r.Context(), rec.AccessToken, name, controlplane.UpsertDNSRecordRequest{
+		IPv4: ipv4,
 		TTL:  ttl,
 	})
 	if err != nil {
-		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not save the DNS record."))
+		data := s.dnsPageData(r, rec, "", controlPlaneErrorMessage(err, "Could not save the DNS record."))
+		data.FormName = name
+		data.FormIPv4 = ipv4
+		data.FormTTL = strconv.Itoa(ttl)
+		s.render(w, r, http.StatusBadRequest, "dns.html", data)
 		return
 	}
 	http.Redirect(w, r, "/dns", http.StatusSeeOther)
@@ -1078,11 +1120,53 @@ func (s *Server) deleteDNSRecord(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not read the delete form."))
 		return
 	}
+	sessionInfo, refreshed, sessErr := s.sessionWithRefresh(r, rec)
+	if sessErr != nil {
+		s.render(w, r, http.StatusUnauthorized, "dns.html", s.dnsPageData(r, rec, "", "Session check failed. Please sign in again."))
+		return
+	}
+	if refreshed.ID != "" {
+		s.sessions.Update(refreshed)
+		rec = refreshed
+	}
+	if !sessionHasPermission(sessionInfo.Permissions, "dns.records.write") {
+		s.render(w, r, http.StatusForbidden, "dns.html", s.dnsPageData(r, rec, "", "You do not have permission to manage DNS records."))
+		return
+	}
 	if err := s.cp.DeleteDNSRecord(r.Context(), rec.AccessToken, r.FormValue("name")); err != nil {
-		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not delete the DNS record."))
+		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", controlPlaneErrorMessage(err, "Could not delete the DNS record.")))
 		return
 	}
 	http.Redirect(w, r, "/dns", http.StatusSeeOther)
+}
+
+func sessionHasPermission(permissions []string, want string) bool {
+	for _, p := range permissions {
+		if p == want {
+			return true
+		}
+	}
+	return false
+}
+
+func controlPlaneErrorMessage(err error, fallback string) string {
+	var httpErr *controlplane.HTTPStatusError
+	if !errors.As(err, &httpErr) || strings.TrimSpace(httpErr.Body) == "" {
+		return fallback
+	}
+	var problem struct {
+		Detail string `json:"detail"`
+		Title  string `json:"title"`
+	}
+	if jsonErr := json.Unmarshal([]byte(httpErr.Body), &problem); jsonErr == nil {
+		if detail := strings.TrimSpace(problem.Detail); detail != "" {
+			return detail
+		}
+		if title := strings.TrimSpace(problem.Title); title != "" {
+			return title
+		}
+	}
+	return fallback
 }
 
 func (s *Server) builderEnabled(ctx context.Context) bool {
