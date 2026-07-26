@@ -44,7 +44,9 @@ Phase 3 makes the DNS appliance useful for other hosts on the LAN:
 - Control-plane SQLite owns A records under `appliance.internal`
 - Authenticated API: `GET/PUT/DELETE /api/v1/dns/records` (capability `dns`)
 - Permissions: `dns.records.read`, `dns.records.write`, `dns.records.register`
-- Zone sync patches CoreDNS ConfigMap `db.local`; CoreDNS `reload` serves it
+- Zone sync patches CoreDNS ConfigMap `db.local` and bumps the SOA serial;
+  CoreDNS `file { reload 1s }` picks up the new zone within about a second
+  (negative cache is capped at ~1s so a prior NXDOMAIN does not stick)
 - UI `/dns` for admin CRUD
 - Peer publish (base capability on every appliance):
   `POST /api/v1/dns/publish` with remote DNS URL + token + name + ipv4

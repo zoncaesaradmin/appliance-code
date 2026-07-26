@@ -12,11 +12,22 @@ data:
         log
         health :{{ .Values.probes.healthPort }}
         ready :{{ .Values.probes.readyPort }}
-        file /etc/coredns/zones/db.local {{ .Values.localZone.name }}
+        # Zone sync bumps the SOA serial on every ConfigMap patch. Poll every
+        # 1s so new/updated A records are served almost immediately; ConfigMap
+        # symlink updates often miss fsnotify, and the file-plugin default is 1m.
+        file /etc/coredns/zones/db.local {{ .Values.localZone.name }} {
+            reload 1s
+        }
         forward . {{ join " " .Values.upstreamResolvers }}
-        cache 30
+        # Keep positive answers briefly; keep NXDOMAIN tiny so a name added
+        # right after a failed lookup becomes visible within ~1–2s.
+        cache {
+            success 9984 30
+            denial 9984 1 0
+        }
         loop
-        reload
+        # Pick up Corefile changes (for example after chart upgrade) quickly.
+        reload 2s
         loadbalance
     }
   db.local: |

@@ -46,13 +46,21 @@ func TestHardenedDNSRender(t *testing.T) {
 		"NET_BIND_SERVICE", "hostNetwork: true",
 		"path: /data/zon/logs/dns", "chmod 2755 /data/zon/logs/dns",
 		"kind: NetworkPolicy", "name: appliance-dns-default-deny",
-		"file /etc/coredns/zones/db.local", "forward . 1.1.1.1 8.8.8.8",
+		"file /etc/coredns/zones/db.local",
+		"reload 1s",
+		"reload 2s",
+		"forward . 1.1.1.1 8.8.8.8",
+		"success 9984 30",
+		"denial 9984 1 0",
 		"ns  3600 IN A 192.0.2.10",
 		"path: /health", "path: /ready",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
+	}
+	if strings.Contains(out, "cache 30\n") {
+		t.Error("render must not use bare cache 30; denial TTL must stay short for fast admin upserts")
 	}
 	if strings.Contains(out, "appliance 3600 IN A") {
 		t.Error("default render must not seed a product host A record")
