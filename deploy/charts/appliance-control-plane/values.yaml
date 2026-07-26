@@ -55,6 +55,12 @@ namespace:
 # per ADR 0005.
 config:
   applianceProfile: core
+  # Product LAN instance label (single DNS label). zonctl sets this from
+  # --appliance-name; FQDN is applianceName.dnsZoneName.
+  applianceName: ""
+  # Node IPv4 for operator-facing identity (dashboard). zonctl injects it.
+  nodeIPv4: ""
+  # Derived by zonctl as https://<applianceName>.<dnsZoneName>.
   canonicalOrigin: "https://appliance.example.internal"
   logLevel: info
   trustedProxyCount: 1

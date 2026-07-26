@@ -52,6 +52,14 @@ type Version struct {
 	GoVersion string `json:"goVersion"`
 }
 
+type ApplianceIdentity struct {
+	ApplianceName   string `json:"applianceName"`
+	DNSZone         string `json:"dnsZone"`
+	FQDN            string `json:"fqdn"`
+	NodeIPv4        string `json:"nodeIPv4,omitempty"`
+	CanonicalOrigin string `json:"canonicalOrigin,omitempty"`
+}
+
 type Health struct {
 	Status string `json:"status"`
 }
@@ -335,6 +343,19 @@ func (c *Client) Capabilities(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return result.Capabilities, nil
+}
+
+// Identity reports the product LAN name for this appliance instance.
+func (c *Client) Identity(ctx context.Context) (ApplianceIdentity, error) {
+	var out ApplianceIdentity
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/appliance/identity", nil)
+	if err != nil {
+		return out, err
+	}
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
 }
 
 func (c *Client) ListRegistryRepositories(ctx context.Context, accessToken string) ([]string, error) {

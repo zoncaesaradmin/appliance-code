@@ -32,7 +32,7 @@
 {{if .DNSEnabled}}
 <article class="builder-callout">
   <p class="eyebrow">LAN DNS</p>
-  <h2>Manage appliance.internal names</h2>
+  <h2>Manage {{if .Identity.DNSZone}}{{.Identity.DNSZone}}{{else}}LAN DNS{{end}} names</h2>
   <p class="muted">Add A records for hosts on your LAN, or review peer-registered names served by this appliance.</p>
   <a href="/dns" role="button">Open DNS records</a>
 </article>

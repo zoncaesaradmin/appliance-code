@@ -18,7 +18,20 @@
   <dd>{{if .Version.Commit}}{{.Version.Commit}}{{else}}unknown{{end}}</dd>
   <dt>Profile</dt>
   <dd>{{.ApplianceProfile}}</dd>
+  {{if .Identity.FQDN}}
+  <dt>Appliance name</dt>
+  <dd>{{.Identity.ApplianceName}}</dd>
+  <dt>LAN FQDN</dt>
+  <dd>{{.Identity.FQDN}}</dd>
+  {{if .Identity.NodeIPv4}}
+  <dt>Node IPv4</dt>
+  <dd>{{.Identity.NodeIPv4}}</dd>
+  {{end}}
+  {{end}}
 </dl>
+{{if and .Identity.FQDN .Identity.NodeIPv4}}
+<p class="notice">Register an A record for <code>{{.Identity.FQDN}}</code> → <code>{{.Identity.NodeIPv4}}</code> on your landns appliance if LAN clients should resolve this name.</p>
+{{end}}
 <a class="secondary" href="/dashboard" hx-get="/partials/status" hx-target="#status-panel" hx-swap="innerHTML" role="button">
   Refresh status
 </a>

@@ -93,6 +93,12 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions},
 		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
 		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
+		IdentityH: &httpapi.IdentityHandlers{
+			ApplianceName:   cfg.ApplianceName,
+			DNSZone:         cfg.DNSZoneName,
+			NodeIPv4:        cfg.NodeIPv4,
+			CanonicalOrigin: cfg.CanonicalOrigin,
+		},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},

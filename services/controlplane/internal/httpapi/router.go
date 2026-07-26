@@ -19,6 +19,7 @@ type Deps struct {
 	AuthH            *AuthHandlers
 	SetupH           *SetupHandlers
 	CapabilitiesH    *CapabilitiesHandlers
+	IdentityH        *IdentityHandlers
 	ForwardAuthH     *ForwardAuthHandlers
 	UsersH           *UserHandlers
 	RolesH           *RoleHandlers
@@ -124,6 +125,12 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing capabilities handlers")
 			}
 			return http.HandlerFunc(deps.CapabilitiesH.Get), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/identity", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.IdentityH == nil {
+				return nil, fmt.Errorf("missing identity handlers")
+			}
+			return http.HandlerFunc(deps.IdentityH.Get), nil
 		}},
 		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/setup/first-admin", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.SetupH == nil {

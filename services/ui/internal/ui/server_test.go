@@ -59,6 +59,10 @@ type fakeControlPlane struct {
 	lastDeleteDNSName        string
 }
 
+func (f *fakeControlPlane) Identity(context.Context) (controlplane.ApplianceIdentity, error) {
+	return controlplane.ApplianceIdentity{}, nil
+}
+
 func (f *fakeControlPlane) Capabilities(context.Context) ([]string, error) {
 	if f.capabilitiesErr != nil {
 		return nil, f.capabilitiesErr

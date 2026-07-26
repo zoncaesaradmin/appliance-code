@@ -7,6 +7,8 @@ metadata:
     {{- include "appliance-control-plane.labels" . | nindent 4 }}
 data:
   APPLIANCE_PROFILE: {{ .Values.config.applianceProfile | quote }}
+  APPLIANCE_NAME: {{ .Values.config.applianceName | default "" | quote }}
+  APPLIANCE_NODE_IPV4: {{ .Values.config.nodeIPv4 | default "" | quote }}
   APPLIANCE_CANONICAL_ORIGIN: {{ .Values.config.canonicalOrigin | quote }}
   APPLIANCE_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   APPLIANCE_TRUSTED_PROXY_COUNT: {{ .Values.config.trustedProxyCount | quote }}

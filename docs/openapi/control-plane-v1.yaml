@@ -11,6 +11,40 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /api/v1/appliance/identity:
+    get:
+      summary: Get appliance LAN identity
+      description: >
+        Returns the product LAN identity for this appliance instance:
+        applianceName, dnsZone, derived FQDN, node IPv4, and canonicalOrigin.
+        Available on every profile (base capability). Install does not publish
+        DNS; operators use this response to register an A record on landns.
+      operationId: getApplianceIdentity
+      security: []
+      responses:
+        "200":
+          description: Appliance identity.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [applianceName, dnsZone, fqdn]
+                properties:
+                  applianceName:
+                    type: string
+                    example: registry1
+                  dnsZone:
+                    type: string
+                    example: appliance.internal
+                  fqdn:
+                    type: string
+                    example: registry1.appliance.internal
+                  nodeIPv4:
+                    type: string
+                    example: 192.168.1.102
+                  canonicalOrigin:
+                    type: string
+                    example: https://registry1.appliance.internal
   /api/v1/dns/publish:
     post:
       summary: Publish a DNS name to a remote DNS appliance

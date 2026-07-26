@@ -48,6 +48,7 @@ type controlPlane interface {
 	SubmitCurrentBuild(ctx context.Context, accessToken string, req controlplane.SubmitBuildRequest) (controlplane.Job, error)
 	CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (controlplane.Job, error)
 	Capabilities(ctx context.Context) ([]string, error)
+	Identity(ctx context.Context) (controlplane.ApplianceIdentity, error)
 	ListRegistryRepositories(ctx context.Context, accessToken string) ([]string, error)
 	ListRegistryTags(ctx context.Context, accessToken, repository string) ([]string, error)
 	ListRegistryReferrers(ctx context.Context, accessToken, repository, digest string) ([]controlplane.RegistryReferrer, error)
@@ -81,6 +82,7 @@ type viewData struct {
 	SetupNeeded      bool
 	Version          controlplane.Version
 	Health           controlplane.Health
+	Identity         controlplane.ApplianceIdentity
 	StatusError      string
 }
 
@@ -408,6 +410,9 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 		data.Health = health
 	} else if data.StatusError == "" {
 		data.StatusError = "Control plane is not ready."
+	}
+	if identity, err := s.cp.Identity(r.Context()); err == nil {
+		data.Identity = identity
 	}
 	return data
 }

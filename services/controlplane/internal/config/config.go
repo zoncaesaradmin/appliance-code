@@ -21,6 +21,8 @@ import (
 // deployment layers override them through environment variables.
 type Config struct {
 	ApplianceProfile string `json:"applianceProfile"`
+	ApplianceName    string `json:"applianceName"`
+	NodeIPv4         string `json:"nodeIPv4"`
 	CanonicalOrigin  string `json:"canonicalOrigin"`
 	PublicAddr       string `json:"publicAddr"`
 	InternalAddr     string `json:"internalAddr"`
@@ -144,6 +146,8 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		}
 	}
 	str("PROFILE", &cfg.ApplianceProfile)
+	str("NAME", &cfg.ApplianceName)
+	str("NODE_IPV4", &cfg.NodeIPv4)
 	str("CANONICAL_ORIGIN", &cfg.CanonicalOrigin)
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
@@ -311,8 +315,18 @@ func (c Config) Validate() error {
 		}
 	}
 
+	if name := strings.TrimSpace(c.ApplianceName); name != "" {
+		if strings.Contains(name, ".") || strings.ToLower(name) != name {
+			errs = append(errs, "applianceName must be a single lowercase DNS label")
+		}
+	}
+	if zone := strings.TrimSpace(c.DNSZoneName); zone != "" {
+		if zone == "local" || strings.HasSuffix(zone, ".local") {
+			errs = append(errs, "dnsZoneName must not use .local (reserved for mDNS)")
+		}
+	}
 	if u, err := url.Parse(c.CanonicalOrigin); err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" {
-		errs = append(errs, "canonicalOrigin must be an absolute URL with no path, e.g. https://appliance.example.internal")
+		errs = append(errs, "canonicalOrigin must be an absolute URL with no path, e.g. https://registry1.appliance.internal")
 	}
 
 	if c.PublicAddr == "" {
