@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +53,9 @@ type controlPlane interface {
 	ListRegistryGrants(ctx context.Context, accessToken string) ([]controlplane.RegistryGrant, error)
 	CreateRegistryGrant(ctx context.Context, accessToken string, req controlplane.CreateRegistryGrantRequest) (controlplane.RegistryGrant, error)
 	DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error
+	ListDNSRecords(ctx context.Context, accessToken string) (controlplane.DNSRecordsResult, error)
+	UpsertDNSRecord(ctx context.Context, accessToken, name string, req controlplane.UpsertDNSRecordRequest) (controlplane.DNSRecord, error)
+	DeleteDNSRecord(ctx context.Context, accessToken, name string) error
 }
 
 type Server struct {
@@ -69,6 +73,7 @@ type viewData struct {
 	ApplianceProfile string
 	BuilderEnabled   bool
 	ArtifactEnabled  bool
+	DNSEnabled       bool
 	Error            string
 	Message          string
 	Session          controlplane.Session
@@ -111,6 +116,13 @@ type artifactPageData struct {
 	Referrers          []controlplane.RegistryReferrer
 	Grants             []controlplane.RegistryGrant
 	CanManageGrants    bool
+}
+
+type dnsPageData struct {
+	viewData
+	Zone             string
+	Records          []controlplane.DNSRecord
+	CanManageRecords bool
 }
 
 func workspaceStatusPending(current *controlplane.Workspace, workspaces []controlplane.Workspace) bool {
@@ -171,6 +183,9 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	mux.HandleFunc("GET /artifacts", s.artifactPage)
 	mux.HandleFunc("POST /artifacts/grants", s.createRegistryGrant)
 	mux.HandleFunc("POST /artifacts/grants/delete", s.deleteRegistryGrant)
+	mux.HandleFunc("GET /dns", s.dnsPage)
+	mux.HandleFunc("POST /dns/records", s.upsertDNSRecord)
+	mux.HandleFunc("POST /dns/records/delete", s.deleteDNSRecord)
 	mux.HandleFunc("POST /builder/workspaces", s.createBuilderWorkspace)
 	mux.HandleFunc("POST /builder/git-access", s.configureBuilderGitAccess)
 	mux.HandleFunc("POST /builder/builds", s.submitBuilderBuild)
@@ -368,6 +383,7 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 		ApplianceProfile: s.cfg.ApplianceProfile,
 		BuilderEnabled:   s.builderEnabled(r.Context()),
 		ArtifactEnabled:  s.artifactEnabled(r.Context()),
+		DNSEnabled:       s.dnsEnabled(r.Context()),
 	}
 	sessionInfo, refreshed, err := s.sessionWithRefresh(r, rec)
 	if err != nil {
@@ -881,6 +897,7 @@ func (s *Server) authenticatedViewData(r *http.Request, rec session.Record) view
 		ApplianceProfile: s.cfg.ApplianceProfile,
 		BuilderEnabled:   s.builderEnabled(r.Context()),
 		ArtifactEnabled:  s.artifactEnabled(r.Context()),
+		DNSEnabled:       s.dnsEnabled(r.Context()),
 	}
 	if latest, ok := s.sessions.Get(rec.ID); ok {
 		rec = latest
@@ -976,12 +993,108 @@ func (s *Server) hasCapability(ctx context.Context, capability string) bool {
 	return false
 }
 
+func (s *Server) dnsPage(w http.ResponseWriter, r *http.Request) {
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	if !s.dnsEnabled(r.Context()) {
+		http.NotFound(w, r)
+		return
+	}
+	data := s.dnsPageData(r, rec, "", "")
+	s.render(w, r, http.StatusOK, "dns.html", data)
+}
+
+func (s *Server) dnsPageData(r *http.Request, rec session.Record, message, formError string) dnsPageData {
+	base := s.authenticatedViewData(r, rec)
+	base.Title = "LAN DNS"
+	base.CurrentPath = "/dns"
+	base.Message = message
+	base.Error = formError
+	data := dnsPageData{viewData: base, Zone: "appliance.internal"}
+	result, err := s.cp.ListDNSRecords(r.Context(), rec.AccessToken)
+	if err != nil {
+		var httpErr *controlplane.HTTPStatusError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusForbidden {
+			data.StatusError = "You do not have permission to list DNS records."
+			return data
+		}
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			data.StatusError = "DNS records API is not available on this appliance."
+			return data
+		}
+		data.StatusError = "Could not load DNS records."
+		return data
+	}
+	data.Zone = result.Zone
+	data.Records = result.Items
+	// Show manage controls after a successful list; the API still enforces
+	// dns.records.write on mutate.
+	data.CanManageRecords = true
+	return data
+}
+
+func (s *Server) upsertDNSRecord(w http.ResponseWriter, r *http.Request) {
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	if !s.dnsEnabled(r.Context()) {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not read the DNS record form."))
+		return
+	}
+	ttl := 300
+	if raw := strings.TrimSpace(r.FormValue("ttl")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			ttl = parsed
+		}
+	}
+	_, err := s.cp.UpsertDNSRecord(r.Context(), rec.AccessToken, r.FormValue("name"), controlplane.UpsertDNSRecordRequest{
+		IPv4: r.FormValue("ipv4"),
+		TTL:  ttl,
+	})
+	if err != nil {
+		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not save the DNS record."))
+		return
+	}
+	http.Redirect(w, r, "/dns", http.StatusSeeOther)
+}
+
+func (s *Server) deleteDNSRecord(w http.ResponseWriter, r *http.Request) {
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	if !s.dnsEnabled(r.Context()) {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not read the delete form."))
+		return
+	}
+	if err := s.cp.DeleteDNSRecord(r.Context(), rec.AccessToken, r.FormValue("name")); err != nil {
+		s.render(w, r, http.StatusBadRequest, "dns.html", s.dnsPageData(r, rec, "", "Could not delete the DNS record."))
+		return
+	}
+	http.Redirect(w, r, "/dns", http.StatusSeeOther)
+}
+
 func (s *Server) builderEnabled(ctx context.Context) bool {
 	return s.hasCapability(ctx, "build")
 }
 
 func (s *Server) artifactEnabled(ctx context.Context) bool {
 	return s.hasCapability(ctx, "artifact")
+}
+
+func (s *Server) dnsEnabled(ctx context.Context) bool {
+	return s.hasCapability(ctx, "dns")
 }
 
 func isHTTPStatus(err error, status int) bool {
@@ -1044,6 +1157,7 @@ func (s *Server) renderLogin(w http.ResponseWriter, r *http.Request, status int,
 		ApplianceProfile: s.cfg.ApplianceProfile,
 		BuilderEnabled:   s.builderEnabled(r.Context()),
 		ArtifactEnabled:  s.artifactEnabled(r.Context()),
+		DNSEnabled:       s.dnsEnabled(r.Context()),
 		Error:            message,
 	})
 }
@@ -1055,6 +1169,7 @@ func (s *Server) renderSetup(w http.ResponseWriter, r *http.Request, status int,
 		ApplianceProfile: s.cfg.ApplianceProfile,
 		BuilderEnabled:   s.builderEnabled(r.Context()),
 		ArtifactEnabled:  s.artifactEnabled(r.Context()),
+		DNSEnabled:       s.dnsEnabled(r.Context()),
 		Error:            message,
 		SetupNeeded:      true,
 	})

@@ -282,6 +282,24 @@
         },
         "dnsReadyURL": {
           "type": "string"
+        },
+        "dnsZoneName": {
+          "type": "string"
+        },
+        "dnsConfigMapNamespace": {
+          "type": "string"
+        },
+        "dnsConfigMapName": {
+          "type": "string"
+        },
+        "dnsBootstrapHostname": {
+          "type": "string"
+        },
+        "dnsBootstrapIPv4": {
+          "type": "string"
+        },
+        "dnsAllowFakeZoneSync": {
+          "type": "boolean"
         }
       }
     },

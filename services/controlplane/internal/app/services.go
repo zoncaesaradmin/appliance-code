@@ -17,6 +17,7 @@ import (
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
+	"appliance-code/services/controlplane/internal/dnsrecords"
 	"appliance-code/services/controlplane/internal/keys"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/registryauth"
@@ -46,6 +47,7 @@ type Services struct {
 	RoleStore          storage.RoleStore
 	AuditStore         storage.AuditStore
 	RegistryGrantStore storage.RegistryGrantStore
+	DNSRecordStore     storage.DNSRecordStore
 	BuildStore         storage.BuildStore
 	IdempotencyStore   storage.IdempotencyStore
 	WorkspaceStore     storage.WorkspaceStore
@@ -62,6 +64,7 @@ type Services struct {
 	Builds             *builds.Service
 	Devflows           *devflows.Service
 	BuilderGit         *buildergit.Service
+	DNS                *dnsrecords.Service
 
 	Keys  *keys.Material
 	Audit *audit.Recorder
@@ -105,6 +108,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	throttleStore := sqlite.NewThrottleStore(db)
 	auditStore := sqlite.NewAuditStore(db)
 	registryGrantStore := sqlite.NewRegistryGrantStore(db)
+	dnsRecordStore := sqlite.NewDNSRecordStore(db)
 	recorder := audit.NewRecorder(auditStore)
 
 	var zotClient zotadapter.Client
@@ -184,6 +188,35 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		}
 	}
 
+	var dnsSvc *dnsrecords.Service
+	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
+		var syncer dnsrecords.ZoneSyncer
+		if cfg.DNSAllowFakeZoneSync {
+			syncer = &dnsrecords.MemoryZoneSyncer{}
+		} else {
+			var err error
+			syncer, err = dnsrecords.NewInClusterConfigMapZoneSyncer(cfg.DNSConfigMapNamespace, cfg.DNSConfigMapName)
+			if err != nil {
+				db.Close()
+				return nil, fmt.Errorf("app: wiring dns zone syncer: %w", err)
+			}
+		}
+		dnsSvc = dnsrecords.NewService(dnsRecordStore, db, syncer, recorder, dnsrecords.Config{
+			Zone:               cfg.DNSZoneName,
+			ConfigMapNamespace: cfg.DNSConfigMapNamespace,
+			ConfigMapName:      cfg.DNSConfigMapName,
+			BootstrapHostname:  cfg.DNSBootstrapHostname,
+			BootstrapIPv4:      cfg.DNSBootstrapIPv4,
+		})
+		// Reconcile (and optionally seed) the zone. Default install leaves
+		// bootstrap hostname/IP empty so no product A record is created;
+		// records come from the DNS API/UI or peer publish.
+		if err := dnsSvc.BootstrapSelf(ctx); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: reconciling dns zone: %w", err)
+		}
+	}
+
 	return &Services{
 		ApplianceProfile:   resolved,
 		DB:                 db,
@@ -191,6 +224,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		RoleStore:          roleStore,
 		AuditStore:         auditStore,
 		RegistryGrantStore: registryGrantStore,
+		DNSRecordStore:     dnsRecordStore,
 		BuildStore:         buildStore,
 		IdempotencyStore:   idempotencyStore,
 		WorkspaceStore:     workspaceStore,
@@ -206,6 +240,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Builds:             buildsSvc,
 		Devflows:           devflowsSvc,
 		BuilderGit:         builderGitSvc,
+		DNS:                dnsSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 	}, nil

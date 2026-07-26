@@ -174,6 +174,29 @@ type CreateRegistryGrantRequest struct {
 	Actions     []string `json:"actions"`
 }
 
+type DNSRecord struct {
+	Name           string     `json:"name"`
+	FQDN           string     `json:"fqdn"`
+	IPv4           string     `json:"ipv4"`
+	TTL            int        `json:"ttl"`
+	Source         string     `json:"source"`
+	Owner          string     `json:"owner,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+	LeaseExpiresAt *time.Time `json:"leaseExpiresAt,omitempty"`
+}
+
+type DNSRecordsResult struct {
+	Zone  string      `json:"zone"`
+	Items []DNSRecord `json:"items"`
+}
+
+type UpsertDNSRecordRequest struct {
+	IPv4  string `json:"ipv4"`
+	TTL   int    `json:"ttl"`
+	Owner string `json:"owner,omitempty"`
+}
+
 func NewClient(cfg Config) (*Client, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("control plane client logger is required")
@@ -393,6 +416,43 @@ func (c *Client) CreateRegistryGrant(ctx context.Context, accessToken string, in
 
 func (c *Client) DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/registry/grants/"+url.PathEscape(grantID), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return c.doJSON(req, http.StatusNoContent, nil)
+}
+
+func (c *Client) ListDNSRecords(ctx context.Context, accessToken string) (DNSRecordsResult, error) {
+	var result DNSRecordsResult
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/dns/records", nil)
+	if err != nil {
+		return result, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (c *Client) UpsertDNSRecord(ctx context.Context, accessToken, name string, in UpsertDNSRecordRequest) (DNSRecord, error) {
+	var out DNSRecord
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/api/v1/dns/records/"+url.PathEscape(name), bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) DeleteDNSRecord(ctx context.Context, accessToken, name string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/dns/records/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}

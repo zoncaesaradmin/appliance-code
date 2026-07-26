@@ -22,6 +22,9 @@
         {{if .ArtifactEnabled}}
         <a class="{{if eq .CurrentPath "/artifacts"}}active{{end}}" href="/artifacts">Artifacts</a>
         {{end}}
+        {{if .DNSEnabled}}
+        <a class="{{if eq .CurrentPath "/dns"}}active{{end}}" href="/dns">DNS</a>
+        {{end}}
         {{end}}
       </nav>
       {{if .Session.Username}}

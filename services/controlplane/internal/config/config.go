@@ -26,12 +26,18 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath string `json:"applicationLogPath"`
-	LogLevel           string `json:"logLevel"`
-	TrustedProxyCount  int    `json:"trustedProxyCount"`
-	ZotBaseURL         string `json:"zotBaseURL"`
-	ZotAllowFake       bool   `json:"zotAllowFake"`
-	DNSReadyURL        string `json:"dnsReadyURL"`
+	ApplicationLogPath    string `json:"applicationLogPath"`
+	LogLevel              string `json:"logLevel"`
+	TrustedProxyCount     int    `json:"trustedProxyCount"`
+	ZotBaseURL            string `json:"zotBaseURL"`
+	ZotAllowFake          bool   `json:"zotAllowFake"`
+	DNSReadyURL           string `json:"dnsReadyURL"`
+	DNSZoneName           string `json:"dnsZoneName"`
+	DNSConfigMapNamespace string `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName      string `json:"dnsConfigMapName"`
+	DNSBootstrapHostname  string `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4      string `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync  bool   `json:"dnsAllowFakeZoneSync"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -64,6 +70,10 @@ func Default() Config {
 		LogLevel:                       "info",
 		TrustedProxyCount:              0,
 		ZotAllowFake:                   true,
+		DNSZoneName:                    "appliance.internal",
+		DNSConfigMapNamespace:          "dns",
+		DNSConfigMapName:               "appliance-dns-config",
+		DNSAllowFakeZoneSync:           true,
 		ReadHeaderTimeout:              5 * time.Second,
 		ReadTimeout:                    30 * time.Second,
 		WriteTimeout:                   30 * time.Second,
@@ -142,6 +152,11 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
 	str("DNS_READY_URL", &cfg.DNSReadyURL)
+	str("DNS_ZONE_NAME", &cfg.DNSZoneName)
+	str("DNS_CONFIGMAP_NAMESPACE", &cfg.DNSConfigMapNamespace)
+	str("DNS_CONFIGMAP_NAME", &cfg.DNSConfigMapName)
+	str("DNS_BOOTSTRAP_HOSTNAME", &cfg.DNSBootstrapHostname)
+	str("DNS_BOOTSTRAP_IPV4", &cfg.DNSBootstrapIPv4)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
@@ -158,6 +173,14 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			errs = append(errs, fmt.Sprintf("ZOT_ALLOW_FAKE: %v", err))
 		} else {
 			cfg.ZotAllowFake = parsed
+		}
+	}
+	if v, ok := env[envPrefix+"DNS_ALLOW_FAKE_ZONE_SYNC"]; ok {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("DNS_ALLOW_FAKE_ZONE_SYNC: %v", err))
+		} else {
+			cfg.DNSAllowFakeZoneSync = parsed
 		}
 	}
 
@@ -276,6 +299,15 @@ func (c Config) Validate() error {
 			errs = append(errs, "dnsReadyURL must not be empty when the dns capability is enabled")
 		} else if u, err := url.Parse(c.DNSReadyURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			errs = append(errs, "dnsReadyURL must be an absolute http(s) URL")
+		}
+		if strings.TrimSpace(c.DNSZoneName) == "" {
+			errs = append(errs, "dnsZoneName must not be empty when the dns capability is enabled")
+		}
+		if strings.TrimSpace(c.DNSConfigMapNamespace) == "" {
+			errs = append(errs, "dnsConfigMapNamespace must not be empty when the dns capability is enabled")
+		}
+		if strings.TrimSpace(c.DNSConfigMapName) == "" {
+			errs = append(errs, "dnsConfigMapName must not be empty when the dns capability is enabled")
 		}
 	}
 

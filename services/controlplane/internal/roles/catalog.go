@@ -78,6 +78,14 @@ const (
 	PermRegistryGrantsRead  = "registry.grants.read"
 	PermRegistryGrantsWrite = "registry.grants.write"
 
+	PermDNSRecordsRead     = "dns.records.read"
+	PermDNSRecordsWrite    = "dns.records.write"
+	PermDNSRecordsRegister = "dns.records.register"
+
+	// PermLANDNSPublish lets any appliance (base capability) publish its
+	// name/IP to a remote lan-dns appliance via POST /api/v1/lan-dns/publish.
+	PermLANDNSPublish = "lan_dns.publish"
+
 	PermMCPInvoke = "mcp.invoke"
 
 	PermSystemRead    = "system.read"
@@ -135,6 +143,11 @@ var AllPermissions = []storage.Permission{
 	{Name: PermRegistryGrantsRead, Description: "Read registry repository-prefix grants"},
 	{Name: PermRegistryGrantsWrite, Description: "Manage registry repository-prefix grants"},
 
+	{Name: PermDNSRecordsRead, Description: "Read LAN DNS A records"},
+	{Name: PermDNSRecordsWrite, Description: "Create, update, or delete any LAN DNS A record"},
+	{Name: PermDNSRecordsRegister, Description: "Register or renew owned LAN DNS A records"},
+	{Name: PermLANDNSPublish, Description: "Publish this appliance's DNS name and IP to a remote LAN DNS appliance"},
+
 	{Name: PermMCPInvoke, Description: "Invoke MCP tools"},
 
 	{Name: PermSystemRead, Description: "Read system status and version"},
@@ -189,6 +202,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead,
 			PermOperationsReadSelf,
 			PermRegistryPull,
+			PermDNSRecordsRead,
 		},
 	},
 	{
@@ -200,6 +214,8 @@ var BuiltInRoles = []BuiltInRole{
 			PermJobsReadSelf, PermJobsCancelSelf,
 			PermArtifactsRead,
 			PermOperationsReadSelf,
+			PermDNSRecordsRegister,
+			PermLANDNSPublish,
 		},
 	},
 }

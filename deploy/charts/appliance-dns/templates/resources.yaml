@@ -25,7 +25,9 @@ data:
             1 7200 3600 1209600 3600 )
         3600 IN NS ns.{{ .Values.localZone.name }}.
     ns  3600 IN A {{ .Values.localZone.ipv4 }}
+    {{- if .Values.localZone.hostname }}
     {{ .Values.localZone.hostname }} 3600 IN A {{ .Values.localZone.ipv4 }}
+    {{- end }}
 ---
 apiVersion: v1
 kind: Service

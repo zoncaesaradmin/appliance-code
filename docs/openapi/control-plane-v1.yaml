@@ -11,6 +11,157 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /api/v1/lan-dns/publish:
+    post:
+      summary: Publish a LAN DNS name to a remote DNS appliance
+      description: >
+        Base-capability helper available on every appliance profile. The local
+        control plane calls PUT /api/v1/dns/records/{name} on the remote
+        lan-dns (or storage-lan-dns) appliance using the supplied API token.
+        Installers never write DNS records; use this API or call the DNS
+        appliance records API directly. Requires lan_dns.publish.
+      operationId: publishLANDNSRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dnsApplianceURL, apiToken, name, ipv4]
+              properties:
+                dnsApplianceURL:
+                  type: string
+                  example: https://192.168.1.101
+                apiToken:
+                  type: string
+                  description: Bearer token with dns.records.register (or write) on the remote DNS appliance.
+                name:
+                  type: string
+                  example: registry1
+                  description: Single left-hand label under appliance.internal.
+                ipv4:
+                  type: string
+                  example: 192.168.1.102
+                ttl:
+                  type: integer
+                  example: 60
+                owner:
+                  type: string
+                  description: Defaults to the authenticated principal user id.
+      responses:
+        "200":
+          description: Remote DNS appliance accepted the record.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, ipv4]
+                properties:
+                  name:
+                    type: string
+                  ipv4:
+                    type: string
+        "400":
+          description: Invalid request body.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          description: Remote DNS appliance rejected or was unreachable.
+  /api/v1/dns/records:
+    get:
+      summary: List LAN DNS A records
+      description: >
+        Lists A records in the appliance.internal zone. Requires the dns
+        capability and dns.records.read. Available on lan-dns /
+        storage-lan-dns profiles only.
+      operationId: listDNSRecords
+      responses:
+        "200":
+          description: DNS records.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [zone, items]
+                properties:
+                  zone:
+                    type: string
+                    example: appliance.internal
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DNSRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: dns capability disabled on this appliance.
+  /api/v1/dns/records/{name}:
+    put:
+      summary: Create or update a LAN DNS A record
+      description: >
+        Upserts one left-hand label under appliance.internal. Administrators
+        use dns.records.write; peer appliances use dns.records.register and
+        may only renew names they own (lease-based).
+      operationId: upsertDNSRecord
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            example: registry1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ipv4]
+              properties:
+                ipv4:
+                  type: string
+                  example: 192.168.1.102
+                ttl:
+                  type: integer
+                  example: 300
+                owner:
+                  type: string
+                  description: Required for peer registration; must match the authenticated principal.
+      responses:
+        "200":
+          description: Upserted record.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DNSRecord"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Ownership conflict.
+    delete:
+      summary: Delete a LAN DNS A record
+      operationId: deleteDNSRecord
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Record not found or dns capability disabled.
   /api/v1/work-profiles:
     get:
       summary: List workspace profiles
@@ -382,6 +533,35 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    DNSRecord:
+      type: object
+      required: [name, fqdn, ipv4, ttl, source, createdAt, updatedAt]
+      properties:
+        name:
+          type: string
+          example: registry1
+        fqdn:
+          type: string
+          example: registry1.appliance.internal
+        ipv4:
+          type: string
+          example: 192.168.1.102
+        ttl:
+          type: integer
+        source:
+          type: string
+          enum: [bootstrap, admin, peer]
+        owner:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        leaseExpiresAt:
+          type: string
+          format: date-time
     WorkProfile:
       type: object
       required: [name]

@@ -29,7 +29,6 @@ func render(t *testing.T, args ...string) string {
 		"template", "dns", chartDir(t), "--namespace", "dns",
 		"--set", "image.digest=sha256:" + strings.Repeat("a", 64),
 		"--set", "localZone.ipv4=192.0.2.10",
-		"--set", "localZone.hostname=appliance",
 	}, args...)
 	out, err := exec.Command("helm", command...).CombinedOutput()
 	if err != nil {
@@ -48,12 +47,15 @@ func TestHardenedDNSRender(t *testing.T) {
 		"path: /data/zon/logs/dns", "chmod 2755 /data/zon/logs/dns",
 		"kind: NetworkPolicy", "name: appliance-dns-default-deny",
 		"file /etc/coredns/zones/db.local", "forward . 1.1.1.1 8.8.8.8",
-		"appliance 3600 IN A 192.0.2.10",
+		"ns  3600 IN A 192.0.2.10",
 		"path: /health", "path: /ready",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
+	}
+	if strings.Contains(out, "appliance 3600 IN A") {
+		t.Error("default render must not seed a product host A record")
 	}
 	if strings.Contains(out, "kind: Namespace") {
 		t.Error("default render must not own Namespace; zonctl EnsureNamespace creates it")

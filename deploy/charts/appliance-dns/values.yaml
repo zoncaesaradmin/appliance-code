@@ -29,9 +29,14 @@ upstreamResolvers:
   - 8.8.8.8
 
 localZone:
-  name: appliance.local
-  # Installer replaces these with the appliance hostname and LAN IP.
-  hostname: appliance
+  # Use .internal (not .local): systemd-resolved reserves .local for mDNS
+  # and never forwards those names to unicast DNS on Ubuntu clients.
+  # Product host A records are not chart defaults: the control plane owns
+  # db.local via ConfigMap patch from the DNS records API. ipv4 is only
+  # NS glue for ns.<zone>; hostname stays empty unless an operator/API
+  # write materializes records.
+  name: appliance.internal
+  hostname: ""
   ipv4: 127.0.0.1
 
 logs:

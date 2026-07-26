@@ -27,10 +27,10 @@
     },
     "localZone": {
       "type": "object",
-      "required": ["name", "hostname", "ipv4"],
+      "required": ["name", "ipv4"],
       "properties": {
         "name": {"type": "string", "minLength": 1},
-        "hostname": {"type": "string", "minLength": 1},
+        "hostname": {"type": "string"},
         "ipv4": {"type": "string", "minLength": 1}
       }
     },

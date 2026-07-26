@@ -79,6 +79,21 @@ Whether the control plane should get API access for Argo workflow submission.
 {{- end -}}
 
 {{/*
+Whether the control plane manages LAN DNS zone ConfigMap sync.
+*/}}
+{{- define "appliance-control-plane.dnsAdminEnabled" -}}
+{{- if or (eq .Values.config.applianceProfile "lan-dns") (eq .Values.config.applianceProfile "storage-lan-dns") -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+
+{{/*
+Whether the control-plane ServiceAccount token must be mounted.
+*/}}
+{{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
+{{- if or (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+
+
+{{/*
 Fixed namespace for appliance-owned Argo workflows in v1.
 */}}
 {{- define "appliance-control-plane.argoWorkflowNamespace" -}}

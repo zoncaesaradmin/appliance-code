@@ -1,0 +1,60 @@
+{{define "dns.html"}}
+{{template "layout-start" .}}
+<section class="dashboard-heading">
+  <div>
+    <p class="eyebrow">DNS</p>
+    <h1>LAN DNS Records</h1>
+    <p class="muted">Manage A records in the <code>{{.Zone}}</code> zone served by this appliance.</p>
+  </div>
+  <form method="post" action="/logout">
+    <button class="secondary" type="submit">Sign out</button>
+  </form>
+</section>
+
+{{if .StatusError}}
+<article class="notice error" role="alert">{{.StatusError}}</article>
+{{end}}
+{{if .Error}}<article class="notice error" role="alert">{{.Error}}</article>{{end}}
+{{if .Message}}<article class="notice" role="status">{{.Message}}</article>{{end}}
+
+<article>
+  <header><strong>Records</strong></header>
+  {{if .Records}}
+  <ul>
+    {{range .Records}}
+    <li>
+      <code>{{.FQDN}}</code> → <code>{{.IPv4}}</code>
+      <span class="muted">(ttl {{.TTL}}, {{.Source}}{{if .Owner}}, owner {{.Owner}}{{end}})</span>
+      {{if $.CanManageRecords}}
+      <form method="post" action="/dns/records/delete" style="display:inline">
+        <input type="hidden" name="name" value="{{.Name}}">
+        <button class="secondary" type="submit">Delete</button>
+      </form>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No LAN DNS records yet.</p>
+  {{end}}
+</article>
+
+{{if .CanManageRecords}}
+<article>
+  <header><strong>Add or update record</strong></header>
+  <form method="post" action="/dns/records">
+    <label>Name (left-hand label)
+      <input name="name" placeholder="registry1" required>
+    </label>
+    <label>IPv4 address
+      <input name="ipv4" placeholder="192.168.1.102" required>
+    </label>
+    <label>TTL seconds
+      <input name="ttl" type="number" min="1" value="300">
+    </label>
+    <button type="submit">Save record</button>
+  </form>
+</article>
+{{end}}
+{{template "layout-end" .}}
+{{end}}

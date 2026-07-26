@@ -19,6 +19,12 @@ data:
   APPLIANCE_ZOT_BASE_URL: {{ .Values.config.zotBaseURL | quote }}
   APPLIANCE_ZOT_ALLOW_FAKE: {{ .Values.config.zotAllowFake | quote }}
   APPLIANCE_DNS_READY_URL: {{ .Values.config.dnsReadyURL | quote }}
+  APPLIANCE_DNS_ZONE_NAME: {{ .Values.config.dnsZoneName | default "appliance.internal" | quote }}
+  APPLIANCE_DNS_CONFIGMAP_NAMESPACE: {{ .Values.config.dnsConfigMapNamespace | default "dns" | quote }}
+  APPLIANCE_DNS_CONFIGMAP_NAME: {{ .Values.config.dnsConfigMapName | default "appliance-dns-config" | quote }}
+  APPLIANCE_DNS_BOOTSTRAP_HOSTNAME: {{ .Values.config.dnsBootstrapHostname | default "" | quote }}
+  APPLIANCE_DNS_BOOTSTRAP_IPV4: {{ .Values.config.dnsBootstrapIPv4 | default "" | quote }}
+  APPLIANCE_DNS_ALLOW_FAKE_ZONE_SYNC: {{ .Values.config.dnsAllowFakeZoneSync | default false | quote }}
   APPLIANCE_WORKSPACE_ROOT_DIR: {{ .Values.workspaceStorage.rootDir | quote }}
   APPLIANCE_WORKSPACE_CLAIM_NAME: {{ include "appliance-control-plane.workspaceClaimName" . | quote }}
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}

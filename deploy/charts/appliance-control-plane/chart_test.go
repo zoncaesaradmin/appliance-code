@@ -530,6 +530,24 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 			if got, _ := data["APPLIANCE_DNS_READY_URL"].(string); got != "http://appliance-dns.dns.svc.cluster.local:8181/ready" {
 				t.Fatalf("APPLIANCE_DNS_READY_URL = %q", got)
 			}
+			if got, _ := data["APPLIANCE_DNS_BOOTSTRAP_HOSTNAME"].(string); got != "" {
+				t.Fatalf("APPLIANCE_DNS_BOOTSTRAP_HOSTNAME = %q, want empty (API-owned records)", got)
+			}
+			if got, _ := data["APPLIANCE_DNS_ALLOW_FAKE_ZONE_SYNC"].(string); got != "false" {
+				t.Fatalf("APPLIANCE_DNS_ALLOW_FAKE_ZONE_SYNC = %q, want false", got)
+			}
+			role := findByKindAndName(docs, "Role", controlPlaneDeploymentName+"-dns")
+			if role == nil {
+				t.Fatalf("expected Role %s-dns for zone ConfigMap patch", controlPlaneDeploymentName)
+			}
+			rendered, _ := yaml.Marshal(role)
+			if !bytes.Contains(rendered, []byte("configmaps")) || !bytes.Contains(rendered, []byte("appliance-dns-config")) {
+				t.Fatalf("dns Role missing ConfigMap patch rules:\n%s", rendered)
+			}
+			sa := findByKindAndName(docs, "ServiceAccount", controlPlaneDeploymentName)
+			if got, _ := at(sa, "automountServiceAccountToken").(bool); !got {
+				t.Fatalf("dns profiles must automount the service account token")
+			}
 		})
 	}
 }

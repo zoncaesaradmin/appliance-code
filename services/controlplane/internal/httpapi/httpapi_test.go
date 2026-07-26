@@ -53,6 +53,10 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
+	if profile == appliance.ProfileLANDNS || profile == appliance.ProfileStorageLANDNS {
+		cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+		cfg.DNSAllowFakeZoneSync = true
+	}
 
 	logger, err := logging.New("error")
 	if err != nil {
@@ -88,9 +92,10 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
+		UsersH:         &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:         &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH:        &httpapi.TokenHandlers{Tokens: services.Tokens},
+		LANDNSPublishH: &httpapi.LANDNSPublishHandlers{},
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 	}
@@ -107,6 +112,9 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
+	}
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityDNS) {
+		deps.DNSH = &httpapi.DNSHandlers{DNS: services.DNS}
 	}
 
 	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)

@@ -191,13 +191,22 @@ enable workflows or build.
 
 ### `dns`
 
-`dns` is now part of the centralized profile-to-capability model so the
-product can cleanly distinguish DNS-bearing profiles from non-DNS profiles.
+`dns` enables the appliance-owned LAN DNS data plane (CoreDNS) and the
+control-plane DNS records API:
 
-In this phase it does not yet introduce a standalone public REST surface,
-independent service pod, or installer-owned DNS workload. It is present so
-profile resolution, reporting, and future release tooling can reason about DNS
-profiles without inventing a second profile model later.
+- `GET /api/v1/dns/records`
+- `PUT /api/v1/dns/records/{name}`
+- `DELETE /api/v1/dns/records/{name}`
+
+Permissions: `dns.records.read`, `dns.records.write`, `dns.records.register`.
+SQLite is the source of truth; the control plane materializes the zone into
+the CoreDNS ConfigMap. The UI exposes `/dns` when the capability is enabled.
+
+Every profile also exposes the base-capability helper
+`POST /api/v1/lan-dns/publish` (permission `lan_dns.publish`) so a non-dns
+appliance can publish its name/IP to a remote DNS appliance without
+install-time DNS mutation. Operator curl cookbook:
+`appliance-release` `docs/lan-dns-usage.md`.
 
 ## Enforcement Rules
 

@@ -91,6 +91,18 @@ func (f *fakeControlPlane) DeleteRegistryGrant(_ context.Context, _, grantID str
 	return &controlplane.HTTPStatusError{StatusCode: http.StatusNotFound}
 }
 
+func (f *fakeControlPlane) ListDNSRecords(context.Context, string) (controlplane.DNSRecordsResult, error) {
+	return controlplane.DNSRecordsResult{Zone: "appliance.internal"}, nil
+}
+
+func (f *fakeControlPlane) UpsertDNSRecord(_ context.Context, _ string, name string, req controlplane.UpsertDNSRecordRequest) (controlplane.DNSRecord, error) {
+	return controlplane.DNSRecord{Name: name, FQDN: name + ".appliance.internal", IPv4: req.IPv4, TTL: req.TTL, Source: "admin"}, nil
+}
+
+func (f *fakeControlPlane) DeleteDNSRecord(context.Context, string, string) error {
+	return nil
+}
+
 func (f *fakeControlPlane) Login(_ context.Context, username, password string) (controlplane.LoginResult, error) {
 	f.loginCalls++
 	if !f.initialized || username != f.adminUser || password != f.adminPass {

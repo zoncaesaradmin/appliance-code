@@ -37,8 +37,24 @@ capability (no new profile names):
 - Target verification: Deployment Ready + `dig @127.0.0.1` for the local zone;
   absence checks on non-dns profiles
 
-Out of scope for this slice: DNS admin UI/API, multi-node HA, replacing
-kube-system CoreDNS, and DHCP/router integration.
+## Phase 3: API-driven LAN DNS records
+
+Phase 3 makes the DNS appliance useful for other hosts on the LAN:
+
+- Control-plane SQLite owns A records under `appliance.internal`
+- Authenticated API: `GET/PUT/DELETE /api/v1/dns/records` (capability `dns`)
+- Permissions: `dns.records.read`, `dns.records.write`, `dns.records.register`
+- Zone sync patches CoreDNS ConfigMap `db.local`; CoreDNS `reload` serves it
+- UI `/dns` for admin CRUD
+- Peer publish (base capability on every appliance):
+  `POST /api/v1/lan-dns/publish` with remote DNS URL + token + name + ipv4
+  (permission `lan_dns.publish`). Installers never write DNS records.
+
+Operator curl cookbook (setup, direct DNS API, peer publish):
+`appliance-release` `docs/lan-dns-usage.md`.
+
+Still out of scope: multi-node HA CoreDNS, replacing kube-system CoreDNS, and
+DHCP/router integration.
 
 ## Intent
 

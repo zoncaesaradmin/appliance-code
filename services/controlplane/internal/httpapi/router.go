@@ -26,6 +26,8 @@ type Deps struct {
 	RegistryH        *RegistryTokenHandlers
 	RegistryGrantsH  *RegistryGrantHandlers
 	RegistryCatalogH *RegistryCatalogHandlers
+	DNSH             *DNSHandlers
+	LANDNSPublishH   *LANDNSPublishHandlers
 	BuildsH          *BuildHandlers
 	DevflowsH        *DeveloperWorkflowHandlers
 	MCPHandler       http.Handler
@@ -279,6 +281,14 @@ func publicRoutes() []publicRoute {
 			}
 			return deps.MCPHandler, nil
 		}},
+		// Outbound publish to a remote lan-dns appliance. Available on every
+		// profile (base); does not require local dns capability.
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/lan-dns/publish", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.LANDNSPublishH == nil {
+				return nil, fmt.Errorf("missing lan-dns publish handlers")
+			}
+			return w.protect(roles.PermLANDNSPublish, deps.LANDNSPublishH.Publish), nil
+		}},
 		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.RegistryH == nil {
 				return nil, fmt.Errorf("missing registry token handlers")
@@ -314,6 +324,24 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing registry catalog handlers")
 			}
 			return w.authenticatedOnly(deps.RegistryCatalogH.CatalogItem), nil
+		}},
+		{capability: appliance.CapabilityDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DNSH == nil {
+				return nil, fmt.Errorf("missing dns handlers")
+			}
+			return w.protect(roles.PermDNSRecordsRead, deps.DNSH.List), nil
+		}},
+		{capability: appliance.CapabilityDNS, pattern: "PUT /api/v1/dns/records/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DNSH == nil {
+				return nil, fmt.Errorf("missing dns handlers")
+			}
+			return w.protectAny(deps.DNSH.Upsert, roles.PermDNSRecordsWrite, roles.PermDNSRecordsRegister), nil
+		}},
+		{capability: appliance.CapabilityDNS, pattern: "DELETE /api/v1/dns/records/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DNSH == nil {
+				return nil, fmt.Errorf("missing dns handlers")
+			}
+			return w.protect(roles.PermDNSRecordsWrite, deps.DNSH.Delete), nil
 		}},
 		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/work-profiles", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {

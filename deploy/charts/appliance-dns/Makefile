@@ -10,8 +10,7 @@ lint:
 template:
 	helm template appliance-dns . --namespace dns \
 		--set image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-		--set localZone.ipv4=192.0.2.10 \
-		--set localZone.hostname=appliance > $(RENDER_OUT)
+		--set localZone.ipv4=192.0.2.10 > $(RENDER_OUT)
 test:
 	GOWORK=off go test -race ./...
 coverage:

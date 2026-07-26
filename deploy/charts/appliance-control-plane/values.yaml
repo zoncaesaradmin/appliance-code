@@ -87,6 +87,16 @@ config:
   # fail closed at control-plane startup when this is empty so the appliance
   # never reports dns-capable while the LAN DNS release is missing.
   dnsReadyURL: ""
+  # LAN DNS zone ownership (control plane is source of truth; CoreDNS serves
+  # a materialized ConfigMap zone file). Product A records are not seeded at
+  # install; create them via the DNS records API/UI. Optional bootstrap_*
+  # fields remain for rare operator overrides and stay empty by default.
+  dnsZoneName: "appliance.internal"
+  dnsConfigMapNamespace: "dns"
+  dnsConfigMapName: "appliance-dns-config"
+  dnsBootstrapHostname: ""
+  dnsBootstrapIPv4: ""
+  dnsAllowFakeZoneSync: false
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects

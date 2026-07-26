@@ -112,9 +112,10 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:  &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:  &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH: &httpapi.TokenHandlers{Tokens: services.Tokens},
+		UsersH:         &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:         &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH:        &httpapi.TokenHandlers{Tokens: services.Tokens},
+		LANDNSPublishH: &httpapi.LANDNSPublishHandlers{},
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 	}
@@ -131,6 +132,13 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
+	}
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityDNS) {
+		if services.DNS == nil {
+			services.DB.Close()
+			return nil, fmt.Errorf("building public mux: dns capability enabled but DNS service is nil")
+		}
+		deps.DNSH = &httpapi.DNSHandlers{DNS: services.DNS}
 	}
 
 	publicHandler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)
