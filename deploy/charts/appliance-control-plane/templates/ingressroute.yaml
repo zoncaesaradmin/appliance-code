@@ -14,18 +14,21 @@ spec:
     {{- if .Values.ingress.host }}
     {{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
     {{- end }}
+    # Explicit priority: Traefik defaults priority to rule length, so adding
+    # UI catch-all exclusions (e.g. !PathPrefix(`/files`)) can otherwise make
+    # the UI rule win over /api/v1 and return SPA HTML / Method Not Allowed.
     - match: {{ printf "%s(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" $hostMatch }}
       kind: Rule
+      priority: 100
       services:
         - name: {{ include "appliance-control-plane.fullname" . }}
           port: {{ .Values.service.publicPort }}
     {{- if .Values.ui.enabled }}
-    # Exclude /v2 and /files so non-artifact profiles (core, landns) do not
-    # serve the UI for those paths. When the registry chart is installed it
-    # owns PathPrefix(`/v2`) and PathPrefix(`/files`); otherwise Traefik
-    # returns 404.
-    - match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" $hostMatch }}
+    # Exclude API and registry/fileserver paths from the UI catch-all.
+    # /v2 and /files are owned by the registry chart when artifact is enabled.
+    - match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" $hostMatch }}
       kind: Rule
+      priority: 1
       services:
         - name: {{ include "appliance-control-plane.uiServiceName" . }}
           port: {{ .Values.ui.service.port }}

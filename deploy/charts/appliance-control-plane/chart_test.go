@@ -425,10 +425,17 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		}
 		svc, _ := services[0].(map[string]any)
 		name, _ := svc["name"].(string)
+		priority, _ := route["priority"].(int)
 		switch {
 		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" && name == controlPlaneServiceName:
+			if priority != 100 {
+				t.Errorf("API route priority = %v, want 100", route["priority"])
+			}
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" && name == controlPlaneUIName:
+			if priority != 1 {
+				t.Errorf("UI route priority = %v, want 1", route["priority"])
+			}
 			uiRouteOK = true
 		}
 	}
@@ -436,7 +443,7 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		t.Error("expected /api/v1 and /mcp route to target control-plane service")
 	}
 	if !uiRouteOK {
-		t.Error("expected / route to target UI service")
+		t.Error("expected / route to target UI service with API/registry exclusions")
 	}
 }
 
