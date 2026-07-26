@@ -44,8 +44,30 @@ func TestHTTPClientListTagsEscapesRepositoryName(t *testing.T) {
 	if len(tags) != 2 {
 		t.Errorf("tags = %v, want 2 entries", tags)
 	}
-	if gotPath != "/v2/users%2Falice%2Fapp/tags/list" {
-		t.Errorf("path = %q, want escaped repository segments", gotPath)
+	// Slashes must remain path separators; only unsafe segment characters escape.
+	if gotPath != "/v2/users/alice/app/tags/list" {
+		t.Errorf("path = %q, want /v2/users/alice/app/tags/list", gotPath)
+	}
+}
+
+func TestHTTPClientListTagsPreservesNestedRepositoryPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		_ = json.NewEncoder(w).Encode(map[string]any{"name": "demo/bzbox", "tags": []string{"latest"}})
+	}))
+	defer srv.Close()
+
+	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	tags, err := client.ListTags(t.Context(), "demo/bzbox")
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if len(tags) != 1 || tags[0] != "latest" {
+		t.Fatalf("tags = %v, want [latest]", tags)
+	}
+	if gotPath != "/v2/demo/bzbox/tags/list" {
+		t.Fatalf("path = %q, want /v2/demo/bzbox/tags/list", gotPath)
 	}
 }
 

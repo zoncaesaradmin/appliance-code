@@ -90,7 +90,10 @@ func (c *HTTPClient) ListTags(ctx context.Context, repository string) ([]string,
 	var result struct {
 		Tags []string `json:"tags"`
 	}
-	path := "/v2/" + url.PathEscape(repository) + "/tags/list"
+	// OCI repository names are multi-segment paths (e.g. "demo/bzbox"). Escape
+	// each segment, but keep "/" as a path separator — PathEscape(whole) turns
+	// slashes into %2F and zot returns 404 for that form.
+	path := "/v2/" + repositoryURLPath(repository) + "/tags/list"
 	if err := c.get(ctx, path, &result); err != nil {
 		return nil, err
 	}
@@ -101,11 +104,25 @@ func (c *HTTPClient) ListReferrers(ctx context.Context, repository, digest strin
 	var index struct {
 		Manifests []Descriptor `json:"manifests"`
 	}
-	path := "/v2/" + url.PathEscape(repository) + "/referrers/" + url.PathEscape(digest)
+	path := "/v2/" + repositoryURLPath(repository) + "/referrers/" + url.PathEscape(digest)
 	if err := c.get(ctx, path, &index); err != nil {
 		return nil, err
 	}
 	return index.Manifests, nil
+}
+
+// repositoryURLPath escapes each repository path segment while preserving
+// "/" separators required by the OCI Distribution API.
+func repositoryURLPath(repository string) string {
+	repository = strings.Trim(strings.TrimSpace(repository), "/")
+	if repository == "" {
+		return ""
+	}
+	parts := strings.Split(repository, "/")
+	for i := range parts {
+		parts[i] = url.PathEscape(parts[i])
+	}
+	return strings.Join(parts, "/")
 }
 
 func (c *HTTPClient) Health(ctx context.Context) error {
