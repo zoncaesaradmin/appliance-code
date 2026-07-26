@@ -508,7 +508,7 @@ func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
 			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 			data, _ := at(cm, "data").(map[string]any)
-			if got, _ := data["APPLIANCE_ZOT_BASE_URL"].(string); got != "http://appliance-registry.registry.svc.cluster.local:5000" {
+			if got, _ := data["APPLIANCE_ZOT_BASE_URL"].(string); got != "http://appliance-registry.artifacts.svc.cluster.local:5000" {
 				t.Fatalf("APPLIANCE_ZOT_BASE_URL = %q", got)
 			}
 			if got, _ := data["APPLIANCE_ZOT_ALLOW_FAKE"].(string); got != "false" {
@@ -517,7 +517,7 @@ func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
 			policy := findByKindAndName(docs, "NetworkPolicy", controlPlaneDeploymentName+"-allow")
 			rendered, _ := yaml.Marshal(policy)
 			if !bytes.Contains(rendered, []byte("app.kubernetes.io/name: appliance-registry")) ||
-				!bytes.Contains(rendered, []byte("kubernetes.io/metadata.name: registry")) ||
+				!bytes.Contains(rendered, []byte("kubernetes.io/metadata.name: artifacts")) ||
 				!bytes.Contains(rendered, []byte("port: 5000")) {
 				t.Fatalf("control-plane NetworkPolicy lacks registry-only egress:\n%s", rendered)
 			}
@@ -607,9 +607,9 @@ func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
 			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  dnsReadyURL: \"\"\n", profile)
 			switch profile {
 			case "storage-landns":
-				values += "  zotBaseURL: \"http://appliance-registry.registry.svc.cluster.local:5000\"\n  zotAllowFake: false\n"
+				values += "  zotBaseURL: \"http://appliance-registry.artifacts.svc.cluster.local:5000\"\n  zotAllowFake: false\n"
 			case "builder-landns", "builder-storage-landns":
-				values += `  zotBaseURL: "http://appliance-registry.registry.svc.cluster.local:5000"
+				values += `  zotBaseURL: "http://appliance-registry.artifacts.svc.cluster.local:5000"
   zotAllowFake: false
   workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

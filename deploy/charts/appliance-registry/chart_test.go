@@ -47,7 +47,7 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"path: /data/zon/logs/zot", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",
 		"secretName: appliance-registry-verification-key",
-		"name: appliance-registry-fileserver", "PathPrefix(`/files`)",
+		"name: fileserver", "PathPrefix(`/files`)",
 		"runAsUser: 10005", "path: /data/zon/files",
 		"registry.local/fileserver",
 	} {

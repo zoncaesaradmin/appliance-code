@@ -8,7 +8,7 @@ image:
 
 namespace:
   create: false
-  name: registry
+  name: artifacts
 
 service:
   port: 5000

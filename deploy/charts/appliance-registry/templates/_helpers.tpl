@@ -34,7 +34,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "appliance-registry.fileserverFullname" -}}
-{{- printf "%s-fileserver" (include "appliance-registry.fullname" .) | trunc 63 | trimSuffix "-" -}}
+fileserver
 {{- end -}}
 
 {{- define "appliance-registry.fileserverLabels" -}}
