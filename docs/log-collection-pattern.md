@@ -241,7 +241,8 @@ Service log directories are also operator-facing. They should be owned by the
 service UID and shared appliance filesystem GID, but use mode `2755` rather
 than `2770`: service containers keep owner write access and setgid behavior,
 while host operators can traverse and read logs without being added to numeric
-Kubernetes groups. General shared writable storage such as workspaces remains
+Kubernetes groups. Log files themselves should be mode `0644` (owner write,
+world read). General shared writable storage such as workspaces remains
 private group-writable storage and should continue to use `2770`.
 
 ## Container and Startup Pattern

@@ -90,7 +90,7 @@ spec:
         - name: prepare-log-dir
           image: {{ .Values.logs.prepare.image }}
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c", "mkdir -p /data/zon/logs/artifactserver && chown 10003:20000 /data/zon/logs/artifactserver && chmod 2755 /data/zon/logs/artifactserver"]
+          command: ["/bin/sh", "-c", "mkdir -p /data/zon/logs/artifactserver && touch /data/zon/logs/artifactserver/application.log && chown 10003:20000 /data/zon/logs/artifactserver /data/zon/logs/artifactserver/application.log && chmod 2755 /data/zon/logs/artifactserver && chmod 0644 /data/zon/logs/artifactserver/application.log"]
           securityContext:
             runAsNonRoot: false
             runAsUser: 0

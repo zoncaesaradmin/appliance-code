@@ -41,6 +41,8 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"mountPath: /var/lib/registry", "mountPath: /var/log/zot", "mountPath: /tmp",
 		"accessModes:\n    - ReadWriteOnce", "chmod 2755 /data/zon/logs/artifactserver",
+		"chmod 0644 /data/zon/logs/artifactserver/application.log",
+		"touch /data/zon/logs/artifactserver/application.log",
 		"kind: NetworkPolicy", "name: appliance-registry-default-deny",
 		"kubernetes.io/metadata.name: control",
 		"app.kubernetes.io/name: api-server",
