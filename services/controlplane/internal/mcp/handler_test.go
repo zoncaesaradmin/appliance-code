@@ -65,7 +65,7 @@ func newTestEnvWithCatalog(t *testing.T, profile appliance.Profile, catalog devf
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
-		cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 		cfg.DNSAllowFakeZoneSync = true
 	}
 

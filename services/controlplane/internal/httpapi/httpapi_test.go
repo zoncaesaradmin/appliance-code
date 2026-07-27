@@ -64,7 +64,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.FilesRootDir = filesRoot
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
-		cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 		cfg.DNSAllowFakeZoneSync = true
 	}
 

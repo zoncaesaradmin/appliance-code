@@ -122,11 +122,11 @@ func defaultRenderArgs() []string {
 }
 
 const (
-	controlPlaneDeploymentName = "control-plane"
-	controlPlaneConfigMapName  = "control-plane-config"
-	controlPlaneServiceName    = "control-plane"
-	controlPlaneUIName         = "control-plane-ui"
-	controlPlaneUIConfigName   = "control-plane-ui-config"
+	controlPlaneDeploymentName = "api-server"
+	controlPlaneConfigMapName  = "api-server-config"
+	controlPlaneServiceName    = "api-server"
+	controlPlaneUIName         = "ui-server"
+	controlPlaneUIConfigName   = "ui-server-config"
 )
 
 func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
@@ -247,7 +247,7 @@ func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
 		deployName string
 	}{
 		{
-			name:       "control-plane",
+			name:       "api-server",
 			deployName: controlPlaneDeploymentName,
 		},
 		{
@@ -396,11 +396,11 @@ func TestUIConfigMapDefaultsToRenderedControlPlaneServiceNames(t *testing.T) {
 	}
 
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://control-plane:8080" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://control-plane:8080", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://api-server:8080" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://api-server:8080", got)
 	}
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://control-plane-internal:8081" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://control-plane-internal:8081", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://api-server-internal:8081" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://api-server-internal:8081", got)
 	}
 }
 
@@ -529,7 +529,7 @@ func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
 		t.Run(profile, func(t *testing.T) {
 			args := append(defaultRenderArgs(), "--set", "config.applianceProfile="+profile)
 			if profile == "storage-landns" {
-				args = append(args, "--set", "config.dnsReadyURL=http://appliance-dns.dns.svc.cluster.local:8181/ready")
+				args = append(args, "--set", "config.dnsReadyURL=http://dns-server.dns.svc.cluster.local:8181/ready")
 			}
 			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
@@ -556,7 +556,7 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 		t.Run(profile, func(t *testing.T) {
 			args := append(defaultRenderArgs(),
 				"--set", "config.applianceProfile="+profile,
-				"--set", "config.dnsReadyURL=http://appliance-dns.dns.svc.cluster.local:8181/ready",
+				"--set", "config.dnsReadyURL=http://dns-server.dns.svc.cluster.local:8181/ready",
 			)
 			switch profile {
 			case "builder-landns", "builder-storage-landns":
@@ -572,7 +572,7 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 			data, _ := at(cm, "data").(map[string]any)
-			if got, _ := data["APPLIANCE_DNS_READY_URL"].(string); got != "http://appliance-dns.dns.svc.cluster.local:8181/ready" {
+			if got, _ := data["APPLIANCE_DNS_READY_URL"].(string); got != "http://dns-server.dns.svc.cluster.local:8181/ready" {
 				t.Fatalf("APPLIANCE_DNS_READY_URL = %q", got)
 			}
 			if got, _ := data["APPLIANCE_DNS_BOOTSTRAP_HOSTNAME"].(string); got != "" {
@@ -586,7 +586,7 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 				t.Fatalf("expected Role %s-dns for zone ConfigMap patch", controlPlaneDeploymentName)
 			}
 			rendered, _ := yaml.Marshal(role)
-			if !bytes.Contains(rendered, []byte("configmaps")) || !bytes.Contains(rendered, []byte("appliance-dns-config")) {
+			if !bytes.Contains(rendered, []byte("configmaps")) || !bytes.Contains(rendered, []byte("dns-server-config")) {
 				t.Fatalf("dns Role missing ConfigMap patch rules:\n%s", rendered)
 			}
 			sa := findByKindAndName(docs, "ServiceAccount", controlPlaneDeploymentName)
@@ -609,7 +609,7 @@ func TestValuesSchemaRejectsArtifactProfilesWithoutZotURL(t *testing.T) {
 			valuesPath := filepath.Join(t.TempDir(), profile+"-without-zot.yaml")
 			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  zotBaseURL: \"\"\n", profile)
 			if profile == "storage-landns" {
-				values += "  dnsReadyURL: \"http://appliance-dns.dns.svc.cluster.local:8181/ready\"\n"
+				values += "  dnsReadyURL: \"http://dns-server.dns.svc.cluster.local:8181/ready\"\n"
 			}
 			if err := os.WriteFile(valuesPath, []byte(values), 0o600); err != nil {
 				t.Fatal(err)
@@ -799,13 +799,13 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if ns, _ := at(pvc, "metadata", "namespace").(string); ns != "appliance-builds" {
 		t.Fatalf("workspace PVC namespace = %q, want appliance-builds", ns)
 	}
-	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "control-plane-workspaces" {
-		t.Fatalf("workspace PVC volumeName = %q, want control-plane-workspaces", volumeName)
+	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "api-server-workspaces" {
+		t.Fatalf("workspace PVC volumeName = %q, want api-server-workspaces", volumeName)
 	}
 	jobs := findByKind(docs, "Job")
 	for _, job := range jobs {
 		name, _ := at(job, "metadata", "name").(string)
-		if strings.HasPrefix(name, "control-plane-workspace-storage-prep-") {
+		if strings.HasPrefix(name, "api-server-workspace-storage-prep-") {
 			t.Fatalf("workspace storage prep Job must be disabled by default (PSA restricted + helm --wait); got %q", name)
 		}
 	}
@@ -817,8 +817,8 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if got, _ := data["APPLIANCE_WORKSPACE_ROOT_DIR"].(string); got != "/data/zon/workspaces" {
 		t.Fatalf("APPLIANCE_WORKSPACE_ROOT_DIR = %q, want /data/zon/workspaces", got)
 	}
-	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "control-plane-workspaces" {
-		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want control-plane-workspaces", got)
+	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "api-server-workspaces" {
+		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want api-server-workspaces", got)
 	}
 	if got, _ := data["APPLIANCE_WORKFLOW_INSTANCE_ID"].(string); got != "appliance" {
 		t.Fatalf("APPLIANCE_WORKFLOW_INSTANCE_ID = %q, want appliance", got)

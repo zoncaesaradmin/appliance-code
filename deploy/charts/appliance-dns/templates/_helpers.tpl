@@ -1,9 +1,10 @@
 {{- define "appliance-dns.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- /* K8s resource basename: dns-server (not the chart name appliance-dns). */ -}}
+{{- .Values.nameOverride | default "dns-server" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "appliance-dns.fullname" -}}
-{{- default "appliance-dns" .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- .Values.fullnameOverride | default "dns-server" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "appliance-dns.namespace" -}}

@@ -45,12 +45,11 @@ networkPolicy:
   enabled: true
   traefikNamespaceLabel: {}
   controlPlaneNamespaceLabel:
-    kubernetes.io/metadata.name: appliance-system
+    kubernetes.io/metadata.name: control
   controlPlanePodLabels:
-    # appliance-control-plane's chart helper trims the "appliance-"
-    # prefix, so the rendered control-plane pod label is
-    # app.kubernetes.io/name=control-plane.
-    app.kubernetes.io/name: control-plane
+    # Matches appliance-control-plane chart selectorLabels:
+    # app.kubernetes.io/name=api-server.
+    app.kubernetes.io/name: api-server
 
 podSecurityContext:
   runAsNonRoot: true

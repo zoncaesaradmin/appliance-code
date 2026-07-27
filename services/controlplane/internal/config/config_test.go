@@ -119,7 +119,7 @@ func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
 			}
 			switch profile {
 			case "storage-landns", "builder-landns", "builder-storage-landns":
-				cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+				cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 			}
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "zotBaseURL") {
 				t.Fatalf("Validate without Zot URL = %v, want zotBaseURL error", err)
@@ -150,7 +150,7 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "dnsReadyURL") {
 				t.Fatalf("Validate without DNS ready URL = %v, want dnsReadyURL error", err)
 			}
-			cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
+			cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("Validate with DNS ready URL: %v", err)
 			}

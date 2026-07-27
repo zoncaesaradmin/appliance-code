@@ -15,7 +15,7 @@ flowchart TD
             Traefik["Traefik pod<br/>HTTPS ingress"]
         end
 
-        subgraph AppNS["appliance-system namespace"]
+        subgraph AppNS["control namespace"]
             Control["Control-plane pod<br/>One Go server replica<br/>REST + MCP + auth + RBAC + orchestration"]
             UI["UI pod<br/>One Go server replica<br/>HTMX + server-rendered HTML"]
             Zot["zot pod<br/>One registry replica<br/>OCI data plane"]

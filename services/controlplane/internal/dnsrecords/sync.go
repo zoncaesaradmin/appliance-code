@@ -42,7 +42,7 @@ func (m *MemoryZoneSyncer) PatchZone(_ context.Context, zoneFile string) error {
 	return nil
 }
 
-// ConfigMapZoneSyncer PATCHes the appliance-dns ConfigMap db.local key.
+// ConfigMapZoneSyncer PATCHes the dns-server ConfigMap db.local key.
 type ConfigMapZoneSyncer struct {
 	baseURL   string
 	token     string

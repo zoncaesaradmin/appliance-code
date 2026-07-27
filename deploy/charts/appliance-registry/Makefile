@@ -8,7 +8,7 @@ build:
 lint:
 	helm lint .
 template:
-	helm template appliance-registry . --namespace appliance-system \
+	helm template appliance-registry . --namespace control \
 		--set networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=traefik > $(RENDER_OUT)
 test:
 	GOWORK=off go test -race ./...

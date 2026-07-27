@@ -80,7 +80,7 @@ func Default() Config {
 		FilesMaxUploadBytes:            20 * 1024 * 1024 * 1024,
 		DNSZoneName:                    "appliance.internal",
 		DNSConfigMapNamespace:          "dns",
-		DNSConfigMapName:               "appliance-dns-config",
+		DNSConfigMapName:               "dns-server-config",
 		DNSAllowFakeZoneSync:           true,
 		ReadHeaderTimeout:              5 * time.Second,
 		ReadTimeout:                    30 * time.Second,

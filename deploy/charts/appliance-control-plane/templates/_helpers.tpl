@@ -2,7 +2,8 @@
 Expand the name of the chart.
 */}}
 {{- define "appliance-control-plane.name" -}}
-{{- .Values.nameOverride | default (trimPrefix "appliance-" .Chart.Name) | trunc 63 | trimSuffix "-" -}}
+{{- /* K8s resource basename: api-server (not the chart/image name appliance-control-plane). */ -}}
+{{- .Values.nameOverride | default "api-server" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -56,7 +57,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 Selector labels for the UI pod.
 */}}
 {{- define "appliance-control-plane.uiSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "appliance-control-plane.name" . }}-ui
+app.kubernetes.io/name: {{ include "appliance-control-plane.uiServiceName" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -123,10 +124,11 @@ UI image reference, preferring an explicit digest pin over a tag.
 {{- end -}}
 
 {{/*
-UI service name.
+UI Deployment/Service name. Independent of api-server fullname so pods are
+ui-server-* rather than api-server-ui-*.
 */}}
 {{- define "appliance-control-plane.uiServiceName" -}}
-{{- printf "%s-ui" (include "appliance-control-plane.fullname" .) -}}
+{{- .Values.ui.nameOverride | default "ui-server" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*

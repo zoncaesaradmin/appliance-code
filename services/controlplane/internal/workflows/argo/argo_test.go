@@ -133,7 +133,7 @@ func TestSubmitCreatesWorkspaceLocalBuildWorkflow(t *testing.T) {
 		TargetRepository:   "registry.local/users/alice/app",
 		TargetTag:          "v1",
 		WorkspaceRootDir:   "/data/zon/workspaces",
-		WorkspaceClaimName: "control-plane-workspaces",
+		WorkspaceClaimName: "api-server-workspaces",
 		WorkspaceName:      "demo",
 		WorkspaceRepo:      "platformkit",
 		Deadline:           time.Now().Add(time.Hour),
@@ -172,14 +172,14 @@ func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
 		TargetRepository:   "registry.local/users/alice/app",
 		TargetTag:          "v1",
 		WorkspaceRootDir:   "/data/zon/workspaces",
-		WorkspaceClaimName: "control-plane-workspaces",
+		WorkspaceClaimName: "api-server-workspaces",
 		Deadline:           time.Now().Add(time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("workflowObject: %v", err)
 	}
 	text := workflowJSON(t, got)
-	for _, want := range []string{"workspace-storage", "control-plane-workspaces", "WORKSPACE_ROOT_DIR", "/data/zon/workspaces"} {
+	for _, want := range []string{"workspace-storage", "api-server-workspaces", "WORKSPACE_ROOT_DIR", "/data/zon/workspaces"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("build workflow JSON missing %q: %s", want, text)
 		}
@@ -193,7 +193,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 		BuilderImageDigest:  "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 		GitCredentialSecret: "builder-git-access",
 		WorkspaceRootDir:    "/data/zon/workspaces",
-		WorkspaceClaimName:  "control-plane-workspaces",
+		WorkspaceClaimName:  "api-server-workspaces",
 		WorkspaceName:       "demo",
 		WorkspaceRepos: []workflows.WorkspaceRepo{
 			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", Ref: "0123456789abcdef0123456789abcdef01234567"},
@@ -206,7 +206,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 	}
 	text := workflowJSON(t, got)
 	command := workflowCommand(t, got)
-	for _, want := range []string{"workspace-storage", "control-plane-workspaces", "WORKSPACE_ROOT_DIR", "WORKSPACE_NAME", "platformkit", "forgeline", "git-access", "builder-git-access", "/var/run/appliance/git-access"} {
+	for _, want := range []string{"workspace-storage", "api-server-workspaces", "WORKSPACE_ROOT_DIR", "WORKSPACE_NAME", "platformkit", "forgeline", "git-access", "builder-git-access", "/var/run/appliance/git-access"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
@@ -232,7 +232,7 @@ func TestSubmitWorkspacePrepareRequiresGitCredential(t *testing.T) {
 		Kind:               workflows.KindWorkspacePrepare,
 		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
 		WorkspaceRootDir:   "/data/zon/workspaces",
-		WorkspaceClaimName: "control-plane-workspaces",
+		WorkspaceClaimName: "api-server-workspaces",
 		WorkspaceName:      "demo",
 		WorkspaceRepos: []workflows.WorkspaceRepo{
 			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", Ref: "main"},

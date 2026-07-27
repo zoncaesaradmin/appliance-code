@@ -356,7 +356,7 @@ Bundle validation:
 
 Target validation:
 
-- `kubectl get pods -n appliance-system` shows control-plane and UI pods running.
+- `kubectl get pods -n control` shows api-server and ui-server pods running.
 - `curl -k https://<appliance>/` returns HTML.
 - `curl -k https://<appliance>/api/v1/auth/session` remains routed to the
   control plane and returns the expected auth response.

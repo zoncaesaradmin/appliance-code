@@ -40,14 +40,14 @@ These trace events are written by the UI service itself, so operators should
 look in the UI service logs first:
 
 - `/data/zon/logs/ui/application.log`
-- `kubectl logs deploy/control-plane-ui -n appliance-system`
+- `kubectl logs deploy/ui-server -n control`
 - `/data/zon/logs/ui/stdout.log`
 
 The control plane writes its own redacted API exchange logs too. For the same
 browser action, operators can also inspect:
 
 - `/data/zon/logs/control-plane/application.log`
-- `kubectl logs deploy/control-plane -n appliance-system`
+- `kubectl logs deploy/api-server -n control`
 - `/data/zon/logs/control-plane/stdout.log`
 
 Useful event names:

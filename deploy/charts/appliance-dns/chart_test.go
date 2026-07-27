@@ -40,12 +40,12 @@ func render(t *testing.T, args ...string) string {
 func TestHardenedDNSRender(t *testing.T) {
 	out := render(t, "--set", "logs.prepare.enabled=true")
 	for _, want := range []string{
-		"kind: Deployment\nmetadata:\n  name: appliance-dns",
+		"kind: Deployment\nmetadata:\n  name: dns-server",
 		"runAsUser: 10004", "runAsGroup: 10004", "fsGroup: 20000",
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"NET_BIND_SERVICE", "hostNetwork: true",
 		"path: /data/zon/logs/dns", "chmod 2755 /data/zon/logs/dns",
-		"kind: NetworkPolicy", "name: appliance-dns-default-deny",
+		"kind: NetworkPolicy", "name: dns-server-default-deny",
 		"file /etc/coredns/zones/db.local",
 		"reload 1s",
 		"reload 2s",

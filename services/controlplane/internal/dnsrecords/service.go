@@ -20,7 +20,7 @@ const (
 	DefaultPeerTTL       = 60
 	DefaultPeerLease     = 15 * time.Minute
 	DefaultConfigMapNS   = "dns"
-	DefaultConfigMapName = "appliance-dns-config"
+	DefaultConfigMapName = "dns-server-config"
 )
 
 var (
