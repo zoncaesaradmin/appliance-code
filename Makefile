@@ -223,8 +223,10 @@ package-zot-image-archive:
 ## bundled annotation and platform-manifest digest reference.
 package-coredns-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/coredns.tar}"; \
+	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
 	bash ./scripts/package/export-coredns-image-archive.sh \
 		--out-file "$$out_file" \
+		--reference-out-file "$$reference_file" \
 		$${DNS_SOURCE_IMAGE:+--source-image "$${DNS_SOURCE_IMAGE}"} \
 		$${DNS_VERSION:+--dns-version "$${DNS_VERSION}"}
 
