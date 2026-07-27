@@ -5,13 +5,14 @@ FROM ${BASE_IMAGE} AS upstream
 # Alpine wrapper adds bash+tee so we can mirror CoreDNS stdout/stderr into
 # /data/zon/logs/dns (upstream distroless image has no shell).
 #
-# libcap-utils provides capsh so CAP_NET_BIND_SERVICE from the pod
-# securityContext survives the entrypoint's final exec into /coredns.
-# Without ambient capabilities, execve clears non-ambient effective caps
-# and UID 10004 fails with: listen tcp :53: bind: permission denied.
+# Port 53 bind for UID 10004 is provided by zonctl hostdns.Prepare, which
+# sets net.ipv4.ip_unprivileged_port_start=0 on the node. Do not wrap PID 1
+# with capsh --addamb: under drop=ALL + NET_BIND_SERVICE only, capsh cannot
+# mutate the inheritable set (needs SETPCAP) and fails with
+# "Unable to set inheritable capabilities: Operation not permitted".
 FROM alpine:3.24.1
 
-RUN apk add --no-cache bash ca-certificates libcap-utils
+RUN apk add --no-cache bash ca-certificates
 
 COPY --from=upstream /coredns /coredns
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -21,8 +22,6 @@ RUN chmod 0755 /coredns /usr/local/bin/entrypoint.sh
 # Matches appliance-dns chart podSecurityContext runAsUser/runAsGroup.
 USER 10004:10004
 
-# capsh is PID 1 (started by the runtime with NET_BIND_SERVICE). It raises
-# that capability into the ambient set, then runs the logging wrapper.
 # Chart args (for example -conf /etc/coredns/Corefile) are appended after
-# entrypoint.sh.
-ENTRYPOINT ["/usr/sbin/capsh", "--inh=cap_net_bind_service", "--addamb=cap_net_bind_service", "--", "/usr/local/bin/entrypoint.sh"]
+# the entrypoint.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

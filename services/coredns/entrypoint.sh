@@ -5,10 +5,11 @@ set -euo pipefail
 # CoreDNS itself only writes to stdout/stderr; mirror those streams so
 # host users can inspect query/error logs without kubectl.
 #
-# This script is invoked under capsh with CAP_NET_BIND_SERVICE already in
-# the ambient set (see Containerfile ENTRYPOINT). Ambient caps survive the
-# final exec into /coredns; a bare `exec /coredns` without ambient clears
-# effective NET_BIND_SERVICE and non-root bind to :53 fails.
+# Non-root bind to :53 depends on zonctl hostdns.Prepare setting
+# net.ipv4.ip_unprivileged_port_start=0 on the node (hostNetwork shares
+# that sysctl). NET_BIND_SERVICE on the pod is belt-and-suspenders only;
+# it does not survive this script's final exec into /coredns unless it is
+# also ambient, which we do not raise here (capsh --addamb needs SETPCAP).
 SERVICE_LOG_DIR="/data/zon/logs/dns"
 STDOUT_LOG="${SERVICE_LOG_DIR}/stdout.log"
 STDERR_LOG="${SERVICE_LOG_DIR}/stderr.log"
