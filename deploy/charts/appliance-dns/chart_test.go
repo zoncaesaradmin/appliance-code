@@ -44,6 +44,7 @@ func TestHardenedDNSRender(t *testing.T) {
 		"runAsUser: 10004", "runAsGroup: 10004", "fsGroup: 20000",
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"NET_BIND_SERVICE", "hostNetwork: true",
+		"net.ipv4.ip_unprivileged_port_start",
 		"path: /data/zon/logs/dns", "chmod 2755 /data/zon/logs/dns",
 		"mountPath: /data/zon/logs/dns",
 		"kind: NetworkPolicy", "name: dns-server-default-deny",
