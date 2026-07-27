@@ -432,7 +432,7 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 				t.Errorf("API route priority = %v, want 100", route["priority"])
 			}
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/v2`) && !PathPrefix(`/files`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
 			if priority != 1 {
 				t.Errorf("UI route priority = %v, want 1", route["priority"])
 			}

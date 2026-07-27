@@ -11,6 +11,9 @@
   </form>
 </section>
 
+{{if .Error}}<article class="notice error" role="alert">{{.Error}}</article>{{end}}
+{{if .Message}}<article class="notice" role="status">{{.Message}}</article>{{end}}
+
 <div class="grid">
   <article id="session-panel">
     {{template "session-panel" .}}
@@ -19,6 +22,77 @@
     {{template "status-panel" .}}
   </article>
 </div>
+
+<article id="api-tokens">
+  <header>
+    <strong>API tokens</strong>
+  </header>
+  <p class="muted">
+    Long-lived opaque tokens (<code>apt_…</code>) for automation such as
+    <code>bundle_store.mode: appliance_files</code> publish/install.
+    Present them as <code>Authorization: Bearer …</code>. Paste the secret into
+    <code>bundle_store.access_token</code> in your local release config.
+    The raw secret is shown only once at creation.
+  </p>
+
+  {{if .NewAPITokenSecret}}
+  <article class="notice" role="status">
+    <p><strong>Copy this token now</strong> — it will not be shown again.</p>
+    <p>Name: <code>{{.NewAPITokenName}}</code></p>
+    <p>Token ID: <code>{{.NewAPITokenID}}</code></p>
+    <label>API token
+      <input id="new-api-token-secret" type="text" readonly value="{{.NewAPITokenSecret}}">
+    </label>
+    <button type="button" class="secondary" onclick="navigator.clipboard.writeText(document.getElementById('new-api-token-secret').value)">Copy token</button>
+  </article>
+  {{end}}
+
+  {{if .CanManageTokens}}
+  <form method="post" action="/dashboard/tokens">
+    <label>Name
+      <input name="name" required placeholder="appliance-release-files" value="{{.FormTokenName}}">
+    </label>
+    <label>Lifetime
+      <select name="lifetime">
+        <option value="90d" selected>90 days (default)</option>
+        <option value="30d">30 days</option>
+        <option value="365d">365 days (maximum)</option>
+      </select>
+    </label>
+    <label>Scopes
+      <select name="scope_preset">
+        <option value="all" selected>All of my permissions</option>
+        <option value="artifacts_files">Artifact files only (artifacts.read + artifacts.write)</option>
+      </select>
+    </label>
+    <button type="submit">Create API token</button>
+  </form>
+
+  {{if .APITokens}}
+  <h3>Existing tokens</h3>
+  <ul>
+    {{range .APITokens}}
+    <li>
+      <code>{{.Name}}</code>
+      — ID <code>{{.ID}}</code>
+      — expires {{.ExpiresAt.UTC.Format "2006-01-02"}}
+      {{if .RevokedAt}}(revoked){{end}}
+      {{if not .RevokedAt}}
+      <form method="post" action="/dashboard/tokens/delete" style="display:inline">
+        <input type="hidden" name="token_id" value="{{.ID}}">
+        <button class="secondary" type="submit">Revoke</button>
+      </form>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No API tokens yet.</p>
+  {{end}}
+  {{else}}
+  <p class="muted">Your account cannot manage API tokens.</p>
+  {{end}}
+</article>
 
 {{if .BuilderEnabled}}
 <article class="builder-callout">

@@ -113,8 +113,8 @@ func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	// CreateTemp uses 0600; widen so the fileserver (UID 10005 via fsGroup
-	// 20000) and host operators can read uploads (dirs are 2775).
+	// CreateTemp uses 0600; widen so host operators can read uploads
+	// (dirs under /data/zon/files are 2775 with shared fsGroup 20000).
 	if err := os.Chmod(tmpPath, 0o644); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return

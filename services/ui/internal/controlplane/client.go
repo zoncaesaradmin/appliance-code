@@ -182,6 +182,29 @@ type CreateRegistryGrantRequest struct {
 	Actions     []string `json:"actions"`
 }
 
+// APIToken is token metadata. The raw secret is only on CreateAPITokenResult.
+type APIToken struct {
+	ID         string     `json:"id"`
+	UserID     string     `json:"userId"`
+	Name       string     `json:"name"`
+	Scopes     []string   `json:"scopes,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	ExpiresAt  time.Time  `json:"expiresAt"`
+	LastUsedAt *time.Time `json:"lastUsedAt,omitempty"`
+	RevokedAt  *time.Time `json:"revokedAt,omitempty"`
+}
+
+type CreateAPITokenRequest struct {
+	Name            string   `json:"name"`
+	LifetimeSeconds int64    `json:"lifetimeSeconds,omitempty"`
+	Scopes          []string `json:"scopes,omitempty"`
+}
+
+type CreateAPITokenResult struct {
+	Token string `json:"token"`
+	APIToken
+}
+
 type DNSRecord struct {
 	Name           string     `json:"name"`
 	FQDN           string     `json:"fqdn"`
@@ -437,6 +460,45 @@ func (c *Client) CreateRegistryGrant(ctx context.Context, accessToken string, in
 
 func (c *Client) DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/registry/grants/"+url.PathEscape(grantID), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return c.doJSON(req, http.StatusNoContent, nil)
+}
+
+func (c *Client) ListAPITokens(ctx context.Context, accessToken string) ([]APIToken, error) {
+	var result struct {
+		Items []APIToken `json:"items"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/tokens", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
+		return nil, err
+	}
+	return result.Items, nil
+}
+
+func (c *Client) CreateAPIToken(ctx context.Context, accessToken string, in CreateAPITokenRequest) (CreateAPITokenResult, error) {
+	var out CreateAPITokenResult
+	body, _ := json.Marshal(in)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/tokens", bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusCreated, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) RevokeAPIToken(ctx context.Context, accessToken, tokenID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/tokens/"+url.PathEscape(tokenID), nil)
 	if err != nil {
 		return err
 	}

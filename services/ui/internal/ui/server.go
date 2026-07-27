@@ -55,6 +55,9 @@ type controlPlane interface {
 	ListRegistryGrants(ctx context.Context, accessToken string) ([]controlplane.RegistryGrant, error)
 	CreateRegistryGrant(ctx context.Context, accessToken string, req controlplane.CreateRegistryGrantRequest) (controlplane.RegistryGrant, error)
 	DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error
+	ListAPITokens(ctx context.Context, accessToken string) ([]controlplane.APIToken, error)
+	CreateAPIToken(ctx context.Context, accessToken string, req controlplane.CreateAPITokenRequest) (controlplane.CreateAPITokenResult, error)
+	RevokeAPIToken(ctx context.Context, accessToken, tokenID string) error
 	ListDNSRecords(ctx context.Context, accessToken string) (controlplane.DNSRecordsResult, error)
 	UpsertDNSRecord(ctx context.Context, accessToken, name string, req controlplane.UpsertDNSRecordRequest) (controlplane.DNSRecord, error)
 	DeleteDNSRecord(ctx context.Context, accessToken, name string) error
@@ -84,6 +87,17 @@ type viewData struct {
 	Health           controlplane.Health
 	Identity         controlplane.ApplianceIdentity
 	StatusError      string
+}
+
+type dashboardPageData struct {
+	viewData
+	APITokens       []controlplane.APIToken
+	CanManageTokens bool
+	// NewAPITokenSecret is shown once after create; never listed again.
+	NewAPITokenSecret string
+	NewAPITokenID     string
+	NewAPITokenName   string
+	FormTokenName     string
 }
 
 type builderPageData struct {
@@ -185,6 +199,8 @@ func New(cfg Config, cp controlPlane, sessions *session.Store, logger uilogging.
 	mux.HandleFunc("POST /setup", s.setup)
 	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /dashboard", s.dashboard)
+	mux.HandleFunc("POST /dashboard/tokens", s.createAPIToken)
+	mux.HandleFunc("POST /dashboard/tokens/delete", s.revokeAPIToken)
 	mux.HandleFunc("GET /builder/workspaces", s.builderWorkspaces)
 	mux.HandleFunc("GET /artifacts", s.artifactPage)
 	mux.HandleFunc("POST /artifacts/grants", s.createRegistryGrant)
@@ -221,7 +237,7 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	if rec, ok := s.currentRecord(r); ok {
-		data := s.dashboardData(r, rec)
+		data := s.dashboardPage(r, rec, "", "", "", "", "")
 		s.render(w, r, http.StatusOK, "dashboard.html", data)
 		return
 	}
@@ -361,7 +377,11 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	data := s.dashboardData(r, rec)
+	rec, ok = s.refreshRecordForAPI(w, r, rec)
+	if !ok {
+		return
+	}
+	data := s.dashboardPage(r, rec, "", "", "", "", "")
 	s.render(w, r, http.StatusOK, "dashboard.html", data)
 }
 
@@ -415,6 +435,108 @@ func (s *Server) dashboardData(r *http.Request, rec session.Record) viewData {
 		data.Identity = identity
 	}
 	return data
+}
+
+func (s *Server) dashboardPage(r *http.Request, rec session.Record, message, formError, newSecret, newID, formName string) dashboardPageData {
+	base := s.dashboardData(r, rec)
+	base.Message = message
+	base.Error = formError
+	base.CurrentPath = "/dashboard"
+	data := dashboardPageData{
+		viewData:          base,
+		NewAPITokenSecret: newSecret,
+		NewAPITokenID:     newID,
+		FormTokenName:     formName,
+	}
+	if newSecret != "" {
+		data.NewAPITokenName = formName
+	}
+	tokens, err := s.cp.ListAPITokens(r.Context(), rec.AccessToken)
+	if err == nil {
+		data.APITokens = tokens
+		data.CanManageTokens = true
+	} else if !isHTTPStatus(err, http.StatusForbidden) && data.StatusError == "" {
+		data.StatusError = "API tokens are unavailable."
+	}
+	return data
+}
+
+func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, ok = s.refreshRecordForAPI(w, r, rec)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Could not read the token form.", "", "", ""))
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	if name == "" {
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Token name is required.", "", "", ""))
+		return
+	}
+	lifetimeSeconds := int64(0)
+	switch strings.TrimSpace(r.Form.Get("lifetime")) {
+	case "30d":
+		lifetimeSeconds = 30 * 24 * 60 * 60
+	case "365d":
+		lifetimeSeconds = 365 * 24 * 60 * 60
+	case "90d", "":
+		lifetimeSeconds = 90 * 24 * 60 * 60
+	default:
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Invalid token lifetime.", "", "", name))
+		return
+	}
+	var scopes []string
+	if r.Form.Get("scope_preset") == "artifacts_files" {
+		scopes = []string{"artifacts.read", "artifacts.write"}
+	}
+	created, err := s.cp.CreateAPIToken(r.Context(), rec.AccessToken, controlplane.CreateAPITokenRequest{
+		Name:            name,
+		LifetimeSeconds: lifetimeSeconds,
+		Scopes:          scopes,
+	})
+	if err != nil {
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Could not create the API token.", "", "", name))
+		return
+	}
+	s.render(w, r, http.StatusOK, "dashboard.html", s.dashboardPage(
+		r, rec,
+		"API token created. Copy the secret now — it is shown only once.",
+		"",
+		created.Token,
+		created.ID,
+		created.Name,
+	))
+}
+
+func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
+	rec, ok := s.requireRecord(w, r)
+	if !ok {
+		return
+	}
+	rec, ok = s.refreshRecordForAPI(w, r, rec)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Could not read the revoke form.", "", "", ""))
+		return
+	}
+	tokenID := strings.TrimSpace(r.Form.Get("token_id"))
+	if tokenID == "" {
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Token ID is required to revoke.", "", "", ""))
+		return
+	}
+	if err := s.cp.RevokeAPIToken(r.Context(), rec.AccessToken, tokenID); err != nil {
+		s.render(w, r, http.StatusBadRequest, "dashboard.html", s.dashboardPage(r, rec, "", "Could not revoke the API token.", "", "", ""))
+		return
+	}
+	http.Redirect(w, r, "/dashboard#api-tokens", http.StatusSeeOther)
 }
 
 func (s *Server) builderWorkspaces(w http.ResponseWriter, r *http.Request) {

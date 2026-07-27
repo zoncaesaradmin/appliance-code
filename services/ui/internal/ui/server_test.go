@@ -57,6 +57,11 @@ type fakeControlPlane struct {
 	lastUpsertDNSReq         controlplane.UpsertDNSRecordRequest
 	deleteDNSCalls           int
 	lastDeleteDNSName        string
+	apiTokens                []controlplane.APIToken
+	createAPITokenCalls      int
+	lastCreateAPITokenReq    controlplane.CreateAPITokenRequest
+	revokeAPITokenCalls      int
+	lastRevokeAPITokenID     string
 }
 
 func (f *fakeControlPlane) Identity(context.Context) (controlplane.ApplianceIdentity, error) {
@@ -96,6 +101,37 @@ func (f *fakeControlPlane) DeleteRegistryGrant(_ context.Context, _, grantID str
 	for i := range f.registryGrants {
 		if f.registryGrants[i].ID == grantID {
 			f.registryGrants = append(f.registryGrants[:i], f.registryGrants[i+1:]...)
+			return nil
+		}
+	}
+	return &controlplane.HTTPStatusError{StatusCode: http.StatusNotFound}
+}
+
+func (f *fakeControlPlane) ListAPITokens(context.Context, string) ([]controlplane.APIToken, error) {
+	return append([]controlplane.APIToken(nil), f.apiTokens...), nil
+}
+
+func (f *fakeControlPlane) CreateAPIToken(_ context.Context, _ string, req controlplane.CreateAPITokenRequest) (controlplane.CreateAPITokenResult, error) {
+	f.createAPITokenCalls++
+	f.lastCreateAPITokenReq = req
+	tok := controlplane.APIToken{
+		ID:        "tok-" + req.Name,
+		UserID:    "user-1",
+		Name:      req.Name,
+		Scopes:    append([]string(nil), req.Scopes...),
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(time.Duration(req.LifetimeSeconds) * time.Second),
+	}
+	f.apiTokens = append(f.apiTokens, tok)
+	return controlplane.CreateAPITokenResult{Token: "apt_test.secret", APIToken: tok}, nil
+}
+
+func (f *fakeControlPlane) RevokeAPIToken(_ context.Context, _, tokenID string) error {
+	f.revokeAPITokenCalls++
+	f.lastRevokeAPITokenID = tokenID
+	for i := range f.apiTokens {
+		if f.apiTokens[i].ID == tokenID {
+			f.apiTokens = append(f.apiTokens[:i], f.apiTokens[i+1:]...)
 			return nil
 		}
 	}
@@ -559,6 +595,7 @@ func TestDashboardAndPartialsReturnHTML(t *testing.T) {
 		want string
 	}{
 		{path: "/dashboard", want: "Appliance status"},
+		{path: "/dashboard", want: "API tokens"},
 		{path: "/partials/status", want: "Platform"},
 		{path: "/partials/session", want: "Current session"},
 	} {
@@ -1478,5 +1515,57 @@ func TestDNSRecordUpsertForbiddenWithoutWritePermission(t *testing.T) {
 	}
 	if cp.upsertDNSCalls != 0 {
 		t.Fatalf("expected no upsert call, got %d", cp.upsertDNSCalls)
+	}
+}
+
+func TestDashboardCreatesAndRevokesAPIToken(t *testing.T) {
+	cp := &fakeControlPlane{initialized: true, adminUser: "admin", adminPass: "secret"}
+	handler := newTestServerWithProfile(t, "core", cp)
+	cookie := loginTestCookie(t, handler)
+
+	createReq := httptest.NewRequest(
+		http.MethodPost,
+		"/dashboard/tokens",
+		strings.NewReader("name=appliance-release-files&lifetime=365d&scope_preset=artifacts_files"),
+	)
+	createReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	createReq.AddCookie(cookie)
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	if createRec.Code != http.StatusOK {
+		t.Fatalf("create status = %d, want 200", createRec.Code)
+	}
+	body := createRec.Body.String()
+	for _, want := range []string{"apt_test.secret", "tok-appliance-release-files", "Copy this token now"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("create response missing %q:\n%s", want, body)
+		}
+	}
+	if cp.createAPITokenCalls != 1 {
+		t.Fatalf("createAPITokenCalls = %d, want 1", cp.createAPITokenCalls)
+	}
+	if cp.lastCreateAPITokenReq.Name != "appliance-release-files" {
+		t.Fatalf("token name = %q", cp.lastCreateAPITokenReq.Name)
+	}
+	if cp.lastCreateAPITokenReq.LifetimeSeconds != 365*24*60*60 {
+		t.Fatalf("lifetimeSeconds = %d", cp.lastCreateAPITokenReq.LifetimeSeconds)
+	}
+	if got := strings.Join(cp.lastCreateAPITokenReq.Scopes, ","); got != "artifacts.read,artifacts.write" {
+		t.Fatalf("scopes = %q", got)
+	}
+
+	revokeReq := httptest.NewRequest(http.MethodPost, "/dashboard/tokens/delete", strings.NewReader("token_id=tok-appliance-release-files"))
+	revokeReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	revokeReq.AddCookie(cookie)
+	revokeRec := httptest.NewRecorder()
+	handler.ServeHTTP(revokeRec, revokeReq)
+	if revokeRec.Code != http.StatusSeeOther {
+		t.Fatalf("revoke status = %d, want 303", revokeRec.Code)
+	}
+	if cp.revokeAPITokenCalls != 1 || cp.lastRevokeAPITokenID != "tok-appliance-release-files" {
+		t.Fatalf("revoke calls=%d id=%q", cp.revokeAPITokenCalls, cp.lastRevokeAPITokenID)
+	}
+	if len(cp.apiTokens) != 0 {
+		t.Fatalf("expected token list empty after revoke, got %#v", cp.apiTokens)
 	}
 }

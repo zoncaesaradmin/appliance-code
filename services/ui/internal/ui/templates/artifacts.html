@@ -52,7 +52,7 @@
 
 <article>
   <header><strong>Push from a workstation</strong></header>
-  <p>Create an appliance API token, then use it as the registry password. Interactive appliance passwords are never accepted by the registry.</p>
+  <p>Create an appliance API token on the <a href="/dashboard#api-tokens">Dashboard</a>, then use it as the registry password. Interactive appliance passwords are never accepted by the registry.</p>
   <pre><code>podman login &lt;appliance-host&gt; --username &lt;username&gt; --password-stdin
 podman push &lt;local-image&gt; &lt;appliance-host&gt;/users/&lt;username&gt;/&lt;repository&gt;:&lt;tag&gt;</code></pre>
   <p class="muted">Pipe the API token to <code>podman login</code> on standard input. Do not place tokens in command arguments or shell history.</p>

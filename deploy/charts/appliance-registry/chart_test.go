@@ -66,17 +66,21 @@ func TestHardenedRegistryRender(t *testing.T) {
 	}
 }
 
-func TestFileserverRendersWhenExplicitlyEnabled(t *testing.T) {
-	out := render(t, "--set", "fileserver.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
-	for _, want := range []string{
-		"name: fileserver", "PathPrefix(`/files`)", "runAsUser: 10005",
-		"path: /data/zon/files", "registry.local/fileserver",
-		"path: /data/zon/logs/fileserver",
-		"access_log /data/zon/logs/fileserver/access.log",
-		"error_log /data/zon/logs/fileserver/error.log",
+func TestFileserverNeverRenders(t *testing.T) {
+	// Leftover installer values must not revive the removed unauthenticated
+	// Traefik /files nginx surface.
+	out := render(t,
+		"--set", "fileserver.enabled=true",
+		"--set", "fileserver.image.repository=registry.local/fileserver",
+		"--set", "fileserver.image.digest=sha256:"+strings.Repeat("d", 64),
+		"--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system",
+	)
+	for _, forbidden := range []string{
+		"name: fileserver", "PathPrefix(`/files`)", "registry.local/fileserver",
+		"/data/zon/logs/fileserver", "runAsUser: 10005",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("fileserver render missing %q", want)
+		if strings.Contains(out, forbidden) {
+			t.Errorf("render unexpectedly contains removed fileserver surface %q", forbidden)
 		}
 	}
 }

@@ -129,7 +129,6 @@ Examples:
 /data/zon/logs/ui/
 /data/zon/logs/argo-controller/
 /data/zon/logs/artifactserver/
-/data/zon/logs/fileserver/
 /data/zon/logs/dns/
 ```
 
