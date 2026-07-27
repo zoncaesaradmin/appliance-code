@@ -21,7 +21,7 @@ data:
   APPLIANCE_ZOT_BASE_URL: {{ .Values.config.zotBaseURL | quote }}
   APPLIANCE_ZOT_ALLOW_FAKE: {{ .Values.config.zotAllowFake | quote }}
   APPLIANCE_FILES_ROOT_DIR: {{ .Values.files.rootDir | quote }}
-  APPLIANCE_FILES_MAX_UPLOAD_BYTES: {{ .Values.files.maxUploadBytes | quote }}
+  APPLIANCE_FILES_MAX_UPLOAD_BYTES: {{ printf "%s" .Values.files.maxUploadBytes | quote }}
   APPLIANCE_FILES_TRANSFER_TIMEOUT: {{ .Values.files.transferTimeout | quote }}
   APPLIANCE_DNS_READY_URL: {{ .Values.config.dnsReadyURL | quote }}
   APPLIANCE_DNS_ZONE_NAME: {{ .Values.config.dnsZoneName | default "appliance.internal" | quote }}

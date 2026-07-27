@@ -447,6 +447,32 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 	}
 }
 
+func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	cms := findByKind(docs, "ConfigMap")
+	var found bool
+	for _, doc := range cms {
+		data, _ := at(doc, "data").(map[string]any)
+		if data == nil {
+			continue
+		}
+		raw, ok := data["APPLIANCE_FILES_MAX_UPLOAD_BYTES"].(string)
+		if !ok {
+			continue
+		}
+		found = true
+		if raw != "21474836480" {
+			t.Fatalf("APPLIANCE_FILES_MAX_UPLOAD_BYTES = %q, want decimal 21474836480 (not scientific notation)", raw)
+		}
+		if strings.Contains(strings.ToLower(raw), "e+") || strings.Contains(strings.ToLower(raw), "e-") {
+			t.Fatalf("APPLIANCE_FILES_MAX_UPLOAD_BYTES must not use scientific notation, got %q", raw)
+		}
+	}
+	if !found {
+		t.Fatal("expected APPLIANCE_FILES_MAX_UPLOAD_BYTES in control-plane ConfigMap")
+	}
+}
+
 func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
 	if len(findByKind(docs, "Namespace")) != 0 {
