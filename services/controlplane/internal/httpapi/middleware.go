@@ -189,7 +189,7 @@ func APIExchangeLog(logger logging.Logger) func(http.Handler) http.Handler {
 				return
 			}
 
-			requestBody := cloneRequestBody(r)
+			requestSummary := peekRequestBodyForLog(r)
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rec, r)
@@ -199,7 +199,7 @@ func APIExchangeLog(logger logging.Logger) func(http.Handler) http.Handler {
 				"path", r.URL.Path,
 				"status", rec.status,
 				"duration", time.Since(start).String(),
-				"request", summarizeBodyForLog(requestBody),
+				"request", requestSummary,
 				"response", summarizeBodyForLog(rec.body.Bytes()),
 				"responseTruncated", rec.truncated,
 			)
@@ -211,17 +211,41 @@ func shouldTraceAPIExchange(path string) bool {
 	return strings.HasPrefix(path, "/api/v1/")
 }
 
-func cloneRequestBody(r *http.Request) []byte {
+// peekRequestBodyForLog returns a redacted request summary for exchange logs
+// without buffering large bodies into memory. Full io.ReadAll here OOMs the
+// control-plane pod (512Mi limit) on appliance_files bundle publishes.
+func peekRequestBodyForLog(r *http.Request) any {
 	if r.Body == nil {
 		return nil
 	}
-	body, err := io.ReadAll(r.Body)
+	if r.ContentLength > int64(traceBodyLimit) {
+		return map[string]any{
+			"size":      r.ContentLength,
+			"truncated": true,
+		}
+	}
+
+	limited := io.LimitReader(r.Body, int64(traceBodyLimit)+1)
+	buf, err := io.ReadAll(limited)
 	if err != nil {
-		r.Body = io.NopCloser(bytes.NewReader(nil))
+		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf), r.Body))
 		return nil
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	return body
+	if len(buf) > traceBodyLimit {
+		// Body continues past the peek window; restore bytes and stream the rest.
+		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buf), r.Body))
+		size := r.ContentLength
+		if size < 0 {
+			size = int64(len(buf))
+		}
+		return map[string]any{
+			"size":      size,
+			"truncated": true,
+		}
+	}
+
+	r.Body = io.NopCloser(bytes.NewReader(buf))
+	return summarizeBodyForLog(buf)
 }
 
 func summarizeBodyForLog(body []byte) any {

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -92,6 +93,52 @@ func TestAPIExchangeLogRedactsRequestAndResponse(t *testing.T) {
 	}
 	if got := response["accessToken"]; got != "[REDACTED]" {
 		t.Fatalf("response.accessToken = %#v, want [REDACTED]", got)
+	}
+}
+
+func TestAPIExchangeLogDoesNotBufferLargeUploadBodies(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger, err := logging.NewWithWriter("info", &logBuf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+
+	const uploadSize = 8 * 1024 * 1024
+	payload := bytes.Repeat([]byte("a"), uploadSize)
+	var received int
+	handler := Chain(TraceID, RequestID, APIExchangeLog(logger))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n, err := io.Copy(io.Discard, r.Body)
+		if err != nil {
+			t.Fatalf("handler read body: %v", err)
+		}
+		received = int(n)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"path":"appliance/probe/large.bin","size":8388608}`))
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files/appliance/probe/large.bin", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.ContentLength = int64(uploadSize)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if received != uploadSize {
+		t.Fatalf("handler received %d bytes, want %d (body must stream, not be drained by exchange log)", received, uploadSize)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	record := findLogRecord(t, logBuf.String(), "http api exchange")
+	request, ok := record["request"].(map[string]any)
+	if !ok {
+		t.Fatalf("request = %#v, want truncated size object", record["request"])
+	}
+	if got := int64(request["size"].(float64)); got != int64(uploadSize) {
+		t.Fatalf("request.size = %d, want %d", got, uploadSize)
+	}
+	if truncated, _ := request["truncated"].(bool); !truncated {
+		t.Fatalf("request.truncated = %#v, want true", request["truncated"])
 	}
 }
 
