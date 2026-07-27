@@ -34,9 +34,18 @@ They now have:
   - `stdout.log`
   - `stderr.log`
 
-The Argo Workflow Controller and other third-party images are not yet moved to
-this same startup-script pattern. They still rely on normal Kubernetes runtime
-logs for now and remain a follow-on step.
+The Argo Workflow Controller and CoreDNS use the same wrapper-entrypoint
+pattern so host operators can read:
+
+```text
+/data/zon/logs/argo-controller/stdout.log
+/data/zon/logs/argo-controller/stderr.log
+/data/zon/logs/dns/stdout.log
+/data/zon/logs/dns/stderr.log
+```
+
+Upstream CoreDNS only logs to stdout; an empty `/data/zon/logs/dns` directory
+means an older image without the log tee wrapper is still installed.
 
 ## Fixed Host Path
 
@@ -98,8 +107,9 @@ For the services already migrated to the new pattern, the first host paths to
 check are:
 
 ```text
-/data/zon/logs/control-plane/
+/data/zon/logs/api-server/
 /data/zon/logs/ui/
+/data/zon/logs/dns/
 ```
 
 ## Target Layout
@@ -115,10 +125,12 @@ For long-running product services, use:
 Examples:
 
 ```text
-/data/zon/logs/control-plane/
+/data/zon/logs/api-server/
 /data/zon/logs/ui/
 /data/zon/logs/argo-controller/
-/data/zon/logs/zot/
+/data/zon/logs/artifactserver/
+/data/zon/logs/fileserver/
+/data/zon/logs/dns/
 ```
 
 Expected files inside each workload directory:
@@ -297,7 +309,7 @@ Then let the startup script and service code write into fixed service-specific
 subdirectories, for example:
 
 ```text
-/data/zon/logs/control-plane/
+/data/zon/logs/api-server/
 /data/zon/logs/ui/
 /data/zon/logs/argo-controller/
 /data/zon/logs/builds/
@@ -366,7 +378,7 @@ Deliverables:
 Acceptance:
 
 - `kubectl logs` still works
-- `/data/zon/logs/control-plane/stdout.log` exists
+- `/data/zon/logs/api-server/stdout.log` exists
 - `/data/zon/logs/ui/stdout.log` exists
 - `/data/zon/logs/argo-controller/stdout.log` exists
 
@@ -472,7 +484,7 @@ After Phase 1, the operator contract should be simple:
 Examples:
 
 ```text
-/data/zon/logs/control-plane/
+/data/zon/logs/api-server/
 /data/zon/logs/ui/
 /data/zon/logs/argo-controller/
 /data/zon/logs/builds/

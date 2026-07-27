@@ -71,7 +71,7 @@ func Default() Config {
 		PublicAddr:                     "127.0.0.1:8080",
 		InternalAddr:                   "127.0.0.1:8081",
 		DataDir:                        "./data",
-		ApplicationLogPath:             "/data/zon/logs/control-plane/application.log",
+		ApplicationLogPath:             "/data/zon/logs/api-server/application.log",
 		LogLevel:                       "info",
 		TrustedProxyCount:              0,
 		ZotAllowFake:                   true,

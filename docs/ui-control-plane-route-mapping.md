@@ -46,9 +46,9 @@ look in the UI service logs first:
 The control plane writes its own redacted API exchange logs too. For the same
 browser action, operators can also inspect:
 
-- `/data/zon/logs/control-plane/application.log`
+- `/data/zon/logs/api-server/application.log`
 - `kubectl logs deploy/api-server -n control`
-- `/data/zon/logs/control-plane/stdout.log`
+- `/data/zon/logs/api-server/stdout.log`
 
 Useful event names:
 
@@ -98,7 +98,7 @@ interaction is a post-redirect-get flow. The control-plane response body for the
 workspace create call is visible in the UI `control plane API call` log entry.
 
 The control plane also writes durable functional lifecycle events for this path
-to `/data/zon/logs/control-plane/application.log`:
+to `/data/zon/logs/api-server/application.log`:
 
 - `workspace provisioning workflow submitted`
 - `workspace provisioning workflow state changed`

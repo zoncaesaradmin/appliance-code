@@ -19,9 +19,10 @@ persistence:
   size: 100Gi
 
 logs:
-  # Host-visible service log directory. zonctl prepares ownership before
-  # Helm apply; the chart mounts this path directly (not the parent tree).
-  hostPath: /data/zon/logs/zot
+  # Host-visible OCI registry (artifactserver) log directory. zonctl prepares
+  # ownership before Helm apply; zot writes application.log under the mounted
+  # container path /var/log/zot.
+  hostPath: /data/zon/logs/artifactserver
   prepare:
     enabled: false
     image: registry.local/busybox:bundled
@@ -80,8 +81,8 @@ probes:
   startupFailureThreshold: 30
   startupPeriodSeconds: 2
 
-# Legacy static HTTP fileserver. Disabled by default now that the
-# appliance-managed authenticated file API owns upload/download flows.
+# Static HTTP fileserver for Traefik /files (content under /data/zon/files).
+# Installer enables this for artifact-capable profiles.
 fileserver:
   enabled: false
   image:
@@ -92,6 +93,9 @@ fileserver:
   service:
     port: 8080
   hostPath: /data/zon/files
+  logs:
+    # Host-visible nginx access/error logs (also mirrored to stdout/stderr).
+    hostPath: /data/zon/logs/fileserver
   podSecurityContext:
     runAsNonRoot: true
     runAsUser: 10005

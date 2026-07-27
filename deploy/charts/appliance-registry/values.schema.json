@@ -32,7 +32,7 @@
       "type": "object",
       "required": ["hostPath", "prepare"],
       "properties": {
-        "hostPath": {"const": "/data/zon/logs/zot"},
+        "hostPath": {"const": "/data/zon/logs/artifactserver"},
         "prepare": {
           "type": "object",
           "required": ["enabled", "image"],
@@ -55,7 +55,7 @@
     },
     "fileserver": {
       "type": "object",
-      "required": ["enabled", "image", "service", "hostPath"],
+      "required": ["enabled", "image", "service", "hostPath", "logs"],
       "properties": {
         "enabled": {"type": "boolean"},
         "image": {
@@ -73,7 +73,14 @@
           "required": ["port"],
           "properties": {"port": {"type": "integer", "minimum": 1, "maximum": 65535}}
         },
-        "hostPath": {"const": "/data/zon/files"}
+        "hostPath": {"const": "/data/zon/files"},
+        "logs": {
+          "type": "object",
+          "required": ["hostPath"],
+          "properties": {
+            "hostPath": {"const": "/data/zon/logs/fileserver"}
+          }
+        }
       }
     }
   }

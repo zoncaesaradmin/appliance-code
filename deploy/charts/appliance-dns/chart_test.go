@@ -45,6 +45,7 @@ func TestHardenedDNSRender(t *testing.T) {
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"NET_BIND_SERVICE", "hostNetwork: true",
 		"path: /data/zon/logs/dns", "chmod 2755 /data/zon/logs/dns",
+		"mountPath: /data/zon/logs/dns",
 		"kind: NetworkPolicy", "name: dns-server-default-deny",
 		"file /etc/coredns/zones/db.local",
 		"reload 1s",

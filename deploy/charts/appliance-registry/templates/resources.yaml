@@ -90,7 +90,7 @@ spec:
         - name: prepare-log-dir
           image: {{ .Values.logs.prepare.image }}
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c", "mkdir -p /data/zon/logs/zot && chown 10003:20000 /data/zon/logs/zot && chmod 2755 /data/zon/logs/zot"]
+          command: ["/bin/sh", "-c", "mkdir -p /data/zon/logs/artifactserver && chown 10003:20000 /data/zon/logs/artifactserver && chmod 2755 /data/zon/logs/artifactserver"]
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
@@ -102,7 +102,7 @@ spec:
               drop: ["ALL"]
           volumeMounts:
             - name: logs
-              mountPath: /data/zon/logs/zot
+              mountPath: /data/zon/logs/artifactserver
       {{- end }}
       containers:
         - name: zot
@@ -222,13 +222,16 @@ metadata:
 data:
   nginx.conf: |
     worker_processes 1;
+    # Dual destinations: kubectl logs (stderr/stdout) and host-visible files.
     error_log /dev/stderr warn;
+    error_log /data/zon/logs/fileserver/error.log warn;
     pid /tmp/nginx.pid;
     events { worker_connections 128; }
     http {
       include /etc/nginx/mime.types;
       default_type application/octet-stream;
       access_log /dev/stdout;
+      access_log /data/zon/logs/fileserver/access.log;
       sendfile on;
       server {
         listen {{ .Values.fileserver.service.port }};
@@ -302,6 +305,7 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true}
             - {name: files, mountPath: /data/zon/files, readOnly: true}
+            - {name: logs, mountPath: /data/zon/logs/fileserver}
             - {name: tmp, mountPath: /tmp}
             - {name: cache, mountPath: /var/cache/nginx}
             - {name: run, mountPath: /var/run}
@@ -312,6 +316,10 @@ spec:
         - name: files
           hostPath:
             path: {{ .Values.fileserver.hostPath }}
+            type: DirectoryOrCreate
+        - name: logs
+          hostPath:
+            path: {{ .Values.fileserver.logs.hostPath }}
             type: DirectoryOrCreate
         - name: tmp
           emptyDir: {}

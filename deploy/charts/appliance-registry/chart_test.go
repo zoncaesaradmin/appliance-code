@@ -40,11 +40,11 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"runAsUser: 10003", "runAsGroup: 10003", "fsGroup: 20000",
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"mountPath: /var/lib/registry", "mountPath: /var/log/zot", "mountPath: /tmp",
-		"accessModes:\n    - ReadWriteOnce", "chmod 2755 /data/zon/logs/zot",
+		"accessModes:\n    - ReadWriteOnce", "chmod 2755 /data/zon/logs/artifactserver",
 		"kind: NetworkPolicy", "name: appliance-registry-default-deny",
 		"kubernetes.io/metadata.name: control",
 		"app.kubernetes.io/name: api-server",
-		"path: /data/zon/logs/zot", "type: DirectoryOrCreate",
+		"path: /data/zon/logs/artifactserver", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",
 		"secretName: appliance-registry-verification-key",
 	} {
@@ -69,6 +69,9 @@ func TestFileserverRendersWhenExplicitlyEnabled(t *testing.T) {
 	for _, want := range []string{
 		"name: fileserver", "PathPrefix(`/files`)", "runAsUser: 10005",
 		"path: /data/zon/files", "registry.local/fileserver",
+		"path: /data/zon/logs/fileserver",
+		"access_log /data/zon/logs/fileserver/access.log",
+		"error_log /data/zon/logs/fileserver/error.log",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("fileserver render missing %q", want)

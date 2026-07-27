@@ -73,7 +73,7 @@ func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o2770); err != nil {
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o2775); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
@@ -113,9 +113,9 @@ func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	// CreateTemp uses 0600; the fileserver (UID 10005) must be able to read
-	// uploads via the shared fsGroup 20000, so widen to group-readable.
-	if err := os.Chmod(tmpPath, 0o640); err != nil {
+	// CreateTemp uses 0600; widen so the fileserver (UID 10005 via fsGroup
+	// 20000) and host operators can read uploads (dirs are 2775).
+	if err := os.Chmod(tmpPath, 0o644); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}

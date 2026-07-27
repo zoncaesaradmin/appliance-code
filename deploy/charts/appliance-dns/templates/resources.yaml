@@ -143,7 +143,9 @@ spec:
             periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
           volumeMounts:
             - {name: config, mountPath: /etc/coredns, readOnly: true}
-            - {name: logs, mountPath: /var/log/coredns}
+            # Host path /data/zon/logs/dns; wrapper entrypoint tees CoreDNS
+            # stdout/stderr into stdout.log and stderr.log here.
+            - {name: logs, mountPath: /data/zon/logs/dns}
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: config

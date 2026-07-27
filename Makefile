@@ -218,8 +218,9 @@ package-zot-image-archive:
 		$${ZOT_SOURCE_IMAGE:+--source-image "$${ZOT_SOURCE_IMAGE}"} \
 		$${ZOT_VERSION:+--zot-version "$${ZOT_VERSION}"}
 
-## package-coredns-image-archive: export the pinned upstream CoreDNS image using
-## the canonical bundled annotation and platform-manifest digest reference.
+## package-coredns-image-archive: build the appliance CoreDNS wrapper
+## (upstream binary + log tee entrypoint) and export it with the canonical
+## bundled annotation and platform-manifest digest reference.
 package-coredns-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/coredns.tar}"; \
 	bash ./scripts/package/export-coredns-image-archive.sh \

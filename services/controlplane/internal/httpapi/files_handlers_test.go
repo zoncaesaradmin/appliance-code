@@ -52,8 +52,8 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat uploaded file: %v", err)
 	}
-	if info.Mode().Perm() != 0o640 {
-		t.Fatalf("uploaded file mode = %o, want 640", info.Mode().Perm())
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("uploaded file mode = %o, want 644", info.Mode().Perm())
 	}
 
 	downloadReq, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/files/releases/v1/bundle.txt", nil)

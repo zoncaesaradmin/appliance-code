@@ -41,6 +41,10 @@ localZone:
   ipv4: 127.0.0.1
 
 logs:
+  # Host-visible DNS service log directory. zonctl prepares ownership before
+  # Helm runs. The appliance CoreDNS wrapper tees stdout/stderr into
+  # stdout.log / stderr.log under this path (upstream CoreDNS only logs to
+  # stdout; the mount alone does not create files).
   hostPath: /data/zon/logs/dns
   prepare:
     enabled: false
