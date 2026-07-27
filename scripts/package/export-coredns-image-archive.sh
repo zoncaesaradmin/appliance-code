@@ -130,7 +130,9 @@ PY
 REFERENCE="registry.local/coredns@${DIGEST}"
 
 rm -f "${OUT_FILE}"
-tar -C "${LAYOUT}" -cf "${OUT_FILE}" .
+# Pack explicit OCI layout members so the tar has index.json (not ./index.json).
+# Python tarfile and zonctl readers look up the unprefixed name.
+tar -C "${LAYOUT}" -cf "${OUT_FILE}" oci-layout index.json blobs
 if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
   mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"
   printf '%s\n' "${REFERENCE}" >"${REFERENCE_OUT_FILE}"
