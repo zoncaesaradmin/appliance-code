@@ -32,7 +32,8 @@ func testBuildCatalog() devflows.Catalog {
 
 type testServer struct {
 	*httptest.Server
-	services *app.Services
+	services  *app.Services
+	filesRoot string
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -57,8 +58,10 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
+	var filesRoot string
 	if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
-		cfg.FilesRootDir = t.TempDir()
+		filesRoot = t.TempDir()
+		cfg.FilesRootDir = filesRoot
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
@@ -141,7 +144,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testServer{Server: srv, services: services}
+	return &testServer{Server: srv, services: services, filesRoot: filesRoot}
 }
 
 // bootstrapAdmin creates the first administrator directly through the

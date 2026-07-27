@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,6 +45,15 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 	defer uploadResp.Body.Close()
 	if uploadResp.StatusCode != http.StatusCreated {
 		t.Fatalf("upload status = %d, want 201", uploadResp.StatusCode)
+	}
+
+	uploadedPath := filepath.Join(ts.filesRoot, "releases", "v1", "bundle.txt")
+	info, err := os.Stat(uploadedPath)
+	if err != nil {
+		t.Fatalf("stat uploaded file: %v", err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Fatalf("uploaded file mode = %o, want 640", info.Mode().Perm())
 	}
 
 	downloadReq, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/files/releases/v1/bundle.txt", nil)
