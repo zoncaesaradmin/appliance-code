@@ -346,7 +346,7 @@ type CreateRegistryGrantRequest struct {
 }
 
 // CreateRegistryGrant creates a repository-prefix grant. The caller must
-// hold registry.grants.write.
+// hold artifacts.grants.write.
 func (c *Client) CreateRegistryGrant(ctx context.Context, accessToken string, req CreateRegistryGrantRequest) (*RegistryGrant, error) {
 	var result RegistryGrant
 	if err := c.do(ctx, http.MethodPost, "/api/v1/registry/grants", bearerCredential(accessToken), req, &result); err != nil {
@@ -356,7 +356,7 @@ func (c *Client) CreateRegistryGrant(ctx context.Context, accessToken string, re
 }
 
 // ListRegistryGrants lists every repository-prefix grant. The caller must
-// hold registry.grants.read.
+// hold artifacts.grants.read.
 func (c *Client) ListRegistryGrants(ctx context.Context, accessToken string) ([]RegistryGrant, error) {
 	var result struct {
 		Items []RegistryGrant `json:"items"`
@@ -368,7 +368,7 @@ func (c *Client) ListRegistryGrants(ctx context.Context, accessToken string) ([]
 }
 
 // DeleteRegistryGrant removes a repository-prefix grant. The caller must
-// hold registry.grants.write.
+// hold artifacts.grants.write.
 func (c *Client) DeleteRegistryGrant(ctx context.Context, accessToken, grantID string) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/registry/grants/"+url.PathEscape(grantID), bearerCredential(accessToken), nil, nil)
 }

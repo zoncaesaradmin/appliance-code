@@ -81,8 +81,8 @@ Built-in roles are immutable:
 | Role | Effective v1 access |
 | --- | --- |
 | `administrator` | Every published API permission, system operations, grant administration, audit access, and all-resource access; node-only recovery remains outside API RBAC |
-| `developer` | Own token lifecycle; create/read/cancel own builds; read artifacts; delete artifacts produced by own builds; registry pull globally and push to personal/build prefixes; MCP invoke |
-| `viewer` | Own token lifecycle; read all builds and artifacts; registry pull globally; no mutation or MCP invoke |
+| `developer` | Own token lifecycle; create/read/cancel own builds; read artifacts; write artifact content; delete artifacts produced by own builds; registry grants still restrict push prefixes; MCP invoke |
+| `viewer` | Own token lifecycle; read all builds and artifacts; no mutation or MCP invoke |
 | `automation` | No interactive login; administrator-created API tokens and explicit repository-prefix grants; create/read/cancel own builds; read artifacts; no user/role administration |
 
 Use explicit permissions rather than broad `write` aliases:
@@ -92,10 +92,10 @@ Use explicit permissions rather than broad `write` aliases:
 - `tokens.read.self`, `tokens.create.self`, `tokens.revoke.self`, `tokens.revoke.any`
 - `tokens.create.any`
 - `builds.create`, `builds.read.self`, `builds.read.any`, `builds.cancel.self`, `builds.cancel.any`
-- `artifacts.read`, `artifacts.delete.self`, `artifacts.delete.any`
+- `artifacts.read`, `artifacts.write`, `artifacts.delete.self`, `artifacts.delete.any`
 - `operations.read.self`, `operations.read.any`
-- `registry.pull`, `registry.push`, `registry.delete`
-- `registry.grants.read`, `registry.grants.write`
+- `artifacts.delete`
+- `artifacts.grants.read`, `artifacts.grants.write`
 - `mcp.invoke`
 - `system.read`, `system.operate`, `audit.read`, `audit.export`
 

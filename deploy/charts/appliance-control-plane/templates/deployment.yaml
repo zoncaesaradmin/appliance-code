@@ -67,6 +67,8 @@ spec:
               mountPath: /tmp
             - name: appliance-logs
               mountPath: /data/zon/logs
+            - name: appliance-files
+              mountPath: {{ .Values.files.rootDir }}
             {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.dataDir }}
@@ -80,6 +82,10 @@ spec:
         - name: appliance-logs
           hostPath:
             path: /data/zon/logs
+            type: DirectoryOrCreate
+        - name: appliance-files
+          hostPath:
+            path: {{ .Values.files.rootDir }}
             type: DirectoryOrCreate
         {{- if .Values.persistence.enabled }}
         - name: data

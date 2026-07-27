@@ -36,7 +36,7 @@ func render(t *testing.T, args ...string) string {
 func TestHardenedRegistryRender(t *testing.T) {
 	out := render(t, "--set", "logs.prepare.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
 	for _, want := range []string{
-		"kind: Deployment\nmetadata:\n  name: artifact-registry",
+		"kind: Deployment\nmetadata:\n  name: artifactserver",
 		"runAsUser: 10003", "runAsGroup: 10003", "fsGroup: 20000",
 		"readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false",
 		"mountPath: /var/lib/registry", "mountPath: /var/log/zot", "mountPath: /tmp",
@@ -47,17 +47,31 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"path: /data/zon/logs/zot", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",
 		"secretName: appliance-registry-verification-key",
-		"name: fileserver", "PathPrefix(`/files`)",
-		"runAsUser: 10005", "path: /data/zon/files",
-		"registry.local/fileserver",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
 	}
+	for _, forbidden := range []string{"name: fileserver", "PathPrefix(`/files`)", "registry.local/fileserver"} {
+		if strings.Contains(out, forbidden) {
+			t.Errorf("render unexpectedly contains %q", forbidden)
+		}
+	}
 	for _, forbidden := range []string{"path: /v2/", "httpGet:", "ui:", "anonymous", "enableManagement", "scrubInterval", "search:"} {
 		if bytes.Contains([]byte(out), []byte(forbidden)) {
 			t.Errorf("render unexpectedly contains %q", forbidden)
+		}
+	}
+}
+
+func TestFileserverRendersWhenExplicitlyEnabled(t *testing.T) {
+	out := render(t, "--set", "fileserver.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
+	for _, want := range []string{
+		"name: fileserver", "PathPrefix(`/files`)", "runAsUser: 10005",
+		"path: /data/zon/files", "registry.local/fileserver",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("fileserver render missing %q", want)
 		}
 	}
 }

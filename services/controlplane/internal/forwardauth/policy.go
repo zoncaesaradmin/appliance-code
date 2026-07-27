@@ -44,11 +44,11 @@ func RequiredPermission(host, method, rawURI string) Decision {
 	case path == "/v2/" || path == "/v2" || strings.HasPrefix(path, "/v2/"):
 		switch normalizedMethod {
 		case http.MethodGet, http.MethodHead:
-			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermRegistryPull}
+			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermArtifactsRead}
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
-			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermRegistryPush}
+			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermArtifactsWrite}
 		case http.MethodDelete:
-			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermRegistryDelete}
+			return Decision{Allowed: true, Capability: appliance.CapabilityArtifact, Permission: roles.PermArtifactsDelete}
 		default:
 			return Decision{Allowed: false, ReasonCode: "unsupported_method"}
 		}

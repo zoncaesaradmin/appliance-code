@@ -28,18 +28,21 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath    string `json:"applicationLogPath"`
-	LogLevel              string `json:"logLevel"`
-	TrustedProxyCount     int    `json:"trustedProxyCount"`
-	ZotBaseURL            string `json:"zotBaseURL"`
-	ZotAllowFake          bool   `json:"zotAllowFake"`
-	DNSReadyURL           string `json:"dnsReadyURL"`
-	DNSZoneName           string `json:"dnsZoneName"`
-	DNSConfigMapNamespace string `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName      string `json:"dnsConfigMapName"`
-	DNSBootstrapHostname  string `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4      string `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync  bool   `json:"dnsAllowFakeZoneSync"`
+	ApplicationLogPath    string        `json:"applicationLogPath"`
+	LogLevel              string        `json:"logLevel"`
+	TrustedProxyCount     int           `json:"trustedProxyCount"`
+	ZotBaseURL            string        `json:"zotBaseURL"`
+	ZotAllowFake          bool          `json:"zotAllowFake"`
+	FilesRootDir          string        `json:"filesRootDir"`
+	FilesTransferTimeout  time.Duration `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes   int64         `json:"filesMaxUploadBytes"`
+	DNSReadyURL           string        `json:"dnsReadyURL"`
+	DNSZoneName           string        `json:"dnsZoneName"`
+	DNSConfigMapNamespace string        `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName      string        `json:"dnsConfigMapName"`
+	DNSBootstrapHostname  string        `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4      string        `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync  bool          `json:"dnsAllowFakeZoneSync"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -72,6 +75,9 @@ func Default() Config {
 		LogLevel:                       "info",
 		TrustedProxyCount:              0,
 		ZotAllowFake:                   true,
+		FilesRootDir:                   "/data/zon/files",
+		FilesTransferTimeout:           30 * time.Minute,
+		FilesMaxUploadBytes:            20 * 1024 * 1024 * 1024,
 		DNSZoneName:                    "appliance.internal",
 		DNSConfigMapNamespace:          "dns",
 		DNSConfigMapName:               "appliance-dns-config",
@@ -155,6 +161,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
+	str("FILES_ROOT_DIR", &cfg.FilesRootDir)
 	str("DNS_READY_URL", &cfg.DNSReadyURL)
 	str("DNS_ZONE_NAME", &cfg.DNSZoneName)
 	str("DNS_CONFIGMAP_NAMESPACE", &cfg.DNSConfigMapNamespace)
@@ -207,6 +214,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		{"IDLE_TIMEOUT", &cfg.IdleTimeout},
 		{"SHUTDOWN_TIMEOUT", &cfg.ShutdownTimeout},
 		{"BUILD_DEFAULT_DEADLINE", &cfg.BuildDefaultDeadline},
+		{"FILES_TRANSFER_TIMEOUT", &cfg.FilesTransferTimeout},
 	}
 	for _, d := range durs {
 		if v, ok := env[envPrefix+d.key]; ok {
@@ -225,6 +233,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	}{
 		{"MAX_HEADER_BYTES", &cfg.MaxHeaderBytes},
 		{"MAX_BODY_BYTES", &cfg.MaxBodyBytes},
+		{"FILES_MAX_UPLOAD_BYTES", &cfg.FilesMaxUploadBytes},
 	}
 	for _, i := range ints {
 		if v, ok := env[envPrefix+i.key]; ok {
@@ -296,6 +305,17 @@ func (c Config) Validate() error {
 			}
 		} else if u, err := url.Parse(c.ZotBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "zotBaseURL must be an absolute http(s) URL with no path")
+		}
+		if strings.TrimSpace(c.FilesRootDir) == "" {
+			errs = append(errs, "filesRootDir must not be empty when the artifact capability is enabled")
+		} else if !strings.HasPrefix(c.FilesRootDir, "/") {
+			errs = append(errs, "filesRootDir must be an absolute path")
+		}
+		if c.FilesTransferTimeout <= 0 {
+			errs = append(errs, "filesTransferTimeout must be positive when the artifact capability is enabled")
+		}
+		if c.FilesMaxUploadBytes <= 0 {
+			errs = append(errs, "filesMaxUploadBytes must be positive when the artifact capability is enabled")
 		}
 	}
 	if profileErr == nil && resolved.Capabilities.Enabled(appliance.CapabilityDNS) {

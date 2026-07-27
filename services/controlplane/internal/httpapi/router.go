@@ -27,6 +27,7 @@ type Deps struct {
 	RegistryH        *RegistryTokenHandlers
 	RegistryGrantsH  *RegistryGrantHandlers
 	RegistryCatalogH *RegistryCatalogHandlers
+	FilesH           *ArtifactFileHandlers
 	DNSH             *DNSHandlers
 	LANDNSPublishH   *LANDNSPublishHandlers
 	BuildsH          *BuildHandlers
@@ -306,19 +307,19 @@ func publicRoutes() []publicRoute {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
-			return w.protect(roles.PermRegistryGrantsRead, deps.RegistryGrantsH.List), nil
+			return w.protect(roles.PermArtifactsGrantsRead, deps.RegistryGrantsH.List), nil
 		}},
 		{capability: appliance.CapabilityArtifact, pattern: "POST /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
-			return w.protect(roles.PermRegistryGrantsWrite, deps.RegistryGrantsH.Create), nil
+			return w.protect(roles.PermArtifactsGrantsWrite, deps.RegistryGrantsH.Create), nil
 		}},
 		{capability: appliance.CapabilityArtifact, pattern: "DELETE /api/v1/registry/grants/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
-			return w.protect(roles.PermRegistryGrantsWrite, deps.RegistryGrantsH.Delete), nil
+			return w.protect(roles.PermArtifactsGrantsWrite, deps.RegistryGrantsH.Delete), nil
 		}},
 		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/repositories", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryCatalogH == nil {
@@ -331,6 +332,18 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing registry catalog handlers")
 			}
 			return w.authenticatedOnly(deps.RegistryCatalogH.CatalogItem), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FilesH == nil {
+				return nil, fmt.Errorf("missing artifact file handlers")
+			}
+			return w.protect(roles.PermArtifactsRead, deps.FilesH.Download), nil
+		}},
+		{capability: appliance.CapabilityArtifact, pattern: "POST /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FilesH == nil {
+				return nil, fmt.Errorf("missing artifact file handlers")
+			}
+			return w.protect(roles.PermArtifactsWrite, deps.FilesH.Upload), nil
 		}},
 		{capability: appliance.CapabilityDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {

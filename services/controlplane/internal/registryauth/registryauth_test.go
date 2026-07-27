@@ -129,7 +129,7 @@ func TestAuthorizeAdministratorGetsEverything(t *testing.T) {
 	}}
 	authz := registryauth.NewAuthorizer(&fakeGrantStore{}, roleLister)
 
-	perms := map[string]bool{roles.PermRegistryPull: true, roles.PermRegistryPush: true}
+	perms := map[string]bool{roles.PermArtifactsRead: true, roles.PermArtifactsWrite: true}
 	requests, err := registryauth.ParseScopes([]string{"repository:anything/at/all:pull,push"})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +148,7 @@ func TestAuthorizeDeveloperOwnPrefixOnly(t *testing.T) {
 		"dev-1": {{ID: roles.DeveloperRoleID, Name: roles.Developer}},
 	}}
 	authz := registryauth.NewAuthorizer(&fakeGrantStore{}, roleLister)
-	perms := map[string]bool{roles.PermRegistryPull: true, roles.PermRegistryPush: true}
+	perms := map[string]bool{roles.PermArtifactsRead: true, roles.PermArtifactsWrite: true}
 
 	// Push to own prefix: allowed.
 	ownReq, _ := registryauth.ParseScopes([]string{"repository:users/alice/app:pull,push"})
@@ -177,7 +177,7 @@ func TestAuthorizeAutomationRequiresExplicitGrant(t *testing.T) {
 	}}
 	grantStore := &fakeGrantStore{}
 	authz := registryauth.NewAuthorizer(grantStore, roleLister)
-	perms := map[string]bool{roles.PermRegistryPull: true, roles.PermRegistryPush: true}
+	perms := map[string]bool{roles.PermArtifactsRead: true, roles.PermArtifactsWrite: true}
 
 	req, _ := registryauth.ParseScopes([]string{"repository:ci/pipeline-a:pull,push"})
 	decisions, err := authz.Authorize(context.Background(), "auto-1", "ci-bot", perms, req)
@@ -207,16 +207,16 @@ func TestAuthorizeDeniesWithoutBasePermission(t *testing.T) {
 	}}
 	authz := registryauth.NewAuthorizer(&fakeGrantStore{}, roleLister)
 
-	// No registry.push permission at all (e.g. an API token scoped to pull
+	// No artifacts.write permission at all (e.g. an API token scoped to pull
 	// only): push must be denied even for an administrator's own account.
-	perms := map[string]bool{roles.PermRegistryPull: true}
+	perms := map[string]bool{roles.PermArtifactsRead: true}
 	req, _ := registryauth.ParseScopes([]string{"repository:anything:pull,push"})
 	decisions, err := authz.Authorize(context.Background(), "admin-1", "admin", perms, req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(decisions[0].Granted) != 1 || decisions[0].Granted[0] != "pull" {
-		t.Errorf("push should be denied without the base registry.push permission, got %v", decisions[0].Granted)
+		t.Errorf("push should be denied without the base artifacts.write permission, got %v", decisions[0].Granted)
 	}
 }
 

@@ -57,6 +57,9 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
+	if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+		cfg.FilesRootDir = t.TempDir()
+	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://appliance-dns.dns.svc.cluster.local:8181/ready"
 		cfg.DNSAllowFakeZoneSync = true
@@ -117,6 +120,11 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore}
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
 			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
+		}
+		deps.FilesH = &httpapi.ArtifactFileHandlers{
+			RootDir:         cfg.FilesRootDir,
+			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
+			TransferTimeout: cfg.FilesTransferTimeout,
 		}
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {

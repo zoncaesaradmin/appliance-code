@@ -105,6 +105,11 @@ config:
   dnsBootstrapIPv4: ""
   dnsAllowFakeZoneSync: false
 
+files:
+  rootDir: /data/zon/files
+  maxUploadBytes: 21474836480
+  transferTimeout: 30m
+
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects
   # (session_ed25519_private.key, api_token_pepper.key, refresh_pepper.key),

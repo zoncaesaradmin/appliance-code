@@ -66,17 +66,16 @@ const (
 	PermJobsCancelAny        = "jobs.cancel.any"
 
 	PermArtifactsRead       = "artifacts.read"
+	PermArtifactsWrite      = "artifacts.write"
 	PermArtifactsDeleteSelf = "artifacts.delete.self"
 	PermArtifactsDeleteAny  = "artifacts.delete.any"
 
 	PermOperationsReadSelf = "operations.read.self"
 	PermOperationsReadAny  = "operations.read.any"
 
-	PermRegistryPull        = "registry.pull"
-	PermRegistryPush        = "registry.push"
-	PermRegistryDelete      = "registry.delete"
-	PermRegistryGrantsRead  = "registry.grants.read"
-	PermRegistryGrantsWrite = "registry.grants.write"
+	PermArtifactsDelete      = "artifacts.delete"
+	PermArtifactsGrantsRead  = "artifacts.grants.read"
+	PermArtifactsGrantsWrite = "artifacts.grants.write"
 
 	PermDNSRecordsRead     = "dns.records.read"
 	PermDNSRecordsWrite    = "dns.records.write"
@@ -130,18 +129,17 @@ var AllPermissions = []storage.Permission{
 	{Name: PermJobsCancelSelf, Description: "Cancel own developer workflow jobs"},
 	{Name: PermJobsCancelAny, Description: "Cancel any developer workflow job"},
 
-	{Name: PermArtifactsRead, Description: "Read artifact metadata"},
+	{Name: PermArtifactsRead, Description: "Read artifact metadata, OCI artifact content, and appliance-managed file content"},
+	{Name: PermArtifactsWrite, Description: "Push OCI artifacts and upload appliance-managed file artifacts"},
 	{Name: PermArtifactsDeleteSelf, Description: "Delete artifacts produced by own builds"},
 	{Name: PermArtifactsDeleteAny, Description: "Delete any artifact"},
 
 	{Name: PermOperationsReadSelf, Description: "Read own durable operations"},
 	{Name: PermOperationsReadAny, Description: "Read any durable operation"},
 
-	{Name: PermRegistryPull, Description: "Pull OCI images and artifacts"},
-	{Name: PermRegistryPush, Description: "Push OCI images and artifacts"},
-	{Name: PermRegistryDelete, Description: "Delete OCI repository content"},
-	{Name: PermRegistryGrantsRead, Description: "Read registry repository-prefix grants"},
-	{Name: PermRegistryGrantsWrite, Description: "Manage registry repository-prefix grants"},
+	{Name: PermArtifactsDelete, Description: "Delete artifact repository content"},
+	{Name: PermArtifactsGrantsRead, Description: "Read artifact repository-prefix grants"},
+	{Name: PermArtifactsGrantsWrite, Description: "Manage artifact repository-prefix grants"},
 
 	{Name: PermDNSRecordsRead, Description: "Read LAN DNS A records"},
 	{Name: PermDNSRecordsWrite, Description: "Create, update, or delete any LAN DNS A record"},
@@ -187,9 +185,8 @@ var BuiltInRoles = []BuiltInRole{
 			PermWorkProfilesRead, PermWorkspacesCreate, PermWorkspacesReadSelf, PermWorkspacesDeleteSelf,
 			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
 			PermJobsReadSelf, PermJobsCancelSelf,
-			PermArtifactsRead, PermArtifactsDeleteSelf,
+			PermArtifactsRead, PermArtifactsWrite, PermArtifactsDeleteSelf,
 			PermOperationsReadSelf,
-			PermRegistryPull, PermRegistryPush,
 			PermMCPInvoke,
 		},
 	},
@@ -201,7 +198,6 @@ var BuiltInRoles = []BuiltInRole{
 			PermWorkProfilesRead, PermWorkspacesReadAny, PermBuildTargetsRead,
 			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead,
 			PermOperationsReadSelf,
-			PermRegistryPull,
 			PermDNSRecordsRead,
 		},
 	},
@@ -212,7 +208,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermWorkProfilesRead, PermWorkspacesCreate, PermWorkspacesReadSelf,
 			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
 			PermJobsReadSelf, PermJobsCancelSelf,
-			PermArtifactsRead,
+			PermArtifactsRead, PermArtifactsWrite,
 			PermOperationsReadSelf,
 			PermDNSRecordsRegister,
 			PermDNSPublish,

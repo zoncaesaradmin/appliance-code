@@ -134,6 +134,11 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
 			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
+		deps.FilesH = &httpapi.ArtifactFileHandlers{
+			RootDir:         cfg.FilesRootDir,
+			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
+			TransferTimeout: cfg.FilesTransferTimeout,
+		}
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}

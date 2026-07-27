@@ -27,12 +27,12 @@ func TestRequiredPermissionRegistry(t *testing.T) {
 		want        string
 		wantAllowed bool
 	}{
-		{method: http.MethodGet, want: roles.PermRegistryPull, wantAllowed: true},
-		{method: http.MethodHead, want: roles.PermRegistryPull, wantAllowed: true},
-		{method: http.MethodPost, want: roles.PermRegistryPush, wantAllowed: true},
-		{method: http.MethodPut, want: roles.PermRegistryPush, wantAllowed: true},
-		{method: http.MethodPatch, want: roles.PermRegistryPush, wantAllowed: true},
-		{method: http.MethodDelete, want: roles.PermRegistryDelete, wantAllowed: true},
+		{method: http.MethodGet, want: roles.PermArtifactsRead, wantAllowed: true},
+		{method: http.MethodHead, want: roles.PermArtifactsRead, wantAllowed: true},
+		{method: http.MethodPost, want: roles.PermArtifactsWrite, wantAllowed: true},
+		{method: http.MethodPut, want: roles.PermArtifactsWrite, wantAllowed: true},
+		{method: http.MethodPatch, want: roles.PermArtifactsWrite, wantAllowed: true},
+		{method: http.MethodDelete, want: roles.PermArtifactsDelete, wantAllowed: true},
 		{method: http.MethodOptions, wantAllowed: false},
 	}
 

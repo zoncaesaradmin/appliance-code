@@ -206,7 +206,7 @@ func (r *runner) run(ctx context.Context) error {
 		"tokens.read.self",
 		"tokens.create.self",
 		"tokens.revoke.self",
-		"registry.pull",
+		"artifacts.read",
 		"work_profiles.read",
 		"workspaces.create",
 		"workspaces.read.self",
@@ -286,7 +286,7 @@ func (r *runner) run(ctx context.Context) error {
 	r.logger.Print("exercising admin create-for-user token and registry flows")
 	aliceRegistryToken, err := r.client.CreateTokenForUser(ctx, adminAccess, alice.ID, applianceclient.CreateTokenRequest{
 		Name:   "alice-registry-token",
-		Scopes: []string{"registry.pull"},
+		Scopes: []string{"artifacts.read"},
 	})
 	if err != nil {
 		return fmt.Errorf("admin create token for alice: %w", err)

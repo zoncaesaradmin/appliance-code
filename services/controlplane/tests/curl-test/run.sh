@@ -327,7 +327,7 @@ assert_contains "${CURL_RESPONSE_BODY}" '"name":"users.read"' "list permissions 
 
 create_role_body_file="${RUN_DIR}/create-role.json"
 cat > "${create_role_body_file}" <<EOF
-{"name":"${ROLE_NAME}","permissions":["tokens.read.self","registry.pull"]}
+{"name":"${ROLE_NAME}","permissions":["tokens.read.self","artifacts.read"]}
 EOF
 curl_request POST "${PUBLIC_URL}/api/v1/roles" "Bearer ${admin_access_token}" "${create_role_body_file}"
 assert_status 201 "POST /api/v1/roles"
@@ -358,7 +358,7 @@ assert_contains "${CURL_RESPONSE_BODY}" '"code":"forbidden"' "alice forbidden re
 
 create_alice_token_body_file="${RUN_DIR}/create-alice-token.json"
 cat > "${create_alice_token_body_file}" <<EOF
-{"name":"${ALICE_API_TOKEN_NAME}","scopes":["registry.pull"]}
+{"name":"${ALICE_API_TOKEN_NAME}","scopes":["artifacts.read"]}
 EOF
 curl_request POST "${PUBLIC_URL}/api/v1/users/${alice_user_id}/tokens" "Bearer ${admin_access_token}" "${create_alice_token_body_file}"
 assert_status 201 "POST /api/v1/users/{id}/tokens"

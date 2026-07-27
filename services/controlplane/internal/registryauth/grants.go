@@ -102,7 +102,7 @@ func (a *Authorizer) grantsFor(ctx context.Context, userID, username string) ([]
 // Authorize resolves the actions granted to userID (with the given
 // username, used to expand personal-prefix defaults) for each requested
 // scope. permissions is the principal's already-scope-intersected effective
-// permission set; a base registry.pull/registry.push permission is
+// permission set; a base artifacts.read/artifacts.write permission is
 // required before any prefix grant is even considered for that action, per
 // the plan's "intersects role permission, prefix grant, ... and optional
 // API-token scope" requirement.
@@ -129,7 +129,7 @@ func (a *Authorizer) Authorize(ctx context.Context, userID, username string, per
 }
 
 // CanPull reports whether userID may pull repoName, combining the base
-// registry.pull permission with prefix-grant matching the same way
+// artifacts.read permission with prefix-grant matching the same way
 // Authorize does for a single repository and action.
 func (a *Authorizer) CanPull(ctx context.Context, userID, username string, permissions map[string]bool, repoName string) (bool, error) {
 	if !hasBasePermission(permissions, "pull") {
@@ -170,9 +170,9 @@ func (a *Authorizer) FilterPullable(ctx context.Context, userID, username string
 func hasBasePermission(permissions map[string]bool, action string) bool {
 	switch action {
 	case "pull":
-		return permissions[roles.PermRegistryPull]
+		return permissions[roles.PermArtifactsRead]
 	case "push":
-		return permissions[roles.PermRegistryPush]
+		return permissions[roles.PermArtifactsWrite]
 	default:
 		return false
 	}

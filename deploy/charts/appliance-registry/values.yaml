@@ -81,10 +81,10 @@ probes:
   startupFailureThreshold: 30
   startupPeriodSeconds: 2
 
-# Generic static HTTP file server (LAN curl). Served at Traefik
-# PathPrefix(/files); data is hostPath, not the zot PVC.
+# Legacy static HTTP fileserver. Disabled by default now that the
+# appliance-managed authenticated file API owns upload/download flows.
 fileserver:
-  enabled: true
+  enabled: false
   image:
     repository: registry.local/fileserver
     tag: ""
