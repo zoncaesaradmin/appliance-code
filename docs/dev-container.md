@@ -29,7 +29,7 @@ repo's sake; there is nothing here for it to build or run.
 
 ## What This Repository Owns vs. What It Doesn't
 
-- **The dev-container image** (`automation-dev`) is built and published
+- **The dev-container image** (`development-container/dev-build`) is built and published
   from a separate repository, not this one. This repository only
   *consumes* it — pulls a tag, runs it, mounts this repo in. There is no
   Dockerfile for that image here, and there shouldn't be.
@@ -89,7 +89,7 @@ Every setting below is a Makefile variable — override per-invocation
 | `CONTAINER_ENGINE` | `podman` | Container engine binary (`docker` also works for `dev-shell`/`dev-run`). |
 | `SUDO` | `sudo -n` | Non-interactive prefix used to run the outer container rootful when Podman is rootless on the host. |
 | `DEV_REGISTRY` | `ghcr.io/zoncaesaradmin/development-container` | Registry + repo path for the dev-container image. |
-| `DEV_IMAGE_NAME` | `automation-dev` | Image name within the registry. |
+| `DEV_IMAGE_NAME` | `dev-build` | Image name within the registry. |
 | `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
 | `DEV_IMAGE` | `$(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)` | Full image reference; set directly to bypass the three variables above. |
 | `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers/auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |

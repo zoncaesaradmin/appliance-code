@@ -24,10 +24,13 @@ CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags -
 
 CONTAINER_ENGINE ?= podman
 DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
-DEV_IMAGE_NAME   ?= automation-dev
+DEV_IMAGE_NAME   ?= dev-build
 DEV_IMAGE_TAG    ?= latest
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
-DEV_REGISTRY_HOST := $(firstword $(subst /, ,$(DEV_REGISTRY)))
+# Login host for podman login. Override from the release skill
+# (build_flow.dev_container_image_registry; host derived from pull_ref) so GHCR
+# and LAN registries both work.
+DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
@@ -390,8 +393,9 @@ dev-registry-login:
 	fi; \
 	if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
 		echo "dev-registry-login: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
-		echo "  export REGISTRY_USER=<github-username>" >&2; \
-		echo "  export REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+		echo "  export REGISTRY_USER=<registry-username>" >&2; \
+		echo "  export REGISTRY_TOKEN=<registry-token-or-PAT>" >&2; \
+		echo "  # login host: DEV_REGISTRY_HOST=$(DEV_REGISTRY_HOST) (override for LAN registries)" >&2; \
 		exit 1; \
 	fi; \
 	mkdir -p "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
