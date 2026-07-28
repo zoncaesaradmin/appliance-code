@@ -26,10 +26,10 @@ submission.
   list (filling each target's `repo` from its parent) and inject the catalog
   into `config.buildCatalog`. Top-level `buildTargets` with an explicit
   `repo` field remain accepted. Optional per-target `builderImageDigest`
-  defaults to the short bundle name `automation-dev` (also accepted when
+  defaults to the short bundle name `dev-build` (also accepted when
   omitted). The control plane resolves that name to
   `config.builderImageDigest`, which zonctl injects from the signed bundle's
-  packaged automation-dev OCI image. Advanced catalogs may override with a
+  packaged dev-build OCI image. Advanced catalogs may override with a
   digest-pinned reference that is present in the bundle; users should not
   paste floating GHCR tags.
 - Target mapping is name/alias → one catalog entry → one execution policy.
@@ -80,7 +80,7 @@ submission.
 Build workflow pods override builder-image home/cache paths (`HOME`, `GOPATH`,
 `GOCACHE`, `GOMODCACHE`, and related vars) to writable directories under
 `/tmp/appliance-home` so non-root workflow UIDs are not blocked by image ENV
-values such as `/home/vscode/go`.
+values such as `/home/devcontainer/go`.
 
 The build-catalog and API field names keep ForgeLine-compatible keys such as
 `workProfiles`, `workProfile`, and `work_profile`. In user-facing wording, these

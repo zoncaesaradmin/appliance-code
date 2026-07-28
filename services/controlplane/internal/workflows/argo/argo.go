@@ -32,7 +32,7 @@ const (
 	sharedFSGID       = int64(20000)
 	gitCredentialDir  = "/var/run/appliance/git-access"
 	// applianceHome is the writable per-pod home for non-root workflow UIDs.
-	// Builder images such as automation-dev bake GOPATH under /home/vscode,
+	// Builder images such as dev-build bake GOPATH under /home/devcontainer,
 	// which is not writable when runAsUser is the appliance workflow UID.
 	applianceHome = "/tmp/appliance-home"
 )

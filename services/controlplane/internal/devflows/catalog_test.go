@@ -187,7 +187,7 @@ func TestCatalogNormalizesEmptyBuilderImageToAutomationDev(t *testing.T) {
 }
 
 func TestResolveBuilderImage(t *testing.T) {
-	appliance := "registry.local/automation-dev@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c"
+	appliance := "registry.local/dev-build@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c"
 	got, err := ResolveBuilderImage(DefaultBuilderImageRef, appliance)
 	if err != nil {
 		t.Fatalf("ResolveBuilderImage: %v", err)

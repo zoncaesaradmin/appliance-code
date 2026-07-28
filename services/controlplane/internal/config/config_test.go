@@ -115,7 +115,7 @@ func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
 			case "builder", "builder-landns", "builder-storage-landns":
 				cfg.BuildCatalog = testBuildCatalog()
 				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-				cfg.BuilderImageDigest = "automation-dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			}
 			switch profile {
 			case "storage-landns", "builder-landns", "builder-storage-landns":
@@ -145,7 +145,7 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 				cfg.ZotAllowFake = true
 				cfg.BuildCatalog = testBuildCatalog()
 				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-				cfg.BuilderImageDigest = "automation-dev@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			}
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "dnsReadyURL") {
 				t.Fatalf("Validate without DNS ready URL = %v, want dnsReadyURL error", err)

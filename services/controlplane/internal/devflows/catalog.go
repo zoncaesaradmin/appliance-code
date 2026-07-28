@@ -20,8 +20,8 @@ const (
 
 	// DefaultBuilderImageRef is the user-facing catalog default for the
 	// bundled CI/dev-container builder image. Install resolves it to the
-	// digest-pinned automation-dev imageReference from the signed bundle.
-	DefaultBuilderImageRef = "automation-dev"
+	// digest-pinned dev-build imageReference from the signed bundle.
+	DefaultBuilderImageRef = "dev-build"
 
 	legacyExecutionMake   = "make_target"
 	legacyExecutionScript = "repo_script"
@@ -71,7 +71,7 @@ type BuildTarget struct {
 	ImageRepository   string   `json:"imageRepository"`
 	ImageTagTemplate  string   `json:"imageTagTemplate,omitempty"`
 	// BuilderImageDigest selects the build pod image. Prefer the short bundle
-	// name "automation-dev" (default when omitted). A digest-pinned override is
+	// name "dev-build" (default when omitted). A digest-pinned override is
 	// also accepted; symbolic names resolve at submit time to the appliance
 	// bundled builder image.
 	BuilderImageDigest string `json:"builderImageDigest,omitempty"`
@@ -397,7 +397,7 @@ func (c Catalog) BuilderImageDigests() []string {
 
 // ResolveBuilderImage maps a catalog builderImageDigest value to the digests-
 // pinned image used for the Argo build pod. Empty and short names such as
-// "automation-dev" resolve to applianceBuilderDigest from install. A digest-
+// "dev-build" resolve to applianceBuilderDigest from install. A digest-
 // pinned override is returned unchanged for allowlist checks.
 func ResolveBuilderImage(ref, applianceBuilderDigest string) (string, error) {
 	ref = strings.TrimSpace(ref)

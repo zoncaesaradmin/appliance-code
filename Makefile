@@ -338,7 +338,7 @@ package-release-input-tar:
 # root, only inside services/controlplane, meant to be invoked from in here.
 #
 # `make dev-shell` drops you into an interactive shell in the shared
-# automation-dev image with this repo mounted. `make dev-run SCRIPT=...`
+# dev-build image with this repo mounted. `make dev-run SCRIPT=...`
 # is the non-interactive counterpart for automation: it runs one script
 # inside the same container and exits.
 #
@@ -355,7 +355,7 @@ package-release-input-tar:
 
 # Installs vim on first use if the image doesn't already have one; a
 # no-op if it does. Tried in package-manager order; harmless if none
-# match. The dev-container image runs as a non-root user (e.g. "vscode")
+# match. The dev-container image runs as a non-root user (e.g. "devcontainer")
 # with passwordless sudo, not as root, so package-manager calls need a
 # `sudo` prefix when not already root.
 DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \

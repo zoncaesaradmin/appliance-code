@@ -81,7 +81,7 @@ config:
   # zonctl injects this from the signed bundle for build-capable profiles.
   workspaceProvisionerImageDigest: ""
   # Single bundled builder/dev-container image used by all Argo build pods.
-  # zonctl injects this from the signed bundle (automation-dev) for
+  # zonctl injects this from the signed bundle (dev-build) for
   # build-capable profiles. Build catalogs must not set per-target builder digests.
   builderImageDigest: ""
   # Internal Zot data-plane endpoint. Artifact-bearing production profiles

@@ -546,11 +546,11 @@
     },
     "catalogBuilderImage": {
       "type": "string",
-      "description": "Short bundle builder name (default automation-dev) or an optional digest-pinned override.",
+      "description": "Short bundle builder name (default dev-build) or an optional digest-pinned override.",
       "oneOf": [
         {
           "enum": [
-            "automation-dev",
+            "dev-build",
             "builder",
             "dev-container",
             "devcontainer"
