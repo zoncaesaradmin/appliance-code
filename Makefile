@@ -31,6 +31,9 @@ DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
 # (build_flow.dev_container_image_registry; host derived from pull_ref) so GHCR
 # and LAN registries both work.
 DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
+# Podman TLS verification policy for registry login and image pulls.
+# Set false for LAN registries with self-signed / host-mismatch certs.
+DEV_REGISTRY_TLS_VERIFY ?= true
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
@@ -52,8 +55,10 @@ SUDO ?= sudo -n
 # build user's persistent registry credentials without a separate
 # `sudo podman login` bootstrap.
 DEV_ENGINE_AUTH_FLAGS :=
+DEV_ENGINE_TLS_FLAGS :=
 ifeq ($(CONTAINER_ENGINE),podman)
 DEV_ENGINE_AUTH_FLAGS += --authfile "$(DEV_REGISTRY_AUTH_FILE)"
+DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
 endif
 DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
@@ -361,6 +366,7 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # on the host — no need to re-export them again inside dev-shell.
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	$(DEV_ENGINE_AUTH_FLAGS) \
+	$(DEV_ENGINE_TLS_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
@@ -398,9 +404,13 @@ dev-registry-login:
 		echo "  # login host: DEV_REGISTRY_HOST=$(DEV_REGISTRY_HOST) (override for LAN registries)" >&2; \
 		exit 1; \
 	fi; \
+	login_tls_flag="--tls-verify=true"; \
+	case "$(DEV_REGISTRY_TLS_VERIFY)" in \
+		0|false|FALSE|no|NO|off|OFF) login_tls_flag="--tls-verify=false" ;; \
+	esac; \
 	mkdir -p "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
 	chmod 700 "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
-	printf '%s\n' "$(REGISTRY_TOKEN)" | podman login --authfile "$(DEV_REGISTRY_AUTH_FILE)" --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
+	printf '%s\n' "$(REGISTRY_TOKEN)" | podman login $$login_tls_flag --authfile "$(DEV_REGISTRY_AUTH_FILE)" --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
 
 dev-registry-auth-check:
 	@if [ "$(CONTAINER_ENGINE)" != "podman" ]; then exit 0; fi; \
