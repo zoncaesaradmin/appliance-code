@@ -371,21 +371,31 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 	else echo "warning: no supported package manager found; vim not installed" >&2; fi; }
 
 # Every run flag must precede $(DEV_IMAGE) — anything after the image
-# name is passed to the container's entrypoint, not to the engine.
+# name is passed to the container command, not to the engine.
 # $(SUDO) (empty by default) goes first so rootful Podman is used when set.
 # `-e VAR` with no value forwards VAR from the current shell's
 # environment (if set) rather than baking a value into the command
 # line, so `make -C services/controlplane image`/`push` inside the container
 # see the same DEV_* publish values already exported
 # on the host — no need to re-export them again inside dev-shell.
+#
+# --entrypoint "" ignores any image ENTRYPOINT. That matters if a service
+# image (with mkdir /data/zon/logs/… entrypoint) was accidentally pushed
+# over the development-container tag — otherwise `make dev-shell` dies
+# before bash runs. Always pass an explicit command after $(DEV_IMAGE).
+#
+# Go caches mount into the image non-root home (not /root/…): the
+# development-container image runs as USERNAME=devcontainer.
+DEV_CONTAINER_HOME ?= /home/devcontainer
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
+	--entrypoint "" \
 	$(DEV_ENGINE_AUTH_FLAGS) \
 	$(DEV_ENGINE_TLS_FLAGS) \
 	$(DEV_ENGINE_PULL_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
-	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
-	-v "$(DEV_CACHE_DIR)/go-mod:/root/go/pkg/mod$(DEV_VOLUME_OPTS)" \
+	-v "$(DEV_CACHE_DIR)/go-build:$(DEV_CONTAINER_HOME)/.cache/go-build$(DEV_VOLUME_OPTS)" \
+	-v "$(DEV_CACHE_DIR)/go-mod:$(DEV_CONTAINER_HOME)/go/pkg/mod$(DEV_VOLUME_OPTS)" \
 	-w /workspace
 
 ## dev-sudo-setup: one-time, idempotent host bootstrap for rootful nested

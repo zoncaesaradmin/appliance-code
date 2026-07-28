@@ -19,10 +19,9 @@
 
 DEV_REGISTRY ?=
 # Host only: strip any legacy path suffix from DEV_REGISTRY (host/repo/...).
+# Do not fail at parse time — `make build` / `image-local` must work without
+# a registry; `image` checks before push.
 SERVICE_IMAGE_REGISTRY ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
-ifeq ($(strip $(SERVICE_IMAGE_REGISTRY)),)
-$(error service-image.mk: SERVICE_IMAGE_REGISTRY is empty; set DEV_REGISTRY or SERVICE_IMAGE_REGISTRY)
-endif
 
 SERVICE_IMAGE_REPO ?= appliance-images
 
@@ -73,6 +72,10 @@ image-local:
 
 ## image: build this service image and push to SERVICE_IMAGE_REMOTE
 image:
+	@if [ -z "$(SERVICE_IMAGE_REGISTRY)" ]; then \
+		echo "image: SERVICE_IMAGE_REGISTRY is empty; set DEV_REGISTRY or SERVICE_IMAGE_REGISTRY" >&2; \
+		exit 1; \
+	fi
 	@if [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
 		echo "image: DEV_REGISTRY_USER and DEV_REGISTRY_TOKEN must both be set (never interactive):" >&2; \
 		echo "  export DEV_REGISTRY_USER=<registry-username>" >&2; \

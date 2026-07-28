@@ -98,7 +98,7 @@ Every setting below is a Makefile variable — override per-invocation
 | `SERVICE_IMAGE_NAME` | per-service Makefile, else directory name | Image name (e.g. `appliance-control-plane`). Set in the service Makefile or pass on the make CLI. |
 | `DEV_IMAGE` | composed from registry[/repo]/name:tag | Full image reference; set directly to bypass the composed variables above. |
 | `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers/auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
-| `DEV_CACHE_DIR` | `$(HOME)/.cache/appliance-code-dev` | Host directory persisting the Go build/module caches across invocations. |
+| `DEV_CONTAINER_HOME` | `/home/devcontainer` | Home path inside the image for Go cache bind-mounts (matches image `USERNAME`). |
 | `DEV_VOLUME_OPTS` | *(empty)* | Suffix appended to every bind-mount flag. Set to `:Z` on SELinux-enforcing hosts (Fedora, RHEL, CentOS) so Podman can relabel the mounted directories. |
 
 ## Developer Workstation Setup
@@ -230,6 +230,13 @@ is for `development-container/dev-build`.
 `DEV_RUN` forwards pull `DEV_*` vars plus `SERVICE_IMAGE_REGISTRY` /
 `SERVICE_IMAGE_REPO` / `SERVICE_IMAGE_NAME` / `SERVICE_IMAGE_TAG` into the
 container; `dev-sudo-setup` keeps those names in sudo `env_keep`.
+`DEV_RUN` also passes `--entrypoint ""` so a wrongly tagged service image
+(whose entrypoint does `mkdir /data/zon/logs/…`) cannot hijack `dev-shell`.
+
+If `make dev-shell` still lacks `go`/`buildah` after a pull, inspect the
+tag — `development-container/dev-build` may have been overwritten by a
+service push. Republish from the `development-container` repo, then pull
+again.
 
 The outer `podman run` that pulls and starts the shared dev-container
 image no longer depends on a separate rootful login. Instead, it uses
