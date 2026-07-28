@@ -92,7 +92,10 @@ Every setting below is a Makefile variable — override per-invocation
 | `DEV_IMAGE_REPO` | *(empty)* | Optional repo path between host and name (e.g. `development-container`). |
 | `DEV_IMAGE_NAME` | `dev-build` | Image name within the registry/repo. |
 | `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
-| `DEV_REGISTRY_TLS_VERIFY` | `true` | TLS verify for outer podman login/pull and for control-plane `make image` push. Set `false` for LAN registries with host-mismatch certs. |
+| `DEV_REGISTRY_TLS_VERIFY` | `true` | TLS verify for outer podman login/pull and for service-image push. Set `false` for LAN registries with host-mismatch certs. |
+| `SERVICE_IMAGE_REGISTRY` | host of `DEV_REGISTRY` (required) | Push registry host for `make -C services/<svc> image`. No hardcoded fallback — set `DEV_REGISTRY` or override with env / `make … SERVICE_IMAGE_REGISTRY=…`. |
+| `SERVICE_IMAGE_REPO` | `appliance-images` | Repo path for all service-image pushes. Override with env or make CLI. |
+| `SERVICE_IMAGE_NAME` | per-service Makefile, else directory name | Image name (e.g. `appliance-control-plane`). Set in the service Makefile or pass on the make CLI. |
 | `DEV_IMAGE` | composed from registry[/repo]/name:tag | Full image reference; set directly to bypass the composed variables above. |
 | `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers/auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
 | `DEV_CACHE_DIR` | `$(HOME)/.cache/appliance-code-dev` | Host directory persisting the Go build/module caches across invocations. |
@@ -187,7 +190,13 @@ make dev-registry-login
 
 That does not mean you need to redo the one-time sudo bootstrap.
 
-#### Normal image-build flow
+#### Normal service-image build flow
+
+Shared [`build/service-image.mk`](../build/service-image.mk) defaults
+`SERVICE_IMAGE_REGISTRY` to the host of `DEV_REGISTRY`, `SERVICE_IMAGE_REPO` to
+`appliance-images`, and `SERVICE_IMAGE_NAME` to the service Makefile value (or
+the service directory name). Outer `DEV_IMAGE_*` vars only name the
+development-container pull for `make dev-shell` and never the service image.
 
 ```bash
 git clone <appliance-code-remote> appliance-code
@@ -195,37 +204,32 @@ cd appliance-code
 
 export DEV_REGISTRY_USER=<github-username>
 export DEV_REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
-export DEV_IMAGE_TAG=v0.1.0      # optional host-side default for this dev-shell session
+# Optional: point DEV_REGISTRY at your LAN registry so SERVICE_IMAGE_REGISTRY
+# defaults to that host. Or override SERVICE_IMAGE_* explicitly:
+# export DEV_REGISTRY=artifact-dns-1.appliance.internal
+# export SERVICE_IMAGE_REPO=appliance-images
+# export DEV_REGISTRY_TLS_VERIFY=false
 make dev-shell
 
 # now inside the container:
-cd services/controlplane
-make image                        # builds, then tags and pushes appliance-control-plane:<version>
-                                    # to ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane
-make image DEV_IMAGE_TAG=v0.1.0   # optional: override the tag (defaults to `git describe`, i.e. VERSION)
-exit                     # tears the container down (--rm); the built image stays
-                         # in the build server's local container storage
+make -C services/controlplane image-local   # local storage only
+make -C services/controlplane image         # build + push
+# → ${SERVICE_IMAGE_REGISTRY}/appliance-images/appliance-control-plane:<git-describe>
+
+make -C services/ui image                   # same pattern; name is appliance-ui
+exit
 ```
 
-`make image` requires `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN` (the same
-non-interactive pattern as everything else — fails fast if either is
-unset, never prompts) since it always builds *and* pushes in one step;
-retarget with `DEV_REGISTRY`/`DEV_IMAGE_REPO`/`DEV_IMAGE_NAME` (e.g.
-`make image DEV_REGISTRY=registry.zon.local` for a future internal
-registry). It sees these two variables without having to re-export them
-inside the container: `DEV_RUN` forwards `DEV_REGISTRY_USER`/
-`DEV_REGISTRY_TOKEN`/`DEV_IMAGE_TAG` from the host's environment into
-`dev-shell`/`dev-run` with `-e VAR` (name-only, no value on the command
-line), and `dev-sudo-setup`'s sudoers rule includes an `env_keep` entry
-for exactly these variables — without it, `sudo`'s default `env_reset`
-policy would silently strip them before Podman ever saw them, since
-`dev-shell` itself runs via `sudo -n podman run ...`.
+`make image` requires `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN` and uses
+`DEV_REGISTRY_TLS_VERIFY` for push TLS. Override destination on the make CLI
+when needed:
+`make -C services/controlplane image SERVICE_IMAGE_REGISTRY=… SERVICE_IMAGE_REPO=… SERVICE_IMAGE_NAME=… SERVICE_IMAGE_TAG=v0.1.0`.
+Do not set `DEV_IMAGE_NAME` hoping to rename the service image — that variable
+is for `development-container/dev-build`.
 
-That means you can optionally export `DEV_IMAGE_TAG` on the host before
-opening `dev-shell`, and `make image` inside the container will see it
-as the default tag for that shell session. If you explicitly run
-`make image DEV_IMAGE_TAG=...` inside the container, that explicit Makefile
-assignment still wins over the inherited environment value.
+`DEV_RUN` forwards pull `DEV_*` vars plus `SERVICE_IMAGE_REGISTRY` /
+`SERVICE_IMAGE_REPO` / `SERVICE_IMAGE_NAME` / `SERVICE_IMAGE_TAG` into the
+container; `dev-sudo-setup` keeps those names in sudo `env_keep`.
 
 The outer `podman run` that pulls and starts the shared dev-container
 image no longer depends on a separate rootful login. Instead, it uses

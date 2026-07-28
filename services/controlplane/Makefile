@@ -41,39 +41,23 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
 # this way). Buildah with chroot isolation (BUILDAH_ISOLATION=chroot,
 # already set by the dev-container image) avoids that nested-namespace
 # creation entirely — see docs/dev-container.md.
-ENGINE_BIN   ?= buildah
-BUILD_ENGINE ?= $(ENGINE_BIN) bud
-BUILD_CACHE_FLAGS ?=
-ifeq ($(BUILD_NO_CACHE),1)
-BUILD_CACHE_FLAGS += --no-cache
-endif
-IMAGE_NAME   ?= appliance-control-plane
-# Defaults to VERSION (git describe); override explicitly, e.g.
-# `make image DEV_IMAGE_TAG=v0.1.0`.
-DEV_IMAGE_TAG ?=
-ifeq ($(strip $(DEV_IMAGE_TAG)),)
-IMAGE_TAG    ?= $(VERSION)
-else
-IMAGE_TAG    ?= $(DEV_IMAGE_TAG)
-endif
-IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
-# Runtime profile for the final container image. `debug` includes common
-# operator tools (bash, vim, curl, ping/dns/process tools); `runtime`
-# keeps only the lean base runtime packages.
+#
+# Service image: name is the common SERVICE_IMAGE_NAME (Makefile default,
+# env, or make CLI). Shared defaults for registry/repo live in
+# build/service-image.mk (DEV_REGISTRY host + appliance-images).
+SERVICE_IMAGE_NAME ?= appliance-control-plane
 RUNTIME_PROFILE ?= debug
+SERVICE_IMAGE_BUILD_ARGS = \
+	--build-arg VERSION=$(VERSION) \
+	--build-arg COMMIT=$(COMMIT) \
+	--build-arg BUILD_TIME=$(BUILD_TIME) \
+	--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE)
 
-# Push destination for `make image`.
-DEV_REGISTRY    ?= ghcr.io
-DEV_IMAGE_REPO  ?= zoncaesaradmin/appliance-code
-DEV_IMAGE_NAME  ?= appliance-control-plane
-REMOTE_IMAGE := $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME)
-DEV_REGISTRY_TLS_VERIFY ?= true
-TLS_VERIFY_FLAG :=
-ifeq ($(filter false 0 no FALSE NO,$(DEV_REGISTRY_TLS_VERIFY)),$(DEV_REGISTRY_TLS_VERIFY))
-TLS_VERIFY_FLAG := --tls-verify=false
-endif
+include $(CURDIR)/../../build/service-image.mk
 
-.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image image-local vendor
+.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean vendor
+# image and image-local come from build/service-image.mk
+
 
 ## build: compile the local server binary into bin/
 build:
@@ -214,51 +198,6 @@ stop:
 		rm -f $(PID_FILE); \
 	else \
 		echo "no pid file at $(PID_FILE); nothing to stop"; \
-	fi
-
-## image-local: build the release-engineering control-plane container image
-## into local container storage without pushing it anywhere
-image-local:
-	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg COMMIT=$(COMMIT) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE) \
-		-f Containerfile \
-		-t $(IMAGE_REF) \
-		.
-
-## image: build the release-engineering control-plane container image
-## and push it to REMOTE_IMAGE (DEV_REGISTRY/DEV_IMAGE_REPO/DEV_IMAGE_NAME)
-## as both IMAGE_TAG and "latest"; run only on the Linux
-## build server/CI, inside the shared dev container — see
-## docs/dev-container.md. Builds from vendor/, so the build itself needs
-## no network access; run `make vendor` first if it's stale. Pushing
-## requires DEV_REGISTRY_USER/DEV_REGISTRY_TOKEN (scoped to write:packages) —
-## never interactive, fails fast if either is unset.
-image:
-	@if [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
-		echo "image: DEV_REGISTRY_USER and DEV_REGISTRY_TOKEN must both be set (never interactive):" >&2; \
-		echo "  export DEV_REGISTRY_USER=<github-username>" >&2; \
-		echo "  export DEV_REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
-		exit 1; \
-	fi
-	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg COMMIT=$(COMMIT) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE) \
-		-f Containerfile \
-		-t $(IMAGE_REF) \
-		.
-	echo "$(DEV_REGISTRY_TOKEN)" | $(ENGINE_BIN) login $(TLS_VERIFY_FLAG) --username "$(DEV_REGISTRY_USER)" --password-stdin $(DEV_REGISTRY)
-	$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):$(IMAGE_TAG)
-	$(ENGINE_BIN) push $(TLS_VERIFY_FLAG) $(REMOTE_IMAGE):$(IMAGE_TAG)
-	@echo "image: pushed $(REMOTE_IMAGE):$(IMAGE_TAG)"
-	@if [ "$(IMAGE_TAG)" != "latest" ]; then \
-		$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):latest; \
-		$(ENGINE_BIN) push $(TLS_VERIFY_FLAG) $(REMOTE_IMAGE):latest; \
-		echo "image: pushed $(REMOTE_IMAGE):latest"; \
 	fi
 
 ## clean: remove local build, run, and coverage artifacts

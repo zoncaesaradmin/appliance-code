@@ -16,17 +16,18 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
            -X '$(MODULE)/internal/version.Commit=$(COMMIT)' \
            -X '$(MODULE)/internal/version.BuildTime=$(BUILD_TIME)'
 
-ENGINE_BIN   ?= buildah
-BUILD_ENGINE ?= $(ENGINE_BIN) bud
-BUILD_CACHE_FLAGS ?=
-ifeq ($(BUILD_NO_CACHE),1)
-BUILD_CACHE_FLAGS += --no-cache
-endif
-IMAGE_NAME   ?= appliance-ui
-IMAGE_TAG    ?= $(VERSION)
-IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
+# Service image: SERVICE_IMAGE_NAME from Makefile / env / make CLI.
+# Registry/repo defaults: build/service-image.mk (DEV_REGISTRY + appliance-images).
+SERVICE_IMAGE_NAME ?= appliance-ui
+SERVICE_IMAGE_BUILD_ARGS = \
+	--build-arg VERSION=$(VERSION) \
+	--build-arg COMMIT=$(COMMIT) \
+	--build-arg BUILD_TIME=$(BUILD_TIME)
 
-.PHONY: build test lint coverage verify run stop clean image-local vendor
+include $(CURDIR)/../../build/service-image.mk
+
+.PHONY: build test lint coverage verify run stop clean vendor
+# image and image-local come from build/service-image.mk
 
 build:
 	mkdir -p $(BIN_DIR)
@@ -72,15 +73,6 @@ stop:
 	else \
 		echo "no pid file at $(PID_FILE); nothing to stop"; \
 	fi
-
-image-local:
-	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg COMMIT=$(COMMIT) \
-		--build-arg BUILD_TIME=$(BUILD_TIME) \
-		-f Containerfile \
-		-t $(IMAGE_REF) \
-		.
 
 clean: stop
 	rm -rf $(BIN_DIR) $(RUN_DIR) $(COVER_FILE)

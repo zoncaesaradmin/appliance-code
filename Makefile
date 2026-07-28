@@ -74,7 +74,7 @@ DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
 # digest; without this, make dev-shell reuses a stale local image forever.
 DEV_ENGINE_PULL_FLAGS += --pull=newer
 endif
-DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY
+DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
@@ -398,7 +398,8 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
 ##      (never a blanket sudo grant), plus an env_keep rule preserving
 ##      only DEV_REGISTRY_USER/DEV_REGISTRY_TOKEN/DEV_IMAGE_TAG/DEV_IMAGE_NAME/
-##      DEV_REGISTRY/DEV_IMAGE_REPO/DEV_REGISTRY_TLS_VERIFY through sudo (so `-e VAR`
+##      DEV_REGISTRY/DEV_IMAGE_REPO/DEV_REGISTRY_TLS_VERIFY plus SERVICE_IMAGE_REGISTRY/
+##      SERVICE_IMAGE_REPO/SERVICE_IMAGE_NAME/SERVICE_IMAGE_TAG through sudo (so `-e VAR`
 ##      name-only forwarding on DEV_RUN's rootful podman actually works —
 ##      sudo's env_reset default would otherwise silently strip them
 ##      before podman ever saw them). Writing/rewriting this needs one
@@ -456,7 +457,7 @@ dev-sudo-setup: dev-registry-auth-check
 		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
 		{ \
 			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
-			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY\""; \
+			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG\""; \
 		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
 		sudo chmod 0440 "$(SUDOERS_FILE)"; \
 		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
