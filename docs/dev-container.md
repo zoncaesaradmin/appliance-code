@@ -116,10 +116,11 @@ the auth-file directory if needed, then runs `podman login` with
 `--username "$DEV_REGISTRY_USER"` and `--password-stdin` so the command does
 not stop and prompt for credentials.
 
-You do *not* need a separate `podman pull` step — the first `make
-dev-shell`/`make dev-run` pulls the image automatically if it isn't
-already cached locally. Podman talks to the kernel directly on Linux, so
-there's no VM/machine step to manage.
+You do *not* need a separate `podman pull` step — `make
+dev-shell`/`make dev-run` use Podman `--pull=newer`, so a mutable tag
+such as `latest` is refreshed when the registry has a newer digest.
+Pin a digest or immutable tag when you need a frozen image. Podman talks
+to the kernel directly on Linux, so there's no VM/machine step to manage.
 
 ### macOS
 

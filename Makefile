@@ -66,9 +66,13 @@ SUDO ?= sudo -n
 # `sudo podman login` bootstrap.
 DEV_ENGINE_AUTH_FLAGS :=
 DEV_ENGINE_TLS_FLAGS :=
+DEV_ENGINE_PULL_FLAGS :=
 ifeq ($(CONTAINER_ENGINE),podman)
 DEV_ENGINE_AUTH_FLAGS += --authfile "$(DEV_REGISTRY_AUTH_FILE)"
 DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
+# Refresh :latest (and other mutable tags) when the registry has a newer
+# digest; without this, make dev-shell reuses a stale local image forever.
+DEV_ENGINE_PULL_FLAGS += --pull=newer
 endif
 DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
@@ -377,6 +381,7 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	$(DEV_ENGINE_AUTH_FLAGS) \
 	$(DEV_ENGINE_TLS_FLAGS) \
+	$(DEV_ENGINE_PULL_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:/root/.cache/go-build$(DEV_VOLUME_OPTS)" \
