@@ -88,10 +88,12 @@ Every setting below is a Makefile variable — override per-invocation
 | --- | --- | --- |
 | `CONTAINER_ENGINE` | `podman` | Container engine binary (`docker` also works for `dev-shell`/`dev-run`). |
 | `SUDO` | `sudo -n` | Non-interactive prefix used to run the outer container rootful when Podman is rootless on the host. |
-| `DEV_REGISTRY` | `ghcr.io/zoncaesaradmin/development-container` | Registry + repo path for the dev-container image. |
-| `DEV_IMAGE_NAME` | `dev-build` | Image name within the registry. |
+| `DEV_REGISTRY` | `ghcr.io/zoncaesaradmin/development-container` | Registry host, or legacy host/repo path. |
+| `DEV_IMAGE_REPO` | *(empty)* | Optional repo path between host and name (e.g. `development-container`). |
+| `DEV_IMAGE_NAME` | `dev-build` | Image name within the registry/repo. |
 | `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
-| `DEV_IMAGE` | `$(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)` | Full image reference; set directly to bypass the three variables above. |
+| `DEV_REGISTRY_TLS_VERIFY` | `true` | TLS verify for outer podman login/pull and for control-plane `make image` push. Set `false` for LAN registries with host-mismatch certs. |
+| `DEV_IMAGE` | composed from registry[/repo]/name:tag | Full image reference; set directly to bypass the composed variables above. |
 | `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers/auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
 | `DEV_CACHE_DIR` | `$(HOME)/.cache/appliance-code-dev` | Host directory persisting the Go build/module caches across invocations. |
 | `DEV_VOLUME_OPTS` | *(empty)* | Suffix appended to every bind-mount flag. Set to `:Z` on SELinux-enforcing hosts (Fedora, RHEL, CentOS) so Podman can relabel the mounted directories. |

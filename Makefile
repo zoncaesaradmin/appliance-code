@@ -23,15 +23,22 @@ CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags -
 -include dev-container/env
 
 CONTAINER_ENGINE ?= podman
+# Registry host (or legacy host/repo path). Prefer host-only + DEV_IMAGE_REPO.
 DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
+DEV_IMAGE_REPO   ?=
 DEV_IMAGE_NAME   ?= dev-build
 DEV_IMAGE_TAG    ?= latest
+ifeq ($(strip $(DEV_IMAGE_REPO)),)
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+else
+DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+endif
 # Login host for podman login. Override from the release skill
 # (build_flow.dev_image_pull; host derived from registry/image_repo/image_name/image_tag)
 # so GHCR and LAN registries both work.
 DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
-# Podman TLS verification policy for registry login and image pulls.
+# TLS verify for outer podman login/pull of the shared dev-container image
+# and for control-plane `make image` push (forwarded into the container).
 # Set false for LAN registries with self-signed / host-mismatch certs.
 DEV_REGISTRY_TLS_VERIFY ?= true
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
@@ -63,7 +70,7 @@ ifeq ($(CONTAINER_ENGINE),podman)
 DEV_ENGINE_AUTH_FLAGS += --authfile "$(DEV_REGISTRY_AUTH_FILE)"
 DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
 endif
-DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_TLS_VERIFY
+DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
@@ -386,7 +393,7 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
 ##      (never a blanket sudo grant), plus an env_keep rule preserving
 ##      only DEV_REGISTRY_USER/DEV_REGISTRY_TOKEN/DEV_IMAGE_TAG/DEV_IMAGE_NAME/
-##      DEV_REGISTRY/DEV_IMAGE_REPO/DEV_TLS_VERIFY through sudo (so `-e VAR`
+##      DEV_REGISTRY/DEV_IMAGE_REPO/DEV_REGISTRY_TLS_VERIFY through sudo (so `-e VAR`
 ##      name-only forwarding on DEV_RUN's rootful podman actually works —
 ##      sudo's env_reset default would otherwise silently strip them
 ##      before podman ever saw them). Writing/rewriting this needs one
@@ -444,7 +451,7 @@ dev-sudo-setup: dev-registry-auth-check
 		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
 		{ \
 			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
-			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_TLS_VERIFY\""; \
+			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY\""; \
 		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
 		sudo chmod 0440 "$(SUDOERS_FILE)"; \
 		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \

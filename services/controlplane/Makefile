@@ -67,9 +67,9 @@ DEV_REGISTRY    ?= ghcr.io
 DEV_IMAGE_REPO  ?= zoncaesaradmin/appliance-code
 DEV_IMAGE_NAME  ?= appliance-control-plane
 REMOTE_IMAGE := $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME)
-DEV_TLS_VERIFY ?= true
+DEV_REGISTRY_TLS_VERIFY ?= true
 TLS_VERIFY_FLAG :=
-ifeq ($(filter false 0 no FALSE NO,$(DEV_TLS_VERIFY)),$(DEV_TLS_VERIFY))
+ifeq ($(filter false 0 no FALSE NO,$(DEV_REGISTRY_TLS_VERIFY)),$(DEV_REGISTRY_TLS_VERIFY))
 TLS_VERIFY_FLAG := --tls-verify=false
 endif
 
