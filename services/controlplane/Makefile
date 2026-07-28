@@ -49,20 +49,29 @@ BUILD_CACHE_FLAGS += --no-cache
 endif
 IMAGE_NAME   ?= appliance-control-plane
 # Defaults to VERSION (git describe); override explicitly, e.g.
-# `make image IMAGE_TAG=v0.1.0`.
+# `make image DEV_IMAGE_TAG=v0.1.0`.
+DEV_IMAGE_TAG ?=
+ifeq ($(strip $(DEV_IMAGE_TAG)),)
 IMAGE_TAG    ?= $(VERSION)
+else
+IMAGE_TAG    ?= $(DEV_IMAGE_TAG)
+endif
 IMAGE_REF    := $(IMAGE_NAME):$(IMAGE_TAG)
 # Runtime profile for the final container image. `debug` includes common
 # operator tools (bash, vim, curl, ping/dns/process tools); `runtime`
 # keeps only the lean base runtime packages.
 RUNTIME_PROFILE ?= debug
 
-# Push destination for `make push`. Only REGISTRY needs to change to
-# retarget a different registry (e.g. a future internal Zot server).
-REGISTRY    ?= ghcr.io
-IMAGE_OWNER ?= zoncaesaradmin
-IMAGE_REPO  ?= appliance-code
-REMOTE_IMAGE := $(REGISTRY)/$(IMAGE_OWNER)/$(IMAGE_REPO)/$(IMAGE_NAME)
+# Push destination for `make image`.
+DEV_REGISTRY    ?= ghcr.io
+DEV_IMAGE_REPO  ?= zoncaesaradmin/appliance-code
+DEV_IMAGE_NAME  ?= appliance-control-plane
+REMOTE_IMAGE := $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME)
+DEV_TLS_VERIFY ?= true
+TLS_VERIFY_FLAG :=
+ifeq ($(filter false 0 no FALSE NO,$(DEV_TLS_VERIFY)),$(DEV_TLS_VERIFY))
+TLS_VERIFY_FLAG := --tls-verify=false
+endif
 
 .PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean image image-local vendor
 
@@ -220,18 +229,18 @@ image-local:
 		.
 
 ## image: build the release-engineering control-plane container image
-## and push it to REMOTE_IMAGE (REGISTRY/IMAGE_OWNER/IMAGE_REPO/
-## IMAGE_NAME) as both IMAGE_TAG and "latest"; run only on the Linux
+## and push it to REMOTE_IMAGE (DEV_REGISTRY/DEV_IMAGE_REPO/DEV_IMAGE_NAME)
+## as both IMAGE_TAG and "latest"; run only on the Linux
 ## build server/CI, inside the shared dev container — see
 ## docs/dev-container.md. Builds from vendor/, so the build itself needs
 ## no network access; run `make vendor` first if it's stale. Pushing
-## requires REGISTRY_USER/REGISTRY_TOKEN (scoped to write:packages) —
+## requires DEV_REGISTRY_USER/DEV_REGISTRY_TOKEN (scoped to write:packages) —
 ## never interactive, fails fast if either is unset.
 image:
-	@if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
-		echo "image: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
-		echo "  export REGISTRY_USER=<github-username>" >&2; \
-		echo "  export REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
+	@if [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
+		echo "image: DEV_REGISTRY_USER and DEV_REGISTRY_TOKEN must both be set (never interactive):" >&2; \
+		echo "  export DEV_REGISTRY_USER=<github-username>" >&2; \
+		echo "  export DEV_REGISTRY_TOKEN=<PAT with write:packages>" >&2; \
 		exit 1; \
 	fi
 	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
@@ -242,13 +251,13 @@ image:
 		-f Containerfile \
 		-t $(IMAGE_REF) \
 		.
-	echo "$(REGISTRY_TOKEN)" | $(ENGINE_BIN) login --username "$(REGISTRY_USER)" --password-stdin $(REGISTRY)
+	echo "$(DEV_REGISTRY_TOKEN)" | $(ENGINE_BIN) login $(TLS_VERIFY_FLAG) --username "$(DEV_REGISTRY_USER)" --password-stdin $(DEV_REGISTRY)
 	$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):$(IMAGE_TAG)
-	$(ENGINE_BIN) push $(REMOTE_IMAGE):$(IMAGE_TAG)
+	$(ENGINE_BIN) push $(TLS_VERIFY_FLAG) $(REMOTE_IMAGE):$(IMAGE_TAG)
 	@echo "image: pushed $(REMOTE_IMAGE):$(IMAGE_TAG)"
 	@if [ "$(IMAGE_TAG)" != "latest" ]; then \
 		$(ENGINE_BIN) tag $(IMAGE_REF) $(REMOTE_IMAGE):latest; \
-		$(ENGINE_BIN) push $(REMOTE_IMAGE):latest; \
+		$(ENGINE_BIN) push $(TLS_VERIFY_FLAG) $(REMOTE_IMAGE):latest; \
 		echo "image: pushed $(REMOTE_IMAGE):latest"; \
 	fi
 

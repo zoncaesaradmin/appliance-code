@@ -41,13 +41,13 @@ repo's sake; there is nothing here for it to build or run.
   `CONTAINER_ENGINE` below to use Docker instead).
 - A persistent Podman auth file for the dev-container registry image.
   `ghcr.io/zoncaesaradmin/development-container` is **not** public; log
-  in once non-interactively with `REGISTRY_USER`/`REGISTRY_TOKEN`
+  in once non-interactively with `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN`
   (either via `make dev-registry-login` or the explicit `podman login
   --username ... --password-stdin ...` form), or point
   `DEV_REGISTRY_AUTH_FILE` at a different existing auth-file path.
   Creating the directory alone is not enough; `podman login` is what
   actually creates/populates the auth file.
-- `REGISTRY_USER`/`REGISTRY_TOKEN` exported in the environment when you
+- `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN` exported in the environment when you
   want to run `make -C services/controlplane image` inside the dev container.
   Those variables are for the image push step, not for the outer
   dev-container pull anymore.
@@ -104,14 +104,14 @@ Every setting below is a Makefile variable — override per-invocation
 
 ```bash
 # install Podman via your distro's package manager
-export REGISTRY_USER=<github-username>
-export REGISTRY_TOKEN=<PAT with read:packages>
+export DEV_REGISTRY_USER=<github-username>
+export DEV_REGISTRY_TOKEN=<PAT with read:packages>
 make dev-registry-login
 ```
 
 `make dev-registry-login` is intentionally non-interactive: it creates
 the auth-file directory if needed, then runs `podman login` with
-`--username "$REGISTRY_USER"` and `--password-stdin` so the command does
+`--username "$DEV_REGISTRY_USER"` and `--password-stdin` so the command does
 not stop and prompt for credentials.
 
 You do *not* need a separate `podman pull` step — the first `make
@@ -158,8 +158,8 @@ Only the first of those is a one-time setup.
 Do these only once per Linux host:
 
 ```bash
-export REGISTRY_USER=<github-username>
-export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
+export DEV_REGISTRY_USER=<github-username>
+export DEV_REGISTRY_TOKEN=<PAT with read:packages>
 make dev-registry-login
 ```
 
@@ -177,8 +177,8 @@ If the registry token rotates, refresh only the auth file with another
 non-interactive login using the same environment variables:
 
 ```bash
-export REGISTRY_USER=<github-username>
-export REGISTRY_TOKEN=<new-PAT with read:packages>
+export DEV_REGISTRY_USER=<github-username>
+export DEV_REGISTRY_TOKEN=<new-PAT with read:packages>
 make dev-registry-login
 ```
 
@@ -190,38 +190,38 @@ That does not mean you need to redo the one-time sudo bootstrap.
 git clone <appliance-code-remote> appliance-code
 cd appliance-code
 
-export REGISTRY_USER=<github-username>
-export REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
-export IMAGE_TAG=v0.1.0          # optional host-side default for this dev-shell session
+export DEV_REGISTRY_USER=<github-username>
+export DEV_REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
+export DEV_IMAGE_TAG=v0.1.0      # optional host-side default for this dev-shell session
 make dev-shell
 
 # now inside the container:
 cd services/controlplane
 make image                        # builds, then tags and pushes appliance-control-plane:<version>
                                     # to ghcr.io/zoncaesaradmin/appliance-code/appliance-control-plane
-make image IMAGE_TAG=v0.1.0       # optional: override the tag (defaults to `git describe`, i.e. VERSION)
+make image DEV_IMAGE_TAG=v0.1.0   # optional: override the tag (defaults to `git describe`, i.e. VERSION)
 exit                     # tears the container down (--rm); the built image stays
                          # in the build server's local container storage
 ```
 
-`make image` requires `REGISTRY_USER`/`REGISTRY_TOKEN` (the same
+`make image` requires `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN` (the same
 non-interactive pattern as everything else — fails fast if either is
 unset, never prompts) since it always builds *and* pushes in one step;
-retarget with `REGISTRY`/`IMAGE_OWNER`/`IMAGE_REPO`/`IMAGE_NAME` (e.g.
-`make image REGISTRY=registry.zon.local` for a future internal
+retarget with `DEV_REGISTRY`/`DEV_IMAGE_REPO`/`DEV_IMAGE_NAME` (e.g.
+`make image DEV_REGISTRY=registry.zon.local` for a future internal
 registry). It sees these two variables without having to re-export them
-inside the container: `DEV_RUN` forwards `REGISTRY_USER`/
-`REGISTRY_TOKEN`/`IMAGE_TAG` from the host's environment into
+inside the container: `DEV_RUN` forwards `DEV_REGISTRY_USER`/
+`DEV_REGISTRY_TOKEN`/`DEV_IMAGE_TAG` from the host's environment into
 `dev-shell`/`dev-run` with `-e VAR` (name-only, no value on the command
 line), and `dev-sudo-setup`'s sudoers rule includes an `env_keep` entry
 for exactly these variables — without it, `sudo`'s default `env_reset`
 policy would silently strip them before Podman ever saw them, since
 `dev-shell` itself runs via `sudo -n podman run ...`.
 
-That means you can optionally export `IMAGE_TAG` on the host before
+That means you can optionally export `DEV_IMAGE_TAG` on the host before
 opening `dev-shell`, and `make image` inside the container will see it
 as the default tag for that shell session. If you explicitly run
-`make image IMAGE_TAG=...` inside the container, that explicit Makefile
+`make image DEV_IMAGE_TAG=...` inside the container, that explicit Makefile
 assignment still wins over the inherited environment value.
 
 The outer `podman run` that pulls and starts the shared dev-container
@@ -243,7 +243,7 @@ needed on a given host, does one thing:
 That check is idempotent: on every run after the first, it detects the
 sudoers rule already exists and skips it, so no later `make
 dev-shell`/`dev-run`/`image` invocation should prompt for a sudo
-password again on that host. Keep `REGISTRY_USER`/`REGISTRY_TOKEN`
+password again on that host. Keep `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN`
 exported when you plan to run `make image` inside the container (e.g. in
 the shell profile that runs these commands, or your CI job's secret env
 vars).

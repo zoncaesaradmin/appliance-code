@@ -28,8 +28,8 @@ DEV_IMAGE_NAME   ?= dev-build
 DEV_IMAGE_TAG    ?= latest
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
 # Login host for podman login. Override from the release skill
-# (build_flow.dev_container_image_registry; host derived from pull_ref) so GHCR
-# and LAN registries both work.
+# (build_flow.dev_image_pull; host derived from registry/image_repo/image_name/image_tag)
+# so GHCR and LAN registries both work.
 DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
 # Podman TLS verification policy for registry login and image pulls.
 # Set false for LAN registries with self-signed / host-mismatch certs.
@@ -37,6 +37,9 @@ DEV_REGISTRY_TLS_VERIFY ?= true
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
+# Explicit credentials for dev container registry login/pulls.
+DEV_REGISTRY_USER ?=
+DEV_REGISTRY_TOKEN ?=
 # Rootful Podman is required for `make -C services/controlplane image` to work
 # from inside dev-shell: a rootless outer container has only one, fully
 # consumed user-namespace mapping, so a nested Buildah build inside it
@@ -60,7 +63,7 @@ ifeq ($(CONTAINER_ENGINE),podman)
 DEV_ENGINE_AUTH_FLAGS += --authfile "$(DEV_REGISTRY_AUTH_FILE)"
 DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
 endif
-DEV_FORWARD_ENV_VARS := REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG
+DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_TLS_VERIFY
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
@@ -362,7 +365,7 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # `-e VAR` with no value forwards VAR from the current shell's
 # environment (if set) rather than baking a value into the command
 # line, so `make -C services/controlplane image`/`push` inside the container
-# see the same REGISTRY_USER/REGISTRY_TOKEN/IMAGE_TAG already exported
+# see the same DEV_* publish values already exported
 # on the host — no need to re-export them again inside dev-shell.
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	$(DEV_ENGINE_AUTH_FLAGS) \
@@ -382,7 +385,8 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 ## before this env-passthrough rule existed gets upgraded automatically):
 ##   1. a NOPASSWD sudoers rule scoped to exactly the podman binary path
 ##      (never a blanket sudo grant), plus an env_keep rule preserving
-##      only REGISTRY_USER/REGISTRY_TOKEN/IMAGE_TAG through sudo (so `-e VAR`
+##      only DEV_REGISTRY_USER/DEV_REGISTRY_TOKEN/DEV_IMAGE_TAG/DEV_IMAGE_NAME/
+##      DEV_REGISTRY/DEV_IMAGE_REPO/DEV_TLS_VERIFY through sudo (so `-e VAR`
 ##      name-only forwarding on DEV_RUN's rootful podman actually works —
 ##      sudo's env_reset default would otherwise silently strip them
 ##      before podman ever saw them). Writing/rewriting this needs one
@@ -397,10 +401,10 @@ dev-registry-login:
 		echo "dev-registry-login: CONTAINER_ENGINE=$(CONTAINER_ENGINE); this helper is for Podman auth files only" >&2; \
 		exit 2; \
 	fi; \
-	if [ -z "$(REGISTRY_USER)" ] || [ -z "$(REGISTRY_TOKEN)" ]; then \
-		echo "dev-registry-login: REGISTRY_USER and REGISTRY_TOKEN must both be set (never interactive):" >&2; \
-		echo "  export REGISTRY_USER=<registry-username>" >&2; \
-		echo "  export REGISTRY_TOKEN=<registry-token-or-PAT>" >&2; \
+	if [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
+		echo "dev-registry-login: DEV_REGISTRY_USER and DEV_REGISTRY_TOKEN must both be set (never interactive):" >&2; \
+		echo "  export DEV_REGISTRY_USER=<registry-username>" >&2; \
+		echo "  export DEV_REGISTRY_TOKEN=<registry-token-or-PAT>" >&2; \
 		echo "  # login host: DEV_REGISTRY_HOST=$(DEV_REGISTRY_HOST) (override for LAN registries)" >&2; \
 		exit 1; \
 	fi; \
@@ -410,15 +414,15 @@ dev-registry-login:
 	esac; \
 	mkdir -p "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
 	chmod 700 "$$(dirname "$(DEV_REGISTRY_AUTH_FILE)")"; \
-	printf '%s\n' "$(REGISTRY_TOKEN)" | podman login $$login_tls_flag --authfile "$(DEV_REGISTRY_AUTH_FILE)" --username "$(REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
+	printf '%s\n' "$(DEV_REGISTRY_TOKEN)" | podman login $$login_tls_flag --authfile "$(DEV_REGISTRY_AUTH_FILE)" --username "$(DEV_REGISTRY_USER)" --password-stdin $(DEV_REGISTRY_HOST)
 
 dev-registry-auth-check:
 	@if [ "$(CONTAINER_ENGINE)" != "podman" ]; then exit 0; fi; \
 	if [ -f "$(DEV_REGISTRY_AUTH_FILE)" ]; then exit 0; fi; \
 	echo "dev-registry-auth-check: missing Podman auth file: $(DEV_REGISTRY_AUTH_FILE)" >&2; \
 	echo "dev-registry-auth-check: create it once non-interactively with:" >&2; \
-	echo "  export REGISTRY_USER=<github-username>" >&2; \
-	echo "  export REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+	echo "  export DEV_REGISTRY_USER=<github-username>" >&2; \
+	echo "  export DEV_REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
 	echo "  make dev-registry-login" >&2; \
 	echo "dev-registry-auth-check: if you already keep credentials elsewhere, set DEV_REGISTRY_AUTH_FILE to that path." >&2; \
 	exit 1
@@ -433,14 +437,14 @@ dev-sudo-setup: dev-registry-auth-check
 	probe_user="dev-sudo-setup-user-probe-$$$$"; \
 	probe_tag="dev-sudo-setup-tag-probe-$$$$"; \
 	if sudo -n "$$podman_path" --version >/dev/null 2>&1 \
-		&& [ "$$(REGISTRY_USER=$$probe_user sudo -n env 2>/dev/null | sed -n 's/^REGISTRY_USER=//p')" = "$$probe_user" ] \
-		&& [ "$$(IMAGE_TAG=$$probe_tag sudo -n env 2>/dev/null | sed -n 's/^IMAGE_TAG=//p')" = "$$probe_tag" ]; then \
+		&& [ "$$(DEV_REGISTRY_USER=$$probe_user sudo -n env 2>/dev/null | sed -n 's/^DEV_REGISTRY_USER=//p')" = "$$probe_user" ] \
+		&& [ "$$(DEV_IMAGE_TAG=$$probe_tag sudo -n env 2>/dev/null | sed -n 's/^DEV_IMAGE_TAG=//p')" = "$$probe_tag" ]; then \
 		: already configured; \
 	else \
 		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
 		{ \
 			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
-			echo "Defaults:$$(whoami) env_keep += \"REGISTRY_USER REGISTRY_TOKEN IMAGE_TAG\""; \
+			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_TLS_VERIFY\""; \
 		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
 		sudo chmod 0440 "$(SUDOERS_FILE)"; \
 		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
