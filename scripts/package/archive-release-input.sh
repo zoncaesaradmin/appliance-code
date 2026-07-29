@@ -21,12 +21,17 @@ Options:
   --ui-image PATH                  Appliance UI image archive. Required.
   --ui-image-reference REF         Canonical UI image reference contained in
                                    the OCI archive.
-  --host-service-image PATH        Pinned appliance host-service OCI archive.
-                                   Required.
-  --host-service-image-reference REF
+  --host-agent-image PATH          Pinned appliance host-agent OCI archive.
+                                   `--host-service-image` is accepted as a
+                                   compatibility alias.
+  --host-agent-image-reference REF
                                    Canonical
-                                   registry.local/appliance-host-service@sha256:...
+                                   registry.local/appliance-host-agent@sha256:...
                                    platform-manifest reference. Required.
+                                   `--host-service-image-reference` is accepted
+                                   as a compatibility alias.
+  --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
+                                   Defaults to services/hostservice/bin/appliance-host-agentd.
   --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
   --zot-image-reference REF        Canonical registry.local/zot@sha256:...
                                    platform-manifest reference.
@@ -81,8 +86,9 @@ CONTROL_PLANE_IMAGE=""
 CONTROL_PLANE_IMAGE_REFERENCE=""
 UI_IMAGE=""
 UI_IMAGE_REFERENCE=""
-HOST_SERVICE_IMAGE=""
-HOST_SERVICE_IMAGE_REFERENCE=""
+HOST_AGENT_IMAGE=""
+HOST_AGENT_IMAGE_REFERENCE=""
+HOST_AGENT_BINARY=""
 ZOT_IMAGE=""
 ZOT_IMAGE_REFERENCE=""
 ZOT_VERSION=""
@@ -139,12 +145,16 @@ while [[ $# -gt 0 ]]; do
       UI_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
-    --host-service-image)
-      HOST_SERVICE_IMAGE="${2:-}"
+    --host-agent-image|--host-service-image)
+      HOST_AGENT_IMAGE="${2:-}"
       shift 2
       ;;
-    --host-service-image-reference)
-      HOST_SERVICE_IMAGE_REFERENCE="${2:-}"
+    --host-agent-image-reference|--host-service-image-reference)
+      HOST_AGENT_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --host-agent-binary)
+      HOST_AGENT_BINARY="${2:-}"
       shift 2
       ;;
     --zot-image)
@@ -243,7 +253,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_SERVICE_IMAGE}" || -z "${HOST_SERVICE_IMAGE_REFERENCE}" || -z "${K3S_VERSION}" ]]; then
+if [[ -z "${HOST_AGENT_BINARY}" ]]; then
+  HOST_AGENT_BINARY="${REPO_ROOT}/services/hostservice/bin/appliance-host-agentd"
+fi
+
+if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${K3S_VERSION}" ]]; then
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
@@ -257,37 +271,41 @@ if [[ ! -f "${UI_IMAGE}" ]]; then
   echo "archive-release-input: UI image not found: ${UI_IMAGE}" >&2
   exit 1
 fi
-if [[ ! -f "${HOST_SERVICE_IMAGE}" ]]; then
-  echo "archive-release-input: host-service image not found: ${HOST_SERVICE_IMAGE}" >&2
+if [[ ! -f "${HOST_AGENT_IMAGE}" ]]; then
+  echo "archive-release-input: host-agent image not found: ${HOST_AGENT_IMAGE}" >&2
   exit 1
 fi
-if [[ ! "${HOST_SERVICE_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-service@sha256:[0-9a-f]{64}$ ]]; then
-  echo "archive-release-input: --host-service-image-reference must be registry.local/appliance-host-service@sha256:<64 lowercase hex>" >&2
+if [[ ! -f "${HOST_AGENT_BINARY}" ]]; then
+  echo "archive-release-input: host-agent binary not found: ${HOST_AGENT_BINARY}" >&2
+  exit 1
+fi
+if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
+  echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
   exit 2
 fi
-python3 - "${HOST_SERVICE_IMAGE}" "${HOST_SERVICE_IMAGE_REFERENCE}" <<'PY'
+python3 - "${HOST_AGENT_IMAGE}" "${HOST_AGENT_IMAGE_REFERENCE}" <<'PY'
 import json, sys, tarfile
 
 archive_path, expected_ref = sys.argv[1], sys.argv[2]
 with tarfile.open(archive_path, "r:*") as tf:
     member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
     if member is None:
-        raise SystemExit("archive-release-input: host-service OCI archive has no index.json")
+        raise SystemExit("archive-release-input: host-agent OCI archive has no index.json")
     if not member.isfile():
-        raise SystemExit("archive-release-input: host-service OCI index.json is not a regular file")
+        raise SystemExit("archive-release-input: host-agent OCI index.json is not a regular file")
     index = json.load(tf.extractfile(member))
 manifests = index.get("manifests") or []
 if len(manifests) != 1:
-    raise SystemExit(f"archive-release-input: host-service OCI index must contain one platform manifest, found {len(manifests)}")
+    raise SystemExit(f"archive-release-input: host-agent OCI index must contain one platform manifest, found {len(manifests)}")
 descriptor = manifests[0]
 annotation = (descriptor.get("annotations") or {}).get("org.opencontainers.image.ref.name")
-if annotation != "registry.local/appliance-host-service:bundled":
-    raise SystemExit(f"archive-release-input: host-service OCI annotation is {annotation!r}, want 'registry.local/appliance-host-service:bundled'")
+if annotation != "registry.local/appliance-host-agent:bundled":
+    raise SystemExit(f"archive-release-input: host-agent OCI annotation is {annotation!r}, want 'registry.local/appliance-host-agent:bundled'")
 digest = descriptor.get("digest") or ""
 expected_digest = expected_ref.rsplit("@", 1)[-1]
 if digest != expected_digest:
     raise SystemExit(
-        f"archive-release-input: host-service imageReference digest {expected_digest} "
+        f"archive-release-input: host-agent imageReference digest {expected_digest} "
         f"does not match archive index.json digest {digest}"
     )
 PY
@@ -522,7 +540,8 @@ copy_dir_or_empty() {
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 UI_BASENAME="$(basename "${UI_IMAGE}")"
-HOST_SERVICE_BASENAME="$(basename "${HOST_SERVICE_IMAGE}")"
+HOST_AGENT_IMAGE_BASENAME="$(basename "${HOST_AGENT_IMAGE}")"
+HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
 ZOT_BASENAME=""
 DNS_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
@@ -535,7 +554,8 @@ CHECKSUMS_BASENAME="checksums.txt"
 
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
-cp "${HOST_SERVICE_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_SERVICE_BASENAME}"
+cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
+cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
 if [[ -n "${ZOT_IMAGE}" ]]; then
   ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
   cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
@@ -620,7 +640,8 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   for file in \
     "${CONTROL_PLANE_BASENAME}" \
     "${UI_BASENAME}" \
-    "${HOST_SERVICE_BASENAME}" \
+    "${HOST_AGENT_IMAGE_BASENAME}" \
+    "${HOST_AGENT_BINARY_BASENAME}" \
     "${CHART_ARCHIVE}" \
     "${ZOT_CHART_ARCHIVE}" \
     "${DNS_CHART_ARCHIVE}" \
@@ -746,7 +767,8 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   "artifacts": {
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
     "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
-    "hostServiceImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_SERVICE_BASENAME}" "${HOST_SERVICE_BASENAME}" "${HOST_SERVICE_IMAGE_REFERENCE}"),
+    "hostAgentImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}"),
+    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}"),
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "zotChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" "${ZOT_CHART_ARCHIVE}")${OPTIONAL_ZOT_IMAGE_JSON},
     "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON},

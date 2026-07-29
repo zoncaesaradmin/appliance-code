@@ -46,12 +46,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
-Common labels for the host-server component.
+Common labels for the host-agent component.
 */}}
-{{- define "appliance-control-plane.hostServiceLabels" -}}
+{{- define "appliance-control-plane.hostAgentLabels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-{{ include "appliance-control-plane.hostServiceSelectorLabels" . }}
-app.kubernetes.io/component: host-server
+{{ include "appliance-control-plane.hostAgentSelectorLabels" . }}
+app.kubernetes.io/component: host-agent
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -73,10 +73,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-Selector labels for the host-server pod.
+Selector labels for the host-agent pod.
 */}}
-{{- define "appliance-control-plane.hostServiceSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "appliance-control-plane.hostServiceName" . }}
+{{- define "appliance-control-plane.hostAgentSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.hostAgentName" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -175,11 +175,11 @@ keeps the common in-chart case aligned with the rendered internal Service name.
 {{- end -}}
 
 {{/*
-Host service Deployment/Service name. Independent of api-server fullname so
-pods are host-server-* rather than api-server-host-service-*.
+Host agent Deployment/Service name. Independent of api-server fullname so
+pods are host-agent-* rather than api-server-host-agent-*.
 */}}
-{{- define "appliance-control-plane.hostServiceName" -}}
-{{- .Values.hostService.nameOverride | default "host-server" | trunc 63 | trimSuffix "-" -}}
+{{- define "appliance-control-plane.hostAgentName" -}}
+{{- .Values.hostAgent.nameOverride | default "host-agent" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*

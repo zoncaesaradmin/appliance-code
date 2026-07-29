@@ -204,7 +204,7 @@ func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
 }
 
 func TestLoadAppliesServiceRegistryJSON(t *testing.T) {
-	registryJSON := `{"services":[{"name":"host-server","capability":"host","baseURL":"http://127.0.0.1:18086","routes":[{"method":"GET","externalPath":"/api/v1/host/info","upstreamPath":"/internal/v1/host/info","permission":"host.read"}]}]}`
+	registryJSON := `{"services":[{"name":"host-agent","capability":"host","baseURL":"http://127.0.0.1:18086","routes":[{"method":"GET","externalPath":"/api/v1/host/info","upstreamPath":"/internal/v1/host/info","permission":"host.read"}]}]}`
 	cfg, err := config.Load([]string{
 		"APPLIANCE_PROFILE=core",
 		"APPLIANCE_SERVICE_REGISTRY_JSON=" + registryJSON,
@@ -216,7 +216,7 @@ func TestLoadAppliesServiceRegistryJSON(t *testing.T) {
 		t.Fatalf("ServiceRegistry = %+v, want one service", cfg.ServiceRegistry.Services)
 	}
 	svc := cfg.ServiceRegistry.Services[0]
-	if svc.Name != "host-server" || svc.Capability != appliance.CapabilityHost || svc.BaseURL != "http://127.0.0.1:18086" {
+	if svc.Name != "host-agent" || svc.Capability != appliance.CapabilityHost || svc.BaseURL != "http://127.0.0.1:18086" {
 		t.Fatalf("service = %+v", svc)
 	}
 }
@@ -240,7 +240,7 @@ func TestValidateRejectsServiceRegistryCapabilityMismatch(t *testing.T) {
 func TestValidateRejectsMalformedServiceRegistryRoute(t *testing.T) {
 	cfg := config.Default()
 	cfg.ServiceRegistry.Services = []serviceregistry.Service{{
-		Name:       "host-server",
+		Name:       "host-agent",
 		Capability: appliance.CapabilityHost,
 		BaseURL:    "http://127.0.0.1:18086",
 		Routes: []serviceregistry.Route{

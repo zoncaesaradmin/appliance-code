@@ -85,14 +85,14 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.dnsReadyPort }}
     {{- end }}
-    {{- if .Values.hostService.enabled }}
+    {{- if .Values.hostAgent.enabled }}
     - to:
         - podSelector:
             matchLabels:
-              {{- include "appliance-control-plane.hostServiceSelectorLabels" . | nindent 14 }}
+              {{- include "appliance-control-plane.hostAgentSelectorLabels" . | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.networkPolicy.hostServicePort }}
+          port: {{ .Values.networkPolicy.hostAgentPort }}
     {{- end }}
     # Cluster DNS is required for Service name lookup (registry, dns, …).
     - to:
@@ -150,19 +150,19 @@ spec:
         - protocol: TCP
           port: 53
 {{- end }}
-{{- if .Values.hostService.enabled }}
+{{- if .Values.hostAgent.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "appliance-control-plane.hostServiceName" . }}-allow
+  name: {{ include "appliance-control-plane.hostAgentName" . }}-allow
   namespace: {{ include "appliance-control-plane.namespace" . }}
   labels:
-    {{- include "appliance-control-plane.hostServiceLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.hostAgentLabels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "appliance-control-plane.hostServiceSelectorLabels" . | nindent 6 }}
+      {{- include "appliance-control-plane.hostAgentSelectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
     - Egress
@@ -173,7 +173,7 @@ spec:
               {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
       ports:
         - protocol: TCP
-          port: {{ .Values.hostService.service.port }}
+          port: {{ .Values.hostAgent.service.port }}
   egress: []
 {{- end }}
 {{- end }}

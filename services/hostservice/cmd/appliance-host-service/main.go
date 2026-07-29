@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"appliance-code/services/hostservice/internal/bridge"
 	"appliance-code/services/hostservice/internal/config"
 	"appliance-code/services/hostservice/internal/httpapi"
 )
@@ -23,7 +24,7 @@ func main() {
 	}
 
 	logger := newLogger(cfg.ApplicationLogPath)
-	handler := httpapi.NewHandler(cfg.HostRoot)
+	handler := httpapi.NewHandler(bridge.NewUnixSocketClient(cfg.SocketPath))
 	server := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,
@@ -37,9 +38,9 @@ func main() {
 		_ = server.Shutdown(ctx)
 	}()
 
-	logger.Info("starting appliance host service", "addr", cfg.Addr, "hostRoot", cfg.HostRoot)
+	logger.Info("starting appliance host agent", "addr", cfg.Addr, "socketPath", cfg.SocketPath)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Error("host service failed", "error", err)
+		logger.Error("host agent failed", "error", err)
 		os.Exit(1)
 	}
 }

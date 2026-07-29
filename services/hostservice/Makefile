@@ -2,7 +2,8 @@ SHELL := /bin/bash
 
 MODULE      := appliance-code/services/hostservice
 BIN_DIR     := bin
-BINARY      := $(BIN_DIR)/appliance-host-service
+BROKER_BINARY := $(BIN_DIR)/appliance-host-agent
+DAEMON_BINARY := $(BIN_DIR)/appliance-host-agentd
 COVER_FILE  := coverage.out
 
 VERSION     ?= $(shell git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)
@@ -13,7 +14,7 @@ LDFLAGS := -X '$(MODULE)/internal/version.Version=$(VERSION)' \
            -X '$(MODULE)/internal/version.Commit=$(COMMIT)' \
            -X '$(MODULE)/internal/version.BuildTime=$(BUILD_TIME)'
 
-SERVICE_IMAGE_NAME ?= appliance-host-service
+SERVICE_IMAGE_NAME ?= appliance-host-agent
 RUNTIME_PROFILE ?= runtime
 SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg VERSION=$(VERSION) \
@@ -27,7 +28,8 @@ include $(CURDIR)/../../build/service-image.mk
 
 build:
 	mkdir -p $(BIN_DIR)
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/appliance-host-service
+	go build -ldflags "$(LDFLAGS)" -o $(BROKER_BINARY) ./cmd/appliance-host-service
+	go build -ldflags "$(LDFLAGS)" -o $(DAEMON_BINARY) ./cmd/appliance-host-agentd
 
 test:
 	go test ./...

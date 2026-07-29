@@ -1,0 +1,104 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"appliance-code/services/hostservice/internal/bridge"
+	"appliance-code/services/hostservice/internal/httpapi"
+)
+
+const (
+	defaultSocketPath = "/run/zon/host-agent/agent.sock"
+	defaultLogPath    = "/data/zon/logs/host-agent/host-agentd.log"
+	sharedFSGID       = 20000
+)
+
+func main() {
+	var socketPath string
+	var logPath string
+	flag.StringVar(&socketPath, "socket-path", defaultSocketPath, "unix socket path for the host agent daemon")
+	flag.StringVar(&logPath, "log-path", defaultLogPath, "host log file path")
+	flag.Parse()
+
+	logger := newLogger(logPath)
+	if err := prepareSocketPath(socketPath); err != nil {
+		logger.Error("prepare socket path failed", "error", err, "socketPath", socketPath)
+		os.Exit(1)
+	}
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		logger.Error("listen failed", "error", err, "socketPath", socketPath)
+		os.Exit(1)
+	}
+	if err := os.Chmod(socketPath, 0o660); err != nil {
+		logger.Error("chmod socket failed", "error", err, "socketPath", socketPath)
+		os.Exit(1)
+	}
+	if err := os.Chown(socketPath, 0, sharedFSGID); err != nil {
+		logger.Error("chown socket failed", "error", err, "socketPath", socketPath)
+		os.Exit(1)
+	}
+	defer func() {
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}()
+
+	server := &http.Server{
+		Handler:           httpapi.NewHandler(bridge.Local{Root: "/"}),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		<-shutdownSignal()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	}()
+
+	logger.Info("starting appliance host agent daemon", "socketPath", socketPath)
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+		logger.Error("host agent daemon failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func prepareSocketPath(socketPath string) error {
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o770); err != nil {
+		return err
+	}
+	if err := os.Chmod(filepath.Dir(socketPath), 0o770); err != nil {
+		return err
+	}
+	if err := os.Chown(filepath.Dir(socketPath), 0, sharedFSGID); err != nil {
+		return err
+	}
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func newLogger(logPath string) *slog.Logger {
+	writers := []io.Writer{os.Stdout}
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err == nil {
+		if file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			writers = append(writers, file)
+		}
+	}
+	return slog.New(slog.NewTextHandler(io.MultiWriter(writers...), nil))
+}
+
+func shutdownSignal() <-chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
+	return ch
+}

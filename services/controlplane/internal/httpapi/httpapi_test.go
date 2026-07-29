@@ -65,7 +65,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	t.Cleanup(hostUpstream.Close)
 	cfg.ServiceRegistry = serviceregistry.Registry{
 		Services: []serviceregistry.Service{{
-			Name:       "host-server",
+			Name:       "host-agent",
 			Capability: appliance.CapabilityHost,
 			BaseURL:    hostUpstream.URL,
 			Routes: []serviceregistry.Route{

@@ -41,6 +41,15 @@ These rules apply to all implementation and documentation in this repository.
 - Installer, health APIs, support reports, and diagnostics must include storage ownership and writeability checks for appliance-owned writable paths, including service log directories and builder workspace storage.
 - Test fresh install, upgrade, rollback, backup restore, and machine migration paths when changing UID/GID, storage, PVC, hostPath, or ownership behavior.
 
+## Host Service Boundary
+
+- Treat the host service as a host-observability and host-control bridge, not as a container-local inspector.
+- New host-service collection and execution logic must execute on the host OS context. The K3s pod may expose the API, enforce service-local policy, and forward requests, but it must not become the source of truth for host facts or the place where host-management commands actually run.
+- Do not add new host-service features by scraping additional host files from a mounted host root as the long-term mechanism. Mounted host files may be used only for narrowly documented bootstrap or compatibility cases while the host-execution bridge is being established.
+- Prefer an explicit host execution bridge such as a pinned host-side agent or another documented host-context mechanism over ad-hoc per-field inspection inside the container.
+- Avoid generic unrestricted shell tunneling from the pod into the host. Prefer a small allowlisted host-operation API with structured request/response types, auditable logging, and explicit timeout/error handling.
+- Any change to the host-service execution model must document the security boundary, required privileges, lifecycle ownership, upgrade path, failure modes, and how the control plane and appliance API remain the only externally exposed entry points.
+
 ## Local Verification Discipline
 
 - Any time you edit this repository, run `make verify` in this repository before considering the work complete.

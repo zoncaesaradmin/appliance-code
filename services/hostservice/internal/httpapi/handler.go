@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"strings"
 
-	"appliance-code/services/hostservice/internal/host"
+	"appliance-code/services/hostservice/internal/bridge"
 )
 
 type Handler struct {
-	hostRoot string
+	bridge bridge.Bridge
 }
 
-func NewHandler(hostRoot string) http.Handler {
-	handler := &Handler{hostRoot: hostRoot}
+func NewHandler(hostBridge bridge.Bridge) http.Handler {
+	handler := &Handler{bridge: hostBridge}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handler.healthz)
 	mux.HandleFunc("GET /internal/v1/host/info", handler.info)
@@ -22,15 +22,19 @@ func NewHandler(hostRoot string) http.Handler {
 	return mux
 }
 
-func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {
+	if err := h.bridge.Ping(r.Context()); err != nil {
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"service": "host-server",
+		"service": "host-agent",
 	})
 }
 
-func (h *Handler) info(w http.ResponseWriter, _ *http.Request) {
-	info, err := host.CollectInfo(h.hostRoot)
+func (h *Handler) info(w http.ResponseWriter, r *http.Request) {
+	info, err := h.bridge.Info(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -38,8 +42,8 @@ func (h *Handler) info(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, info)
 }
 
-func (h *Handler) stats(w http.ResponseWriter, _ *http.Request) {
-	stats, err := host.CollectStats(h.hostRoot)
+func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.bridge.Stats(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -47,8 +51,12 @@ func (h *Handler) stats(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, stats)
 }
 
-func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
-	health := host.CollectHealth(h.hostRoot)
+func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
+	health, err := h.bridge.Health(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	status := http.StatusOK
 	if !strings.EqualFold(health.Status, "ok") {
 		status = http.StatusServiceUnavailable

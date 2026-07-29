@@ -41,9 +41,9 @@ type Health struct {
 }
 
 func CollectInfo(root string) (Info, error) {
-	hostname, _ := readTrimmed(filepath.Join(root, "etc/hostname"))
+	hostname := hostHostname(root)
 	osName := operatingSystem(root)
-	kernelVersion, _ := firstField(filepath.Join(root, "proc/version"))
+	kernelVersion := hostKernelVersion(root)
 	containerHostname, _ := os.Hostname()
 	return Info{
 		Hostname:          hostname,
@@ -52,6 +52,24 @@ func CollectInfo(root string) (Info, error) {
 		Architecture:      runtime.GOARCH,
 		ContainerHostname: containerHostname,
 	}, nil
+}
+
+func hostHostname(root string) string {
+	if hostname, err := readTrimmed(filepath.Join(root, "proc/sys/kernel/hostname")); err == nil && hostname != "" {
+		return hostname
+	}
+	hostname, _ := readTrimmed(filepath.Join(root, "etc/hostname"))
+	return hostname
+}
+
+func hostKernelVersion(root string) string {
+	if version, err := readTrimmed(filepath.Join(root, "proc/sys/kernel/osrelease")); err == nil && version != "" {
+		return version
+	}
+	if version, err := nthField(filepath.Join(root, "proc/version"), 3); err == nil {
+		return version
+	}
+	return ""
 }
 
 func CollectStats(root string) (Stats, error) {
@@ -154,15 +172,19 @@ func readTrimmed(path string) (string, error) {
 }
 
 func firstField(path string) (string, error) {
+	return nthField(path, 1)
+}
+
+func nthField(path string, index int) (string, error) {
 	text, err := readTrimmed(path)
 	if err != nil {
 		return "", err
 	}
 	fields := strings.Fields(text)
-	if len(fields) == 0 {
-		return "", fmt.Errorf("no fields in %s", path)
+	if index <= 0 || len(fields) < index {
+		return "", fmt.Errorf("field %d missing in %s", index, path)
 	}
-	return fields[0], nil
+	return fields[index-1], nil
 }
 
 func readUptime(path string) (float64, error) {

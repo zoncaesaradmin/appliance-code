@@ -1,17 +1,17 @@
-{{- if .Values.hostService.enabled }}
+{{- if .Values.hostAgent.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "appliance-control-plane.hostServiceName" . }}
+  name: {{ include "appliance-control-plane.hostAgentName" . }}
   namespace: {{ include "appliance-control-plane.namespace" . }}
   labels:
-    {{- include "appliance-control-plane.hostServiceLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.hostAgentLabels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    {{- include "appliance-control-plane.hostServiceSelectorLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.hostAgentSelectorLabels" . | nindent 4 }}
   ports:
     - name: http
-      port: {{ .Values.hostService.service.port }}
+      port: {{ .Values.hostAgent.service.port }}
       targetPort: http
 {{- end }}

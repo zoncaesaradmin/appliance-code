@@ -10,7 +10,7 @@ RUN GOWORK=off CGO_ENABLED=0 go build \
     -ldflags "-X appliance-code/services/hostservice/internal/version.Version=${VERSION} \
               -X appliance-code/services/hostservice/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/hostservice/internal/version.BuildTime=${BUILD_TIME}" \
-    -o /out/appliance-host-service ./cmd/appliance-host-service
+    -o /out/appliance-host-agent ./cmd/appliance-host-service
 
 ARG RUNTIME_PROFILE=runtime
 FROM alpine:3.24.1
@@ -23,8 +23,8 @@ RUN set -eux; \
       echo "unsupported RUNTIME_PROFILE=${RUNTIME_PROFILE}" >&2; \
       exit 1; \
     fi; \
-    addgroup -S -g 10005 appliance-host-service; \
-    adduser -S -D -H -u 10005 -G appliance-host-service appliance-host-service
-COPY --from=build /out/appliance-host-service /appliance-host-service
+    addgroup -S -g 10005 appliance-host-agent; \
+    adduser -S -D -H -u 10005 -G appliance-host-agent appliance-host-agent
+COPY --from=build /out/appliance-host-agent /appliance-host-agent
 USER 10005:10005
-ENTRYPOINT ["/appliance-host-service"]
+ENTRYPOINT ["/appliance-host-agent"]

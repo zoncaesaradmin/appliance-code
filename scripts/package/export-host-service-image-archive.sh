@@ -5,12 +5,12 @@ usage() {
   cat <<'EOF'
 usage: export-host-service-image-archive.sh --out-file PATH [options]
 
-Builds the appliance host service container image into local container storage
+Builds the appliance host agent container image into local container storage
 and exports it as an OCI archive for release-input packaging.
 
-The archive annotation is registry.local/appliance-host-service:bundled and the
+The archive annotation is registry.local/appliance-host-agent:bundled and the
 emitted workload reference is
-registry.local/appliance-host-service@sha256:<archive index digest>.
+registry.local/appliance-host-agent@sha256:<archive index digest>.
 
 Options:
   --out-file PATH           Output OCI archive tar path. Required.
@@ -18,7 +18,7 @@ Options:
   --image-tag VERSION       Local image tag to build/export.
                             Default: the appliance-code repo `git describe`
                             version for this checkout.
-  --image-name NAME         Local image name. Default: appliance-host-service.
+  --image-name NAME         Local image name. Default: appliance-host-agent.
   --help                    Show this help.
 EOF
 }
@@ -31,7 +31,7 @@ VERIFY_SCRIPT="${SCRIPT_DIR}/verify-oci-archive-build-metadata.py"
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
 IMAGE_TAG=""
-IMAGE_NAME="appliance-host-service"
+IMAGE_NAME="appliance-host-agent"
 LOCAL_IMAGE_PREFIX="localhost"
 BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
@@ -100,7 +100,7 @@ mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-make -C "${SERVICE_DIR}" image-local \
+make -C "${SERVICE_DIR}" build image-local \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   VERSION="${IMAGE_TAG}" \
@@ -115,7 +115,7 @@ LAYOUT="${TMP_DIR}/oci"
 # Re-export under the canonical :bundled annotation so install
 # ValidateOCIArchiveReference / ctr import match the OCI contract.
 skopeo copy --override-os linux --override-arch amd64 \
-  "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/appliance-host-service:bundled"
+  "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/appliance-host-agent:bundled"
 
 DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'
 import json, sys
@@ -124,15 +124,15 @@ manifests = index.get("manifests", [])
 if len(manifests) != 1:
     raise SystemExit(f"expected one platform manifest in OCI index, found {len(manifests)}")
 descriptor = manifests[0]
-if descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name") != "registry.local/appliance-host-service:bundled":
-    raise SystemExit("OCI archive is missing registry.local/appliance-host-service:bundled annotation")
+if descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name") != "registry.local/appliance-host-agent:bundled":
+    raise SystemExit("OCI archive is missing registry.local/appliance-host-agent:bundled annotation")
 digest = descriptor.get("digest", "")
 if not digest.startswith("sha256:") or len(digest) != 71:
     raise SystemExit(f"invalid platform manifest digest: {digest!r}")
 print(digest)
 PY
 )"
-REFERENCE="registry.local/appliance-host-service@${DIGEST}"
+REFERENCE="registry.local/appliance-host-agent@${DIGEST}"
 
 rm -f "${OUT_FILE}"
 # Pack explicit OCI layout members so the tar has index.json (not ./index.json).
@@ -140,17 +140,17 @@ tar -C "${LAYOUT}" -cf "${OUT_FILE}" oci-layout index.json blobs
 
 python3 "${VERIFY_SCRIPT}" \
   --archive "${OUT_FILE}" \
-  --binary-path "appliance-host-service" \
+  --binary-path "appliance-host-agent" \
   --expect-version "${IMAGE_TAG}" \
   --expect-commit "${COMMIT}" \
   --expect-build-time "${BUILD_TIME}" \
-  --label "host-service"
+  --label "host-agent"
 
 if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
   mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"
   printf '%s\n' "${REFERENCE}" >"${REFERENCE_OUT_FILE}"
 fi
 
-echo "created host service image archive: ${OUT_FILE}"
-echo "archive annotation: registry.local/appliance-host-service:bundled"
+echo "created host agent image archive: ${OUT_FILE}"
+echo "archive annotation: registry.local/appliance-host-agent:bundled"
 echo "image reference: ${REFERENCE}"
