@@ -27,6 +27,31 @@ type Route struct {
 	Permission   string `json:"permission"`
 }
 
+func RegistryFromModules(modules []appliance.ModuleDescriptor) Registry {
+	registry := Registry{Services: make([]Service, 0, len(modules))}
+	for _, module := range modules {
+		if strings.TrimSpace(module.BaseURL) == "" || len(module.Routes) == 0 {
+			continue
+		}
+		service := Service{
+			Name:       strings.TrimSpace(module.Name),
+			Capability: module.PrimaryCapability(),
+			BaseURL:    strings.TrimSpace(module.BaseURL),
+			Routes:     make([]Route, 0, len(module.Routes)),
+		}
+		for _, route := range module.Routes {
+			service.Routes = append(service.Routes, Route{
+				Method:       strings.ToUpper(strings.TrimSpace(route.Method)),
+				ExternalPath: strings.TrimSpace(route.ExternalPath),
+				UpstreamPath: strings.TrimSpace(route.UpstreamPath),
+				Permission:   strings.TrimSpace(route.Permission),
+			})
+		}
+		registry.Services = append(registry.Services, service)
+	}
+	return registry
+}
+
 func (r Registry) Validate(enabled appliance.Set) error {
 	seen := make(map[string]string)
 	var errs []string

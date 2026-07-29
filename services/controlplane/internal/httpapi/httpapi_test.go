@@ -63,22 +63,17 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		}
 	}))
 	t.Cleanup(hostUpstream.Close)
-	cfg.ServiceRegistry = serviceregistry.Registry{
-		Services: []serviceregistry.Service{{
-			Name:       "host-agent",
-			Capability: appliance.CapabilityHost,
-			BaseURL:    hostUpstream.URL,
-			Routes: []serviceregistry.Route{
-				{Method: http.MethodGet, ExternalPath: "/api/v1/host/info", UpstreamPath: "/internal/v1/host/info", Permission: roles.PermHostRead},
-				{Method: http.MethodGet, ExternalPath: "/api/v1/host/stats", UpstreamPath: "/internal/v1/host/stats", Permission: roles.PermHostRead},
-				{Method: http.MethodGet, ExternalPath: "/api/v1/host/health", UpstreamPath: "/internal/v1/host/health", Permission: roles.PermHostRead},
-			},
-		}},
-	}
 	resolved, err := appliance.ResolveProfile(string(profile))
 	if err != nil {
 		t.Fatalf("ResolveProfile(%s): %v", profile, err)
 	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	for i := range modules {
+		if modules[i].Name == "host-agent" {
+			modules[i].BaseURL = hostUpstream.URL
+		}
+	}
+	cfg.ServiceRegistry = serviceregistry.RegistryFromModules(modules)
 	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
 		cfg.BuildCatalog = catalog
 		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

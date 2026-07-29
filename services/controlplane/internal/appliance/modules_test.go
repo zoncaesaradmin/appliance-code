@@ -1,0 +1,62 @@
+package appliance_test
+
+import (
+	"testing"
+
+	"appliance-code/services/controlplane/internal/appliance"
+)
+
+func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("core")
+	if err != nil {
+		t.Fatalf("ResolveProfile(core): %v", err)
+	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	if len(modules) != 1 {
+		t.Fatalf("ResolveModules(core) returned %d modules, want 1", len(modules))
+	}
+	module := modules[0]
+	if module.Name != "host-agent" {
+		t.Fatalf("module.Name = %q, want host-agent", module.Name)
+	}
+	if module.PrimaryCapability() != appliance.CapabilityHost {
+		t.Fatalf("PrimaryCapability = %q, want %q", module.PrimaryCapability(), appliance.CapabilityHost)
+	}
+	if len(module.Routes) != 3 {
+		t.Fatalf("len(module.Routes) = %d, want 3", len(module.Routes))
+	}
+}
+
+func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("core")
+	if err != nil {
+		t.Fatalf("ResolveProfile(core): %v", err)
+	}
+	modules := appliance.ResolveModules(resolved, denyAllEntitlements{}, appliance.BuiltInModuleCatalog())
+	if len(modules) != 0 {
+		t.Fatalf("ResolveModules(core) with deny-all entitlements returned %d modules, want 0", len(modules))
+	}
+}
+
+func TestResolveModulesSkipsHostAgentWithoutHostCapability(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("builder")
+	if err != nil {
+		t.Fatalf("ResolveProfile(builder): %v", err)
+	}
+	hostless := appliance.ModuleDescriptor{
+		Name:                 "host-agent",
+		RequiredCapabilities: []appliance.Capability{"missing"},
+		BaseURL:              "http://example.invalid",
+		Routes:               []appliance.ModuleRoute{{Method: "GET", ExternalPath: "/api/v1/host/info", UpstreamPath: "/internal/v1/host/info", Permission: "host.read"}},
+	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, []appliance.ModuleDescriptor{hostless})
+	if len(modules) != 0 {
+		t.Fatalf("ResolveModules(builder) with missing capability returned %d modules, want 0", len(modules))
+	}
+}
+
+type denyAllEntitlements struct{}
+
+func (denyAllEntitlements) IsEntitled(appliance.ModuleDescriptor, appliance.EntitlementContext) bool {
+	return false
+}
