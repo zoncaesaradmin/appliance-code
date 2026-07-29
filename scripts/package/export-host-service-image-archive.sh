@@ -6,15 +6,20 @@ usage() {
 usage: export-host-service-image-archive.sh --out-file PATH [options]
 
 Builds the appliance host service container image into local container storage
-and exports it as an OCI archive tarball for release-input packaging.
+and exports it as an OCI archive for release-input packaging.
+
+The archive annotation is registry.local/appliance-host-service:bundled and the
+emitted workload reference is
+registry.local/appliance-host-service@sha256:<archive index digest>.
 
 Options:
-  --out-file PATH        Output OCI archive tar path. Required.
-  --image-tag VERSION    Local image tag to build/export.
-                         Default: the appliance-code repo `git describe`
-                         version for this checkout.
-  --image-name NAME      Local image name. Default: appliance-host-service.
-  --help                 Show this help.
+  --out-file PATH           Output OCI archive tar path. Required.
+  --reference-out-file PATH Write the canonical digest reference to PATH.
+  --image-tag VERSION       Local image tag to build/export.
+                            Default: the appliance-code repo `git describe`
+                            version for this checkout.
+  --image-name NAME         Local image name. Default: appliance-host-service.
+  --help                    Show this help.
 EOF
 }
 
@@ -24,6 +29,7 @@ SERVICE_DIR="${REPO_ROOT}/services/hostservice"
 VERIFY_SCRIPT="${SCRIPT_DIR}/verify-oci-archive-build-metadata.py"
 
 OUT_FILE=""
+REFERENCE_OUT_FILE=""
 IMAGE_TAG=""
 IMAGE_NAME="appliance-host-service"
 LOCAL_IMAGE_PREFIX="localhost"
@@ -37,6 +43,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --out-file)
       OUT_FILE="${2:-}"
+      shift 2
+      ;;
+    --reference-out-file)
+      REFERENCE_OUT_FILE="${2:-}"
       shift 2
       ;;
     --image-tag)
@@ -65,10 +75,12 @@ if [[ -z "${OUT_FILE}" ]]; then
   exit 2
 fi
 
-if ! command -v skopeo >/dev/null 2>&1; then
-  echo "export-host-service-image-archive: skopeo is required on PATH" >&2
-  exit 1
-fi
+for tool in skopeo python3 tar; do
+  command -v "${tool}" >/dev/null 2>&1 || {
+    echo "export-host-service-image-archive: ${tool} is required on PATH" >&2
+    exit 1
+  }
+done
 
 if [[ -z "${IMAGE_TAG}" ]]; then
   IMAGE_TAG="$(git -C "${REPO_ROOT}" describe --tags --always --dirty 2>/dev/null || true)"
@@ -95,8 +107,37 @@ make -C "${SERVICE_DIR}" image-local \
   COMMIT="${COMMIT}" \
   BUILD_TIME="${BUILD_TIME}" \
   BUILD_NO_CACHE=1
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+LAYOUT="${TMP_DIR}/oci"
+
+# Re-export under the canonical :bundled annotation so install
+# ValidateOCIArchiveReference / ctr import match the OCI contract.
+skopeo copy --override-os linux --override-arch amd64 \
+  "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/appliance-host-service:bundled"
+
+DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'
+import json, sys
+index = json.load(open(sys.argv[1], encoding="utf-8"))
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"expected one platform manifest in OCI index, found {len(manifests)}")
+descriptor = manifests[0]
+if descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name") != "registry.local/appliance-host-service:bundled":
+    raise SystemExit("OCI archive is missing registry.local/appliance-host-service:bundled annotation")
+digest = descriptor.get("digest", "")
+if not digest.startswith("sha256:") or len(digest) != 71:
+    raise SystemExit(f"invalid platform manifest digest: {digest!r}")
+print(digest)
+PY
+)"
+REFERENCE="registry.local/appliance-host-service@${DIGEST}"
+
 rm -f "${OUT_FILE}"
-skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
+# Pack explicit OCI layout members so the tar has index.json (not ./index.json).
+tar -C "${LAYOUT}" -cf "${OUT_FILE}" oci-layout index.json blobs
+
 python3 "${VERIFY_SCRIPT}" \
   --archive "${OUT_FILE}" \
   --binary-path "appliance-host-service" \
@@ -105,5 +146,11 @@ python3 "${VERIFY_SCRIPT}" \
   --expect-build-time "${BUILD_TIME}" \
   --label "host-service"
 
-echo "created host service image archive:"
-echo "  ${OUT_FILE}"
+if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
+  mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"
+  printf '%s\n' "${REFERENCE}" >"${REFERENCE_OUT_FILE}"
+fi
+
+echo "created host service image archive: ${OUT_FILE}"
+echo "archive annotation: registry.local/appliance-host-service:bundled"
+echo "image reference: ${REFERENCE}"

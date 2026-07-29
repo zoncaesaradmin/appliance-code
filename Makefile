@@ -225,9 +225,11 @@ package-ui-image-archive:
 ## packaging.
 package-host-service-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-host-service-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
-	mkdir -p "$$(dirname "$$out_file")"; \
+	reference_out_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	mkdir -p "$$(dirname "$$out_file")" "$$(dirname "$$reference_out_file")"; \
 	bash ./scripts/package/export-host-service-image-archive.sh \
-		--out-file "$$out_file"
+		--out-file "$$out_file" \
+		--reference-out-file "$$reference_out_file"
 
 ## package-argo-controller-image-archive: always build and export the
 ## appliance-owned Argo workflow-controller wrapper image as an OCI archive
@@ -276,6 +278,7 @@ package-release-input-tar:
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	ui_image="$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	host_service_image="$(CURDIR)/.run/appliance-host-service-$(CONTROL_PLANE_CODE_VERSION).tar"; \
+	host_service_reference_file="$(CURDIR)/.run/appliance-host-service-$(CONTROL_PLANE_CODE_VERSION).reference"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
 	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
 	zot_version="$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
@@ -286,11 +289,13 @@ package-release-input-tar:
 	dns_reference_file="$(CURDIR)/.run/coredns-$$dns_version.reference"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
-	host_service_image_ref="registry.local/appliance-host-service"; \
 	argo_controller_image_ref="localhost/appliance-argo-controller:$$argo_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
-	$(MAKE) --no-print-directory package-host-service-image-archive OUT_FILE="$$host_service_image"; \
+	$(MAKE) --no-print-directory package-host-service-image-archive \
+		OUT_FILE="$$host_service_image" \
+		REFERENCE_OUT_FILE="$$host_service_reference_file"; \
+	host_service_image_ref="$$(tr -d '\r\n' < "$$host_service_reference_file")"; \
 	if [ -n "$$argo_version" ] && [ -z "$${ARGO_CONTROLLER_IMAGE:-}" ]; then \
 		$(MAKE) --no-print-directory package-argo-controller-image-archive \
 			OUT_FILE="$$argo_controller_image" \
@@ -323,8 +328,8 @@ package-release-input-tar:
 		--control-plane-image-reference "$$control_plane_image_ref" \
 		--ui-image "$$ui_image" \
 		--ui-image-reference "$$ui_image_ref" \
-		--extra-oci-image "$$host_service_image" \
-		--extra-oci-image-reference "$$host_service_image_ref" \
+		--host-service-image "$$host_service_image" \
+		--host-service-image-reference "$$host_service_image_ref" \
 		--zot-image "$$zot_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
 		--zot-version "$$zot_version" \

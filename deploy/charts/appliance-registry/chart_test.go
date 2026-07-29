@@ -114,6 +114,19 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 	if output, err := exec.Command("tar", "-cf", zotArchive, "-C", zotLayout, ".").CombinedOutput(); err != nil {
 		t.Fatalf("create Zot archive: %v\n%s", err, output)
 	}
+	hostDigest := strings.Repeat("d", 64)
+	hostLayout := filepath.Join(tmp, "host-layout")
+	if err := os.Mkdir(hostLayout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	hostIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + hostDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/appliance-host-service:bundled"}}]}`
+	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hostArchive := filepath.Join(tmp, "host-service.tar")
+	if output, err := exec.Command("tar", "-cf", hostArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create host-service archive: %v\n%s", err, output)
+	}
 	crds := filepath.Join(tmp, "crds")
 	if err := os.Mkdir(crds, 0o700); err != nil {
 		t.Fatal(err)
@@ -126,6 +139,8 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 		"--out-file", out, "--code-version", "test", "--k3s-version", "v1.33.0+k3s1",
 		"--control-plane-image", filepath.Join(tmp, "control-plane.tar"),
 		"--ui-image", filepath.Join(tmp, "ui.tar"),
+		"--host-service-image", hostArchive,
+		"--host-service-image-reference", "registry.local/appliance-host-service@sha256:"+hostDigest,
 		"--zot-image", zotArchive,
 		"--zot-image-reference", "registry.local/zot@sha256:"+digest,
 		"--zot-version", "2.1.8", "--argo-crds-dir", crds)
@@ -150,7 +165,7 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatalf("decode release-input.json: %v\n%s", err, raw)
 	}
-	for _, key := range []string{"zotImage", "zotChart"} {
+	for _, key := range []string{"hostServiceImage", "zotImage", "zotChart"} {
 		if len(manifest.Artifacts[key]) == 0 {
 			t.Errorf("missing first-class %s artifact", key)
 		}
@@ -167,9 +182,24 @@ func TestReleaseInputRejectsUnpairedZotImage(t *testing.T) {
 	if err := os.WriteFile(zot, []byte("zot"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	hostDigest := strings.Repeat("d", 64)
+	hostLayout := filepath.Join(tmp, "host-layout")
+	if err := os.Mkdir(hostLayout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	hostIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + hostDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/appliance-host-service:bundled"}}]}`
+	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hostArchive := filepath.Join(tmp, "host-service.tar")
+	if output, err := exec.Command("tar", "-cf", hostArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create host-service archive: %v\n%s", err, output)
+	}
 	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "test",
 		"--k3s-version", "v1", "--control-plane-image", zot, "--ui-image", zot,
+		"--host-service-image", hostArchive,
+		"--host-service-image-reference", "registry.local/appliance-host-service@sha256:"+hostDigest,
 		"--zot-image", zot).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
 		t.Fatalf("unpaired Zot image was not rejected: err=%v output=%s", err, out)
