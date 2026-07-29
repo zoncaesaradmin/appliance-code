@@ -25,7 +25,7 @@ func NewHandler(hostRoot string) http.Handler {
 func (h *Handler) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
-		"service": "appliance-host-service",
+		"service": "host-server",
 	})
 }
 

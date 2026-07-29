@@ -16,7 +16,7 @@ func Default() Config {
 	return Config{
 		Addr:               "127.0.0.1:18086",
 		HostRoot:           "/",
-		ApplicationLogPath: "/data/zon/logs/host-service/application.log",
+		ApplicationLogPath: "/data/zon/logs/host-server/application.log",
 	}
 }
 

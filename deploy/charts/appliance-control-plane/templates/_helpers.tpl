@@ -46,12 +46,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
-Common labels for the host-service component.
+Common labels for the host-server component.
 */}}
 {{- define "appliance-control-plane.hostServiceLabels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{ include "appliance-control-plane.hostServiceSelectorLabels" . }}
-app.kubernetes.io/component: host-service
+app.kubernetes.io/component: host-server
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -73,7 +73,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-Selector labels for the host-service pod.
+Selector labels for the host-server pod.
 */}}
 {{- define "appliance-control-plane.hostServiceSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.hostServiceName" . }}
@@ -175,10 +175,11 @@ keeps the common in-chart case aligned with the rendered internal Service name.
 {{- end -}}
 
 {{/*
-Host service Deployment/Service name.
+Host service Deployment/Service name. Independent of api-server fullname so
+pods are host-server-* rather than api-server-host-service-*.
 */}}
 {{- define "appliance-control-plane.hostServiceName" -}}
-{{- printf "%s-host-service" (include "appliance-control-plane.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- .Values.hostService.nameOverride | default "host-server" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*

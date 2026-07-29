@@ -95,7 +95,7 @@ config:
   # while the LAN DNS release is missing.
   dnsReadyURL: ""
   # Bundled manifest describing in-cluster services whose selected routes are
-  # exposed through the appliance API. zonctl injects host-service here today;
+  # exposed through the appliance API. zonctl injects host-server here today;
   # post-install addon lifecycle is intentionally a later step.
   serviceRegistry:
     services: []
@@ -199,6 +199,8 @@ containerSecurityContext:
 
 hostService:
   enabled: true
+  # K8s resource basename (Deployment/Service). Independent of api-server.
+  nameOverride: ""
   image:
     reference: registry.local/appliance-host-service:dev
     pullPolicy: IfNotPresent
@@ -207,7 +209,7 @@ hostService:
   hostRootPath: /
   hostRootMountPath: /host
   logs:
-    hostPath: /data/zon/logs/host-service
+    hostPath: /data/zon/logs/host-server
   resources:
     requests:
       cpu: 25m
