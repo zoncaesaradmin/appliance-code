@@ -25,6 +25,7 @@ type Capability string
 
 const (
 	CapabilityBase      Capability = "base"
+	CapabilityHost      Capability = "host"
 	CapabilityWorkflows Capability = "workflows"
 	CapabilityBuild     Capability = "build"
 	CapabilityArtifact  Capability = "artifact"
@@ -37,6 +38,7 @@ type capabilityDefinition struct {
 
 var capabilityCatalog = map[Capability]capabilityDefinition{
 	CapabilityBase:      {},
+	CapabilityHost:      {Dependencies: []Capability{CapabilityBase}},
 	CapabilityWorkflows: {Dependencies: []Capability{CapabilityBase}},
 	CapabilityBuild:     {Dependencies: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityArtifact}},
 	CapabilityArtifact:  {Dependencies: []Capability{CapabilityBase}},
@@ -44,16 +46,16 @@ var capabilityCatalog = map[Capability]capabilityDefinition{
 }
 
 var profileCatalog = map[Profile][]Capability{
-	ProfileCore:          {CapabilityBase, CapabilityWorkflows},
-	ProfileBuilder:       {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact},
-	ProfileStorage:       {CapabilityBase, CapabilityArtifact},
-	ProfileLANDNS:        {CapabilityBase, CapabilityDNS},
-	ProfileStorageLANDNS: {CapabilityBase, CapabilityArtifact, CapabilityDNS},
+	ProfileCore:          {CapabilityBase, CapabilityHost, CapabilityWorkflows},
+	ProfileBuilder:       {CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact},
+	ProfileStorage:       {CapabilityBase, CapabilityHost, CapabilityArtifact},
+	ProfileLANDNS:        {CapabilityBase, CapabilityHost, CapabilityDNS},
+	ProfileStorageLANDNS: {CapabilityBase, CapabilityHost, CapabilityArtifact, CapabilityDNS},
 	// builder ∪ landns (registry/artifact already comes with builder).
-	ProfileBuilderLANDNS: {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
+	ProfileBuilderLANDNS: {CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
 	// builder ∪ storage ∪ registry ∪ dns — same capability union as
 	// builder-landns (storage/registry add no capabilities beyond builder).
-	ProfileBuilderStorageLANDNS: {CapabilityBase, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
+	ProfileBuilderStorageLANDNS: {CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
 }
 
 // Set is the resolved enabled capability set for one appliance instance.

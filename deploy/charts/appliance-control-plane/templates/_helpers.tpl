@@ -46,6 +46,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
+Common labels for the host-service component.
+*/}}
+{{- define "appliance-control-plane.hostServiceLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "appliance-control-plane.hostServiceSelectorLabels" . }}
+app.kubernetes.io/component: host-service
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
 Selector labels.
 */}}
 {{- define "appliance-control-plane.selectorLabels" -}}
@@ -58,6 +69,14 @@ Selector labels for the UI pod.
 */}}
 {{- define "appliance-control-plane.uiSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.uiServiceName" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+Selector labels for the host-service pod.
+*/}}
+{{- define "appliance-control-plane.hostServiceSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.hostServiceName" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -153,6 +172,13 @@ keeps the common in-chart case aligned with the rendered internal Service name.
 {{- else -}}
 {{- printf "http://%s-internal:%d" (include "appliance-control-plane.fullname" .) (.Values.service.internalPort | int) -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Host service Deployment/Service name.
+*/}}
+{{- define "appliance-control-plane.hostServiceName" -}}
+{{- printf "%s-host-service" (include "appliance-control-plane.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*

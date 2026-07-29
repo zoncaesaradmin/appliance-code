@@ -33,6 +33,7 @@ type Deps struct {
 	BuildsH          *BuildHandlers
 	DevflowsH        *DeveloperWorkflowHandlers
 	MCPHandler       http.Handler
+	ProxiedServices  []ServiceProxyRegistration
 }
 
 type publicRoute struct {
@@ -70,7 +71,7 @@ func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
 		},
 	}
 
-	for _, route := range publicRoutes() {
+	for _, route := range append(publicRoutes(), proxiedServiceRoutes(deps.ProxiedServices)...) {
 		if !capabilities.Enabled(route.capability) {
 			continue
 		}

@@ -19,6 +19,7 @@ import (
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/mcp"
 	"appliance-code/services/controlplane/internal/roles"
+	"appliance-code/services/controlplane/internal/serviceregistry"
 	"appliance-code/services/controlplane/internal/storage"
 )
 
@@ -49,6 +50,31 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	cfg := config.Default()
 	cfg.DataDir = t.TempDir()
 	cfg.ApplianceProfile = string(profile)
+	hostUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal/v1/host/info":
+			_ = json.NewEncoder(w).Encode(map[string]any{"hostname": "appliance-01", "operatingSystem": "Ubuntu 24.04.2 LTS"})
+		case "/internal/v1/host/stats":
+			_ = json.NewEncoder(w).Encode(map[string]any{"uptimeSeconds": 123.45, "logicalCpuCount": 8})
+		case "/internal/v1/host/health":
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "hostRootAccessible": true})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(hostUpstream.Close)
+	cfg.ServiceRegistry = serviceregistry.Registry{
+		Services: []serviceregistry.Service{{
+			Name:       "host-service",
+			Capability: appliance.CapabilityHost,
+			BaseURL:    hostUpstream.URL,
+			Routes: []serviceregistry.Route{
+				{Method: http.MethodGet, ExternalPath: "/api/v1/host/info", UpstreamPath: "/internal/v1/host/info", Permission: roles.PermHostRead},
+				{Method: http.MethodGet, ExternalPath: "/api/v1/host/stats", UpstreamPath: "/internal/v1/host/stats", Permission: roles.PermHostRead},
+				{Method: http.MethodGet, ExternalPath: "/api/v1/host/health", UpstreamPath: "/internal/v1/host/health", Permission: roles.PermHostRead},
+			},
+		}},
+	}
 	resolved, err := appliance.ResolveProfile(string(profile))
 	if err != nil {
 		t.Fatalf("ResolveProfile(%s): %v", profile, err)
@@ -108,10 +134,11 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,
 		},
-		UsersH:         &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
-		RolesH:         &httpapi.RoleHandlers{Roles: services.Roles},
-		TokensH:        &httpapi.TokenHandlers{Tokens: services.Tokens},
-		LANDNSPublishH: &httpapi.LANDNSPublishHandlers{},
+		UsersH:          &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
+		RolesH:          &httpapi.RoleHandlers{Roles: services.Roles},
+		TokensH:         &httpapi.TokenHandlers{Tokens: services.Tokens},
+		LANDNSPublishH:  &httpapi.LANDNSPublishHandlers{},
+		ProxiedServices: httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry),
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 	}
@@ -221,13 +248,13 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		profile appliance.Profile
 		want    []string
 	}{
-		{appliance.ProfileCore, []string{"base", "workflows"}},
-		{appliance.ProfileBuilder, []string{"artifact", "base", "build", "workflows"}},
-		{appliance.ProfileStorage, []string{"artifact", "base"}},
-		{appliance.ProfileLANDNS, []string{"base", "dns"}},
-		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns"}},
-		{appliance.ProfileBuilderLANDNS, []string{"artifact", "base", "build", "dns", "workflows"}},
-		{appliance.ProfileBuilderStorageLANDNS, []string{"artifact", "base", "build", "dns", "workflows"}},
+		{appliance.ProfileCore, []string{"base", "host", "workflows"}},
+		{appliance.ProfileBuilder, []string{"artifact", "base", "build", "host", "workflows"}},
+		{appliance.ProfileStorage, []string{"artifact", "base", "host"}},
+		{appliance.ProfileLANDNS, []string{"base", "dns", "host"}},
+		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "host"}},
+		{appliance.ProfileBuilderLANDNS, []string{"artifact", "base", "build", "dns", "host", "workflows"}},
+		{appliance.ProfileBuilderStorageLANDNS, []string{"artifact", "base", "build", "dns", "host", "workflows"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
@@ -247,6 +274,20 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 				t.Fatalf("capabilities for profile %q = %v, want %v", tc.profile, body.Capabilities, tc.want)
 			}
 		})
+	}
+}
+
+func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
+	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	token := ts.login(t, "admin", testPassword)
+
+	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health"} {
+		resp := ts.doJSON(t, http.MethodGet, path, token, "")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)
+		}
+		resp.Body.Close()
 	}
 }
 

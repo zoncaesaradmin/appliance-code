@@ -77,6 +77,8 @@ const (
 	PermArtifactsGrantsRead  = "artifacts.grants.read"
 	PermArtifactsGrantsWrite = "artifacts.grants.write"
 
+	PermHostRead = "host.read"
+
 	PermDNSRecordsRead     = "dns.records.read"
 	PermDNSRecordsWrite    = "dns.records.write"
 	PermDNSRecordsRegister = "dns.records.register"
@@ -141,6 +143,8 @@ var AllPermissions = []storage.Permission{
 	{Name: PermArtifactsGrantsRead, Description: "Read artifact repository-prefix grants"},
 	{Name: PermArtifactsGrantsWrite, Description: "Manage artifact repository-prefix grants"},
 
+	{Name: PermHostRead, Description: "Read host health, stats, and identity information"},
+
 	{Name: PermDNSRecordsRead, Description: "Read LAN DNS A records"},
 	{Name: PermDNSRecordsWrite, Description: "Create, update, or delete any LAN DNS A record"},
 	{Name: PermDNSRecordsRegister, Description: "Register or renew owned LAN DNS A records"},
@@ -186,7 +190,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
 			PermJobsReadSelf, PermJobsCancelSelf,
 			PermArtifactsRead, PermArtifactsWrite, PermArtifactsDeleteSelf,
-			PermOperationsReadSelf,
+			PermHostRead, PermOperationsReadSelf,
 			PermMCPInvoke,
 		},
 	},
@@ -196,7 +200,7 @@ var BuiltInRoles = []BuiltInRole{
 		Permissions: []string{
 			PermTokensReadSelf, PermTokensCreateSelf, PermTokensRevokeSelf,
 			PermWorkProfilesRead, PermWorkspacesReadAny, PermBuildTargetsRead,
-			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead,
+			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRead,
 		},
@@ -208,7 +212,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermWorkProfilesRead, PermWorkspacesCreate, PermWorkspacesReadSelf,
 			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
 			PermJobsReadSelf, PermJobsCancelSelf,
-			PermArtifactsRead, PermArtifactsWrite,
+			PermArtifactsRead, PermArtifactsWrite, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRegister,
 			PermDNSPublish,

@@ -1,0 +1,79 @@
+{{- if .Values.hostService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.hostServiceName" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.hostServiceLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.hostServiceSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.hostServiceSelectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.hostService.podSecurityContext | nindent 8 }}
+      containers:
+        - name: appliance-host-service
+          image: {{ required "hostService.image.reference is required when hostService.enabled=true" .Values.hostService.image.reference | quote }}
+          imagePullPolicy: {{ .Values.hostService.image.pullPolicy }}
+          env:
+            - name: HOST_SERVICE_ADDR
+              value: {{ printf "0.0.0.0:%d" (.Values.hostService.service.port | int) | quote }}
+            - name: HOST_SERVICE_HOST_ROOT
+              value: {{ .Values.hostService.hostRootMountPath | quote }}
+            - name: HOST_SERVICE_APPLICATION_LOG_PATH
+              value: {{ printf "%s/application.log" .Values.hostService.logs.hostPath | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.hostService.service.port }}
+          securityContext:
+            {{- toYaml .Values.hostService.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.hostService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: host-root
+              mountPath: {{ .Values.hostService.hostRootMountPath }}
+              readOnly: true
+            - name: appliance-host-service-logs
+              mountPath: {{ .Values.hostService.logs.hostPath }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: host-root
+          hostPath:
+            path: {{ .Values.hostService.hostRootPath }}
+            type: Directory
+        - name: appliance-host-service-logs
+          hostPath:
+            path: {{ .Values.hostService.logs.hostPath }}
+            type: DirectoryOrCreate
+{{- end }}

@@ -124,6 +124,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		LANDNSPublishH: &httpapi.LANDNSPublishHandlers{},
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
+		ProxiedServices: httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry),
 	}
 	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{

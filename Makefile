@@ -1,5 +1,6 @@
 BACKEND_DIR := services/controlplane
 UI_DIR      := services/ui
+HOSTSERVICE_DIR := services/hostservice
 SDK_DIR     := sdk/golang/applianceclient
 CHART_DIR   := deploy/charts/appliance-control-plane
 REGISTRY_CHART_DIR := deploy/charts/appliance-registry
@@ -14,7 +15,7 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOSTSERVICE_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(E2E_DIR)
 CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)"; printf '%s' "$$raw" | sed 's/[^A-Za-z0-9_.-]/-/g')
 
 # Per-developer overrides (dev-container image/tag, engine, cache paths).
@@ -78,7 +79,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-service-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -219,6 +220,15 @@ package-ui-image-archive:
 	bash ./scripts/package/export-ui-image-archive.sh \
 		--out-file "$$out_file"
 
+## package-host-service-image-archive: always build and export the host
+## service image from this checkout as an OCI archive tarball for release-input
+## packaging.
+package-host-service-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-host-service-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
+	mkdir -p "$$(dirname "$$out_file")"; \
+	bash ./scripts/package/export-host-service-image-archive.sh \
+		--out-file "$$out_file"
+
 ## package-argo-controller-image-archive: always build and export the
 ## appliance-owned Argo workflow-controller wrapper image as an OCI archive
 ## tarball for release-input packaging.
@@ -265,6 +275,7 @@ package-release-input-tar:
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	ui_image="$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar"; \
+	host_service_image="$(CURDIR)/.run/appliance-host-service-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
 	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
 	zot_version="$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
@@ -275,9 +286,11 @@ package-release-input-tar:
 	dns_reference_file="$(CURDIR)/.run/coredns-$$dns_version.reference"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
+	host_service_image_ref="registry.local/appliance-host-service"; \
 	argo_controller_image_ref="localhost/appliance-argo-controller:$$argo_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
+	$(MAKE) --no-print-directory package-host-service-image-archive OUT_FILE="$$host_service_image"; \
 	if [ -n "$$argo_version" ] && [ -z "$${ARGO_CONTROLLER_IMAGE:-}" ]; then \
 		$(MAKE) --no-print-directory package-argo-controller-image-archive \
 			OUT_FILE="$$argo_controller_image" \
@@ -310,6 +323,8 @@ package-release-input-tar:
 		--control-plane-image-reference "$$control_plane_image_ref" \
 		--ui-image "$$ui_image" \
 		--ui-image-reference "$$ui_image_ref" \
+		--extra-oci-image "$$host_service_image" \
+		--extra-oci-image-reference "$$host_service_image_ref" \
 		--zot-image "$$zot_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
 		--zot-version "$$zot_version" \

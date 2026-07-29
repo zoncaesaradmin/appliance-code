@@ -14,6 +14,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/devflows"
+	"appliance-code/services/controlplane/internal/serviceregistry"
 )
 
 // Config is the complete typed configuration surface for the control plane
@@ -28,21 +29,22 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath    string        `json:"applicationLogPath"`
-	LogLevel              string        `json:"logLevel"`
-	TrustedProxyCount     int           `json:"trustedProxyCount"`
-	ZotBaseURL            string        `json:"zotBaseURL"`
-	ZotAllowFake          bool          `json:"zotAllowFake"`
-	FilesRootDir          string        `json:"filesRootDir"`
-	FilesTransferTimeout  time.Duration `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes   int64         `json:"filesMaxUploadBytes"`
-	DNSReadyURL           string        `json:"dnsReadyURL"`
-	DNSZoneName           string        `json:"dnsZoneName"`
-	DNSConfigMapNamespace string        `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName      string        `json:"dnsConfigMapName"`
-	DNSBootstrapHostname  string        `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4      string        `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync  bool          `json:"dnsAllowFakeZoneSync"`
+	ApplicationLogPath    string                   `json:"applicationLogPath"`
+	LogLevel              string                   `json:"logLevel"`
+	TrustedProxyCount     int                      `json:"trustedProxyCount"`
+	ZotBaseURL            string                   `json:"zotBaseURL"`
+	ZotAllowFake          bool                     `json:"zotAllowFake"`
+	ServiceRegistry       serviceregistry.Registry `json:"serviceRegistry"`
+	FilesRootDir          string                   `json:"filesRootDir"`
+	FilesTransferTimeout  time.Duration            `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes   int64                    `json:"filesMaxUploadBytes"`
+	DNSReadyURL           string                   `json:"dnsReadyURL"`
+	DNSZoneName           string                   `json:"dnsZoneName"`
+	DNSConfigMapNamespace string                   `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName      string                   `json:"dnsConfigMapName"`
+	DNSBootstrapHostname  string                   `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4      string                   `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync  bool                     `json:"dnsAllowFakeZoneSync"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -253,6 +255,11 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			cfg.BuildCatalog.Normalize()
 		}
 	}
+	if v, ok := env[envPrefix+"SERVICE_REGISTRY_JSON"]; ok && strings.TrimSpace(v) != "" {
+		if err := json.Unmarshal([]byte(v), &cfg.ServiceRegistry); err != nil {
+			errs = append(errs, fmt.Sprintf("SERVICE_REGISTRY_JSON: %v", err))
+		}
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
@@ -295,6 +302,11 @@ func (c Config) Validate() error {
 		}
 	} else if !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if profileErr == nil && len(c.ServiceRegistry.Services) > 0 {
+		if err := c.ServiceRegistry.Validate(resolved.Capabilities); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}

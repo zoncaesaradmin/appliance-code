@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
+	"appliance-code/services/controlplane/internal/serviceregistry"
 )
 
 func TestDefaultIsValid(t *testing.T) {
@@ -198,5 +200,54 @@ func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
 	}
 	if len(cfg.BuildCatalog.BuildTargets) != 1 {
 		t.Fatalf("BuildCatalog targets = %+v, want one", cfg.BuildCatalog.BuildTargets)
+	}
+}
+
+func TestLoadAppliesServiceRegistryJSON(t *testing.T) {
+	registryJSON := `{"services":[{"name":"host-service","capability":"host","baseURL":"http://127.0.0.1:18086","routes":[{"method":"GET","externalPath":"/api/v1/host/info","upstreamPath":"/internal/v1/host/info","permission":"host.read"}]}]}`
+	cfg, err := config.Load([]string{
+		"APPLIANCE_PROFILE=core",
+		"APPLIANCE_SERVICE_REGISTRY_JSON=" + registryJSON,
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.ServiceRegistry.Services) != 1 {
+		t.Fatalf("ServiceRegistry = %+v, want one service", cfg.ServiceRegistry.Services)
+	}
+	svc := cfg.ServiceRegistry.Services[0]
+	if svc.Name != "host-service" || svc.Capability != appliance.CapabilityHost || svc.BaseURL != "http://127.0.0.1:18086" {
+		t.Fatalf("service = %+v", svc)
+	}
+}
+
+func TestValidateRejectsServiceRegistryCapabilityMismatch(t *testing.T) {
+	cfg := config.Default()
+	cfg.ApplianceProfile = "core"
+	cfg.ServiceRegistry.Services = []serviceregistry.Service{{
+		Name:       "zot-proxy",
+		Capability: appliance.CapabilityArtifact,
+		BaseURL:    "http://appliance-registry.artifacts.svc.cluster.local:5000",
+		Routes: []serviceregistry.Route{
+			{Method: "GET", ExternalPath: "/api/v1/zot/health", UpstreamPath: "/healthz", Permission: "registry.read"},
+		},
+	}}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "not enabled") {
+		t.Fatalf("Validate with capability mismatch = %v, want not enabled error", err)
+	}
+}
+
+func TestValidateRejectsMalformedServiceRegistryRoute(t *testing.T) {
+	cfg := config.Default()
+	cfg.ServiceRegistry.Services = []serviceregistry.Service{{
+		Name:       "host-service",
+		Capability: appliance.CapabilityHost,
+		BaseURL:    "http://127.0.0.1:18086",
+		Routes: []serviceregistry.Route{
+			{Method: "TRACE", ExternalPath: "api/v1/host/info", UpstreamPath: "/internal/v1/host/info", Permission: ""},
+		},
+	}}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "serviceRegistry") {
+		t.Fatalf("Validate with malformed registry route = %v, want serviceRegistry error", err)
 	}
 }

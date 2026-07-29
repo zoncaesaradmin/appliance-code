@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+
+FROM docker.io/library/golang:1.26 AS build
+WORKDIR /src
+COPY . .
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_TIME=unknown
+RUN GOWORK=off CGO_ENABLED=0 go build \
+    -ldflags "-X appliance-code/services/hostservice/internal/version.Version=${VERSION} \
+              -X appliance-code/services/hostservice/internal/version.Commit=${COMMIT} \
+              -X appliance-code/services/hostservice/internal/version.BuildTime=${BUILD_TIME}" \
+    -o /out/appliance-host-service ./cmd/appliance-host-service
+
+ARG RUNTIME_PROFILE=runtime
+FROM alpine:3.24.1
+ARG RUNTIME_PROFILE
+RUN set -eux; \
+    apk add --no-cache bash ca-certificates tzdata; \
+    if [ "${RUNTIME_PROFILE}" = "debug" ]; then \
+      apk add --no-cache curl procps; \
+    elif [ "${RUNTIME_PROFILE}" != "runtime" ]; then \
+      echo "unsupported RUNTIME_PROFILE=${RUNTIME_PROFILE}" >&2; \
+      exit 1; \
+    fi; \
+    addgroup -S -g 10005 appliance-host-service; \
+    adduser -S -D -H -u 10005 -G appliance-host-service appliance-host-service
+COPY --from=build /out/appliance-host-service /appliance-host-service
+USER 10005:10005
+ENTRYPOINT ["/appliance-host-service"]

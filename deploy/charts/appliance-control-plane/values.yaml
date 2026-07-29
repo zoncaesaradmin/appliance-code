@@ -94,6 +94,11 @@ config:
   # startup when this is empty so the appliance never reports dns-capable
   # while the LAN DNS release is missing.
   dnsReadyURL: ""
+  # Bundled manifest describing in-cluster services whose selected routes are
+  # exposed through the appliance API. zonctl injects host-service here today;
+  # post-install addon lifecycle is intentionally a later step.
+  serviceRegistry:
+    services: []
   # LAN DNS zone ownership (control plane is source of truth; CoreDNS serves
   # a materialized ConfigMap zone file). Product A records are not seeded at
   # install; create them via the DNS records API/UI. Optional bootstrap_*
@@ -192,6 +197,38 @@ containerSecurityContext:
   capabilities:
     drop: ["ALL"]
 
+hostService:
+  enabled: true
+  image:
+    reference: registry.local/appliance-host-service:dev
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  hostRootPath: /
+  hostRootMountPath: /host
+  logs:
+    hostPath: /data/zon/logs/host-service
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10005
+    runAsGroup: 10005
+    fsGroup: 20000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
 networkPolicy:
   enabled: true
   # Namespace selector label for Traefik's namespace, used to scope the
@@ -210,6 +247,7 @@ networkPolicy:
   dnsNamespaceLabel: {}
   dnsPodLabels: {}
   dnsReadyPort: 8181
+  hostServicePort: 8080
 
 probes:
   livenessPath: /health/live
