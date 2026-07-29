@@ -27,6 +27,31 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 	}
 }
 
+func TestResolveModulesIncludesArtifactAndBuildWhenEnabled(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("builder")
+	if err != nil {
+		t.Fatalf("ResolveProfile(builder): %v", err)
+	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry) {
+		t.Fatal("builder modules should include artifact-registry")
+	}
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameBuild) {
+		t.Fatal("builder modules should include build")
+	}
+}
+
+func TestResolveModulesIncludesDNSWhenEnabled(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("landns")
+	if err != nil {
+		t.Fatalf("ResolveProfile(landns): %v", err)
+	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS) {
+		t.Fatal("landns modules should include lan-dns")
+	}
+}
+
 func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {
 	resolved, err := appliance.ResolveProfile("core")
 	if err != nil {

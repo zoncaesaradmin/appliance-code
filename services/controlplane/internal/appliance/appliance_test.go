@@ -1,6 +1,8 @@
 package appliance_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"appliance-code/services/controlplane/internal/appliance"
@@ -115,4 +117,51 @@ func TestResolveProfile(t *testing.T) {
 			t.Fatal("ResolveProfile should reject an unknown profile")
 		}
 	})
+}
+
+func TestBuiltInProfileCatalogReturnsClone(t *testing.T) {
+	catalog := appliance.BuiltInProfileCatalog()
+	catalog[appliance.ProfileCore] = appliance.ProfileDefinition{}
+
+	resolved, err := appliance.ResolveProfile("core")
+	if err != nil {
+		t.Fatalf("ResolveProfile(core): %v", err)
+	}
+	if !resolved.Capabilities.Enabled(appliance.CapabilityHost) {
+		t.Fatal("mutating cloned catalog must not affect built-in core profile")
+	}
+}
+
+func TestResolveProfileWithLoaderUsesProvidedCatalog(t *testing.T) {
+	loader := appliance.StaticProfileCatalogLoader{
+		Catalog: appliance.ProfileCatalog{
+			"custom": {Capabilities: []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost}},
+		},
+	}
+	resolved, err := appliance.ResolveProfileWithLoader("custom", loader)
+	if err != nil {
+		t.Fatalf("ResolveProfileWithLoader(custom): %v", err)
+	}
+	if resolved.Name != appliance.Profile("custom") {
+		t.Fatalf("resolved.Name = %q, want custom", resolved.Name)
+	}
+	if !resolved.Capabilities.Enabled(appliance.CapabilityHost) {
+		t.Fatal("custom profile should enable host")
+	}
+}
+
+func TestResolveProfileWithLoaderPropagatesLoaderError(t *testing.T) {
+	_, err := appliance.ResolveProfileWithLoader("core", failingProfileCatalogLoader{})
+	if err == nil {
+		t.Fatal("ResolveProfileWithLoader should fail when the loader fails")
+	}
+	if !strings.Contains(err.Error(), "load appliance profile catalog") {
+		t.Fatalf("error = %q, want loader context", err)
+	}
+}
+
+type failingProfileCatalogLoader struct{}
+
+func (failingProfileCatalogLoader) LoadProfileCatalog() (appliance.ProfileCatalog, error) {
+	return nil, errors.New("boom")
 }

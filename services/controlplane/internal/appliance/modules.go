@@ -9,6 +9,13 @@ const (
 	ModuleKindApplication ModuleKind = "application"
 )
 
+const (
+	ModuleNameHostAgent        = "host-agent"
+	ModuleNameArtifactRegistry = "artifact-registry"
+	ModuleNameLANDNS           = "lan-dns"
+	ModuleNameBuild            = "build"
+)
+
 type ExecutionMode string
 
 const (
@@ -69,11 +76,11 @@ func (AlwaysEntitled) IsEntitled(ModuleDescriptor, EntitlementContext) bool {
 func BuiltInModuleCatalog() []ModuleDescriptor {
 	return []ModuleDescriptor{
 		{
-			Name:                 "host-agent",
+			Name:                 ModuleNameHostAgent,
 			Kind:                 ModuleKindPlatform,
 			RequiredCapabilities: []Capability{CapabilityHost},
 			ExecutionMode:        ExecutionModeHostAgent,
-			EntitlementKey:       "host-agent",
+			EntitlementKey:       ModuleNameHostAgent,
 			BaseURL:              "http://host-agent.control.svc.cluster.local:8080",
 			SecurityClass:        SecurityClassHostPrivileged,
 			Routes: []ModuleRoute{
@@ -82,10 +89,52 @@ func BuiltInModuleCatalog() []ModuleDescriptor {
 				{Method: "GET", ExternalPath: "/api/v1/host/health", UpstreamPath: "/internal/v1/host/health", Permission: "host.read"},
 			},
 		},
+		{
+			Name:                 ModuleNameArtifactRegistry,
+			Kind:                 ModuleKindPlatform,
+			RequiredCapabilities: []Capability{CapabilityArtifact},
+			ExecutionMode:        ExecutionModeClusterService,
+			EntitlementKey:       ModuleNameArtifactRegistry,
+			SecurityClass:        SecurityClassRestricted,
+		},
+		{
+			Name:                 ModuleNameLANDNS,
+			Kind:                 ModuleKindPlatform,
+			RequiredCapabilities: []Capability{CapabilityDNS},
+			ExecutionMode:        ExecutionModeClusterService,
+			EntitlementKey:       ModuleNameLANDNS,
+			SecurityClass:        SecurityClassRestricted,
+		},
+		{
+			Name:                 ModuleNameBuild,
+			Kind:                 ModuleKindPlatform,
+			RequiredCapabilities: []Capability{CapabilityBuild},
+			ExecutionMode:        ExecutionModeWorkflowBacked,
+			EntitlementKey:       ModuleNameBuild,
+			SecurityClass:        SecurityClassRestricted,
+		},
 	}
 }
 
 func ResolveModules(resolved ResolvedProfile, evaluator EntitlementEvaluator, catalog []ModuleDescriptor) []ModuleDescriptor {
+	return ResolveModulesWithCatalog(resolved, evaluator, catalog)
+}
+
+func ResolveModulesWithLoader(resolved ResolvedProfile, evaluator EntitlementEvaluator, loader ModuleCatalogLoader) ([]ModuleDescriptor, error) {
+	if evaluator == nil {
+		evaluator = AlwaysEntitled{}
+	}
+	if loader == nil {
+		loader = StaticModuleCatalogLoader{Modules: BuiltInModuleCatalog()}
+	}
+	catalog, err := loader.LoadModuleCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return ResolveModulesWithCatalog(resolved, evaluator, catalog), nil
+}
+
+func ResolveModulesWithCatalog(resolved ResolvedProfile, evaluator EntitlementEvaluator, catalog []ModuleDescriptor) []ModuleDescriptor {
 	if evaluator == nil {
 		evaluator = AlwaysEntitled{}
 	}
@@ -101,6 +150,20 @@ func ResolveModules(resolved ResolvedProfile, evaluator EntitlementEvaluator, ca
 		enabled = append(enabled, normalizeModule(module))
 	}
 	return enabled
+}
+
+func ModuleNamed(modules []ModuleDescriptor, name string) (ModuleDescriptor, bool) {
+	for _, module := range modules {
+		if strings.TrimSpace(module.Name) == strings.TrimSpace(name) {
+			return module, true
+		}
+	}
+	return ModuleDescriptor{}, false
+}
+
+func ModuleEnabled(modules []ModuleDescriptor, name string) bool {
+	_, ok := ModuleNamed(modules, name)
+	return ok
 }
 
 func moduleEnabled(module ModuleDescriptor, capabilities Set) bool {

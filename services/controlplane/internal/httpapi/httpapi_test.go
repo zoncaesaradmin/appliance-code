@@ -137,7 +137,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{
 			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,
 			Keys: services.Keys, Issuer: cfg.CanonicalOrigin,
@@ -152,15 +152,15 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			TransferTimeout: cfg.FilesTransferTimeout,
 		}
 	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
 	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityDNS) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameLANDNS) {
 		deps.DNSH = &httpapi.DNSHandlers{DNS: services.DNS}
 	}
 
-	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)
+	handler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities, services.Modules)
 	if err != nil {
 		t.Fatalf("NewPublicMux: %v", err)
 	}

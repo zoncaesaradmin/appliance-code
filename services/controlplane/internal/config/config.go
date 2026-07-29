@@ -29,22 +29,23 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath    string                   `json:"applicationLogPath"`
-	LogLevel              string                   `json:"logLevel"`
-	TrustedProxyCount     int                      `json:"trustedProxyCount"`
-	ZotBaseURL            string                   `json:"zotBaseURL"`
-	ZotAllowFake          bool                     `json:"zotAllowFake"`
-	ServiceRegistry       serviceregistry.Registry `json:"serviceRegistry"`
-	FilesRootDir          string                   `json:"filesRootDir"`
-	FilesTransferTimeout  time.Duration            `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes   int64                    `json:"filesMaxUploadBytes"`
-	DNSReadyURL           string                   `json:"dnsReadyURL"`
-	DNSZoneName           string                   `json:"dnsZoneName"`
-	DNSConfigMapNamespace string                   `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName      string                   `json:"dnsConfigMapName"`
-	DNSBootstrapHostname  string                   `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4      string                   `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync  bool                     `json:"dnsAllowFakeZoneSync"`
+	ApplicationLogPath    string                    `json:"applicationLogPath"`
+	LogLevel              string                    `json:"logLevel"`
+	TrustedProxyCount     int                       `json:"trustedProxyCount"`
+	ApplianceCatalog      appliance.CatalogDocument `json:"applianceCatalog"`
+	ZotBaseURL            string                    `json:"zotBaseURL"`
+	ZotAllowFake          bool                      `json:"zotAllowFake"`
+	ServiceRegistry       serviceregistry.Registry  `json:"serviceRegistry"`
+	FilesRootDir          string                    `json:"filesRootDir"`
+	FilesTransferTimeout  time.Duration             `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes   int64                     `json:"filesMaxUploadBytes"`
+	DNSReadyURL           string                    `json:"dnsReadyURL"`
+	DNSZoneName           string                    `json:"dnsZoneName"`
+	DNSConfigMapNamespace string                    `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName      string                    `json:"dnsConfigMapName"`
+	DNSBootstrapHostname  string                    `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4      string                    `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync  bool                      `json:"dnsAllowFakeZoneSync"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -255,6 +256,11 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			cfg.BuildCatalog.Normalize()
 		}
 	}
+	if v, ok := env[envPrefix+"CATALOG_JSON"]; ok && strings.TrimSpace(v) != "" {
+		if err := json.Unmarshal([]byte(v), &cfg.ApplianceCatalog); err != nil {
+			errs = append(errs, fmt.Sprintf("CATALOG_JSON: %v", err))
+		}
+	}
 	if v, ok := env[envPrefix+"SERVICE_REGISTRY_JSON"]; ok && strings.TrimSpace(v) != "" {
 		if err := json.Unmarshal([]byte(v), &cfg.ServiceRegistry); err != nil {
 			errs = append(errs, fmt.Sprintf("SERVICE_REGISTRY_JSON: %v", err))
@@ -270,10 +276,22 @@ func applyEnv(cfg *Config, env map[string]string) error {
 func (c Config) Validate() error {
 	var errs []string
 
-	resolved, profileErr := appliance.ResolveProfile(c.ApplianceProfile)
+	resolved, profileErr := c.ResolveProfile()
+	buildEnabled := false
+	artifactEnabled := false
+	dnsEnabled := false
 	if profileErr != nil {
 		errs = append(errs, fmt.Sprintf("applianceProfile %q is invalid: %v", c.ApplianceProfile, profileErr))
-	} else if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+	} else {
+		modules, err := c.ResolveModules(resolved)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("applianceCatalog is invalid: %v", err))
+		}
+		buildEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameBuild)
+		artifactEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry)
+		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
+	}
+	if profileErr == nil && buildEnabled {
 		if c.BuildCatalog.Empty() {
 			errs = append(errs, "buildCatalog must not be empty when the build capability is enabled")
 		} else if err := c.BuildCatalog.Validate(); err != nil {
@@ -300,7 +318,7 @@ func (c Config) Validate() error {
 		} else if !strings.Contains(c.BuilderImageDigest, "@sha256:") {
 			errs = append(errs, "builderImageDigest must be digest-pinned")
 		}
-	} else if !c.BuildCatalog.Empty() {
+	} else if profileErr == nil && !buildEnabled && !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -310,7 +328,7 @@ func (c Config) Validate() error {
 			errs = append(errs, err.Error())
 		}
 	}
-	if profileErr == nil && resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+	if profileErr == nil && artifactEnabled {
 		if strings.TrimSpace(c.ZotBaseURL) == "" {
 			if !c.ZotAllowFake {
 				errs = append(errs, "zotBaseURL must not be empty when the artifact capability is enabled in production")
@@ -330,7 +348,7 @@ func (c Config) Validate() error {
 			errs = append(errs, "filesMaxUploadBytes must be positive when the artifact capability is enabled")
 		}
 	}
-	if profileErr == nil && resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
+	if profileErr == nil && dnsEnabled {
 		if strings.TrimSpace(c.DNSReadyURL) == "" {
 			errs = append(errs, "dnsReadyURL must not be empty when the dns capability is enabled")
 		} else if u, err := url.Parse(c.DNSReadyURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -415,6 +433,36 @@ func (c Config) Validate() error {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+func (c Config) ResolveProfile() (appliance.ResolvedProfile, error) {
+	catalog, err := c.profileCatalog()
+	if err != nil {
+		return appliance.ResolvedProfile{}, err
+	}
+	return appliance.ResolveProfileWithCatalog(c.ApplianceProfile, catalog)
+}
+
+func (c Config) ResolveModules(resolved appliance.ResolvedProfile) ([]appliance.ModuleDescriptor, error) {
+	catalog, err := c.moduleCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return appliance.ResolveModulesWithCatalog(resolved, appliance.AlwaysEntitled{}, catalog), nil
+}
+
+func (c Config) profileCatalog() (appliance.ProfileCatalog, error) {
+	if len(c.ApplianceCatalog.Profiles) == 0 && len(c.ApplianceCatalog.Modules) == 0 {
+		return appliance.BuiltInProfileCatalog(), nil
+	}
+	return appliance.ProfileCatalogFromDocument(c.ApplianceCatalog)
+}
+
+func (c Config) moduleCatalog() ([]appliance.ModuleDescriptor, error) {
+	if len(c.ApplianceCatalog.Profiles) == 0 && len(c.ApplianceCatalog.Modules) == 0 {
+		return appliance.BuiltInModuleCatalog(), nil
+	}
+	return appliance.ModuleCatalogFromDocument(c.ApplianceCatalog)
 }
 
 func (c Config) SQLitePath() string {

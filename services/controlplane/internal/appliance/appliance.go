@@ -45,17 +45,42 @@ var capabilityCatalog = map[Capability]capabilityDefinition{
 	CapabilityDNS:       {Dependencies: []Capability{CapabilityBase}},
 }
 
-var profileCatalog = map[Profile][]Capability{
-	ProfileCore:          {CapabilityBase, CapabilityHost, CapabilityWorkflows},
-	ProfileBuilder:       {CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact},
-	ProfileStorage:       {CapabilityBase, CapabilityHost, CapabilityArtifact},
-	ProfileLANDNS:        {CapabilityBase, CapabilityHost, CapabilityDNS},
-	ProfileStorageLANDNS: {CapabilityBase, CapabilityHost, CapabilityArtifact, CapabilityDNS},
+type ProfileDefinition struct {
+	Capabilities []Capability
+}
+
+type ProfileCatalog map[Profile]ProfileDefinition
+
+type ProfileCatalogLoader interface {
+	LoadProfileCatalog() (ProfileCatalog, error)
+}
+
+type StaticProfileCatalogLoader struct {
+	Catalog ProfileCatalog
+}
+
+func (l StaticProfileCatalogLoader) LoadProfileCatalog() (ProfileCatalog, error) {
+	if l.Catalog == nil {
+		return BuiltInProfileCatalog(), nil
+	}
+	return cloneProfileCatalog(l.Catalog), nil
+}
+
+var builtInProfileCatalog = ProfileCatalog{
+	ProfileCore:          {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows}},
+	ProfileBuilder:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact}},
+	ProfileStorage:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityArtifact}},
+	ProfileLANDNS:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityDNS}},
+	ProfileStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityArtifact, CapabilityDNS}},
 	// builder ∪ landns (registry/artifact already comes with builder).
-	ProfileBuilderLANDNS: {CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
+	ProfileBuilderLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS}},
 	// builder ∪ storage ∪ registry ∪ dns — same capability union as
 	// builder-landns (storage/registry add no capabilities beyond builder).
-	ProfileBuilderStorageLANDNS: {CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS},
+	ProfileBuilderStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS}},
+}
+
+func BuiltInProfileCatalog() ProfileCatalog {
+	return cloneProfileCatalog(builtInProfileCatalog)
 }
 
 // Set is the resolved enabled capability set for one appliance instance.
@@ -93,12 +118,31 @@ type ResolvedProfile struct {
 // returns the resolved enabled capability set. It does not add implicit
 // dependencies; invalid profile-to-capability combinations fail closed.
 func ResolveProfile(name string) (ResolvedProfile, error) {
+	return ResolveProfileWithLoader(name, StaticProfileCatalogLoader{Catalog: builtInProfileCatalog})
+}
+
+func ResolveProfileWithLoader(name string, loader ProfileCatalogLoader) (ResolvedProfile, error) {
+	if loader == nil {
+		loader = StaticProfileCatalogLoader{Catalog: builtInProfileCatalog}
+	}
+	catalog, err := loader.LoadProfileCatalog()
+	if err != nil {
+		return ResolvedProfile{}, fmt.Errorf("load appliance profile catalog: %w", err)
+	}
+	return ResolveProfileWithCatalog(name, catalog)
+}
+
+// ResolveProfile validates name against the provided appliance-profile catalog
+// and returns the resolved enabled capability set. It does not add implicit
+// dependencies; invalid profile-to-capability combinations fail closed.
+func ResolveProfileWithCatalog(name string, catalog ProfileCatalog) (ResolvedProfile, error) {
 	profile := Profile(strings.TrimSpace(name))
-	capabilities, ok := profileCatalog[profile]
+	definition, ok := catalog[profile]
 	if !ok {
 		return ResolvedProfile{}, fmt.Errorf("unknown appliance profile %q", name)
 	}
 
+	capabilities := definition.Capabilities
 	set := Set{enabled: make(map[Capability]struct{}, len(capabilities))}
 	for _, capability := range capabilities {
 		if _, ok := capabilityCatalog[capability]; !ok {
@@ -121,4 +165,14 @@ func ResolveProfile(name string) (ResolvedProfile, error) {
 	}
 
 	return ResolvedProfile{Name: profile, Capabilities: set}, nil
+}
+
+func cloneProfileCatalog(catalog ProfileCatalog) ProfileCatalog {
+	cloned := make(ProfileCatalog, len(catalog))
+	for profile, definition := range catalog {
+		cloned[profile] = ProfileDefinition{
+			Capabilities: append([]Capability(nil), definition.Capabilities...),
+		}
+	}
+	return cloned
 }

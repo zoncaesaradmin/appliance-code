@@ -60,6 +60,7 @@ func proxiedServiceRoutes(registrations []ServiceProxyRegistration) []publicRout
 			rt := route
 			routes = append(routes, publicRoute{
 				capability: reg.Capability,
+				moduleName: reg.Name,
 				pattern:    rt.Method + " " + rt.ExternalPath,
 				build: func(deps Deps, w wrappers) (http.Handler, error) {
 					handler, err := newServiceProxyHandler(deps.Logger, reg, rt)

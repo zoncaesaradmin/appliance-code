@@ -87,7 +87,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	if processLogger == nil {
 		return nil, errors.New("process logger is required")
 	}
-	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
+	resolved, err := cfg.ResolveProfile()
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 		ProxiedServices: httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry),
 	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityArtifact) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{
 			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,
 			Keys: services.Keys, Issuer: cfg.CanonicalOrigin,
@@ -141,11 +141,11 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			TransferTimeout: cfg.FilesTransferTimeout,
 		}
 	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityBuild) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
 	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityDNS) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameLANDNS) {
 		if services.DNS == nil {
 			services.DB.Close()
 			return nil, fmt.Errorf("building public mux: dns capability enabled but DNS service is nil")
@@ -153,7 +153,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		deps.DNSH = &httpapi.DNSHandlers{DNS: services.DNS}
 	}
 
-	publicHandler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities)
+	publicHandler, err := httpapi.NewPublicMux(deps, services.ApplianceProfile.Capabilities, services.Modules)
 	if err != nil {
 		services.DB.Close()
 		return nil, fmt.Errorf("building public mux: %w", err)

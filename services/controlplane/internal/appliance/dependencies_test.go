@@ -7,17 +7,10 @@ import (
 
 func TestResolveProfileRejectsMissingCapabilityDependency(t *testing.T) {
 	const invalidProfile Profile = "invalid-builder-without-artifact"
-	original, existed := profileCatalog[invalidProfile]
-	profileCatalog[invalidProfile] = []Capability{CapabilityBase, CapabilityWorkflows, CapabilityBuild}
-	t.Cleanup(func() {
-		if existed {
-			profileCatalog[invalidProfile] = original
-		} else {
-			delete(profileCatalog, invalidProfile)
-		}
-	})
+	catalog := BuiltInProfileCatalog()
+	catalog[invalidProfile] = ProfileDefinition{Capabilities: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityBuild}}
 
-	_, err := ResolveProfile(string(invalidProfile))
+	_, err := ResolveProfileWithCatalog(string(invalidProfile), catalog)
 	if err == nil {
 		t.Fatal("ResolveProfile should reject build capability without artifact dependency")
 	}

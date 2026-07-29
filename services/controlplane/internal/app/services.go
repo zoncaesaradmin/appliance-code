@@ -40,6 +40,7 @@ const (
 
 type Services struct {
 	ApplianceProfile appliance.ResolvedProfile
+	Modules          []appliance.ModuleDescriptor
 
 	DB storage.DB
 
@@ -71,7 +72,7 @@ type Services struct {
 }
 
 func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
-	resolved, err := appliance.ResolveProfile(cfg.ApplianceProfile)
+	resolved, err := cfg.ResolveProfile()
 	if err != nil {
 		return nil, fmt.Errorf("app: resolving appliance profile: %w", err)
 	}
@@ -79,6 +80,13 @@ func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
 }
 
 func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger logging.Logger) (*Services, error) {
+	resolvedModules, err := cfg.ResolveModules(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("app: resolving modules: %w", err)
+	}
+	artifactEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameArtifactRegistry)
+	buildEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameBuild)
+	dnsEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameLANDNS)
 	db, err := sqlite.Open(cfg.SQLitePath())
 	if err != nil {
 		return nil, fmt.Errorf("app: opening storage: %w", err)
@@ -113,7 +121,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 
 	var zotClient zotadapter.Client
 	var registryAuthorizer *registryauth.Authorizer
-	if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+	if artifactEnabled {
 		registryAuthorizer = registryauth.NewAuthorizer(registryGrantStore, roleStore)
 		if cfg.ZotBaseURL != "" {
 			zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, newInternalZotRequestEditor(keyMaterial, cfg.CanonicalOrigin))
@@ -130,7 +138,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	workspaceStore := sqlite.NewWorkspaceStore(db)
 	jobStore := sqlite.NewJobStore(db)
 	var workflowEngine workflows.Engine
-	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+	if buildEnabled {
 		switch cfg.WorkflowEngine {
 		case "fake":
 			workflowEngine = workflows.NewFake()
@@ -147,7 +155,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	var buildsSvc *builds.Service
 	var devflowsSvc *devflows.Service
 	var builderGitSvc *buildergit.Service
-	if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+	if buildEnabled {
 		allowedGitHosts, err := cfg.BuildCatalog.RepoHosts()
 		if err != nil {
 			db.Close()
@@ -189,7 +197,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	}
 
 	var dnsSvc *dnsrecords.Service
-	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
+	if dnsEnabled {
 		var syncer dnsrecords.ZoneSyncer
 		if cfg.DNSAllowFakeZoneSync {
 			syncer = &dnsrecords.MemoryZoneSyncer{}
@@ -219,6 +227,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 
 	return &Services{
 		ApplianceProfile:   resolved,
+		Modules:            resolvedModules,
 		DB:                 db,
 		UserStore:          userStore,
 		RoleStore:          roleStore,

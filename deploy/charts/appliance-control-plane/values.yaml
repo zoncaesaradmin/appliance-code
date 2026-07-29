@@ -77,6 +77,10 @@ config:
   # for non-build profiles such as core, storage, landns, and
   # storage-landns.
   buildCatalog: {}
+  # Bundled appliance profile/module catalog. zonctl injects the signed
+  # bundle copy so runtime profile/module resolution matches install-time
+  # resolution.
+  applianceCatalog: {}
   # Appliance-owned generic image used by workspace provisioning workflows.
   # zonctl injects this from the signed bundle for build-capable profiles.
   workspaceProvisionerImageDigest: ""

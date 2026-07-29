@@ -38,6 +38,7 @@ type Deps struct {
 
 type publicRoute struct {
 	capability appliance.Capability
+	moduleName string
 	pattern    string
 	build      func(Deps, wrappers) (http.Handler, error)
 }
@@ -52,7 +53,7 @@ type wrappers struct {
 // auth/user/role/token surface, protected by RequireAuth and per-route
 // RequirePermission/RequireAnyPermission. Everything else falls through to
 // a standard application/problem+json 404.
-func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
+func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.ModuleDescriptor) (http.Handler, error) {
 	if deps.Logger == nil {
 		return nil, fmt.Errorf("logger is required")
 	}
@@ -72,7 +73,11 @@ func NewPublicMux(deps Deps, capabilities appliance.Set) (http.Handler, error) {
 	}
 
 	for _, route := range append(publicRoutes(), proxiedServiceRoutes(deps.ProxiedServices)...) {
-		if !capabilities.Enabled(route.capability) {
+		if route.moduleName != "" {
+			if !appliance.ModuleEnabled(modules, route.moduleName) {
+				continue
+			}
+		} else if !capabilities.Enabled(route.capability) {
 			continue
 		}
 		handler, err := route.build(deps, w)
@@ -298,199 +303,199 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermDNSPublish, deps.LANDNSPublishH.Publish), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.RegistryH == nil {
 				return nil, fmt.Errorf("missing registry token handlers")
 			}
 			return http.HandlerFunc(deps.RegistryH.Token), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
 			return w.protect(roles.PermArtifactsGrantsRead, deps.RegistryGrantsH.List), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "POST /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "POST /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
 			return w.protect(roles.PermArtifactsGrantsWrite, deps.RegistryGrantsH.Create), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "DELETE /api/v1/registry/grants/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "DELETE /api/v1/registry/grants/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
 			return w.protect(roles.PermArtifactsGrantsWrite, deps.RegistryGrantsH.Delete), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/repositories", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/repositories", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryCatalogH == nil {
 				return nil, fmt.Errorf("missing registry catalog handlers")
 			}
 			return w.authenticatedOnly(deps.RegistryCatalogH.ListRepositories), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/registry/repositories/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/repositories/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryCatalogH == nil {
 				return nil, fmt.Errorf("missing registry catalog handlers")
 			}
 			return w.authenticatedOnly(deps.RegistryCatalogH.CatalogItem), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "GET /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.FilesH == nil {
 				return nil, fmt.Errorf("missing artifact file handlers")
 			}
 			return w.protect(roles.PermArtifactsRead, deps.FilesH.Download), nil
 		}},
-		{capability: appliance.CapabilityArtifact, pattern: "POST /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "POST /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.FilesH == nil {
 				return nil, fmt.Errorf("missing artifact file handlers")
 			}
 			return w.protect(roles.PermArtifactsWrite, deps.FilesH.Upload), nil
 		}},
-		{capability: appliance.CapabilityDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameLANDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {
 				return nil, fmt.Errorf("missing dns handlers")
 			}
 			return w.protect(roles.PermDNSRecordsRead, deps.DNSH.List), nil
 		}},
-		{capability: appliance.CapabilityDNS, pattern: "PUT /api/v1/dns/records/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameLANDNS, pattern: "PUT /api/v1/dns/records/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {
 				return nil, fmt.Errorf("missing dns handlers")
 			}
 			return w.protectAny(deps.DNSH.Upsert, roles.PermDNSRecordsWrite, roles.PermDNSRecordsRegister), nil
 		}},
-		{capability: appliance.CapabilityDNS, pattern: "DELETE /api/v1/dns/records/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameLANDNS, pattern: "DELETE /api/v1/dns/records/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {
 				return nil, fmt.Errorf("missing dns handlers")
 			}
 			return w.protect(roles.PermDNSRecordsWrite, deps.DNSH.Delete), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/work-profiles", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/work-profiles", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.ListWorkProfiles), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.GetBuilderGitAccess), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "PUT /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "PUT /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermSystemOperate, deps.DevflowsH.UpdateBuilderGitAccess), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/workspaces", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/workspaces", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermWorkspacesCreate, deps.DevflowsH.CreateWorkspace), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/workspaces", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/workspaces", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.ListWorkspaces, roles.PermWorkspacesReadSelf, roles.PermWorkspacesReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/workspaces/{workspaceId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/workspaces/{workspaceId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.GetWorkspace, roles.PermWorkspacesReadSelf, roles.PermWorkspacesReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "DELETE /api/v1/workspaces/{workspaceId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "DELETE /api/v1/workspaces/{workspaceId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.DeleteWorkspace, roles.PermWorkspacesDeleteSelf, roles.PermWorkspacesDeleteAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/current-workspace", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/current-workspace", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermWorkspacesReadSelf, deps.DevflowsH.GetCurrentWorkspace), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/current-workspace", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/current-workspace", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermWorkspacesReadSelf, deps.DevflowsH.SetCurrentWorkspace), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/current-workspace/build-targets", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/current-workspace/build-targets", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermBuildTargetsRead, deps.DevflowsH.ListCurrentBuildTargets), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/current-workspace/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/current-workspace/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermBuildsCreate, deps.DevflowsH.SubmitCurrentBuild), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/current-workspace/build-status", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/current-workspace/build-status", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermJobsReadSelf, deps.DevflowsH.CurrentWorkspaceBuildStatus), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/jobs", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/jobs", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.ListJobs, roles.PermJobsReadSelf, roles.PermJobsReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/jobs/{jobId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/jobs/{jobId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.GetJob, roles.PermJobsReadSelf, roles.PermJobsReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/jobs/{jobId}/cancel", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/jobs/{jobId}/cancel", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.CancelJob, roles.PermJobsCancelSelf, roles.PermJobsCancelAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/jobs/{jobId}/steps", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/jobs/{jobId}/steps", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.JobSteps, roles.PermJobsReadSelf, roles.PermJobsReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/jobs/{jobId}/logs", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/jobs/{jobId}/logs", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protectAny(deps.DevflowsH.JobLogs, roles.PermJobsReadSelf, roles.PermJobsReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.BuildsH == nil {
 				return nil, fmt.Errorf("missing build handlers")
 			}
 			return w.protect(roles.PermBuildsCreate, deps.BuildsH.Create), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/builds", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.BuildsH == nil {
 				return nil, fmt.Errorf("missing build handlers")
 			}
 			return w.protectAny(deps.BuildsH.List, roles.PermBuildsReadSelf, roles.PermBuildsReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builds/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/builds/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.BuildsH == nil {
 				return nil, fmt.Errorf("missing build handlers")
 			}
 			return w.protectAny(deps.BuildsH.Get, roles.PermBuildsReadSelf, roles.PermBuildsReadAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "POST /api/v1/builds/{id}/cancel", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/builds/{id}/cancel", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.BuildsH == nil {
 				return nil, fmt.Errorf("missing build handlers")
 			}
 			return w.protectAny(deps.BuildsH.Cancel, roles.PermBuildsCancelSelf, roles.PermBuildsCancelAny), nil
 		}},
-		{capability: appliance.CapabilityBuild, pattern: "GET /api/v1/builds/{id}/logs", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/builds/{id}/logs", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.BuildsH == nil {
 				return nil, fmt.Errorf("missing build handlers")
 			}

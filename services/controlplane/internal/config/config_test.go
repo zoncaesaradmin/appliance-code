@@ -203,6 +203,31 @@ func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
 	}
 }
 
+func TestLoadAppliesApplianceCatalogJSON(t *testing.T) {
+	catalogJSON := `{"version":"appliance.catalog/v1alpha1","profiles":[{"name":"custom","capabilities":["base","host"]}],"modules":[{"name":"host-agent","kind":"platform","requiredCapabilities":["host"],"executionMode":"host-agent","entitlementKey":"host-agent","baseURL":"http://host-agent.control.svc.cluster.local:8080","securityClass":"host-privileged"}]}`
+	cfg, err := config.Load([]string{
+		"APPLIANCE_PROFILE=custom",
+		"APPLIANCE_CATALOG_JSON=" + catalogJSON,
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, err := cfg.ResolveProfile()
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if resolved.Name != "custom" {
+		t.Fatalf("resolved profile = %q, want custom", resolved.Name)
+	}
+	modules, err := cfg.ResolveModules(resolved)
+	if err != nil {
+		t.Fatalf("ResolveModules: %v", err)
+	}
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameHostAgent) {
+		t.Fatalf("resolved modules = %+v, want host-agent enabled", modules)
+	}
+}
+
 func TestLoadAppliesServiceRegistryJSON(t *testing.T) {
 	registryJSON := `{"services":[{"name":"host-agent","capability":"host","baseURL":"http://127.0.0.1:18086","routes":[{"method":"GET","externalPath":"/api/v1/host/info","upstreamPath":"/internal/v1/host/info","permission":"host.read"}]}]}`
 	cfg, err := config.Load([]string{
