@@ -3,14 +3,7 @@
 FROM docker.io/library/golang:1.26 AS build
 WORKDIR /src
 COPY . .
-ARG VERSION=dev
-ARG COMMIT=unknown
-ARG BUILD_TIME=unknown
-RUN GOWORK=off CGO_ENABLED=0 go build \
-    -ldflags "-X appliance-code/services/hostservice/internal/version.Version=${VERSION} \
-              -X appliance-code/services/hostservice/internal/version.Commit=${COMMIT} \
-              -X appliance-code/services/hostservice/internal/version.BuildTime=${BUILD_TIME}" \
-    -o /out/appliance-host-agent ./cmd/appliance-host-service
+RUN GOWORK=off CGO_ENABLED=0 go build -o /out/appliance-host-agent ./cmd/appliance-host-agent
 
 ARG RUNTIME_PROFILE=runtime
 FROM alpine:3.24.1

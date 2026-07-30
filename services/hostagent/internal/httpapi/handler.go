@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"appliance-code/services/hostservice/internal/bridge"
+	"appliance-code/services/hostagent/internal/bridge"
 )
 
 type Handler struct {

@@ -147,9 +147,9 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	hostArchive := filepath.Join(tmp, "host-service.tar")
-	if output, err := exec.Command("tar", "-cf", hostArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create host-service archive: %v\n%s", err, output)
+	hostAgentArchive := filepath.Join(tmp, "host-agent.tar")
+	if output, err := exec.Command("tar", "-cf", hostAgentArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create host-agent archive: %v\n%s", err, output)
 	}
 	hostBinary := filepath.Join(tmp, "appliance-host-agentd")
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
@@ -167,8 +167,8 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 		"--out-file", out, "--code-version", "test", "--k3s-version", "v1.33.0+k3s1",
 		"--control-plane-image", filepath.Join(tmp, "control-plane.tar"),
 		"--ui-image", filepath.Join(tmp, "ui.tar"),
-		"--host-service-image", hostArchive,
-		"--host-service-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
+		"--host-agent-image", hostAgentArchive,
+		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
 		"--zot-image", zotArchive,
 		"--zot-image-reference", "registry.local/zot@sha256:"+zotDigest,
@@ -224,9 +224,9 @@ func TestReleaseInputRejectsUnpairedDNSImage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	hostArchive := filepath.Join(tmp, "host-service.tar")
-	if output, err := exec.Command("tar", "-cf", hostArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create host-service archive: %v\n%s", err, output)
+	hostAgentArchive := filepath.Join(tmp, "host-agent.tar")
+	if output, err := exec.Command("tar", "-cf", hostAgentArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create host-agent archive: %v\n%s", err, output)
 	}
 	hostBinary := filepath.Join(tmp, "appliance-host-agentd")
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
@@ -235,8 +235,8 @@ func TestReleaseInputRejectsUnpairedDNSImage(t *testing.T) {
 	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "test",
 		"--k3s-version", "v1", "--control-plane-image", dns, "--ui-image", dns,
-		"--host-service-image", hostArchive,
-		"--host-service-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
+		"--host-agent-image", hostAgentArchive,
+		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
 		"--dns-image", dns).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {

@@ -22,16 +22,12 @@ Options:
   --ui-image-reference REF         Canonical UI image reference contained in
                                    the OCI archive.
   --host-agent-image PATH          Pinned appliance host-agent OCI archive.
-                                   `--host-service-image` is accepted as a
-                                   compatibility alias.
   --host-agent-image-reference REF
                                    Canonical
                                    registry.local/appliance-host-agent@sha256:...
                                    platform-manifest reference. Required.
-                                   `--host-service-image-reference` is accepted
-                                   as a compatibility alias.
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
-                                   Defaults to services/hostservice/bin/appliance-host-agentd.
+                                   Defaults to services/hostagent/bin/appliance-host-agentd.
   --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
   --zot-image-reference REF        Canonical registry.local/zot@sha256:...
                                    platform-manifest reference.
@@ -145,11 +141,11 @@ while [[ $# -gt 0 ]]; do
       UI_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
-    --host-agent-image|--host-service-image)
+    --host-agent-image)
       HOST_AGENT_IMAGE="${2:-}"
       shift 2
       ;;
-    --host-agent-image-reference|--host-service-image-reference)
+    --host-agent-image-reference)
       HOST_AGENT_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
@@ -254,7 +250,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${HOST_AGENT_BINARY}" ]]; then
-  HOST_AGENT_BINARY="${REPO_ROOT}/services/hostservice/bin/appliance-host-agentd"
+  HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
 
 if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${K3S_VERSION}" ]]; then

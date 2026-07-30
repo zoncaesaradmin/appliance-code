@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"testing"
 
-	"appliance-code/services/hostservice/internal/bridge"
+	"appliance-code/services/hostagent/internal/bridge"
 )
 
 func TestHandlerServesHostEndpoints(t *testing.T) {

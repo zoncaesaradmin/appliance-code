@@ -1,6 +1,6 @@
 BACKEND_DIR := services/controlplane
 UI_DIR      := services/ui
-HOSTSERVICE_DIR := services/hostservice
+HOST_AGENT_SERVICE_DIR := services/hostagent
 SDK_DIR     := sdk/golang/applianceclient
 CHART_DIR   := deploy/charts/appliance-control-plane
 REGISTRY_CHART_DIR := deploy/charts/appliance-registry
@@ -15,7 +15,7 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOSTSERVICE_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(E2E_DIR)
 CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)"; printf '%s' "$$raw" | sed 's/[^A-Za-z0-9_.-]/-/g')
 
 # Per-developer overrides (dev-container image/tag, engine, cache paths).
@@ -79,7 +79,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-service-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -220,17 +220,16 @@ package-ui-image-archive:
 	bash ./scripts/package/export-ui-image-archive.sh \
 		--out-file "$$out_file"
 
-## package-host-service-image-archive: compatibility alias for the host-agent
-## image export target.
-package-host-service-image-archive:
+## package-host-agent-image-archive: always build and export the appliance
+## host-agent service image as an OCI archive tarball for release-input
+## packaging.
+package-host-agent-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
 	reference_out_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
 	mkdir -p "$$(dirname "$$out_file")" "$$(dirname "$$reference_out_file")"; \
-	bash ./scripts/package/export-host-service-image-archive.sh \
+	bash ./scripts/package/export-host-agent-image-archive.sh \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_out_file"
-
-package-host-agent-image-archive: package-host-service-image-archive
 
 ## package-argo-controller-image-archive: always build and export the
 ## appliance-owned Argo workflow-controller wrapper image as an OCI archive
@@ -280,7 +279,7 @@ package-release-input-tar:
 	ui_image="$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	host_agent_image="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	host_agent_reference_file="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).reference"; \
-	host_agent_binary="$(CURDIR)/services/hostservice/bin/appliance-host-agentd"; \
+	host_agent_binary="$(CURDIR)/services/hostagent/bin/appliance-host-agentd"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
 	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
 	zot_version="$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
@@ -294,7 +293,7 @@ package-release-input-tar:
 	argo_controller_image_ref="localhost/appliance-argo-controller:$$argo_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
-	$(MAKE) --no-print-directory -C ./services/hostservice build; \
+	$(MAKE) --no-print-directory -C ./services/hostagent build; \
 	$(MAKE) --no-print-directory package-host-agent-image-archive \
 		OUT_FILE="$$host_agent_image" \
 		REFERENCE_OUT_FILE="$$host_agent_reference_file"; \

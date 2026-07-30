@@ -3,18 +3,15 @@ package main
 import (
 	"context"
 	"flag"
-	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	"appliance-code/services/hostservice/internal/bridge"
-	"appliance-code/services/hostservice/internal/httpapi"
+	"appliance-code/services/hostagent/internal/bridge"
+	"appliance-code/services/hostagent/internal/httpapi"
+	"appliance-code/services/hostagent/internal/process"
 )
 
 const (
@@ -30,7 +27,7 @@ func main() {
 	flag.StringVar(&logPath, "log-path", defaultLogPath, "host log file path")
 	flag.Parse()
 
-	logger := newLogger(logPath)
+	logger := process.NewLogger(logPath)
 	if err := prepareSocketPath(socketPath); err != nil {
 		logger.Error("prepare socket path failed", "error", err, "socketPath", socketPath)
 		os.Exit(1)
@@ -58,7 +55,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
-		<-shutdownSignal()
+		<-process.ShutdownSignal()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = server.Shutdown(ctx)
@@ -85,20 +82,4 @@ func prepareSocketPath(socketPath string) error {
 		return err
 	}
 	return nil
-}
-
-func newLogger(logPath string) *slog.Logger {
-	writers := []io.Writer{os.Stdout}
-	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err == nil {
-		if file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-			writers = append(writers, file)
-		}
-	}
-	return slog.New(slog.NewTextHandler(io.MultiWriter(writers...), nil))
-}
-
-func shutdownSignal() <-chan os.Signal {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
-	return ch
 }

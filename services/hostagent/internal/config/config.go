@@ -28,16 +28,10 @@ func Load(environ []string) (Config, error) {
 			continue
 		}
 		switch key {
-		case "HOST_SERVICE_ADDR":
-			cfg.Addr = value
 		case "HOST_AGENT_ADDR":
 			cfg.Addr = value
-		case "HOST_SERVICE_SOCKET_PATH":
-			cfg.SocketPath = value
 		case "HOST_AGENT_SOCKET_PATH":
 			cfg.SocketPath = value
-		case "HOST_SERVICE_APPLICATION_LOG_PATH":
-			cfg.ApplicationLogPath = value
 		case "HOST_AGENT_APPLICATION_LOG_PATH":
 			cfg.ApplicationLogPath = value
 		}

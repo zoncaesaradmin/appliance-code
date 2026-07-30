@@ -1,20 +1,20 @@
-# Host Service Execution Model
+# Host Agent Execution Model
 
 ## Intent
 
-The host service exists to expose host-scoped capability through the appliance API while keeping the appliance control plane as the external policy boundary. The pod is not meant to be the place where host facts are derived or where host-management commands truly execute.
+The host agent exists to expose host-scoped capability through the appliance API while keeping the appliance control plane as the external policy boundary. The pod is not meant to be the place where host facts are derived or where host-management commands truly execute.
 
 The target model is:
 
 - external callers talk only to the appliance API
 - the control plane enforces authentication, authorization, and routing
-- the host service pod exposes an internal service API inside K3s
+- the host agent pod exposes an internal service API inside K3s
 - host-scoped data collection and host-scoped command execution happen on the host OS context
 - the pod acts as a transport and shaping layer, not as the host execution environment
 
 ## Current State
 
-Today the host service does **not** execute on the host.
+Today the host agent does **not** execute on the host.
 
 It currently:
 
@@ -27,7 +27,7 @@ This is a practical bootstrap path, but it is not the intended long-term executi
 
 ## Requirement
 
-For host-service features, the product requirement is:
+For host-agent features, the product requirement is:
 
 - host-information gathering should happen on the host
 - host-management commands should run on the host
@@ -41,14 +41,14 @@ The preferred design is a **host execution bridge** with a small host-side agent
 
 ### Shape
 
-- `appliance-host-service` remains the in-cluster HTTP service behind the control plane
-- a new pinned host-side component such as `appliance-host-agent` runs on the appliance host
-- the pod communicates with the host-side agent over a local bridge, preferably a Unix domain socket mounted into the pod from a fixed host path such as `/run/zon/hostagent/hostagent.sock`
+- `appliance-host-agent` remains the in-cluster HTTP service behind the control plane
+- a pinned host-side component such as `appliance-host-agentd` runs on the appliance host
+- the pod communicates with the host-side agent over a local bridge, preferably a Unix domain socket mounted into the pod from a fixed host path such as `/run/zon/host-agent/agent.sock`
 - the host-side agent performs host-scoped reads and host-scoped commands, then returns structured results
 
 ### Why this is preferred
 
-- keeps the host service API in K3s and therefore still addable and manageable through the appliance platform
+- keeps the host agent API in K3s and therefore still addable and manageable through the appliance platform
 - keeps true host execution on the host OS
 - avoids needing a privileged pod, `hostPID`, `nsenter`, or broad host namespace escape in the normal service container
 - allows explicit lifecycle ownership through `zonctl` and the appliance install/upgrade path
@@ -101,7 +101,7 @@ The key boundary is that those actions execute in the host OS context, not in th
 
 ## Transition Plan
 
-1. Define a host-runner interface inside host service so HTTP handlers call a host bridge rather than reading files directly.
+1. Define a host-runner interface inside the host agent so HTTP handlers call a host bridge rather than reading files directly.
 2. Keep the current mounted-host collector only as a transitional implementation behind that interface.
 3. Add the pinned host-side agent and a Unix-socket transport.
 4. Switch info, stats, and health to the host-side implementation.

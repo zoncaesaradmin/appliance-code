@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"appliance-code/services/hostservice/internal/host"
+	"appliance-code/services/hostagent/internal/host"
 )
 
 const dialTimeout = 5 * time.Second

@@ -171,10 +171,6 @@ func readTrimmed(path string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func firstField(path string) (string, error) {
-	return nthField(path, 1)
-}
-
 func nthField(path string, index int) (string, error) {
 	text, err := readTrimmed(path)
 	if err != nil {
