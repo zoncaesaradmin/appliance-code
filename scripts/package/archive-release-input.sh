@@ -28,7 +28,7 @@ Options:
                                    platform-manifest reference. Required.
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
                                    Defaults to services/hostagent/bin/appliance-host-agentd.
-  --host-packages-dir DIR          Optional offline host package directory to
+  --host-packages-dir DIR          Required offline host package directory to
                                    copy into release-input as host-packages/.
                                    Layout must be OS/version/arch, for example
                                    ubuntu/24.04/amd64/*.deb.
@@ -262,7 +262,7 @@ if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
 
-if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${K3S_VERSION}" ]]; then
+if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${HOST_PACKAGES_DIR}" || -z "${K3S_VERSION}" ]]; then
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
@@ -284,7 +284,7 @@ if [[ ! -f "${HOST_AGENT_BINARY}" ]]; then
   echo "archive-release-input: host-agent binary not found: ${HOST_AGENT_BINARY}" >&2
   exit 1
 fi
-if [[ -n "${HOST_PACKAGES_DIR}" && ! -d "${HOST_PACKAGES_DIR}" ]]; then
+if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
   echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR}" >&2
   exit 1
 fi
@@ -565,9 +565,7 @@ cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
-if [[ -n "${HOST_PACKAGES_DIR}" ]]; then
-  copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
-fi
+copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
 if [[ -n "${ZOT_IMAGE}" ]]; then
   ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
   cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
@@ -770,11 +768,8 @@ if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
   OPTIONAL_EXTRA_OCI_IMAGES_JSON+=']'
 fi
 
-OPTIONAL_HOST_PACKAGES_JSON=""
-if [[ -d "${RELEASE_INPUT_DIR}/host-packages" ]]; then
-  OPTIONAL_HOST_PACKAGES_JSON=',
+HOST_PACKAGES_JSON=',
     "hostPackages": '"$(render_dir_artifact "host-packages")"
-fi
 
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {
@@ -786,7 +781,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
     "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
     "hostAgentImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}"),
-    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${OPTIONAL_HOST_PACKAGES_JSON},
+    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${HOST_PACKAGES_JSON},
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "zotChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" "${ZOT_CHART_ARCHIVE}")${OPTIONAL_ZOT_IMAGE_JSON},
     "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON},
