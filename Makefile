@@ -333,7 +333,7 @@ package-release-input-tar:
 		--host-agent-image "$$host_agent_image" \
 		--host-agent-image-reference "$$host_agent_image_ref" \
 		--host-agent-binary "$$host_agent_binary" \
-		--host-packages-dir "$${HOST_PACKAGES_DIR:?HOST_PACKAGES_DIR is required for bundled host packages such as Avahi}" \
+		--host-packages-dir "$${HOST_PACKAGES_DIR:-./scripts/package/host-packages}" \
 		--zot-image "$$zot_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
 		--zot-version "$$zot_version" \

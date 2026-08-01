@@ -28,8 +28,9 @@ Options:
                                    platform-manifest reference. Required.
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
                                    Defaults to services/hostagent/bin/appliance-host-agentd.
-  --host-packages-dir DIR          Required offline host package directory to
-                                   copy into release-input as host-packages/.
+  --host-packages-dir DIR          Offline host package directory to copy into
+                                   release-input as host-packages/. Defaults to
+                                   scripts/package/host-packages in this repo.
                                    Layout must be OS/version/arch, for example
                                    ubuntu/24.04/amd64/*.deb.
   --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
@@ -261,8 +262,34 @@ done
 if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
+if [[ -z "${HOST_PACKAGES_DIR}" ]]; then
+  HOST_PACKAGES_DIR="${REPO_ROOT}/scripts/package/host-packages"
+fi
 
-if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${HOST_PACKAGES_DIR}" || -z "${K3S_VERSION}" ]]; then
+require_supported_host_packages_tree() {
+  local root="$1"
+  local missing=()
+  local rel=""
+  local dir=""
+  local deb_count=""
+  for rel in "ubuntu/22.04/amd64" "ubuntu/24.04/amd64"; do
+    dir="${root}/${rel}"
+    if [[ ! -d "${dir}" ]]; then
+      missing+=("${rel}/*.deb")
+      continue
+    fi
+    deb_count="$(find "${dir}" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
+    if [[ "${deb_count}" == "0" ]]; then
+      missing+=("${rel}/*.deb")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "archive-release-input: host packages directory ${root} is missing offline .deb payloads for supported host baselines: ${missing[*]}" >&2
+    exit 1
+  fi
+}
+
+if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${K3S_VERSION}" ]]; then
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
@@ -288,6 +315,7 @@ if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
   echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR}" >&2
   exit 1
 fi
+require_supported_host_packages_tree "${HOST_PACKAGES_DIR}"
 if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
   echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
   exit 2
