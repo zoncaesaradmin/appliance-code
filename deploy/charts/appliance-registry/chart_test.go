@@ -131,6 +131,14 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	hostPackagesRoot := filepath.Join(tmp, "host-packages")
+	hostPackagesDir := filepath.Join(hostPackagesRoot, "ubuntu", "24.04", "amd64")
+	if err := os.MkdirAll(hostPackagesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostPackagesDir, "avahi-daemon.deb"), []byte("deb"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	crds := filepath.Join(tmp, "crds")
 	if err := os.Mkdir(crds, 0o700); err != nil {
 		t.Fatal(err)
@@ -146,6 +154,8 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
+		"--host-packages-dir", hostPackagesRoot,
+		"--host-packages-os-version", "24.04",
 		"--zot-image", zotArchive,
 		"--zot-image-reference", "registry.local/zot@sha256:"+digest,
 		"--zot-version", "2.1.8", "--argo-crds-dir", crds)
@@ -204,12 +214,22 @@ func TestReleaseInputRejectsUnpairedZotImage(t *testing.T) {
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	hostPackagesRoot := filepath.Join(tmp, "host-packages")
+	hostPackagesDir := filepath.Join(hostPackagesRoot, "ubuntu", "24.04", "amd64")
+	if err := os.MkdirAll(hostPackagesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostPackagesDir, "avahi-daemon.deb"), []byte("deb"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "test",
 		"--k3s-version", "v1", "--control-plane-image", zot, "--ui-image", zot,
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
+		"--host-packages-dir", hostPackagesRoot,
+		"--host-packages-os-version", "24.04",
 		"--zot-image", zot).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
 		t.Fatalf("unpaired Zot image was not rejected: err=%v output=%s", err, out)

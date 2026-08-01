@@ -79,7 +79,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-host-packages package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -264,6 +264,16 @@ package-coredns-image-archive:
 		$${DNS_SOURCE_IMAGE:+--source-image "$${DNS_SOURCE_IMAGE}"} \
 		$${DNS_VERSION:+--dns-version "$${DNS_VERSION}"}
 
+## package-host-packages: export the offline Ubuntu host package payload
+## needed by installer-owned host capabilities such as mDNS.
+package-host-packages:
+	@out_dir="$${OUT_DIR:-$(CURDIR)/.run/host-packages}"; \
+	mkdir -p "$$(dirname "$$out_dir")"; \
+	bash ./scripts/package/export-host-packages.sh \
+		--out-dir "$$out_dir" \
+		$${OS_VERSION:+--os-version "$${OS_VERSION}"} \
+		$${ARCH:+--arch "$${ARCH}"}
+
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.
 ## ARGO_CRDS_DIR is required: the Argo Workflows chart is always packaged
@@ -280,6 +290,8 @@ package-release-input-tar:
 	host_agent_image="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	host_agent_reference_file="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).reference"; \
 	host_agent_binary="$(CURDIR)/services/hostagent/bin/appliance-host-agentd"; \
+	host_packages_dir="$${HOST_PACKAGES_DIR:-$(CURDIR)/.run/host-packages}"; \
+	host_packages_os_version="$${HOST_PACKAGES_OS_VERSION:-$${OS_VERSION:-24.04}}"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
 	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
 	zot_version="$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
@@ -297,6 +309,11 @@ package-release-input-tar:
 	$(MAKE) --no-print-directory package-host-agent-image-archive \
 		OUT_FILE="$$host_agent_image" \
 		REFERENCE_OUT_FILE="$$host_agent_reference_file"; \
+	if [ -z "$${HOST_PACKAGES_DIR:-}" ]; then \
+		$(MAKE) --no-print-directory package-host-packages \
+			OUT_DIR="$$host_packages_dir" \
+			OS_VERSION="$$host_packages_os_version"; \
+	fi; \
 	host_agent_image_ref="$$(tr -d '\r\n' < "$$host_agent_reference_file")"; \
 	if [ -n "$$argo_version" ] && [ -z "$${ARGO_CONTROLLER_IMAGE:-}" ]; then \
 		$(MAKE) --no-print-directory package-argo-controller-image-archive \
@@ -333,7 +350,8 @@ package-release-input-tar:
 		--host-agent-image "$$host_agent_image" \
 		--host-agent-image-reference "$$host_agent_image_ref" \
 		--host-agent-binary "$$host_agent_binary" \
-		--host-packages-dir "$${HOST_PACKAGES_DIR:-./scripts/package/host-packages}" \
+		--host-packages-dir "$$host_packages_dir" \
+		--host-packages-os-version "$$host_packages_os_version" \
 		--zot-image "$$zot_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
 		--zot-version "$$zot_version" \

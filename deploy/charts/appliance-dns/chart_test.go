@@ -155,6 +155,14 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	hostPackagesRoot := filepath.Join(tmp, "host-packages")
+	hostPackagesDir := filepath.Join(hostPackagesRoot, "ubuntu", "24.04", "amd64")
+	if err := os.MkdirAll(hostPackagesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostPackagesDir, "avahi-daemon.deb"), []byte("deb"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	crds := filepath.Join(tmp, "crds")
 	if err := os.Mkdir(crds, 0o700); err != nil {
 		t.Fatal(err)
@@ -170,6 +178,8 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
+		"--host-packages-dir", hostPackagesRoot,
+		"--host-packages-os-version", "24.04",
 		"--zot-image", zotArchive,
 		"--zot-image-reference", "registry.local/zot@sha256:"+zotDigest,
 		"--zot-version", "2.1.8",
@@ -232,12 +242,22 @@ func TestReleaseInputRejectsUnpairedDNSImage(t *testing.T) {
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	hostPackagesRoot := filepath.Join(tmp, "host-packages")
+	hostPackagesDir := filepath.Join(hostPackagesRoot, "ubuntu", "24.04", "amd64")
+	if err := os.MkdirAll(hostPackagesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hostPackagesDir, "avahi-daemon.deb"), []byte("deb"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "test",
 		"--k3s-version", "v1", "--control-plane-image", dns, "--ui-image", dns,
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
+		"--host-packages-dir", hostPackagesRoot,
+		"--host-packages-os-version", "24.04",
 		"--dns-image", dns).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
 		t.Fatalf("unpaired DNS image was not rejected: err=%v output=%s", err, out)

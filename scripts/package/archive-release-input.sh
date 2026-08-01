@@ -29,10 +29,13 @@ Options:
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
                                    Defaults to services/hostagent/bin/appliance-host-agentd.
   --host-packages-dir DIR          Offline host package directory to copy into
-                                   release-input as host-packages/. Defaults to
-                                   scripts/package/host-packages in this repo.
+                                   release-input as host-packages/.
                                    Layout must be OS/version/arch, for example
                                    ubuntu/24.04/amd64/*.deb.
+  --host-packages-os-version VER   Ubuntu baseline expected under
+                                   host-packages/ubuntu/<VER>/amd64/.
+                                   Defaults to the OS_VERSION environment
+                                   variable. Required when OS_VERSION is unset.
   --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
   --zot-image-reference REF        Canonical registry.local/zot@sha256:...
                                    platform-manifest reference.
@@ -91,6 +94,7 @@ HOST_AGENT_IMAGE=""
 HOST_AGENT_IMAGE_REFERENCE=""
 HOST_AGENT_BINARY=""
 HOST_PACKAGES_DIR=""
+HOST_PACKAGES_OS_VERSION="${OS_VERSION:-}"
 ZOT_IMAGE=""
 ZOT_IMAGE_REFERENCE=""
 ZOT_VERSION=""
@@ -161,6 +165,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --host-packages-dir)
       HOST_PACKAGES_DIR="${2:-}"
+      shift 2
+      ;;
+    --host-packages-os-version)
+      HOST_PACKAGES_OS_VERSION="${2:-}"
       shift 2
       ;;
     --zot-image)
@@ -263,28 +271,21 @@ if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
 if [[ -z "${HOST_PACKAGES_DIR}" ]]; then
-  HOST_PACKAGES_DIR="${REPO_ROOT}/scripts/package/host-packages"
+  HOST_PACKAGES_DIR="${REPO_ROOT}/.run/host-packages"
 fi
 
-require_supported_host_packages_tree() {
+require_host_packages_baseline() {
   local root="$1"
-  local missing=()
-  local rel=""
-  local dir=""
+  local os_version="$2"
+  local dir="${root}/ubuntu/${os_version}/amd64"
   local deb_count=""
-  for rel in "ubuntu/22.04/amd64" "ubuntu/24.04/amd64"; do
-    dir="${root}/${rel}"
-    if [[ ! -d "${dir}" ]]; then
-      missing+=("${rel}/*.deb")
-      continue
-    fi
-    deb_count="$(find "${dir}" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
-    if [[ "${deb_count}" == "0" ]]; then
-      missing+=("${rel}/*.deb")
-    fi
-  done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "archive-release-input: host packages directory ${root} is missing offline .deb payloads for supported host baselines: ${missing[*]}" >&2
+  if [[ ! -d "${dir}" ]]; then
+    echo "archive-release-input: host packages directory ${root} is missing ubuntu/${os_version}/amd64/*.deb" >&2
+    exit 1
+  fi
+  deb_count="$(find "${dir}" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
+  if [[ "${deb_count}" == "0" ]]; then
+    echo "archive-release-input: host packages directory ${root} is missing ubuntu/${os_version}/amd64/*.deb" >&2
     exit 1
   fi
 }
@@ -315,7 +316,11 @@ if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
   echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR}" >&2
   exit 1
 fi
-require_supported_host_packages_tree "${HOST_PACKAGES_DIR}"
+if [[ -z "${HOST_PACKAGES_OS_VERSION}" ]]; then
+  echo "archive-release-input: --host-packages-os-version is required (or set OS_VERSION in the environment)" >&2
+  exit 2
+fi
+require_host_packages_baseline "${HOST_PACKAGES_DIR}" "${HOST_PACKAGES_OS_VERSION}"
 if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
   echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
   exit 2
