@@ -32,10 +32,14 @@ Options:
                                    release-input as host-packages/.
                                    Layout must be OS/version/arch, for example
                                    ubuntu/24.04/amd64/*.deb.
+                                   Used only when host mDNS is enabled.
   --host-packages-os-version VER   Ubuntu baseline expected under
                                    host-packages/ubuntu/<VER>/amd64/.
                                    Defaults to the OS_VERSION environment
-                                   variable. Required when OS_VERSION is unset.
+                                   variable. Required only when host mDNS is enabled.
+  --host-mdns-enabled true|false   Whether this release-input should carry the
+                                   offline host mDNS package payload.
+                                   Defaults to false.
   --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
   --zot-image-reference REF        Canonical registry.local/zot@sha256:...
                                    platform-manifest reference.
@@ -95,6 +99,7 @@ HOST_AGENT_IMAGE_REFERENCE=""
 HOST_AGENT_BINARY=""
 HOST_PACKAGES_DIR=""
 HOST_PACKAGES_OS_VERSION="${OS_VERSION:-}"
+HOST_MDNS_ENABLED="${HOST_MDNS_ENABLED:-false}"
 ZOT_IMAGE=""
 ZOT_IMAGE_REFERENCE=""
 ZOT_VERSION=""
@@ -169,6 +174,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --host-packages-os-version)
       HOST_PACKAGES_OS_VERSION="${2:-}"
+      shift 2
+      ;;
+    --host-mdns-enabled)
+      HOST_MDNS_ENABLED="${2:-}"
       shift 2
       ;;
     --zot-image)
@@ -267,10 +276,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+bool_true() {
+  local value="${1:-}"
+  case "$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
-if [[ -z "${HOST_PACKAGES_DIR}" ]]; then
+if bool_true "${HOST_MDNS_ENABLED}" && [[ -z "${HOST_PACKAGES_DIR}" ]]; then
   HOST_PACKAGES_DIR="${REPO_ROOT}/.run/host-packages"
 fi
 
@@ -312,15 +329,17 @@ if [[ ! -f "${HOST_AGENT_BINARY}" ]]; then
   echo "archive-release-input: host-agent binary not found: ${HOST_AGENT_BINARY}" >&2
   exit 1
 fi
-if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
-  echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR}" >&2
-  exit 1
+if bool_true "${HOST_MDNS_ENABLED}"; then
+  if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
+    echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR}" >&2
+    exit 1
+  fi
+  if [[ -z "${HOST_PACKAGES_OS_VERSION}" ]]; then
+    echo "archive-release-input: --host-packages-os-version is required when host mDNS is enabled (or set OS_VERSION in the environment)" >&2
+    exit 2
+  fi
+  require_host_packages_baseline "${HOST_PACKAGES_DIR}" "${HOST_PACKAGES_OS_VERSION}"
 fi
-if [[ -z "${HOST_PACKAGES_OS_VERSION}" ]]; then
-  echo "archive-release-input: --host-packages-os-version is required (or set OS_VERSION in the environment)" >&2
-  exit 2
-fi
-require_host_packages_baseline "${HOST_PACKAGES_DIR}" "${HOST_PACKAGES_OS_VERSION}"
 if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
   echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
   exit 2
@@ -598,7 +617,9 @@ cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
-copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
+if bool_true "${HOST_MDNS_ENABLED}"; then
+  copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
+fi
 if [[ -n "${ZOT_IMAGE}" ]]; then
   ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
   cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
@@ -801,8 +822,11 @@ if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
   OPTIONAL_EXTRA_OCI_IMAGES_JSON+=']'
 fi
 
-HOST_PACKAGES_JSON=',
+HOST_PACKAGES_JSON=""
+if bool_true "${HOST_MDNS_ENABLED}"; then
+  HOST_PACKAGES_JSON=',
     "hostPackages": '"$(render_dir_artifact "host-packages")"
+fi
 
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {

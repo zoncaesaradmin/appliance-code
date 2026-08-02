@@ -107,6 +107,7 @@ config:
   # a materialized ConfigMap zone file). Product A records are not seeded at
   # install; create them via the DNS records API/UI. Optional bootstrap_*
   # fields remain for rare operator overrides and stay empty by default.
+  hostMDNSEnabled: false
   dnsZoneName: "appliance.internal"
   dnsConfigMapNamespace: "dns"
   dnsConfigMapName: "dns-server-config"

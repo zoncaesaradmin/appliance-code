@@ -290,6 +290,7 @@ package-release-input-tar:
 	host_agent_image="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).tar"; \
 	host_agent_reference_file="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).reference"; \
 	host_agent_binary="$(CURDIR)/services/hostagent/bin/appliance-host-agentd"; \
+	host_mdns_enabled="$${HOST_MDNS_ENABLED:-false}"; \
 	host_packages_dir="$${HOST_PACKAGES_DIR:-$(CURDIR)/.run/host-packages}"; \
 	host_packages_os_version="$${HOST_PACKAGES_OS_VERSION:-$${OS_VERSION:-24.04}}"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
@@ -309,7 +310,7 @@ package-release-input-tar:
 	$(MAKE) --no-print-directory package-host-agent-image-archive \
 		OUT_FILE="$$host_agent_image" \
 		REFERENCE_OUT_FILE="$$host_agent_reference_file"; \
-	if [ -z "$${HOST_PACKAGES_DIR:-}" ]; then \
+	if [ "$$host_mdns_enabled" = "true" ] && [ -z "$${HOST_PACKAGES_DIR:-}" ]; then \
 		$(MAKE) --no-print-directory package-host-packages \
 			OUT_DIR="$$host_packages_dir" \
 			OS_VERSION="$$host_packages_os_version"; \
@@ -339,9 +340,8 @@ package-release-input-tar:
 			$${DNS_SOURCE_IMAGE:+--source-image "$${DNS_SOURCE_IMAGE}"}; \
 		DNS_IMAGE_REFERENCE="$$(tr -d '\r\n' < "$$dns_reference_file")"; \
 	fi; \
-	bash ./scripts/package/archive-release-input.sh \
+	set -- \
 		--out-file "$${OUT_FILE}" \
-		$${LATEST_OUT_FILE:+--latest-out-file "$${LATEST_OUT_FILE}"} \
 		--code-version "$${CODE_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}" \
 		--control-plane-image "$$control_plane_image" \
 		--control-plane-image-reference "$$control_plane_image_ref" \
@@ -350,28 +350,32 @@ package-release-input-tar:
 		--host-agent-image "$$host_agent_image" \
 		--host-agent-image-reference "$$host_agent_image_ref" \
 		--host-agent-binary "$$host_agent_binary" \
-		--host-packages-dir "$$host_packages_dir" \
-		--host-packages-os-version "$$host_packages_os_version" \
+		--host-mdns-enabled "$$host_mdns_enabled" \
 		--zot-image "$$zot_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
 		--zot-version "$$zot_version" \
 		--dns-image "$$dns_image" \
 		--dns-image-reference "$${DNS_IMAGE_REFERENCE}" \
 		--dns-version "$$dns_version" \
-		--k3s-version "$${K3S_VERSION}" \
-		$${RELEASE_ID:+--release-id "$${RELEASE_ID}"} \
-		$${CHART_VERSION:+--chart-version "$${CHART_VERSION}"} \
-		$${SUPPORTED_UPGRADE_SOURCE:+--supported-upgrade-source "$${SUPPORTED_UPGRADE_SOURCE}"} \
-		$${SBOM_DIR:+--sbom-dir "$${SBOM_DIR}"} \
-		$${PROVENANCE_DIR:+--provenance-dir "$${PROVENANCE_DIR}"} \
-		$${NOTICES_DIR:+--notices-dir "$${NOTICES_DIR}"} \
-		$${TESTS_DIR:+--tests-dir "$${TESTS_DIR}"} \
-		$${argo_version:+--argo-version "$${argo_version}"} \
-		$${ARGO_CONTROLLER_IMAGE:+--argo-controller-image "$${ARGO_CONTROLLER_IMAGE}"} \
-		$${ARGO_CONTROLLER_IMAGE_REFERENCE:+--argo-controller-image-reference "$${ARGO_CONTROLLER_IMAGE_REFERENCE}"} \
-		$${ARGO_EXECUTOR_IMAGE:+--argo-executor-image "$${ARGO_EXECUTOR_IMAGE}"} \
-		$${ARGO_EXECUTOR_IMAGE_REFERENCE:+--argo-executor-image-reference "$${ARGO_EXECUTOR_IMAGE_REFERENCE}"} \
-		$${ARGO_CRDS_DIR:+--argo-crds-dir "$${ARGO_CRDS_DIR}"}
+		--k3s-version "$${K3S_VERSION}"; \
+	if [ "$$host_mdns_enabled" = "true" ]; then \
+		set -- "$$@" --host-packages-dir "$$host_packages_dir" --host-packages-os-version "$$host_packages_os_version"; \
+	fi; \
+	if [ -n "$${LATEST_OUT_FILE:-}" ]; then set -- "$$@" --latest-out-file "$${LATEST_OUT_FILE}"; fi; \
+	if [ -n "$${RELEASE_ID:-}" ]; then set -- "$$@" --release-id "$${RELEASE_ID}"; fi; \
+	if [ -n "$${CHART_VERSION:-}" ]; then set -- "$$@" --chart-version "$${CHART_VERSION}"; fi; \
+	if [ -n "$${SUPPORTED_UPGRADE_SOURCE:-}" ]; then set -- "$$@" --supported-upgrade-source "$${SUPPORTED_UPGRADE_SOURCE}"; fi; \
+	if [ -n "$${SBOM_DIR:-}" ]; then set -- "$$@" --sbom-dir "$${SBOM_DIR}"; fi; \
+	if [ -n "$${PROVENANCE_DIR:-}" ]; then set -- "$$@" --provenance-dir "$${PROVENANCE_DIR}"; fi; \
+	if [ -n "$${NOTICES_DIR:-}" ]; then set -- "$$@" --notices-dir "$${NOTICES_DIR}"; fi; \
+	if [ -n "$${TESTS_DIR:-}" ]; then set -- "$$@" --tests-dir "$${TESTS_DIR}"; fi; \
+	if [ -n "$$argo_version" ]; then set -- "$$@" --argo-version "$$argo_version"; fi; \
+	if [ -n "$${ARGO_CONTROLLER_IMAGE:-}" ]; then set -- "$$@" --argo-controller-image "$${ARGO_CONTROLLER_IMAGE}"; fi; \
+	if [ -n "$${ARGO_CONTROLLER_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --argo-controller-image-reference "$${ARGO_CONTROLLER_IMAGE_REFERENCE}"; fi; \
+	if [ -n "$${ARGO_EXECUTOR_IMAGE:-}" ]; then set -- "$$@" --argo-executor-image "$${ARGO_EXECUTOR_IMAGE}"; fi; \
+	if [ -n "$${ARGO_EXECUTOR_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --argo-executor-image-reference "$${ARGO_EXECUTOR_IMAGE_REFERENCE}"; fi; \
+	if [ -n "$${ARGO_CRDS_DIR:-}" ]; then set -- "$$@" --argo-crds-dir "$${ARGO_CRDS_DIR}"; fi; \
+	bash ./scripts/package/archive-release-input.sh "$$@"
 
 # --- Developer Container (Linux only — see docs/dev-container.md) -----
 # A shared toolchain image (Go, Buildah, Skopeo, etc. — see the image's

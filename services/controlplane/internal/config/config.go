@@ -40,6 +40,7 @@ type Config struct {
 	FilesTransferTimeout  time.Duration             `json:"filesTransferTimeout"`
 	FilesMaxUploadBytes   int64                     `json:"filesMaxUploadBytes"`
 	DNSReadyURL           string                    `json:"dnsReadyURL"`
+	HostMDNSEnabled       bool                      `json:"hostMDNSEnabled"`
 	DNSZoneName           string                    `json:"dnsZoneName"`
 	DNSConfigMapNamespace string                    `json:"dnsConfigMapNamespace"`
 	DNSConfigMapName      string                    `json:"dnsConfigMapName"`
@@ -195,6 +196,14 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			errs = append(errs, fmt.Sprintf("DNS_ALLOW_FAKE_ZONE_SYNC: %v", err))
 		} else {
 			cfg.DNSAllowFakeZoneSync = parsed
+		}
+	}
+	if v, ok := env[envPrefix+"HOST_MDNS_ENABLED"]; ok {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("HOST_MDNS_ENABLED: %v", err))
+		} else {
+			cfg.HostMDNSEnabled = parsed
 		}
 	}
 
