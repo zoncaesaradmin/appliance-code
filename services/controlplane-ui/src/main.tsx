@@ -398,8 +398,12 @@ function Shell(props: {
   }, [props.pathname, props.session]);
 
   useEffect(() => {
-    if (props.pathname === "/home/session") {
+    if (props.pathname === "/home/session" || props.pathname === "/account") {
       navigate("/account/session", true);
+      return;
+    }
+    if (props.pathname === "/home/access") {
+      navigate("/account/api-keys", true);
     }
   }, [props.pathname]);
 
@@ -469,7 +473,7 @@ function Shell(props: {
               <div className="shell-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] grid min-w-56 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20 max-[680px]:left-0 max-[680px]:right-auto">
                 <button onClick={closeTransientMenus}>Preferences</button>
                 <button onClick={closeTransientMenus}>Change password</button>
-                <button onClick={() => onUserAction("/home/access")}>Manage API keys</button>
+                <button onClick={() => onUserAction("/account/api-keys")}>Manage API keys</button>
                 <button onClick={() => onUserAction("/account/session")}>Session info</button>
                 <button onClick={closeTransientMenus}>Logo options</button>
                 <button
@@ -552,8 +556,8 @@ function RouteView(props: {
   session: Session;
   capabilities: string[];
 }): React.JSX.Element {
-  if (props.pathname.startsWith("/account/session")) {
-    return <SessionPage session={props.session} />;
+  if (props.pathname.startsWith("/account")) {
+    return <AccountPage pathname={props.pathname} session={props.session} />;
   }
   if (props.pathname.startsWith("/manage/builder")) {
     return <BuilderPage pathname={props.pathname} />;
@@ -573,74 +577,17 @@ function RouteView(props: {
   return <HomePage pathname={props.pathname} session={props.session} capabilities={props.capabilities} />;
 }
 
-function SessionPage(props: { session: Session }): React.JSX.Element {
-  return (
-    <PageFrame
-      title="Session info"
-      description="Details for the currently authenticated control-plane session."
-      pathname="/account/session"
-      onNavigate={navigate}
-      tabs={[]}
-    >
-      <div className="grid-two">
-        <Card title="User details" subtitle="Current authenticated session">
-          <div className="detail-list">
-            <div>
-              <span>Username</span>
-              <strong>{props.session.username}</strong>
-            </div>
-            <div>
-              <span>User ID</span>
-              <strong>{props.session.userId}</strong>
-            </div>
-            <div>
-              <span>Auth method</span>
-              <strong>{props.session.authMethod}</strong>
-            </div>
-          </div>
-        </Card>
-        <Card title="Permissions" subtitle="Resolved control-plane permissions">
-          <div className="badge-row">
-            {props.session.permissions.map((permission) => (
-              <span className="pill" key={permission}>
-                {permission}
-              </span>
-            ))}
-          </div>
-        </Card>
-      </div>
-    </PageFrame>
-  );
-}
-
-function HomePage(props: {
+function AccountPage(props: {
   pathname: string;
   session: Session;
-  capabilities: string[];
 }): React.JSX.Element {
-  const [version, setVersion] = useState<Version | null>(null);
-  const [health, setHealth] = useState("unknown");
-  const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [tokenName, setTokenName] = useState("");
   const [createdToken, setCreatedToken] = useState<CreateTokenResponse | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    void (async () => {
-      const [nextVersion, nextHealth, nextIdentity] = await Promise.all([
-        client.getVersion().catch(() => null),
-        client.getReady().then((value) => value.status).catch(() => "degraded"),
-        client.getIdentity().catch(() => null)
-      ]);
-      setVersion(nextVersion);
-      setHealth(nextHealth);
-      setIdentity(nextIdentity);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (props.pathname !== "/home/access") {
+    if (props.pathname !== "/account/api-keys") {
       return;
     }
     void client.listTokens().then(setTokens).catch(() => setTokens([]));
@@ -671,15 +618,15 @@ function HomePage(props: {
 
   return (
     <PageFrame
-      title={`Welcome, ${props.session.username}`}
+      title={props.session.username}
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
-        { label: "Overview", path: "/home", icon: "home" },
-        { label: "API Keys", path: "/home/access", icon: "key" }
+        { label: "Session", path: "/account/session" },
+        { label: "API Keys", path: "/account/api-keys" }
       ]}
     >
-      {props.pathname === "/home/access" ? (
+      {props.pathname === "/account/api-keys" ? (
         <div className="grid-two">
           <Card title="Create API token" subtitle="User-scoped token creation">
             <form className="stack-form" onSubmit={createToken}>
@@ -715,6 +662,75 @@ function HomePage(props: {
             </div>
           </Card>
         </div>
+      ) : (
+        <div className="grid-two">
+          <Card title="User details" subtitle="Current authenticated session">
+            <div className="detail-list">
+              <div>
+                <span>Username</span>
+                <strong>{props.session.username}</strong>
+              </div>
+              <div>
+                <span>User ID</span>
+                <strong>{props.session.userId}</strong>
+              </div>
+              <div>
+                <span>Auth method</span>
+                <strong>{props.session.authMethod}</strong>
+              </div>
+            </div>
+          </Card>
+          <Card title="Permissions" subtitle="Resolved control-plane permissions">
+            <div className="badge-row">
+              {props.session.permissions.map((permission) => (
+                <span className="pill" key={permission}>
+                  {permission}
+                </span>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+    </PageFrame>
+  );
+}
+
+function HomePage(props: {
+  pathname: string;
+  session: Session;
+  capabilities: string[];
+}): React.JSX.Element {
+  const [version, setVersion] = useState<Version | null>(null);
+  const [health, setHealth] = useState("unknown");
+  const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      const [nextVersion, nextHealth, nextIdentity] = await Promise.all([
+        client.getVersion().catch(() => null),
+        client.getReady().then((value) => value.status).catch(() => "degraded"),
+        client.getIdentity().catch(() => null)
+      ]);
+      setVersion(nextVersion);
+      setHealth(nextHealth);
+      setIdentity(nextIdentity);
+    })();
+  }, []);
+
+  return (
+    <PageFrame
+      title={`Welcome, ${props.session.username}`}
+      pathname={props.pathname}
+      onNavigate={navigate}
+      tabs={[
+        { label: "Overview", path: "/home" },
+        { label: "Topology", path: "/home/topology" }
+      ]}
+    >
+      {props.pathname === "/home/topology" ? (
+        <Card title="Topology" subtitle="Connected appliance topology">
+          <EmptyState message="Topology details are not available yet. This view will show how appliances are connected for the current deployment." />
+        </Card>
       ) : (
         <div className="stack">
           <div className="stats-grid">
@@ -867,9 +883,9 @@ function BuilderPage(props: { pathname: string }): React.JSX.Element {
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
-        { label: "Workspaces", path: "/manage/builder", icon: "builder" },
-        { label: "Git Access", path: "/manage/builder/git-access", icon: "key" },
-        { label: "Builds", path: "/manage/builder/builds", icon: "artifacts" }
+        { label: "Workspaces", path: "/manage/builder" },
+        { label: "Git Access", path: "/manage/builder/git-access" },
+        { label: "Builds", path: "/manage/builder/builds" }
       ]}
     >
       {message ? <div className="message">{message}</div> : null}
@@ -1067,7 +1083,7 @@ function DNSPage(): React.JSX.Element {
       description="Managed LAN DNS records for the appliance zone."
       pathname="/manage/dns"
       onNavigate={navigate}
-      tabs={[{ label: "Records", path: "/manage/dns", icon: "dns" }]}
+      tabs={[{ label: "Records", path: "/manage/dns" }]}
     >
       {message ? <div className="message">{message}</div> : null}
       <div className="grid-two">
@@ -1172,8 +1188,8 @@ function ArtifactsPage(props: { pathname: string }): React.JSX.Element {
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
-        { label: "Catalog", path: "/manage/artifacts", icon: "catalog" },
-        { label: "Grants", path: "/manage/artifacts/grants", icon: "key" }
+        { label: "Catalog", path: "/manage/artifacts" },
+        { label: "Grants", path: "/manage/artifacts/grants" }
       ]}
     >
       {message ? <div className="message">{message}</div> : null}
@@ -1307,7 +1323,7 @@ function AnalyzePage(): React.JSX.Element {
       description="A lightweight operational analysis view for current builder workflow activity."
       pathname="/analyze/workflows"
       onNavigate={navigate}
-      tabs={[{ label: "Workflow Health", path: "/analyze/workflows", icon: "workflows" }]}
+      tabs={[{ label: "Workflow Health", path: "/analyze/workflows" }]}
     >
       <div className="stats-grid">
         <StatCard label="Workspaces" value={String(workspaces.length)} />
@@ -1367,9 +1383,9 @@ function AdminPage(props: { pathname: string; capabilities: string[] }): React.J
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
-        { label: "System Status", path: "/admin/system-status", icon: "status" },
-        { label: "Profiles", path: "/admin/profiles", icon: "profiles" },
-        { label: "Licensing", path: "/admin/licensing", icon: "license" }
+        { label: "System Status", path: "/admin/system-status" },
+        { label: "Profiles", path: "/admin/profiles" },
+        { label: "Licensing", path: "/admin/licensing" }
       ]}
     >
       {props.pathname === "/admin/profiles" ? (

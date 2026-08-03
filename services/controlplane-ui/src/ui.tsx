@@ -22,6 +22,7 @@ export type IconName =
   | "search"
   | "session"
   | "status"
+  | "topology"
   | "user"
   | "workflows";
 
@@ -129,6 +130,17 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
       return (
         <svg {...common}>
           <path d="M4 13h4l2-6 4 10 2-4h4" />
+        </svg>
+      );
+    case "topology":
+      return (
+        <svg {...common}>
+          <circle cx="6" cy="6" r="2.5" />
+          <circle cx="18" cy="6" r="2.5" />
+          <circle cx="12" cy="18" r="2.5" />
+          <path d="M8 7.5 10.5 15" />
+          <path d="m16 7.5-2.5 7.5" />
+          <path d="M8.5 6h7" />
         </svg>
       );
     case "profiles":
@@ -258,7 +270,7 @@ export function Card(props: {
 export function PageFrame(props: {
   title: string;
   description?: string;
-  tabs: Array<{ label: string; path: string; icon?: IconName }>;
+  tabs: Array<{ label: string; path: string }>;
   pathname: string;
   onNavigate: (path: string) => void;
   children: ReactNode;
@@ -279,26 +291,30 @@ export function PageFrame(props: {
         ) : null}
       </div>
       {props.tabs.length > 0 ? (
-        <div className="mb-6 mt-5 flex flex-wrap gap-2 border-b border-slate-200 pb-4">
+        <nav
+          className="mb-6 mt-5 flex flex-wrap gap-x-6 gap-y-1 border-b border-slate-200"
+          aria-label="Page sections"
+        >
           {props.tabs.map((tab) => {
             const active = props.pathname === tab.path;
             return (
               <button
                 key={tab.path}
+                type="button"
                 className={cn(
-                  "inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition",
+                  "-mb-px border-b-2 px-0.5 pb-3 text-sm font-semibold tracking-tight transition",
                   active
-                    ? "bg-blue-100 text-blue-950"
-                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                    ? "border-blue-950 text-slate-950"
+                    : "border-transparent text-slate-500 hover:text-slate-950"
                 )}
+                aria-current={active ? "page" : undefined}
                 onClick={() => props.onNavigate(tab.path)}
               >
-                {tab.icon ? <Icon name={tab.icon} className="h-4 w-4" /> : null}
                 {tab.label}
               </button>
             );
           })}
-        </div>
+        </nav>
       ) : (
         <div className="mb-6 mt-5" />
       )}
