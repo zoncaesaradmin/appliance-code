@@ -159,8 +159,9 @@ function App(): React.JSX.Element {
     }
   }, [pathname, shellState.booting, shellState.initialized, shellState.session]);
 
-  async function handleLogin(username: string, password: string, domain: string): Promise<void> {
-    const tokens = await client.login(username, password, domain);
+  async function handleLogin(username: string, password: string): Promise<void> {
+    // Login omits domain in the UI; client/backend default to local.
+    const tokens = await client.login(username, password);
     saveAuth(tokens);
     setRefreshKey((value) => value + 1);
   }
@@ -221,7 +222,7 @@ function BootScreen(props: { message: string; error?: boolean }): React.JSX.Elem
 
 function AuthLayout(props: {
   mode: "login" | "setup";
-  onLogin: (username: string, password: string, domain: string) => Promise<void>;
+  onLogin: (username: string, password: string) => Promise<void>;
   onSetup: (username: string, password: string) => Promise<void>;
 }): React.JSX.Element {
   const [username, setUsername] = useState("admin");
@@ -230,7 +231,7 @@ function AuthLayout(props: {
   const [domain, setDomain] = useState("local");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [productVersion, setProductVersion] = useState<string>("—");
+  const [productVersion, setProductVersion] = useState<string>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -243,7 +244,7 @@ function AuthLayout(props: {
       })
       .catch(() => {
         if (!cancelled) {
-          setProductVersion("—");
+          setProductVersion("");
         }
       });
     return () => {
@@ -262,7 +263,7 @@ function AuthLayout(props: {
         }
         await props.onSetup(username, password);
       } else {
-        await props.onLogin(username, password, domain);
+        await props.onLogin(username, password);
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
@@ -272,6 +273,7 @@ function AuthLayout(props: {
   }
 
   const year = new Date().getFullYear();
+  const versionLabel = productVersion ? `Version ${productVersion}` : "Version unavailable";
 
   return (
     <div className="auth-layout">
@@ -304,22 +306,14 @@ function AuthLayout(props: {
             <header className="auth-form__brand">
               <BrandMark size="lg" />
               <h1>Welcome to Zon Appliance</h1>
-              <p className="auth-form__version">Version {productVersion}</p>
+              <p className="auth-form__version" aria-live="polite">
+                {versionLabel}
+              </p>
               {props.mode === "setup" ? (
                 <p className="auth-form__lede">Create the first administrator to finish setup.</p>
               ) : null}
             </header>
             <form className="stack-form auth-form__fields" onSubmit={handleSubmit}>
-              <label className="field">
-                <span>Domain</span>
-                <select
-                  value={domain}
-                  onChange={(event) => setDomain(event.target.value)}
-                  disabled={props.mode === "setup"}
-                >
-                  <option value="local">local</option>
-                </select>
-              </label>
               <label className="field">
                 <span>Username</span>
                 <input
@@ -346,6 +340,14 @@ function AuthLayout(props: {
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     autoComplete="new-password"
                   />
+                </label>
+              ) : null}
+              {props.mode === "setup" ? (
+                <label className="field">
+                  <span>Domain</span>
+                  <select value={domain} onChange={(event) => setDomain(event.target.value)}>
+                    <option value="local">local</option>
+                  </select>
                 </label>
               ) : null}
               {error ? <div className="message message--error">{error}</div> : null}

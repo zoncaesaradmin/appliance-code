@@ -23,6 +23,8 @@ The Go host serves:
 - immutable files under `/assets/`
 - `/health/live`
 - `/health/ready`
+- `/version` (proxies the control-plane product version JSON; Traefik
+  routes this path to the UI catch-all rather than `/api/v1`)
 
 Readiness still checks the configured internal control-plane URL so the UI pod
 does not report ready when the appliance API is unavailable.

@@ -15,7 +15,9 @@ import (
 )
 
 type fakeControlPlane struct {
-	readyErr error
+	readyErr   error
+	versionErr error
+	version    controlplane.Version
 }
 
 func (f fakeControlPlane) Ready(_ context.Context) (controlplane.Health, error) {
@@ -23,6 +25,16 @@ func (f fakeControlPlane) Ready(_ context.Context) (controlplane.Health, error) 
 		return controlplane.Health{}, f.readyErr
 	}
 	return controlplane.Health{Status: "ready"}, nil
+}
+
+func (f fakeControlPlane) Version(_ context.Context) (controlplane.Version, error) {
+	if f.versionErr != nil {
+		return controlplane.Version{}, f.versionErr
+	}
+	if f.version.Version != "" {
+		return f.version, nil
+	}
+	return controlplane.Version{Version: "1.2.3", Commit: "abc", BuildTime: "2026-01-01T00:00:00Z", GoVersion: "go1.26"}, nil
 }
 
 func TestSPARoutesServeIndexAndAssets(t *testing.T) {
@@ -159,6 +171,46 @@ func TestReadinessFailure(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("ready got %d, want 503", rec.Code)
+	}
+}
+
+func TestVersionRoute(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "index.html"), "ok")
+	logger, err := uilogging.NewWithWriter("debug", os.Stdout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler, err := New(Config{StaticDir: root}, fakeControlPlane{
+		version: controlplane.Version{Version: "1.4.2", Commit: "deadbeef", BuildTime: "2026-08-01T00:00:00Z", GoVersion: "go1.26"},
+	}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("version got %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	if !strings.Contains(rec.Body.String(), `"version":"1.4.2"`) {
+		t.Fatalf("version body = %q, want product version JSON", rec.Body.String())
+	}
+
+	failHandler, err := New(Config{StaticDir: root}, fakeControlPlane{versionErr: errors.New("cp down")}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failRec := httptest.NewRecorder()
+	failHandler.ServeHTTP(failRec, httptest.NewRequest(http.MethodGet, "/version", nil))
+	if failRec.Code != http.StatusBadGateway {
+		t.Fatalf("version failure got %d, want 502", failRec.Code)
 	}
 }
 

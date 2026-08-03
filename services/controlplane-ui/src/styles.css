@@ -205,9 +205,10 @@ button {
 
 .auth-form__version {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.92rem;
-  font-weight: 600;
+  color: #334155;
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .auth-form__lede {

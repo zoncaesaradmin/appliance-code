@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ type Config struct {
 
 type controlPlane interface {
 	Ready(ctx context.Context) (controlplane.Health, error)
+	Version(ctx context.Context) (controlplane.Version, error)
 }
 
 type Server struct {
@@ -54,6 +56,7 @@ func New(cfg Config, cp controlPlane, logger uilogging.Logger) (http.Handler, er
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/live", server.live)
 	mux.HandleFunc("/health/ready", server.ready)
+	mux.HandleFunc("/version", server.version)
 	mux.HandleFunc("/", server.spa)
 	return withTraceContext(chainMiddleware(securityHeaders(mux), logger)), nil
 }
@@ -71,6 +74,29 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("ready\n"))
+}
+
+// version returns the control-plane product version as JSON. Traefik routes
+// /version to the UI catch-all (not /api/v1), so the UI host must serve it
+// instead of falling through to index.html.
+func (s *Server) version(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	info, err := s.cp.Version(r.Context())
+	if err != nil {
+		s.logger.WithContext(r.Context()).Warnw("UI version lookup failed", "error", err.Error())
+		http.Error(w, "version unavailable", http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(info)
 }
 
 func (s *Server) spa(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +201,7 @@ func chainMiddleware(next http.Handler, logger uilogging.Logger) http.Handler {
 
 func shouldSuppressUILog(path string) bool {
 	switch path {
-	case "/health/live", "/health/ready":
+	case "/health/live", "/health/ready", "/version":
 		return true
 	default:
 		return false

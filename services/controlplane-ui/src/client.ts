@@ -119,8 +119,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
   }
 
   async login(username: string, password: string, domain?: string): Promise<LoginResponse> {
-    // Server also defaults omitted/empty to "local"; normalize client-side so
-    // the request always carries the resolved V1 domain.
+    // Login UI omits domain; empty/omitted values become local here and on the server.
     const resolvedDomain = (domain ?? "").trim().toLowerCase() || "local";
     return this.request("/api/v1/auth/login", {
       method: "POST",
