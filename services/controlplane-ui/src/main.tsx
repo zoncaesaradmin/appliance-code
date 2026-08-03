@@ -619,6 +619,7 @@ function AccountPage(props: {
   return (
     <PageFrame
       title={props.session.username}
+      eyebrow="Account"
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
@@ -720,6 +721,7 @@ function HomePage(props: {
   return (
     <PageFrame
       title={`Welcome, ${props.session.username}`}
+      eyebrow=""
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
@@ -879,6 +881,7 @@ function BuilderPage(props: { pathname: string }): React.JSX.Element {
   return (
     <PageFrame
       title="Builder"
+      eyebrow=""
       description="Workspace creation, appliance-wide Git access, and build submission."
       pathname={props.pathname}
       onNavigate={navigate}
@@ -1080,6 +1083,7 @@ function DNSPage(): React.JSX.Element {
   return (
     <PageFrame
       title="DNS"
+      eyebrow=""
       description="Managed LAN DNS records for the appliance zone."
       pathname="/manage/dns"
       onNavigate={navigate}
@@ -1184,6 +1188,7 @@ function ArtifactsPage(props: { pathname: string }): React.JSX.Element {
   return (
     <PageFrame
       title="Artifacts"
+      eyebrow=""
       description="Registry catalog visibility and grant management."
       pathname={props.pathname}
       onNavigate={navigate}
@@ -1320,6 +1325,7 @@ function AnalyzePage(): React.JSX.Element {
   return (
     <PageFrame
       title="Workflow analysis"
+      eyebrow=""
       description="A lightweight operational analysis view for current builder workflow activity."
       pathname="/analyze/workflows"
       onNavigate={navigate}
@@ -1379,6 +1385,7 @@ function AdminPage(props: { pathname: string; capabilities: string[] }): React.J
   return (
     <PageFrame
       title="Administration"
+      eyebrow=""
       description="Appliance-wide operating posture, profile expansion points, and future licensing surfaces."
       pathname={props.pathname}
       onNavigate={navigate}
