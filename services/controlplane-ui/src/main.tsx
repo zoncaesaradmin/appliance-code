@@ -397,6 +397,12 @@ function Shell(props: {
     }
   }, [props.pathname, props.session]);
 
+  useEffect(() => {
+    if (props.pathname === "/home/session") {
+      navigate("/account/session", true);
+    }
+  }, [props.pathname]);
+
   return (
     <div className="grid min-h-screen grid-rows-[auto_1fr]">
       <header className="top-navigation relative z-[70] flex items-center justify-between gap-6 overflow-visible border-b border-slate-200/80 bg-white px-6 py-4 shadow-sm shadow-slate-900/5 max-[680px]:flex-col max-[680px]:items-start">
@@ -464,7 +470,7 @@ function Shell(props: {
                 <button onClick={closeTransientMenus}>Preferences</button>
                 <button onClick={closeTransientMenus}>Change password</button>
                 <button onClick={() => onUserAction("/home/access")}>Manage API keys</button>
-                <button onClick={() => onUserAction("/home/session")}>User login details</button>
+                <button onClick={() => onUserAction("/account/session")}>Session info</button>
                 <button onClick={closeTransientMenus}>Logo options</button>
                 <button
                   onClick={() => {
@@ -546,6 +552,9 @@ function RouteView(props: {
   session: Session;
   capabilities: string[];
 }): React.JSX.Element {
+  if (props.pathname.startsWith("/account/session")) {
+    return <SessionPage session={props.session} />;
+  }
   if (props.pathname.startsWith("/manage/builder")) {
     return <BuilderPage pathname={props.pathname} />;
   }
@@ -561,12 +570,51 @@ function RouteView(props: {
   if (props.pathname.startsWith("/admin")) {
     return <AdminPage pathname={props.pathname} capabilities={props.capabilities} />;
   }
-  return <HomePage pathname={props.pathname} session={props.session} capabilities={props.capabilities} />;
+  return <HomePage pathname={props.pathname} capabilities={props.capabilities} />;
+}
+
+function SessionPage(props: { session: Session }): React.JSX.Element {
+  return (
+    <PageFrame
+      title="Session info"
+      description="Details for the currently authenticated control-plane session."
+      pathname="/account/session"
+      onNavigate={navigate}
+      tabs={[]}
+    >
+      <div className="grid-two">
+        <Card title="User details" subtitle="Current authenticated session">
+          <div className="detail-list">
+            <div>
+              <span>Username</span>
+              <strong>{props.session.username}</strong>
+            </div>
+            <div>
+              <span>User ID</span>
+              <strong>{props.session.userId}</strong>
+            </div>
+            <div>
+              <span>Auth method</span>
+              <strong>{props.session.authMethod}</strong>
+            </div>
+          </div>
+        </Card>
+        <Card title="Permissions" subtitle="Resolved control-plane permissions">
+          <div className="badge-row">
+            {props.session.permissions.map((permission) => (
+              <span className="pill" key={permission}>
+                {permission}
+              </span>
+            ))}
+          </div>
+        </Card>
+      </div>
+    </PageFrame>
+  );
 }
 
 function HomePage(props: {
   pathname: string;
-  session: Session;
   capabilities: string[];
 }): React.JSX.Element {
   const [version, setVersion] = useState<Version | null>(null);
@@ -628,8 +676,7 @@ function HomePage(props: {
       onNavigate={navigate}
       tabs={[
         { label: "Overview", path: "/home", icon: "home" },
-        { label: "API Keys", path: "/home/access", icon: "key" },
-        { label: "Session", path: "/home/session", icon: "session" }
+        { label: "API Keys", path: "/home/access", icon: "key" }
       ]}
     >
       {props.pathname === "/home/access" ? (
@@ -664,34 +711,6 @@ function HomePage(props: {
                     Revoke
                   </button>
                 </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      ) : props.pathname === "/home/session" ? (
-        <div className="grid-two">
-          <Card title="User details" subtitle="Current authenticated session">
-            <div className="detail-list">
-              <div>
-                <span>Username</span>
-                <strong>{props.session.username}</strong>
-              </div>
-              <div>
-                <span>User ID</span>
-                <strong>{props.session.userId}</strong>
-              </div>
-              <div>
-                <span>Auth method</span>
-                <strong>{props.session.authMethod}</strong>
-              </div>
-            </div>
-          </Card>
-          <Card title="Permissions" subtitle="Resolved control-plane permissions">
-            <div className="badge-row">
-              {props.session.permissions.map((permission) => (
-                <span className="pill" key={permission}>
-                  {permission}
-                </span>
               ))}
             </div>
           </Card>

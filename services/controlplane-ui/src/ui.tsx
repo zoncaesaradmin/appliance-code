@@ -276,26 +276,30 @@ export function PageFrame(props: {
           {props.description}
         </p>
       </div>
-      <div className="mb-6 mt-5 flex flex-wrap gap-2 border-b border-slate-200 pb-4">
-        {props.tabs.map((tab) => {
-          const active = props.pathname === tab.path;
-          return (
-            <button
-              key={tab.path}
-              className={cn(
-                "inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition",
-                active
-                  ? "bg-blue-100 text-blue-950"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-              )}
-              onClick={() => props.onNavigate(tab.path)}
-            >
-              {tab.icon ? <Icon name={tab.icon} className="h-4 w-4" /> : null}
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {props.tabs.length > 0 ? (
+        <div className="mb-6 mt-5 flex flex-wrap gap-2 border-b border-slate-200 pb-4">
+          {props.tabs.map((tab) => {
+            const active = props.pathname === tab.path;
+            return (
+              <button
+                key={tab.path}
+                className={cn(
+                  "inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition",
+                  active
+                    ? "bg-blue-100 text-blue-950"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
+                )}
+                onClick={() => props.onNavigate(tab.path)}
+              >
+                {tab.icon ? <Icon name={tab.icon} className="h-4 w-4" /> : null}
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mb-6 mt-5" />
+      )}
       <div className="w-full">{props.children}</div>
     </section>
   );
