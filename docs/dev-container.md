@@ -199,6 +199,9 @@ Shared [`build/service-image.mk`](../build/service-image.mk) defaults
 `appliance-images`, and `SERVICE_IMAGE_NAME` to the service Makefile value (or
 the service directory name). Outer `DEV_IMAGE_*` vars only name the
 development-container pull for `make dev-shell` and never the service image.
+That means a build server that already points `DEV_REGISTRY` at the artifact
+registry can build and push service images without setting any
+`SERVICE_IMAGE_*` variables.
 
 ```bash
 git clone <appliance-code-remote> appliance-code
@@ -206,25 +209,28 @@ cd appliance-code
 
 export DEV_REGISTRY_USER=<github-username>
 export DEV_REGISTRY_TOKEN=<PAT with write:packages (also covers read)>
-# Optional: point DEV_REGISTRY at your LAN registry so SERVICE_IMAGE_REGISTRY
-# defaults to that host. Or override SERVICE_IMAGE_* explicitly:
-# export DEV_REGISTRY=artifact-dns-1.appliance.internal
-# export SERVICE_IMAGE_REPO=appliance-images
-# export DEV_REGISTRY_TLS_VERIFY=false
+export DEV_REGISTRY=artifact-dns-1.appliance.internal
+export DEV_IMAGE_REPO=development-container
+export DEV_IMAGE_NAME=dev-build
+export DEV_IMAGE_TAG=latest
+export DEV_REGISTRY_TLS_VERIFY=false
 make dev-shell
 
 # now inside the container:
 make -C services/controlplane image-local   # local storage only
 make -C services/controlplane image         # build + push
-# → ${SERVICE_IMAGE_REGISTRY}/appliance-images/appliance-control-plane:<git-describe>
+# → ${DEV_REGISTRY}/appliance-images/appliance-control-plane:<git-describe>
 
 make -C services/controlplane-ui image      # same pattern; name is appliance-ui
+# → ${DEV_REGISTRY}/appliance-images/appliance-ui:<git-describe>
 exit
 ```
 
 `make image` requires `DEV_REGISTRY_USER`/`DEV_REGISTRY_TOKEN` and uses
-`DEV_REGISTRY_TLS_VERIFY` for push TLS. Override destination on the make CLI
-when needed:
+`DEV_REGISTRY_TLS_VERIFY` for push TLS. If `DEV_REGISTRY` is already the
+artifact registry host, `SERVICE_IMAGE_REGISTRY` is not required. Override the
+service image destination on the make CLI only when it must differ from the
+default:
 `make -C services/controlplane image SERVICE_IMAGE_REGISTRY=… SERVICE_IMAGE_REPO=… SERVICE_IMAGE_NAME=… SERVICE_IMAGE_TAG=v0.1.0`.
 Do not set `DEV_IMAGE_NAME` hoping to rename the service image — that variable
 is for `development-container/dev-build`.

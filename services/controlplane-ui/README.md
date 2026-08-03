@@ -83,6 +83,57 @@ npm run openapi:types
 
 ## Image Build Inputs
 
+### Build And Push Only The UI Image
+
+On the Linux build server, use the shared dev container and the service image
+target. When `DEV_REGISTRY` points at the artifact registry,
+`make -C services/controlplane-ui image` automatically builds, logs in, tags,
+and pushes the UI image. You do not need to set `SERVICE_IMAGE_*` variables
+unless you want to override the default destination.
+
+```bash
+cd /path/to/appliance-code
+
+export DEV_REGISTRY=artifact-dns-1.appliance.internal
+export DEV_IMAGE_REPO=development-container
+export DEV_IMAGE_NAME=dev-build
+export DEV_IMAGE_TAG=latest
+export DEV_REGISTRY_USER=<artifact-registry-username>
+export DEV_REGISTRY_TOKEN=<artifact-registry-token>
+export DEV_REGISTRY_TLS_VERIFY=false
+
+make dev-shell
+
+# Inside the dev container:
+make -C services/controlplane-ui image
+```
+
+By default, the image target pushes:
+
+```text
+${DEV_REGISTRY}/appliance-images/appliance-ui:<git-describe>
+${DEV_REGISTRY}/appliance-images/appliance-ui:latest
+```
+
+Use explicit service overrides only when the service image must go somewhere
+different from `${DEV_REGISTRY}/appliance-images/appliance-ui` or needs a
+custom tag:
+
+```bash
+make -C services/controlplane-ui image \
+  SERVICE_IMAGE_REGISTRY=<other-registry-host> \
+  SERVICE_IMAGE_REPO=appliance-images \
+  SERVICE_IMAGE_TAG=ui-test-$(git rev-parse --short HEAD)
+```
+
+For a local-only image with no push, use:
+
+```bash
+make -C services/controlplane-ui image-local
+```
+
+### Base Image Overrides
+
 The UI `Containerfile` accepts build-stage base images as build arguments so
 CI/release jobs can provide mirrored or digest-pinned references:
 
@@ -100,8 +151,8 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
 ## Layout Rules
 
 - Home is the default landing mode and opens directly to the dashboard page.
-- Manage, Analyze, and Admin use the left icon rail plus a contextual feature
-  panel.
+- Manage, Analyze, and Admin use the left icon rail plus a transient feature
+  selector.
 - Each feature page uses simple top tabs for views within that feature.
 - The header owns product identity, user actions, future notifications, and
   help/about entry points.
