@@ -31,6 +31,7 @@ type SessionClaims struct {
 	Subject           string    `json:"sub"`
 	JTI               string    `json:"jti"`
 	FamilyID          string    `json:"familyId"`
+	AuthDomain        string    `json:"authDomain"`
 	CredentialVersion int       `json:"credentialVersion"`
 	IssuedAt          time.Time `json:"-"`
 	NotBefore         time.Time `json:"-"`
@@ -49,6 +50,7 @@ type jwtPayload struct {
 	Subject           string `json:"sub"`
 	JTI               string `json:"jti"`
 	FamilyID          string `json:"familyId"`
+	AuthDomain        string `json:"authDomain,omitempty"`
 	CredentialVersion int    `json:"credentialVersion"`
 	IssuedAt          int64  `json:"iat"`
 	NotBefore         int64  `json:"nbf"`
@@ -70,8 +72,9 @@ func IssueSessionJWT(priv ed25519.PrivateKey, kid string, claims SessionClaims) 
 
 	payload := jwtPayload{
 		Issuer: claims.Issuer, Audience: claims.Audience, Subject: claims.Subject,
-		JTI: claims.JTI, FamilyID: claims.FamilyID, CredentialVersion: claims.CredentialVersion,
-		IssuedAt: claims.IssuedAt.Unix(), NotBefore: claims.NotBefore.Unix(), ExpiresAt: claims.ExpiresAt.Unix(),
+		JTI: claims.JTI, FamilyID: claims.FamilyID, AuthDomain: claims.AuthDomain,
+		CredentialVersion: claims.CredentialVersion,
+		IssuedAt:          claims.IssuedAt.Unix(), NotBefore: claims.NotBefore.Unix(), ExpiresAt: claims.ExpiresAt.Unix(),
 	}
 	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
@@ -146,8 +149,13 @@ func ValidateSessionJWT(pub ed25519.PublicKey, expectedKid, issuer, audience, to
 
 	claims := SessionClaims{
 		Issuer: payload.Issuer, Audience: payload.Audience, Subject: payload.Subject,
-		JTI: payload.JTI, FamilyID: payload.FamilyID, CredentialVersion: payload.CredentialVersion,
-		IssuedAt: time.Unix(payload.IssuedAt, 0), NotBefore: notBefore, ExpiresAt: expiresAt,
+		JTI: payload.JTI, FamilyID: payload.FamilyID, AuthDomain: payload.AuthDomain,
+		CredentialVersion: payload.CredentialVersion,
+		IssuedAt:          time.Unix(payload.IssuedAt, 0), NotBefore: notBefore, ExpiresAt: expiresAt,
+	}
+	if claims.AuthDomain == "" {
+		// Pre-domain tokens remain valid as appliance-local sessions.
+		claims.AuthDomain = AuthDomainLocal
 	}
 	return claims, header.Kid, nil
 }

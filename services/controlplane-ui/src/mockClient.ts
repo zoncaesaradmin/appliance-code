@@ -52,9 +52,10 @@ type MockState = {
 const mockState: MockState = {
   initialized: true,
   capabilities: ["base", "build", "artifact", "dns"],
-  session: {
+	session: {
     userId: "mock-admin",
     username: "admin",
+    domain: "local",
     authMethod: "password",
     permissions: ["dns.records.write", "artifacts.write", "artifacts.read"]
   },
@@ -154,10 +155,11 @@ export class MockControlPlaneClient {
     mockState.initialized = true;
   }
 
-  async login(username: string): Promise<LoginResponse> {
+	async login(username: string): Promise<LoginResponse> {
     mockState.session = {
       userId: "mock-admin",
       username,
+      domain: "local",
       authMethod: "password",
       permissions: ["dns.records.write", "artifacts.write", "artifacts.read"]
     };

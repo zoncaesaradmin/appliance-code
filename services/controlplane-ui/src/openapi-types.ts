@@ -73,7 +73,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Log in with local appliance credentials */
+        /**
+         * Log in with appliance credentials
+         * @description Authenticates against an authentication domain. V1 supports only `local` (the appliance-local user store). The `domain` field may be omitted or sent as an empty string; both are treated as `local`.
+         */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -613,7 +616,15 @@ export interface components {
         LoginRequest: {
             username: string;
             password: string;
+            domain?: components["schemas"]["AuthDomain"];
         };
+        /**
+         * @description Authentication domain (identity store / IdP). V1 supports only `local` — the appliance-local user store. On login request bodies, omitted and empty values are accepted and default to `local`. Session responses always return the resolved domain (never empty).
+         * @default local
+         * @example local
+         * @enum {string}
+         */
+        AuthDomain: "local";
         RefreshRequest: {
             refreshToken: string;
         };
@@ -626,6 +637,7 @@ export interface components {
         Session: {
             userId: string;
             username: string;
+            domain: components["schemas"]["AuthDomain"];
             authMethod: string;
             permissions: string[];
         };

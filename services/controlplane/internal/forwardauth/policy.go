@@ -16,6 +16,7 @@ import (
 const (
 	HeaderUserID     = "X-Appliance-User-Id"
 	HeaderUsername   = "X-Appliance-Username"
+	HeaderAuthDomain = "X-Appliance-Auth-Domain"
 	HeaderScopes     = "X-Appliance-Scopes"
 	HeaderRoles      = "X-Appliance-Roles"
 	HeaderAuthMethod = "X-Appliance-Auth-Method"

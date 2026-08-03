@@ -57,7 +57,7 @@ export interface ControlPlaneClient {
   getSetupStatus(): Promise<SetupStatus>;
   getCapabilities(): Promise<CapabilitiesResponse>;
   createFirstAdmin(username: string, password: string, displayName: string): Promise<void>;
-  login(username: string, password: string): Promise<LoginResponse>;
+  login(username: string, password: string, domain?: string): Promise<LoginResponse>;
   refresh(): Promise<LoginResponse>;
   logout(): Promise<void>;
   getSession(): Promise<Session>;
@@ -118,10 +118,13 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     });
   }
 
-  async login(username: string, password: string): Promise<LoginResponse> {
+  async login(username: string, password: string, domain?: string): Promise<LoginResponse> {
+    // Server also defaults omitted/empty to "local"; normalize client-side so
+    // the request always carries the resolved V1 domain.
+    const resolvedDomain = (domain ?? "").trim().toLowerCase() || "local";
     return this.request("/api/v1/auth/login", {
       method: "POST",
-      body: { username, password },
+      body: { username, password, domain: resolvedDomain },
       auth: false,
       retryAuth: false
     });

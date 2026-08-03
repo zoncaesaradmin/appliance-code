@@ -136,6 +136,7 @@ type TokenStore interface {
 type SessionFamily struct {
 	ID                string
 	UserID            string
+	AuthDomain        string // authentication domain used at login (e.g. "local")
 	CreatedAt         time.Time
 	LastUsedAt        time.Time
 	AbsoluteExpiresAt time.Time

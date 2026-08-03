@@ -82,6 +82,34 @@ func TestNormalizeUsername(t *testing.T) {
 	}
 }
 
+func TestNormalizeAuthDomain(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"", authn.AuthDomainLocal, false},
+		{"   ", authn.AuthDomainLocal, false},
+		{"  LOCAL  ", authn.AuthDomainLocal, false},
+		{"local", authn.AuthDomainLocal, false},
+		{"ldap", "", true},
+		{"oidc", "", true},
+	}
+	for _, c := range cases {
+		got, err := authn.NormalizeAuthDomain(c.in)
+		if (err != nil) != c.wantErr {
+			t.Errorf("NormalizeAuthDomain(%q) error = %v, wantErr %v", c.in, err, c.wantErr)
+			continue
+		}
+		if err == nil && got != c.want {
+			t.Errorf("NormalizeAuthDomain(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	if len(authn.SupportedAuthDomains) != 1 || authn.SupportedAuthDomains[0] != authn.AuthDomainLocal {
+		t.Errorf("SupportedAuthDomains = %v, want [%q]", authn.SupportedAuthDomains, authn.AuthDomainLocal)
+	}
+}
+
 func TestAPITokenGenerateParseVerify(t *testing.T) {
 	raw, lookupID, secret, err := authn.GenerateAPIToken()
 	if err != nil {
@@ -154,7 +182,7 @@ func TestSessionJWTIssueAndValidate(t *testing.T) {
 	now := time.Now()
 	claims := authn.SessionClaims{
 		Issuer: "https://appliance.local", Audience: "appliance-api", Subject: "user-1",
-		JTI: "jti-1", FamilyID: "family-1", CredentialVersion: 1,
+		JTI: "jti-1", FamilyID: "family-1", AuthDomain: authn.AuthDomainLocal, CredentialVersion: 1,
 		IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(authn.SessionAccessLifetime),
 	}
 
@@ -172,6 +200,31 @@ func TestSessionJWTIssueAndValidate(t *testing.T) {
 	}
 	if got.Subject != "user-1" || got.FamilyID != "family-1" || got.CredentialVersion != 1 {
 		t.Errorf("validated claims = %+v, missing expected fields", got)
+	}
+	if got.AuthDomain != authn.AuthDomainLocal {
+		t.Errorf("AuthDomain = %q, want %q", got.AuthDomain, authn.AuthDomainLocal)
+	}
+}
+
+func TestSessionJWTDefaultsEmptyAuthDomainToLocal(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	token, err := authn.IssueSessionJWT(priv, "kid-1", authn.SessionClaims{
+		Issuer: "iss", Audience: "aud", Subject: "u1", JTI: "j1", FamilyID: "f1",
+		IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := authn.ValidateSessionJWT(pub, "kid-1", "iss", "aud", token)
+	if err != nil {
+		t.Fatalf("ValidateSessionJWT: %v", err)
+	}
+	if got.AuthDomain != authn.AuthDomainLocal {
+		t.Errorf("AuthDomain = %q, want %q for legacy empty claim", got.AuthDomain, authn.AuthDomainLocal)
 	}
 }
 

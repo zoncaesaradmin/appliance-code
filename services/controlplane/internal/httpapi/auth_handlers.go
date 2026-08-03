@@ -17,6 +17,7 @@ type AuthHandlers struct {
 type loginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	Domain   string `json:"domain"`
 }
 
 type loginResponse struct {
@@ -36,8 +37,17 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.Sessions.Login(r.Context(), r.RemoteAddr, requestIDFromRequest(r), req.Username, req.Password)
+	domain, err := authn.NormalizeAuthDomain(req.Domain)
+	if err != nil {
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+
+	result, err := h.Sessions.Login(r.Context(), r.RemoteAddr, requestIDFromRequest(r), domain, req.Username, req.Password)
 	switch {
+	case errors.Is(err, authn.ErrUnsupportedAuthDomain):
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
 	case errors.Is(err, authn.ErrAccountLocked):
 		WriteProblem(w, r, http.StatusLocked, "account_locked", "Account temporarily locked", "")
 		return
@@ -97,6 +107,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 type sessionResponse struct {
 	UserID      string   `json:"userId"`
 	Username    string   `json:"username"`
+	Domain      string   `json:"domain"`
 	AuthMethod  string   `json:"authMethod"`
 	Permissions []string `json:"permissions"`
 }
@@ -112,7 +123,12 @@ func (h *AuthHandlers) Session(w http.ResponseWriter, r *http.Request) {
 	for name := range principal.Permissions {
 		perms = append(perms, name)
 	}
+	domain := principal.Domain
+	if domain == "" {
+		domain = authn.AuthDomainLocal
+	}
 	writeJSON(w, http.StatusOK, sessionResponse{
-		UserID: principal.UserID, Username: principal.Username, AuthMethod: principal.AuthMethod, Permissions: perms,
+		UserID: principal.UserID, Username: principal.Username, Domain: domain,
+		AuthMethod: principal.AuthMethod, Permissions: perms,
 	})
 }

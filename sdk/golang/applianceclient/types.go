@@ -14,6 +14,8 @@ type LoginResult struct {
 // credential, as returned by GET /api/v1/auth/session.
 type SessionInfo struct {
 	UserID      string   `json:"userId"`
+	Username    string   `json:"username"`
+	Domain      string   `json:"domain"`
 	AuthMethod  string   `json:"authMethod"`
 	Permissions []string `json:"permissions"`
 }

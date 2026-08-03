@@ -7,6 +7,7 @@ export interface LoginResponse {
 export interface Session {
   userId: string;
   username: string;
+  domain: string;
   authMethod: string;
   permissions: string[];
 }

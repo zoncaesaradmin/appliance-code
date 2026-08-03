@@ -168,6 +168,7 @@ ingress:
     responseHeaders:
       - X-Appliance-User-Id
       - X-Appliance-Username
+      - X-Appliance-Auth-Domain
       - X-Appliance-Scopes
       - X-Appliance-Roles
       - X-Appliance-Auth-Method

@@ -357,6 +357,79 @@ func TestLoginHTTPEndToEnd(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("session status = %d, want 200", resp.StatusCode)
 	}
+	var session struct {
+		Username   string `json:"username"`
+		Domain     string `json:"domain"`
+		AuthMethod string `json:"authMethod"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	if session.Username != "admin" {
+		t.Errorf("session.username = %q, want admin", session.Username)
+	}
+	if session.Domain != "local" {
+		t.Errorf("session.domain = %q, want local", session.Domain)
+	}
+	if session.AuthMethod != "session" {
+		t.Errorf("session.authMethod = %q, want session", session.AuthMethod)
+	}
+}
+
+func TestLoginRejectsUnsupportedAuthDomain(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	resp := ts.doJSON(t, "POST", "/api/v1/auth/login", "", `{"username":"admin","password":"`+testPassword+`","domain":"ldap"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unsupported domain status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestLoginDefaultsOmittedOrEmptyDomainToLocal(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "omitted", body: fmt.Sprintf(`{"username":"admin","password":%q}`, testPassword)},
+		{name: "empty", body: fmt.Sprintf(`{"username":"admin","password":%q,"domain":""}`, testPassword)},
+		{name: "whitespace", body: fmt.Sprintf(`{"username":"admin","password":%q,"domain":"  "}`, testPassword)},
+		{name: "explicit local", body: fmt.Sprintf(`{"username":"admin","password":%q,"domain":"local"}`, testPassword)},
+		{name: "explicit LOCAL", body: fmt.Sprintf(`{"username":"admin","password":%q,"domain":"LOCAL"}`, testPassword)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := ts.doJSON(t, "POST", "/api/v1/auth/login", "", tc.body)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("login status = %d, want 200", resp.StatusCode)
+			}
+			var login struct {
+				AccessToken string `json:"accessToken"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&login); err != nil {
+				t.Fatalf("decode login: %v", err)
+			}
+			sessionResp := ts.doJSON(t, "GET", "/api/v1/auth/session", login.AccessToken, "")
+			defer sessionResp.Body.Close()
+			if sessionResp.StatusCode != http.StatusOK {
+				t.Fatalf("session status = %d, want 200", sessionResp.StatusCode)
+			}
+			var session struct {
+				Domain string `json:"domain"`
+			}
+			if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+				t.Fatalf("decode session: %v", err)
+			}
+			if session.Domain != "local" {
+				t.Fatalf("session.domain = %q, want local", session.Domain)
+			}
+		})
+	}
 }
 
 func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
@@ -398,6 +471,12 @@ func TestForwardAuthCheckAllowsAuthorizedMCPRequest(t *testing.T) {
 	}
 	if got := resp.Header.Get("X-Appliance-Roles"); !strings.Contains(got, "administrator") {
 		t.Errorf("X-Appliance-Roles = %q, want administrator", got)
+	}
+	if got := resp.Header.Get("X-Appliance-Auth-Domain"); got != "local" {
+		t.Errorf("X-Appliance-Auth-Domain = %q, want local", got)
+	}
+	if got := resp.Header.Get("X-Appliance-Auth-Method"); got != "session" {
+		t.Errorf("X-Appliance-Auth-Method = %q, want session", got)
 	}
 }
 

@@ -27,7 +27,7 @@ describe("remote control-plane client", () => {
           accessExpiresAt: "2026-08-03T02:00:00Z"
         })
       )
-      .mockResolvedValueOnce(jsonResponse({ userId: "u1", username: "admin", authMethod: "password", permissions: [] }));
+      .mockResolvedValueOnce(jsonResponse({ userId: "u1", username: "admin", domain: "local", authMethod: "password", permissions: [] }));
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new RemoteControlPlaneClient("https://appliance.example/");
@@ -39,6 +39,29 @@ describe("remote control-plane client", () => {
     expect(fetchMock.mock.calls[1]?.[0]).toBe("https://appliance.example/api/v1/auth/refresh");
     expect(fetchMock.mock.calls[2]?.[1]?.headers.get("Authorization")).toBe("Bearer new-access");
     expect(loadAuth()?.refreshToken).toBe("new-refresh");
+  });
+
+  it("sends domain local when login domain is omitted or empty", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        accessToken: "access",
+        refreshToken: "refresh",
+        accessExpiresAt: "2026-08-03T02:00:00Z"
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new RemoteControlPlaneClient("https://appliance.example/");
+    await client.login("admin", "secret");
+    await client.login("admin", "secret", "");
+    await client.login("admin", "secret", "  ");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    for (const call of fetchMock.mock.calls) {
+      const init = call[1] as RequestInit;
+      const body = JSON.parse(String(init.body)) as { domain: string };
+      expect(body.domain).toBe("local");
+    }
   });
 
   it("encodes repository path segments while preserving repository slashes", async () => {

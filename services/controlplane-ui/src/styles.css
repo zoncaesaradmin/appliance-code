@@ -95,7 +95,8 @@ button {
 
 .auth-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(420px, 520px);
+  /* ~60% hero / ~40% sign-in — form was capped ~520px and looked undersized on wide screens. */
+  grid-template-columns: minmax(0, 3fr) minmax(380px, 2fr);
 }
 
 .auth-visual {
@@ -171,9 +172,13 @@ button {
 }
 
 .auth-form__card {
-  width: min(460px, 100%);
+  width: min(560px, 100%);
   border-radius: 28px;
   padding: 36px;
+}
+
+.auth-form__card h2 {
+  margin: 0 0 24px;
 }
 
 .stack-form,

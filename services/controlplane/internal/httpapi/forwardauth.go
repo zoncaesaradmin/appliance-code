@@ -8,6 +8,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/forwardauth"
 	"appliance-code/services/controlplane/internal/reqauth"
@@ -58,8 +59,13 @@ func (h *ForwardAuthHandlers) Check(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.recordPrincipal(r, principal, storage.AuditOutcomeSuccess, "allowed", host, method, uri, decision.Permission)
+	domain := principal.Domain
+	if domain == "" {
+		domain = authn.AuthDomainLocal
+	}
 	w.Header().Set(forwardauth.HeaderUserID, principal.UserID)
 	w.Header().Set(forwardauth.HeaderUsername, principal.Username)
+	w.Header().Set(forwardauth.HeaderAuthDomain, domain)
 	w.Header().Set(forwardauth.HeaderAuthMethod, principal.AuthMethod)
 	w.Header().Set(forwardauth.HeaderScopes, strings.Join(sortedPermissions(principal.Permissions), ","))
 	w.Header().Set(forwardauth.HeaderRoles, strings.Join(sortedStrings(principal.RoleNames), ","))
@@ -90,6 +96,7 @@ func (h *ForwardAuthHandlers) recordPrincipal(r *http.Request, principal Princip
 		"forwardedHost":   host,
 		"forwardedMethod": method,
 		"forwardedURI":    uri,
+		"authDomain":      principal.Domain,
 	}
 	if permission != "" {
 		details["permission"] = permission

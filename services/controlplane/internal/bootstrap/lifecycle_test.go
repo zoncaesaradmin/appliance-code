@@ -116,7 +116,7 @@ func TestLoginRefreshLogoutLifecycle(t *testing.T) {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
 
-	login, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", "admin", "a-very-long-bootstrap-password")
+	login, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", authn.AuthDomainLocal, "admin", "a-very-long-bootstrap-password")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestLoginRefreshLogoutLifecycle(t *testing.T) {
 	}
 
 	// A fresh login should still work after the previous family was revoked.
-	login2, err := h.sessions.Login(ctx, "127.0.0.1", "req-5", "admin", "a-very-long-bootstrap-password")
+	login2, err := h.sessions.Login(ctx, "127.0.0.1", "req-5", authn.AuthDomainLocal, "admin", "a-very-long-bootstrap-password")
 	if err != nil {
 		t.Fatalf("second Login: %v", err)
 	}
@@ -169,10 +169,10 @@ func TestLoginRejectsWrongPasswordAndUnknownUser(t *testing.T) {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
 
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", "admin", "wrong-password-entirely"); !errors.Is(err, authn.ErrInvalidCredentials) {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", authn.AuthDomainLocal, "admin", "wrong-password-entirely"); !errors.Is(err, authn.ErrInvalidCredentials) {
 		t.Errorf("wrong password error = %v, want ErrInvalidCredentials", err)
 	}
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-2", "nonexistent-user", "whatever-password-here"); !errors.Is(err, authn.ErrInvalidCredentials) {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-2", authn.AuthDomainLocal, "nonexistent-user", "whatever-password-here"); !errors.Is(err, authn.ErrInvalidCredentials) {
 		t.Errorf("unknown user error = %v, want ErrInvalidCredentials", err)
 	}
 }
@@ -193,7 +193,7 @@ func TestDisableRevokesSessionsAndTokens(t *testing.T) {
 		t.Fatalf("SetUserRoles: %v", err)
 	}
 
-	login, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", "developer", "a-very-long-developer-password")
+	login, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", authn.AuthDomainLocal, "developer", "a-very-long-developer-password")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestPasswordResetInvalidatesSessionsAndSetsNewPassword(t *testing.T) {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
 
-	login, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", "admin", "a-very-long-bootstrap-password")
+	login, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", authn.AuthDomainLocal, "admin", "a-very-long-bootstrap-password")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -280,10 +280,10 @@ func TestPasswordResetInvalidatesSessionsAndSetsNewPassword(t *testing.T) {
 		t.Error("prior session should be invalidated after password reset")
 	}
 
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-2", "admin", "a-very-long-bootstrap-password"); !errors.Is(err, authn.ErrInvalidCredentials) {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-2", authn.AuthDomainLocal, "admin", "a-very-long-bootstrap-password"); !errors.Is(err, authn.ErrInvalidCredentials) {
 		t.Errorf("old password should no longer work, error = %v", err)
 	}
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-3", "admin", "brand-new-long-password-1"); err != nil {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-3", authn.AuthDomainLocal, "admin", "brand-new-long-password-1"); err != nil {
 		t.Errorf("new password should work: %v", err)
 	}
 }
@@ -330,10 +330,10 @@ func TestAuditChainVerifies(t *testing.T) {
 	if _, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", "admin", "a-very-long-bootstrap-password"); err != nil {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", authn.AuthDomainLocal, "admin", "a-very-long-bootstrap-password"); err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-2", "admin", "wrong-password"); err == nil {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-2", authn.AuthDomainLocal, "admin", "wrong-password"); err == nil {
 		t.Fatal("expected login failure")
 	}
 

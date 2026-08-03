@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
@@ -92,17 +93,17 @@ func TestUserEnableUpdateDisplayNameAndUnlock(t *testing.T) {
 	// Trigger a lockout via repeated failed logins, then confirm Unlock
 	// clears it.
 	for i := 0; i < 21; i++ {
-		if _, err := h.sessions.Login(ctx, "127.0.0.1", "req", "developer", "wrong-password"); err == nil {
+		if _, err := h.sessions.Login(ctx, "127.0.0.1", "req", authn.AuthDomainLocal, "developer", "wrong-password"); err == nil {
 			t.Fatal("expected login failure")
 		}
 	}
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req", "developer", "a-very-long-developer-password"); err == nil {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req", authn.AuthDomainLocal, "developer", "a-very-long-developer-password"); err == nil {
 		t.Fatal("account should be locked after repeated failures")
 	}
 	if err := h.users.Unlock(ctx, systemActor(), "developer"); err != nil {
 		t.Fatalf("Unlock: %v", err)
 	}
-	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req", "developer", "a-very-long-developer-password"); err != nil {
+	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req", authn.AuthDomainLocal, "developer", "a-very-long-developer-password"); err != nil {
 		t.Errorf("login after unlock should succeed: %v", err)
 	}
 }

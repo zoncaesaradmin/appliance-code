@@ -22,10 +22,14 @@ func NewSessionStore(db *DB) *SessionStore {
 
 func (s *SessionStore) CreateFamily(ctx context.Context, family storage.SessionFamily, refresh storage.RefreshCredential) error {
 	return s.db.WithTx(ctx, func(ctx context.Context) error {
+		authDomain := family.AuthDomain
+		if authDomain == "" {
+			authDomain = "local"
+		}
 		_, err := s.db.q(ctx).ExecContext(ctx, `
-			INSERT INTO session_families (id, user_id, created_at, last_used_at, absolute_expires_at)
-			VALUES (?, ?, ?, ?, ?)`,
-			family.ID, family.UserID,
+			INSERT INTO session_families (id, user_id, auth_domain, created_at, last_used_at, absolute_expires_at)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			family.ID, family.UserID, authDomain,
 			family.CreatedAt.Format(time.RFC3339Nano), family.LastUsedAt.Format(time.RFC3339Nano),
 			family.AbsoluteExpiresAt.Format(time.RFC3339Nano),
 		)
@@ -52,8 +56,11 @@ func scanSessionFamily(row interface{ Scan(dest ...any) error }) (storage.Sessio
 		createdAt, lastUsedAt, absoluteExpires string
 		revokedAt, revokedReason               sql.NullString
 	)
-	if err := row.Scan(&f.ID, &f.UserID, &createdAt, &lastUsedAt, &absoluteExpires, &revokedAt, &revokedReason); err != nil {
+	if err := row.Scan(&f.ID, &f.UserID, &f.AuthDomain, &createdAt, &lastUsedAt, &absoluteExpires, &revokedAt, &revokedReason); err != nil {
 		return storage.SessionFamily{}, err
+	}
+	if f.AuthDomain == "" {
+		f.AuthDomain = "local"
 	}
 	var err error
 	if f.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {
@@ -76,7 +83,7 @@ func scanSessionFamily(row interface{ Scan(dest ...any) error }) (storage.Sessio
 	return f, nil
 }
 
-const selectSessionFamilyColumns = `id, user_id, created_at, last_used_at, absolute_expires_at, revoked_at, revoked_reason`
+const selectSessionFamilyColumns = `id, user_id, auth_domain, created_at, last_used_at, absolute_expires_at, revoked_at, revoked_reason`
 
 func (s *SessionStore) GetFamily(ctx context.Context, id string) (storage.SessionFamily, error) {
 	row := s.db.q(ctx).QueryRowContext(ctx, `SELECT `+selectSessionFamilyColumns+` FROM session_families WHERE id = ?`, id)

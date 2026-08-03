@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/app"
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
@@ -116,7 +117,7 @@ func (e *testEnv) createUserWithRole(t *testing.T, username, roleID string) {
 
 func (e *testEnv) login(t *testing.T, username string) string {
 	t.Helper()
-	result, err := e.services.Sessions.Login(t.Context(), "127.0.0.1", "test", username, testPassword)
+	result, err := e.services.Sessions.Login(t.Context(), "127.0.0.1", "test", authn.AuthDomainLocal, username, testPassword)
 	if err != nil {
 		t.Fatalf("login for %s: %v", username, err)
 	}

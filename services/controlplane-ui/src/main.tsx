@@ -138,8 +138,8 @@ function App(): React.JSX.Element {
     }
   }, [pathname, shellState.booting, shellState.initialized, shellState.session]);
 
-  async function handleLogin(username: string, password: string): Promise<void> {
-    const tokens = await client.login(username, password);
+  async function handleLogin(username: string, password: string, domain: string): Promise<void> {
+    const tokens = await client.login(username, password, domain);
     saveAuth(tokens);
     setRefreshKey((value) => value + 1);
   }
@@ -200,12 +200,13 @@ function BootScreen(props: { message: string; error?: boolean }): React.JSX.Elem
 
 function AuthLayout(props: {
   mode: "login" | "setup";
-  onLogin: (username: string, password: string) => Promise<void>;
+  onLogin: (username: string, password: string, domain: string) => Promise<void>;
   onSetup: (username: string, password: string) => Promise<void>;
 }): React.JSX.Element {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [domain, setDomain] = useState("local");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -220,7 +221,7 @@ function AuthLayout(props: {
         }
         await props.onSetup(username, password);
       } else {
-        await props.onLogin(username, password);
+        await props.onLogin(username, password, domain);
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
@@ -258,12 +259,17 @@ function AuthLayout(props: {
         <div className="auth-form__card">
           <span className="eyebrow">{props.mode === "setup" ? "First-time setup" : "Secure sign-in"}</span>
           <h2>{props.mode === "setup" ? "Create the first administrator" : "Sign in to the appliance"}</h2>
-          <p>
-            {props.mode === "setup"
-              ? "Initialize the control plane with the first admin account."
-              : "Use your control-plane credentials to continue."}
-          </p>
           <form className="stack-form" onSubmit={handleSubmit}>
+            <label className="field">
+              <span>Domain</span>
+              <select
+                value={domain}
+                onChange={(event) => setDomain(event.target.value)}
+                disabled={props.mode === "setup"}
+              >
+                <option value="local">local</option>
+              </select>
+            </label>
             <label className="field">
               <span>Username</span>
               <input value={username} onChange={(event) => setUsername(event.target.value)} />
@@ -675,10 +681,14 @@ function AccountPage(props: {
                 <span>User ID</span>
                 <strong>{props.session.userId}</strong>
               </div>
-              <div>
-                <span>Auth method</span>
-                <strong>{props.session.authMethod}</strong>
-              </div>
+            <div>
+              <span>Auth method</span>
+              <strong>{props.session.authMethod}</strong>
+            </div>
+            <div>
+              <span>Domain</span>
+              <strong>{props.session.domain}</strong>
+            </div>
             </div>
           </Card>
           <Card title="Permissions" subtitle="Resolved control-plane permissions">

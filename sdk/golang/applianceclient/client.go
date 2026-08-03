@@ -113,10 +113,22 @@ func (c *Client) doWithHeaders(ctx context.Context, method, path string, cred cr
 }
 
 // Login authenticates with a username and password and returns a new
-// interactive session's access and refresh tokens.
+// interactive session's access and refresh tokens. domain defaults to the
+// appliance-local user store ("local") when empty.
 func (c *Client) Login(ctx context.Context, username, password string) (*LoginResult, error) {
+	return c.LoginDomain(ctx, username, password, "local")
+}
+
+// LoginDomain authenticates against the given authentication domain.
+// V1 supports only "local" (appliance-local users). Empty or whitespace
+// domain values are sent as "local", matching the control-plane default.
+func (c *Client) LoginDomain(ctx context.Context, username, password, domain string) (*LoginResult, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	if domain == "" {
+		domain = "local"
+	}
 	var result LoginResult
-	body := map[string]string{"username": username, "password": password}
+	body := map[string]string{"username": username, "password": password, "domain": domain}
 	if err := c.do(ctx, http.MethodPost, "/api/v1/auth/login", credential{}, body, &result); err != nil {
 		return nil, err
 	}

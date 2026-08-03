@@ -10,6 +10,7 @@ import (
 	"github.com/zoncaesaradmin/platformkit/ctxutil"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/forwardauth"
 	"appliance-code/services/controlplane/internal/logging"
@@ -117,11 +118,17 @@ func newServiceProxyHandler(logger logging.Logger, registration ServiceProxyRegi
 
 		r.Header.Del(forwardauth.HeaderUserID)
 		r.Header.Del(forwardauth.HeaderUsername)
+		r.Header.Del(forwardauth.HeaderAuthDomain)
 		r.Header.Del(forwardauth.HeaderAuthMethod)
 		r.Header.Del(forwardauth.HeaderScopes)
 		r.Header.Del(forwardauth.HeaderRoles)
+		domain := principal.Domain
+		if domain == "" {
+			domain = authn.AuthDomainLocal
+		}
 		r.Header.Set(forwardauth.HeaderUserID, principal.UserID)
 		r.Header.Set(forwardauth.HeaderUsername, principal.Username)
+		r.Header.Set(forwardauth.HeaderAuthDomain, domain)
 		r.Header.Set(forwardauth.HeaderAuthMethod, principal.AuthMethod)
 		r.Header.Set(forwardauth.HeaderScopes, strings.Join(sortedPermissions(principal.Permissions), ","))
 		r.Header.Set(forwardauth.HeaderRoles, strings.Join(sortedStrings(principal.RoleNames), ","))

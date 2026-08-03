@@ -41,6 +41,7 @@ type LoginResult struct {
 type Session struct {
 	UserID      string   `json:"userId"`
 	Username    string   `json:"username"`
+	Domain      string   `json:"domain"`
 	AuthMethod  string   `json:"authMethod"`
 	Permissions []string `json:"permissions"`
 }
@@ -247,7 +248,7 @@ func NewClient(cfg Config) (*Client, error) {
 
 func (c *Client) Login(ctx context.Context, username, password string) (LoginResult, error) {
 	var out LoginResult
-	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password, "domain": "local"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/auth/login", bytes.NewReader(body))
 	if err != nil {
 		return out, err

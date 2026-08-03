@@ -116,6 +116,9 @@ func (r *runner) run(ctx context.Context) error {
 	if adminSession.AuthMethod != "session" {
 		return fmt.Errorf("admin session auth method = %q, want session", adminSession.AuthMethod)
 	}
+	if adminSession.Domain != "local" {
+		return fmt.Errorf("admin session domain = %q, want local", adminSession.Domain)
+	}
 
 	refreshed, err := r.client.Refresh(ctx, adminLogin.RefreshToken)
 	if err != nil {

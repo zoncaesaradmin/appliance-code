@@ -87,9 +87,26 @@ func NewSessionService(
 	return &SessionService{db: db, users: users, sessions: sessions, throttle: throttle, audit: recorder, keys: keyMaterial, issuer: issuer, audience: audience}
 }
 
-// Login authenticates username/password and, on success, creates a new
-// session family with an access token and rotating refresh credential.
-func (s *SessionService) Login(ctx context.Context, sourceAddr, requestID, username, password string) (LoginResult, error) {
+// Login authenticates username/password for the given authentication domain
+// and, on success, creates a new session family with an access token and
+// rotating refresh credential. V1 only accepts AuthDomainLocal.
+func (s *SessionService) Login(ctx context.Context, sourceAddr, requestID, domain, username, password string) (LoginResult, error) {
+	normalizedDomain, err := NormalizeAuthDomain(domain)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	switch normalizedDomain {
+	case AuthDomainLocal:
+		return s.loginLocalPassword(ctx, sourceAddr, requestID, username, password)
+	default:
+		// NormalizeAuthDomain already rejects unknowns; keep an explicit
+		// branch so new domains are added here rather than by falling through.
+		return LoginResult{}, fmt.Errorf("%w: %q", ErrUnsupportedAuthDomain, normalizedDomain)
+	}
+}
+
+func (s *SessionService) loginLocalPassword(ctx context.Context, sourceAddr, requestID, username, password string) (LoginResult, error) {
 	normalized, err := NormalizeUsername(username)
 	if err != nil {
 		return LoginResult{}, ErrInvalidCredentials
@@ -126,7 +143,7 @@ func (s *SessionService) Login(ctx context.Context, sourceAddr, requestID, usern
 	}
 
 	if !userExists || user.State != storage.UserStateActive || !passwordOK {
-		if err := s.recordLoginFailure(ctx, normalized, sourceAddr, requestID); err != nil {
+		if err := s.recordLoginFailure(ctx, AuthDomainLocal, normalized, sourceAddr, requestID); err != nil {
 			return LoginResult{}, err
 		}
 		return LoginResult{}, ErrInvalidCredentials
@@ -136,20 +153,21 @@ func (s *SessionService) Login(ctx context.Context, sourceAddr, requestID, usern
 		return LoginResult{}, err
 	}
 
-	result, err := s.createSessionFamily(ctx, user)
+	result, err := s.createSessionFamily(ctx, user, AuthDomainLocal)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
 	if err := s.audit.Record(ctx, audit.Actor{UserID: user.ID, Type: storage.AuditActorUser, AuthMethod: "password", RequestID: requestID, SourceAddr: sourceAddr}, audit.Event{
 		Action: "auth.login", TargetType: "user", TargetID: user.ID, Outcome: storage.AuditOutcomeSuccess,
+		Details: map[string]any{"domain": AuthDomainLocal},
 	}); err != nil {
 		return LoginResult{}, err
 	}
 	return result, nil
 }
 
-func (s *SessionService) recordLoginFailure(ctx context.Context, normalizedUsername, sourceAddr, requestID string) error {
+func (s *SessionService) recordLoginFailure(ctx context.Context, domain, normalizedUsername, sourceAddr, requestID string) error {
 	state, err := s.throttle.RecordFailure(ctx, normalizedUsername, time.Now().UTC(), failureWindowReset, lockDuration, lockThreshold)
 	if err != nil {
 		return err
@@ -157,7 +175,7 @@ func (s *SessionService) recordLoginFailure(ctx context.Context, normalizedUsern
 
 	if err := s.audit.Record(ctx, audit.Actor{Type: storage.AuditActorAnonymous, AuthMethod: "password", RequestID: requestID, SourceAddr: sourceAddr}, audit.Event{
 		Action: "auth.login", TargetType: "user", TargetID: normalizedUsername, Outcome: storage.AuditOutcomeFailure,
-		ReasonCode: "invalid_credentials",
+		ReasonCode: "invalid_credentials", Details: map[string]any{"domain": domain},
 	}); err != nil {
 		return err
 	}
@@ -172,10 +190,10 @@ func (s *SessionService) recordLoginFailure(ctx context.Context, normalizedUsern
 	return nil
 }
 
-func (s *SessionService) createSessionFamily(ctx context.Context, user storage.User) (LoginResult, error) {
+func (s *SessionService) createSessionFamily(ctx context.Context, user storage.User, domain string) (LoginResult, error) {
 	now := time.Now().UTC()
 	family := storage.SessionFamily{
-		ID: uuid.Must(uuid.NewV7()).String(), UserID: user.ID,
+		ID: uuid.Must(uuid.NewV7()).String(), UserID: user.ID, AuthDomain: domain,
 		CreatedAt: now, LastUsedAt: now, AbsoluteExpiresAt: now.Add(RefreshAbsoluteLifetime),
 	}
 
@@ -210,7 +228,7 @@ func (s *SessionService) createSessionFamily(ctx context.Context, user storage.U
 			return err
 		}
 
-		accessToken, err := s.issueAccessToken(user, family.ID)
+		accessToken, err := s.issueAccessToken(user, family.ID, domain)
 		if err != nil {
 			return err
 		}
@@ -226,12 +244,16 @@ func (s *SessionService) createSessionFamily(ctx context.Context, user storage.U
 	return result, nil
 }
 
-func (s *SessionService) issueAccessToken(user storage.User, familyID string) (string, error) {
+func (s *SessionService) issueAccessToken(user storage.User, familyID, domain string) (string, error) {
 	now := time.Now().UTC()
+	if domain == "" {
+		domain = AuthDomainLocal
+	}
 	return IssueSessionJWT(s.keys.SessionPrivateKey, s.keys.SessionKeyID, SessionClaims{
 		Issuer: s.issuer, Audience: s.audience, Subject: user.ID,
-		JTI: uuid.Must(uuid.NewV7()).String(), FamilyID: familyID, CredentialVersion: user.CredentialVersion,
-		IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(SessionAccessLifetime),
+		JTI: uuid.Must(uuid.NewV7()).String(), FamilyID: familyID, AuthDomain: domain,
+		CredentialVersion: user.CredentialVersion,
+		IssuedAt:          now, NotBefore: now, ExpiresAt: now.Add(SessionAccessLifetime),
 	})
 }
 
@@ -326,7 +348,7 @@ func (s *SessionService) Refresh(ctx context.Context, sourceAddr, requestID, ref
 		if err := s.sessions.TouchFamily(ctx, familyID, now); err != nil {
 			return err
 		}
-		accessToken, err := s.issueAccessToken(user, familyID)
+		accessToken, err := s.issueAccessToken(user, familyID, family.AuthDomain)
 		if err != nil {
 			return err
 		}
@@ -336,6 +358,7 @@ func (s *SessionService) Refresh(ctx context.Context, sourceAddr, requestID, ref
 		}
 		return s.audit.Record(ctx, audit.Actor{UserID: user.ID, Type: storage.AuditActorUser, AuthMethod: "refresh_token", RequestID: requestID, SourceAddr: sourceAddr}, audit.Event{
 			Action: "auth.refresh", TargetType: "session_family", TargetID: familyID, Outcome: storage.AuditOutcomeSuccess,
+			Details: map[string]any{"domain": family.AuthDomain},
 		})
 	})
 	if err != nil {
@@ -365,6 +388,12 @@ func (s *SessionService) ValidateAccessToken(ctx context.Context, token string) 
 	if err != nil {
 		return storage.User{}, SessionClaims{}, ErrInvalidCredentials
 	}
+
+	domain, err := NormalizeAuthDomain(claims.AuthDomain)
+	if err != nil {
+		return storage.User{}, SessionClaims{}, ErrInvalidCredentials
+	}
+	claims.AuthDomain = domain
 
 	user, err := s.users.Get(ctx, claims.Subject)
 	if errors.Is(err, storage.ErrNotFound) {
