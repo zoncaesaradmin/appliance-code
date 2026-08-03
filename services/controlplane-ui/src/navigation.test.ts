@@ -30,6 +30,9 @@ describe("navigation model", () => {
     expect(currentMode("/manage/dns").id).toBe("manage");
     expect(currentMode("/analyze/workflows").id).toBe("analyze");
     expect(currentMode("/admin/system-status").id).toBe("admin");
+    expect(currentMode("/admin/system-status/resources").id).toBe("admin");
+    expect(currentMode("/admin/profiles").id).toBe("admin");
+    expect(currentMode("/admin/licensing").id).toBe("admin");
   });
 
   it("falls back to Home for unknown paths", () => {

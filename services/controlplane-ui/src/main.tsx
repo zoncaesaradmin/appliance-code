@@ -1448,8 +1448,16 @@ function AdminPage(props: { pathname: string; capabilities: string[] }): React.J
   const [health, setHealth] = useState("unknown");
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
 
+  const isProfiles = props.pathname === "/admin/profiles" || props.pathname.startsWith("/admin/profiles/");
+  const isLicensing =
+    props.pathname === "/admin/licensing" || props.pathname.startsWith("/admin/licensing/");
+  const isSystemStatus =
+    props.pathname === "/admin/system-status" ||
+    props.pathname.startsWith("/admin/system-status/") ||
+    (!isProfiles && !isLicensing);
+
   useEffect(() => {
-    if (props.pathname !== "/admin/system-status") {
+    if (!isSystemStatus) {
       return;
     }
     void (async () => {
@@ -1462,32 +1470,61 @@ function AdminPage(props: { pathname: string; capabilities: string[] }): React.J
       setHealth(nextHealth);
       setIdentity(nextIdentity);
     })();
-  }, [props.pathname]);
+  }, [isSystemStatus, props.pathname]);
+
+  if (isProfiles) {
+    return (
+      <PageFrame
+        title="Profiles"
+        eyebrow=""
+        description="Profile management entry points for future appliance feature grouping."
+        pathname={props.pathname}
+        onNavigate={navigate}
+        tabs={[{ label: "Overview", path: "/admin/profiles" }]}
+      >
+        <Card title="Overview" subtitle="Future appliance feature grouping">
+          <EmptyState message="Profile management details will grow here as more feature-specific admin controls are introduced." />
+        </Card>
+      </PageFrame>
+    );
+  }
+
+  if (isLicensing) {
+    return (
+      <PageFrame
+        title="Licensing"
+        eyebrow=""
+        description="License and entitlement surfaces for this appliance."
+        pathname={props.pathname}
+        onNavigate={navigate}
+        tabs={[{ label: "Overview", path: "/admin/licensing" }]}
+      >
+        <Card title="Overview" subtitle="Reserved appliance licensing surface">
+          <EmptyState message="Licensing and entitlement workflows will be added here when the supporting control-plane APIs exist." />
+        </Card>
+      </PageFrame>
+    );
+  }
 
   return (
     <PageFrame
-      title="Administration"
+      title="System Status"
       eyebrow=""
-      description="Appliance-wide operating posture, profile expansion points, and future licensing surfaces."
+      description="Version, readiness, and appliance identity."
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
-        { label: "System Status", path: "/admin/system-status" },
-        { label: "Profiles", path: "/admin/profiles" },
-        { label: "Licensing", path: "/admin/licensing" }
+        { label: "Overview", path: "/admin/system-status" },
+        { label: "Resources", path: "/admin/system-status/resources" }
       ]}
     >
-      {props.pathname === "/admin/profiles" ? (
-        <Card title="Profiles" subtitle="Future appliance feature grouping">
-          <EmptyState message="Profile management details will grow here as more feature-specific admin controls are introduced." />
-        </Card>
-      ) : props.pathname === "/admin/licensing" ? (
-        <Card title="Licensing" subtitle="Reserved appliance licensing surface">
-          <EmptyState message="Licensing and entitlement workflows will be added here when the supporting control-plane APIs exist." />
+      {props.pathname === "/admin/system-status/resources" ? (
+        <Card title="Resources" subtitle="Host and cluster resource posture">
+          <EmptyState message="Resource utilization and capacity details will appear here when the supporting control-plane APIs are available." />
         </Card>
       ) : (
         <div className="grid-two">
-          <Card title="System status" subtitle="Primary appliance runtime posture">
+          <Card title="Overview" subtitle="Primary appliance runtime posture">
             <div className="detail-list">
               <div>
                 <span>Readiness</span>
