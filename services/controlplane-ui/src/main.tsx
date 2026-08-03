@@ -570,7 +570,7 @@ function RouteView(props: {
   if (props.pathname.startsWith("/admin")) {
     return <AdminPage pathname={props.pathname} capabilities={props.capabilities} />;
   }
-  return <HomePage pathname={props.pathname} capabilities={props.capabilities} />;
+  return <HomePage pathname={props.pathname} session={props.session} capabilities={props.capabilities} />;
 }
 
 function SessionPage(props: { session: Session }): React.JSX.Element {
@@ -615,6 +615,7 @@ function SessionPage(props: { session: Session }): React.JSX.Element {
 
 function HomePage(props: {
   pathname: string;
+  session: Session;
   capabilities: string[];
 }): React.JSX.Element {
   const [version, setVersion] = useState<Version | null>(null);
@@ -670,8 +671,7 @@ function HomePage(props: {
 
   return (
     <PageFrame
-      title="Home"
-      description="Default landing page for operators, with dashboard status and user-facing access tools."
+      title={`Welcome, ${props.session.username}`}
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[

@@ -257,7 +257,7 @@ export function Card(props: {
 
 export function PageFrame(props: {
   title: string;
-  description: string;
+  description?: string;
   tabs: Array<{ label: string; path: string; icon?: IconName }>;
   pathname: string;
   onNavigate: (path: string) => void;
@@ -272,9 +272,11 @@ export function PageFrame(props: {
         <h1 className="m-0 text-3xl font-bold tracking-tight text-slate-950 md:text-4xl">
           {props.title}
         </h1>
-        <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500 md:text-base">
-          {props.description}
-        </p>
+        {props.description ? (
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-500 md:text-base">
+            {props.description}
+          </p>
+        ) : null}
       </div>
       {props.tabs.length > 0 ? (
         <div className="mb-6 mt-5 flex flex-wrap gap-2 border-b border-slate-200 pb-4">
