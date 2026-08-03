@@ -433,12 +433,27 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # Go caches mount into the image non-root home (not /root/…): the
 # development-container image runs as USERNAME=devcontainer.
 DEV_CONTAINER_HOME ?= /home/devcontainer
+# Forward host Git SSH credentials into the container when available.
+# Prefer the running ssh-agent socket; also mount ~/.ssh read-only so
+# key-file auth works without an agent. Without this, `git pull` inside
+# `make dev-shell` fails with Permission denied (publickey) even though
+# the same command works on the host.
+DEV_SSH_FLAGS :=
+ifneq ($(SSH_AUTH_SOCK),)
+ifeq ($(shell test -S "$(SSH_AUTH_SOCK)" && echo yes),yes)
+DEV_SSH_FLAGS += -e SSH_AUTH_SOCK=/ssh-agent -v "$(SSH_AUTH_SOCK):/ssh-agent"
+endif
+endif
+ifeq ($(shell test -d "$(HOME)/.ssh" && echo yes),yes)
+DEV_SSH_FLAGS += -v "$(HOME)/.ssh:$(DEV_CONTAINER_HOME)/.ssh:ro"
+endif
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	--entrypoint "" \
 	$(DEV_ENGINE_AUTH_FLAGS) \
 	$(DEV_ENGINE_TLS_FLAGS) \
 	$(DEV_ENGINE_PULL_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
+	$(DEV_SSH_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:$(DEV_CONTAINER_HOME)/.cache/go-build$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-mod:$(DEV_CONTAINER_HOME)/go/pkg/mod$(DEV_VOLUME_OPTS)" \

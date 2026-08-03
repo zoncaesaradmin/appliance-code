@@ -78,6 +78,37 @@ Both mount the repo read-write at `/workspace` and persist Go's
 build/module caches under `$(DEV_CACHE_DIR)` on the host, so repeated
 invocations don't re-download modules or recompile from scratch.
 
+### Git over SSH from inside the container
+
+`make dev-shell` / `make dev-run` forward host SSH credentials when present:
+
+- if `SSH_AUTH_SOCK` points at a live agent socket, it is mounted into the
+  container as `/ssh-agent`
+- if `~/.ssh` exists on the host, it is mounted read-only at
+  `/home/devcontainer/.ssh`
+
+That is why host `git pull` can work while an older container shell failed
+with `Permission denied (publickey)`: the workspace was mounted, but SSH
+keys were not.
+
+On the host, before entering the shell, make sure GitHub auth is available:
+
+```bash
+# Preferred: agent (needed if your key has a passphrase)
+eval "$(ssh-agent -s)"
+ssh-add -l || ssh-add   # add your GitHub key if the agent is empty
+ssh -T git@github.com   # should succeed on the host first
+
+make dev-shell
+# inside:
+ssh -T git@github.com
+git pull
+```
+
+If `ssh-add -l` is empty and you do not use an agent, a non-passphrase key
+under `~/.ssh` is enough via the read-only mount. Passphrase-protected keys
+still need `ssh-add` on the host.
+
 ## Configuration
 
 Every setting below is a Makefile variable — override per-invocation
