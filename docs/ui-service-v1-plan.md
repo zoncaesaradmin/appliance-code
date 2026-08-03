@@ -1,5 +1,11 @@
 # UI Service V1 Plan
 
+> Superseded: this was the original server-rendered/HTMX UI plan for
+> `services/ui`. The active UI direction is now the React + TypeScript SPA in
+> `services/controlplane-ui`, with the browser calling the control-plane
+> OpenAPI surface directly. Keep this document only as historical context for
+> the first UI service implementation.
+
 ## Goal
 
 Add a separate appliance UI service under `services/ui` and deploy it as its

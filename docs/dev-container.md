@@ -1,7 +1,7 @@
 # Developer Container
 
 Two Makefile targets (`make dev-shell`, `make dev-run`) give you a
-container with a known, shared toolchain (Go, Buildah, Skopeo, etc.).
+container with a known, shared toolchain (Go, Node.js/npm, Buildah, Skopeo, etc.).
 This is where the control-plane's release container image actually gets
 built (`make -C services/controlplane image`, run from inside `make
 dev-shell`), and it's also useful for reproducing a CI build failure
@@ -16,9 +16,10 @@ container tooling happens to be installed there. Building it straight
 on a bare host (even a Linux one) would lose the point of a known,
 audited, reproducible toolchain; building it from macOS would additionally
 mean no architecture or environment guarantees at all. Day to day, a
-laptop only needs `make build`/`make run`/`make test` against the plain
-Go binary (see the root README) — no containers, no Podman, nothing
-beyond a Go toolchain.
+laptop only needs the local language toolchains for the thing being
+worked on: Go for backend/service binaries, and Node.js/npm for the
+React control-plane UI (see `services/controlplane-ui/README.md`).
+No containers or Podman are needed for local UI development.
 
 ## Supported Hosts
 
@@ -129,10 +130,11 @@ to the kernel directly on Linux, so there's no VM/machine step to manage.
 
 **Not supported.** Do not install Podman/Docker on macOS for this repo
 — `make dev-shell`/`make dev-run` are Linux-only, and the control-plane
-image is only ever built on the Linux build server, never here. Use
-`make build`/`make run`/`make test` directly against the Go toolchain
-instead (see the root README); for anything needing the shared
-container toolchain, use a Linux dev machine or the build server itself.
+or UI images are only ever built on the Linux build server, never here.
+Use local Go commands for backend work and local Node.js/npm commands for
+the React UI instead (see `services/controlplane-ui/README.md`); for
+anything needing the shared container toolchain, use a Linux dev machine
+or the build server itself.
 
 ### Windows (untested)
 
@@ -216,7 +218,7 @@ make -C services/controlplane image-local   # local storage only
 make -C services/controlplane image         # build + push
 # → ${SERVICE_IMAGE_REGISTRY}/appliance-images/appliance-control-plane:<git-describe>
 
-make -C services/ui image                   # same pattern; name is appliance-ui
+make -C services/controlplane-ui image      # same pattern; name is appliance-ui
 exit
 ```
 

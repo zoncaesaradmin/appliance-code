@@ -4,13 +4,150 @@ info:
   version: 0.1.0
   description: >
     REST contract for appliance control-plane APIs used by browser UI,
-    CLI, SDKs, and automation clients. UI-only HTMX fragment routes are not
-    part of this contract.
+    CLI, SDKs, and automation clients. The React SPA calls this contract
+    directly from the browser; UI static asset routes are intentionally not
+    part of this API contract.
 servers:
   - url: https://appliance.local
 security:
   - bearerAuth: []
 paths:
+  /api/v1/setup/status:
+    get:
+      summary: Get appliance setup status
+      description: >
+        Returns whether the appliance has already been initialized with a first
+        administrator account. Available on every profile and does not require
+        authentication.
+      operationId: getSetupStatus
+      security: []
+      responses:
+        "200":
+          description: Setup status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetupStatus"
+  /api/v1/capabilities:
+    get:
+      summary: List enabled appliance capabilities
+      description: >
+        Returns the resolved capability set for the running appliance instance.
+        Browser clients should gate visible navigation and pages on these
+        capabilities instead of duplicating profile-to-capability mapping.
+      operationId: listCapabilities
+      security: []
+      responses:
+        "200":
+          description: Enabled capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilitiesResponse"
+  /api/v1/setup/first-admin:
+    post:
+      summary: Create the first administrator
+      description: >
+        Creates the first local administrator when the appliance is not yet
+        initialized. Available without authentication until initialization is
+        complete.
+      operationId: createFirstAdmin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFirstAdminRequest"
+      responses:
+        "201":
+          description: First administrator created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateFirstAdminResponse"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/auth/login:
+    post:
+      summary: Log in with local appliance credentials
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Session credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "423":
+          description: Account temporarily locked.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh an interactive session
+      operationId: refreshSession
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Refreshed session credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/logout:
+    post:
+      summary: Log out the current interactive session
+      operationId: logout
+      responses:
+        "204":
+          description: Logged out.
+        "400":
+          description: Presented credential is not an interactive session.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/session:
+    get:
+      summary: Get the current authenticated session
+      operationId: getSession
+      responses:
+        "200":
+          description: Current session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/v1/appliance/identity:
     get:
       summary: Get appliance LAN identity
@@ -217,6 +354,49 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/builder/git-access:
+    get:
+      summary: Get shared builder Git access status
+      description: >
+        Returns whether the appliance-wide HTTPS Git credential required for
+        builder workspace provisioning and build flows has been configured.
+      operationId: getBuilderGitAccess
+      responses:
+        "200":
+          description: Builder Git access status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuilderGitAccessStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      summary: Configure shared builder Git access
+      description: >
+        Stores the appliance-wide HTTPS Git credential used by builder
+        workflows when cloning configured repositories.
+      operationId: updateBuilderGitAccess
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBuilderGitAccessRequest"
+      responses:
+        "200":
+          description: Updated builder Git access status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuilderGitAccessStatus"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/workspaces:
     get:
       summary: List workspaces
@@ -412,6 +592,202 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/tokens:
+    get:
+      summary: List the caller's API tokens
+      operationId: listSelfTokens
+      responses:
+        "200":
+          description: Tokens owned by the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/APIToken"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create an API token for the caller
+      operationId: createSelfToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTokenRequest"
+      responses:
+        "201":
+          description: Token created. The raw token value is returned only once.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateTokenResponse"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/tokens/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TokenID"
+    delete:
+      summary: Revoke an API token
+      operationId: revokeSelfToken
+      responses:
+        "204":
+          description: Token revoked.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/grants:
+    get:
+      summary: List registry grants
+      operationId: listRegistryGrants
+      responses:
+        "200":
+          description: Explicit registry grants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RegistryGrant"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      summary: Create a registry grant
+      operationId: createRegistryGrant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRegistryGrantRequest"
+      responses:
+        "201":
+          description: Created registry grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistryGrant"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/registry/grants/{id}:
+    parameters:
+      - $ref: "#/components/parameters/GrantID"
+    delete:
+      summary: Delete a registry grant
+      operationId: deleteRegistryGrant
+      responses:
+        "204":
+          description: Grant deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/repositories:
+    get:
+      summary: List visible registry repositories
+      operationId: listRegistryRepositories
+      responses:
+        "200":
+          description: Repositories visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/registry/repositories/{repositoryPath}/tags:
+    parameters:
+      - $ref: "#/components/parameters/RepositoryPath"
+    get:
+      summary: List tags for a repository
+      description: >
+        Repository paths are multi-segment names as returned by the repository
+        list. Clients should preserve the repository path exactly when building
+        this request path.
+      operationId: listRegistryTags
+      responses:
+        "200":
+          description: Repository tags.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/registry/repositories/{repositoryPath}/referrers:
+    parameters:
+      - $ref: "#/components/parameters/RepositoryPath"
+    get:
+      summary: List referrers for a repository manifest
+      operationId: listRegistryReferrers
+      parameters:
+        - in: query
+          name: digest
+          required: true
+          schema:
+            type: string
+          description: Subject manifest digest.
+      responses:
+        "200":
+          description: Repository referrers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RegistryDescriptor"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/jobs:
     get:
       summary: List jobs
@@ -534,6 +910,24 @@ components:
       required: true
       schema:
         type: string
+    TokenID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    GrantID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    RepositoryPath:
+      in: path
+      name: repositoryPath
+      required: true
+      schema:
+        type: string
   responses:
     Unauthorized:
       description: Authentication required.
@@ -566,6 +960,75 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    SetupStatus:
+      type: object
+      required: [initialized]
+      properties:
+        initialized:
+          type: boolean
+    CapabilitiesResponse:
+      type: object
+      required: [capabilities]
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+    CreateFirstAdminRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        displayName:
+          type: string
+    CreateFirstAdminResponse:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    LoginResponse:
+      type: object
+      required: [accessToken, refreshToken, accessExpiresAt]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        accessExpiresAt:
+          type: string
+          format: date-time
+    Session:
+      type: object
+      required: [userId, username, authMethod, permissions]
+      properties:
+        userId:
+          type: string
+        username:
+          type: string
+        authMethod:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
     DNSRecord:
       type: object
       required: [name, fqdn, ipv4, ttl, source, createdAt, updatedAt]
@@ -679,6 +1142,127 @@ components:
         containerfilePath:
           type: string
         imageRepository:
+          type: string
+    BuilderGitAccessStatus:
+      type: object
+      required: [configured, canConfigure]
+      properties:
+        configured:
+          type: boolean
+        host:
+          type: string
+        username:
+          type: string
+        requiredHosts:
+          type: array
+          items:
+            type: string
+        canConfigure:
+          type: boolean
+    UpdateBuilderGitAccessRequest:
+      type: object
+      required: [host, username, token]
+      properties:
+        host:
+          type: string
+        username:
+          type: string
+        token:
+          type: string
+    APIToken:
+      type: object
+      required: [id, userId, name, createdAt, expiresAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: string
+          format: date-time
+    CreateTokenRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        lifetimeSeconds:
+          type: integer
+        scopes:
+          type: array
+          items:
+            type: string
+    CreateTokenResponse:
+      allOf:
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+        - $ref: "#/components/schemas/APIToken"
+    RegistryGrant:
+      type: object
+      required: [id, subjectType, subjectId, pathPrefix, actions, createdAt]
+      properties:
+        id:
+          type: string
+        subjectType:
+          type: string
+          enum: [user, role]
+        subjectId:
+          type: string
+        pathPrefix:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+            enum: [pull, push]
+        createdAt:
+          type: string
+          format: date-time
+    CreateRegistryGrantRequest:
+      type: object
+      required: [subjectType, subjectId, pathPrefix, actions]
+      properties:
+        subjectType:
+          type: string
+          enum: [user, role]
+        subjectId:
+          type: string
+        pathPrefix:
+          type: string
+        actions:
+          type: array
+          items:
+            type: string
+            enum: [pull, push]
+    RegistryDescriptor:
+      type: object
+      required: [mediaType, digest, size]
+      properties:
+        mediaType:
+          type: string
+        digest:
+          type: string
+        size:
+          type: integer
+        artifactType:
           type: string
     SubmitBuildRequest:
       type: object

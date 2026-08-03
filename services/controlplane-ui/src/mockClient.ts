@@ -1,0 +1,404 @@
+import type {
+  APIToken,
+  ApplianceIdentity,
+  BuilderGitAccessStatus,
+  BuildTarget,
+  CapabilitiesResponse,
+  CreateRegistryGrantRequest,
+  CreateTokenRequest,
+  CreateTokenResponse,
+  CreateWorkspaceRequest,
+  DNSRecord,
+  DNSRecordsResult,
+  Health,
+  Job,
+  LoginResponse,
+  RegistryDescriptor,
+  RegistryGrant,
+  Session,
+  SetupStatus,
+  SubmitBuildRequest,
+  UpdateBuilderGitAccessRequest,
+  UpsertDNSRecordRequest,
+  Version,
+  WorkProfile,
+  Workspace
+} from "./types";
+
+function now(): string {
+  return new Date().toISOString();
+}
+
+function uuid(): string {
+  return crypto.randomUUID();
+}
+
+type MockState = {
+  initialized: boolean;
+  capabilities: string[];
+  session: Session | null;
+  tokens: APIToken[];
+  dnsRecords: DNSRecord[];
+  workProfiles: WorkProfile[];
+  workspaces: Workspace[];
+  currentWorkspaceId: string | null;
+  builderGitAccess: BuilderGitAccessStatus;
+  buildTargets: BuildTarget[];
+  latestJob: Job | null;
+  repositories: string[];
+  grants: RegistryGrant[];
+};
+
+const mockState: MockState = {
+  initialized: true,
+  capabilities: ["base", "build", "artifact", "dns"],
+  session: {
+    userId: "mock-admin",
+    username: "admin",
+    authMethod: "password",
+    permissions: ["dns.records.write", "artifacts.write", "artifacts.read"]
+  },
+  tokens: [
+    {
+      id: uuid(),
+      userId: "mock-admin",
+      name: "automation-bot",
+      scopes: ["artifacts.read", "artifacts.write"],
+      createdAt: now(),
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
+    }
+  ],
+  dnsRecords: [
+    {
+      name: "builder",
+      fqdn: "builder.appliance.internal",
+      ipv4: "10.20.0.24",
+      ttl: 300,
+      source: "manual",
+      createdAt: now(),
+      updatedAt: now()
+    }
+  ],
+  workProfiles: [
+    {
+      name: "builder-default",
+      description: "Default build workspace profile",
+      repos: [
+        { name: "controlplane", enabledByDefault: true },
+        { name: "appliance-ctl" }
+      ]
+    },
+    {
+      name: "builder-dns",
+      description: "DNS-focused workspace profile",
+      repos: [{ name: "appliance-dns", enabledByDefault: true }]
+    }
+  ],
+  workspaces: [
+    {
+      id: uuid(),
+      ownerId: "mock-admin",
+      name: "primary-workspace",
+      workProfile: "builder-default",
+      sourceRepoUrl: "https://git.example.internal/appliance-code.git",
+      sourceRef: "main",
+      status: "ready",
+      createdAt: now(),
+      updatedAt: now()
+    }
+  ],
+  currentWorkspaceId: null,
+  builderGitAccess: {
+    configured: true,
+    host: "git.example.internal",
+    username: "builder-bot",
+    requiredHosts: ["git.example.internal"],
+    canConfigure: true
+  },
+  buildTargets: [
+    {
+      name: "bundle-controlplane",
+      description: "Build the appliance control plane bundle",
+      repo: "appliance-code",
+      execution: "container",
+      containerfilePath: "services/controlplane/Containerfile",
+      imageRepository: "registry.local/appliance-control-plane"
+    }
+  ],
+  latestJob: null,
+  repositories: ["appliance/controlplane", "appliance/ui"],
+  grants: [
+    {
+      id: uuid(),
+      subjectType: "user",
+      subjectId: "admin",
+      pathPrefix: "appliance/",
+      actions: ["pull", "push"],
+      createdAt: now()
+    }
+  ]
+};
+
+mockState.currentWorkspaceId = mockState.workspaces[0]?.id ?? null;
+
+export class MockControlPlaneClient {
+  async getSetupStatus(): Promise<SetupStatus> {
+    return { initialized: mockState.initialized };
+  }
+
+  async getCapabilities(): Promise<CapabilitiesResponse> {
+    return { capabilities: mockState.capabilities };
+  }
+
+  async createFirstAdmin(): Promise<void> {
+    mockState.initialized = true;
+  }
+
+  async login(username: string): Promise<LoginResponse> {
+    mockState.session = {
+      userId: "mock-admin",
+      username,
+      authMethod: "password",
+      permissions: ["dns.records.write", "artifacts.write", "artifacts.read"]
+    };
+    return {
+      accessToken: uuid(),
+      refreshToken: uuid(),
+      accessExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    };
+  }
+
+  async refresh(): Promise<LoginResponse> {
+    return {
+      accessToken: uuid(),
+      refreshToken: uuid(),
+      accessExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    };
+  }
+
+  async logout(): Promise<void> {
+    return;
+  }
+
+  async getSession(): Promise<Session> {
+    if (!mockState.session) {
+      throw new Error("No mock session");
+    }
+    return mockState.session;
+  }
+
+  async getVersion(): Promise<Version> {
+    return {
+      version: "mock-2026.08.02",
+      commit: "mock",
+      buildTime: now(),
+      goVersion: "go1.26"
+    };
+  }
+
+  async getReady(): Promise<Health> {
+    return { status: "ready" };
+  }
+
+  async getIdentity(): Promise<ApplianceIdentity> {
+    return {
+      applianceName: "zon-appliance",
+      dnsZone: "appliance.internal",
+      fqdn: "zon-appliance.appliance.internal",
+      nodeIPv4: "10.20.0.12",
+      canonicalOrigin: "https://zon-appliance.appliance.internal"
+    };
+  }
+
+  async listTokens(): Promise<APIToken[]> {
+    return mockState.tokens;
+  }
+
+  async createToken(request: CreateTokenRequest): Promise<CreateTokenResponse> {
+    const created: CreateTokenResponse = {
+      id: uuid(),
+      userId: "mock-admin",
+      name: request.name,
+      scopes: request.scopes ?? [],
+      createdAt: now(),
+      expiresAt: new Date(Date.now() + (request.lifetimeSeconds ?? 0) * 1000).toISOString(),
+      token: `mock-${Math.random().toString(36).slice(2, 18)}`
+    };
+    mockState.tokens = [...mockState.tokens, created];
+    return created;
+  }
+
+  async deleteToken(id: string): Promise<void> {
+    mockState.tokens = mockState.tokens.filter((token) => token.id !== id);
+  }
+
+  async listDNSRecords(): Promise<DNSRecordsResult> {
+    return {
+      zone: "appliance.internal",
+      items: mockState.dnsRecords
+    };
+  }
+
+  async upsertDNSRecord(name: string, request: UpsertDNSRecordRequest): Promise<DNSRecord> {
+    const next: DNSRecord = {
+      name,
+      fqdn: `${name}.appliance.internal`,
+      ipv4: request.ipv4,
+      ttl: request.ttl,
+      source: "manual",
+      createdAt: now(),
+      updatedAt: now()
+    };
+    mockState.dnsRecords = [
+      ...mockState.dnsRecords.filter((record) => record.name !== name),
+      next
+    ];
+    return next;
+  }
+
+  async deleteDNSRecord(name: string): Promise<void> {
+    mockState.dnsRecords = mockState.dnsRecords.filter((record) => record.name !== name);
+  }
+
+  async listWorkProfiles(): Promise<WorkProfile[]> {
+    return mockState.workProfiles;
+  }
+
+  async listWorkspaces(): Promise<Workspace[]> {
+    return mockState.workspaces;
+  }
+
+  async getCurrentWorkspace(): Promise<Workspace | null> {
+    return (
+      mockState.workspaces.find((workspace) => workspace.id === mockState.currentWorkspaceId) ??
+      null
+    );
+  }
+
+  async createWorkspace(request: CreateWorkspaceRequest): Promise<Workspace> {
+    const workspace: Workspace = {
+      id: uuid(),
+      ownerId: "mock-admin",
+      name: request.name,
+      workProfile: request.workProfile,
+      sourceRepoUrl: "https://git.example.internal/generated.git",
+      sourceRef: "main",
+      status: mockState.builderGitAccess.configured ? "ready" : "pending",
+      createdAt: now(),
+      updatedAt: now()
+    };
+    mockState.workspaces = [...mockState.workspaces, workspace];
+    mockState.currentWorkspaceId = workspace.id;
+    return workspace;
+  }
+
+  async setCurrentWorkspace(workspaceId: string): Promise<void> {
+    mockState.currentWorkspaceId = workspaceId;
+  }
+
+  async deleteWorkspace(workspaceId: string): Promise<void> {
+    mockState.workspaces = mockState.workspaces.filter((workspace) => workspace.id !== workspaceId);
+    if (mockState.currentWorkspaceId === workspaceId) {
+      mockState.currentWorkspaceId = mockState.workspaces[0]?.id ?? null;
+    }
+  }
+
+  async getBuilderGitAccess(): Promise<BuilderGitAccessStatus> {
+    return mockState.builderGitAccess;
+  }
+
+  async updateBuilderGitAccess(
+    request: UpdateBuilderGitAccessRequest
+  ): Promise<BuilderGitAccessStatus> {
+    mockState.builderGitAccess = {
+      configured: true,
+      host: request.host,
+      username: request.username,
+      requiredHosts: [request.host],
+      canConfigure: true
+    };
+    return mockState.builderGitAccess;
+  }
+
+  async listBuildTargets(): Promise<BuildTarget[]> {
+    return mockState.buildTargets;
+  }
+
+  async submitBuild(request: SubmitBuildRequest): Promise<Job> {
+    const current = await this.getCurrentWorkspace();
+    const job: Job = {
+      id: uuid(),
+      ownerId: "mock-admin",
+      workspaceId: current?.id,
+      type: "build",
+      status: "running",
+      targetName: request.targetName,
+      artifactRef: `${request.targetName}:${request.imageTag || "latest"}`,
+      createdAt: now(),
+      updatedAt: now(),
+      startedAt: now()
+    };
+    mockState.latestJob = job;
+    window.setTimeout(() => {
+      if (!mockState.latestJob || mockState.latestJob.id !== job.id) {
+        return;
+      }
+      mockState.latestJob = {
+        ...mockState.latestJob,
+        status: "succeeded",
+        updatedAt: now(),
+        completedAt: now()
+      };
+    }, 3500);
+    return job;
+  }
+
+  async getCurrentBuildStatus(): Promise<Job | null> {
+    return mockState.latestJob;
+  }
+
+  async listRepositories(): Promise<string[]> {
+    return mockState.repositories;
+  }
+
+  async listRepositoryTags(): Promise<string[]> {
+    return ["latest", "2026.08.02", "stable"];
+  }
+
+  async listRepositoryReferrers(digest: string): Promise<RegistryDescriptor[]> {
+    if (!digest) {
+      return [];
+    }
+    return [
+      {
+        mediaType: "application/vnd.oci.image.manifest.v1+json",
+        digest: "sha256:mockreferrer1",
+        size: 2048,
+        artifactType: "sbom/spdx"
+      }
+    ];
+  }
+
+  async listRegistryGrants(): Promise<RegistryGrant[]> {
+    return mockState.grants;
+  }
+
+  async createRegistryGrant(
+    request: CreateRegistryGrantRequest
+  ): Promise<RegistryGrant> {
+    const grant: RegistryGrant = {
+      id: uuid(),
+      subjectType: request.subjectType,
+      subjectId: request.subjectId,
+      pathPrefix: request.pathPrefix,
+      actions: request.actions,
+      createdAt: now()
+    };
+    mockState.grants = [...mockState.grants, grant];
+    return grant;
+  }
+
+  async deleteRegistryGrant(id: string): Promise<void> {
+    mockState.grants = mockState.grants.filter((grant) => grant.id !== id);
+  }
+}

@@ -1,0 +1,6 @@
+node_modules/
+bin/dist/assets/*.css
+bin/dist/assets/*.css.map
+bin/dist/assets/*.js
+bin/dist/assets/*.js.map
+bin/dist/index.html

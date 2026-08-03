@@ -17,7 +17,7 @@ flowchart TD
 
         subgraph AppNS["control namespace"]
             Control["Control-plane pod<br/>One Go server replica<br/>REST + MCP + auth + RBAC + orchestration"]
-            UI["UI pod<br/>One Go server replica<br/>HTMX + server-rendered HTML"]
+            UI["UI pod<br/>One Go static host replica<br/>React + TypeScript SPA assets"]
             Zot["zot pod<br/>One registry replica<br/>OCI data plane"]
             ControlPVC[("Control-plane RWO PVC<br/>SQLite + durable application state")]
             ZotPVC[("zot RWO PVC<br/>OCI manifests + blobs + indexes")]
@@ -78,7 +78,7 @@ flowchart TD
 
 | Pod | Replicas | Public route | Responsibility |
 | --- | ---: | --- | --- |
-| UI service | 1 | `/`, browser UI paths | Login page, operator dashboard, and HTMX/server-rendered browser flows backed by control-plane APIs |
+| UI service | 1 | `/`, browser UI paths | Login page, appliance shell, and React/TypeScript SPA assets. Browser workflows call the control-plane OpenAPI routes directly under `/api/v1`. |
 | Control plane | 1 | `/api/v1/*`, `/mcp` | REST, MCP, local identity, sessions, API tokens, RBAC, registry-token issuance, internal ForwardAuth decisions, audit, builds, artifact metadata, reconciliation, and internal maintenance scheduling |
 | zot | 1 | `/v2/*` | OCI manifests, tags, digests, referrers, blobs, enhanced search, scrub, deduplication, garbage collection, and internal events |
 | Argo Workflow Controller | 1 | None | Watches appliance-owned `Workflow` resources and reconciles build, scan, and image-operation task pods |

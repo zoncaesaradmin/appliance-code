@@ -21,6 +21,7 @@ ui:
   config:
     logLevel: info
     cookieSecure: true
+    staticDir: /opt/appliance-ui/dist
     controlPlaneBaseURL: "" # empty => derive from the rendered public Service name
     controlPlaneInternalBaseURL: "" # empty => derive from the rendered internal Service name
   resources:

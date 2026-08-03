@@ -14,18 +14,27 @@ Options:
                          Default: the appliance-code repo `git describe`
                          version for this checkout.
   --image-name NAME      Local image name. Default: appliance-ui.
+  --node-image REF       Node build-stage base image. Default: UI_NODE_IMAGE
+                         env or Containerfile default.
+  --go-image REF         Go build-stage base image. Default: UI_GO_IMAGE env
+                         or Containerfile default.
+  --runtime-image REF    Runtime base image. Default: UI_RUNTIME_IMAGE env or
+                         Containerfile default.
   --help                 Show this help.
 EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-UI_DIR="${REPO_ROOT}/services/ui"
+UI_DIR="${REPO_ROOT}/services/controlplane-ui"
 VERIFY_SCRIPT="${SCRIPT_DIR}/verify-oci-archive-build-metadata.py"
 
 OUT_FILE=""
 IMAGE_TAG=""
 IMAGE_NAME="appliance-ui"
+UI_NODE_IMAGE="${UI_NODE_IMAGE:-}"
+UI_GO_IMAGE="${UI_GO_IMAGE:-}"
+UI_RUNTIME_IMAGE="${UI_RUNTIME_IMAGE:-}"
 LOCAL_IMAGE_PREFIX="localhost"
 BUILD_TIME="${BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
@@ -45,6 +54,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --image-name)
       IMAGE_NAME="${2:-}"
+      shift 2
+      ;;
+    --node-image)
+      UI_NODE_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --go-image)
+      UI_GO_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --runtime-image)
+      UI_RUNTIME_IMAGE="${2:-}"
       shift 2
       ;;
     --help|-h)
@@ -88,13 +109,25 @@ mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 
+build_args=()
+if [[ -n "${UI_NODE_IMAGE}" ]]; then
+  build_args+=(--build-arg "UI_NODE_IMAGE=${UI_NODE_IMAGE}")
+fi
+if [[ -n "${UI_GO_IMAGE}" ]]; then
+  build_args+=(--build-arg "UI_GO_IMAGE=${UI_GO_IMAGE}")
+fi
+if [[ -n "${UI_RUNTIME_IMAGE}" ]]; then
+  build_args+=(--build-arg "UI_RUNTIME_IMAGE=${UI_RUNTIME_IMAGE}")
+fi
+
 make -C "${UI_DIR}" image-local \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   VERSION="${IMAGE_TAG}" \
   COMMIT="${COMMIT}" \
   BUILD_TIME="${BUILD_TIME}" \
-  BUILD_NO_CACHE=1
+  BUILD_NO_CACHE=1 \
+  SERVICE_IMAGE_EXTRA_BUILD_ARGS="${build_args[*]}"
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 python3 "${VERIFY_SCRIPT}" \

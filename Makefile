@@ -1,5 +1,5 @@
 BACKEND_DIR := services/controlplane
-UI_DIR      := services/ui
+UI_DIR      := services/controlplane-ui
 HOST_AGENT_SERVICE_DIR := services/hostagent
 SDK_DIR     := sdk/golang/applianceclient
 CHART_DIR   := deploy/charts/appliance-control-plane
