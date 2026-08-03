@@ -254,6 +254,7 @@ function AuthLayout(props: {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    event.stopPropagation();
     setError("");
     setSubmitting(true);
     try {
@@ -301,74 +302,78 @@ function AuthLayout(props: {
         </div>
       </section>
       <section className="auth-form">
-        <div className="auth-form__card">
-          <div className="auth-form__main">
-            <header className="auth-form__brand">
-              <BrandMark size="lg" />
-              <h1>Welcome to Zon Appliance</h1>
-              <p className="auth-form__version" aria-live="polite">
-                {versionLabel}
-              </p>
-              {props.mode === "setup" ? (
-                <p className="auth-form__lede">Create the first administrator to finish setup.</p>
-              ) : null}
-            </header>
-            <form className="stack-form auth-form__fields" onSubmit={handleSubmit}>
+        <header className="auth-form__logo">
+          <BrandMark size="lg" />
+        </header>
+        <div className="auth-form__center">
+          <div className="auth-form__intro">
+            <p className="auth-form__welcome">Welcome to Zon Appliance</p>
+            <p className="auth-form__version" aria-live="polite">
+              {versionLabel}
+            </p>
+            {props.mode === "setup" ? (
+              <p className="auth-form__lede">Create the first administrator to finish setup.</p>
+            ) : null}
+          </div>
+            <form className="stack-form auth-form__fields" method="post" onSubmit={handleSubmit}>
               <label className="field">
                 <span>Username</span>
                 <input
+                  name="username"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   autoComplete="username"
+                  required
                 />
               </label>
               <label className="field">
                 <span>Password</span>
                 <input
+                  name="password"
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete={props.mode === "setup" ? "new-password" : "current-password"}
+                  required
                 />
               </label>
-              {props.mode === "setup" ? (
-                <label className="field">
-                  <span>Confirm password</span>
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    autoComplete="new-password"
-                  />
-                </label>
-              ) : null}
-              {props.mode === "setup" ? (
-                <label className="field">
-                  <span>Domain</span>
-                  <select value={domain} onChange={(event) => setDomain(event.target.value)}>
-                    <option value="local">local</option>
-                  </select>
-                </label>
-              ) : null}
-              {error ? <div className="message message--error">{error}</div> : null}
-              <button className="button button--primary" disabled={submitting} type="submit">
-                {submitting
-                  ? "Working..."
-                  : props.mode === "setup"
-                    ? "Create administrator"
-                    : "Sign in"}
-              </button>
-            </form>
-          </div>
-          <footer className="auth-form__footer">
-            <p className="auth-form__copyright">© {year} Zon. All rights reserved.</p>
-            <nav className="auth-form__legal" aria-label="Legal and support">
-              <a href="#terms-and-conditions">Terms &amp; Conditions</a>
-              <span aria-hidden="true">·</span>
-              <a href="#help-center">Help Center</a>
-            </nav>
-          </footer>
+            {props.mode === "setup" ? (
+              <label className="field">
+                <span>Confirm password</span>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+              </label>
+            ) : null}
+            {props.mode === "setup" ? (
+              <label className="field">
+                <span>Domain</span>
+                <select value={domain} onChange={(event) => setDomain(event.target.value)}>
+                  <option value="local">local</option>
+                </select>
+              </label>
+            ) : null}
+            {error ? <div className="message message--error">{error}</div> : null}
+            <button className="button button--primary" disabled={submitting} type="submit">
+              {submitting
+                ? "Working..."
+                : props.mode === "setup"
+                  ? "Create administrator"
+                  : "Sign in"}
+            </button>
+          </form>
         </div>
+        <footer className="auth-form__footer">
+          <p className="auth-form__copyright">© {year} Zon. All rights reserved.</p>
+          <nav className="auth-form__legal" aria-label="Legal and support">
+            <a href="#terms-and-conditions">Terms &amp; Conditions</a>
+            <span aria-hidden="true">·</span>
+            <a href="#help-center">Help Center</a>
+          </nav>
+        </footer>
       </section>
     </div>
   );

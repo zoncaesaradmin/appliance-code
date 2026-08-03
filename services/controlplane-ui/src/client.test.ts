@@ -42,7 +42,7 @@ describe("remote control-plane client", () => {
   });
 
   it("sends domain local when login domain is omitted or empty", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn().mockImplementation(() =>
       jsonResponse({
         accessToken: "access",
         refreshToken: "refresh",

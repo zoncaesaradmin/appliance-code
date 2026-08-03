@@ -337,11 +337,20 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
       }
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
+    let response: Response;
+    try {
+      const init: RequestInit = {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+      };
+      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+        init.signal = AbortSignal.timeout(120_000);
+      }
+      response = await fetch(`${this.baseUrl}${path}`, init);
+    } catch (error) {
+      throw networkRequestError(error);
+    }
 
     if (response.status === 401 && auth && retryAuth && loadAuth()?.refreshToken) {
       await this.refresh();
@@ -357,6 +366,20 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     }
     return JSON.parse(text) as T;
   }
+}
+
+function networkRequestError(error: unknown): Error {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return new ApiError(0, "The appliance took too long to respond. Please try again.");
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  if (/networkerror|failed to fetch|load failed|aborted/i.test(message)) {
+    return new ApiError(
+      0,
+      "Could not reach the appliance API. Check network connectivity and that the control plane is healthy, then try again."
+    );
+  }
+  return error instanceof Error ? error : new Error(message);
 }
 
 export function createControlPlaneClient(): ControlPlaneClient {
