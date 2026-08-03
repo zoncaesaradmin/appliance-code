@@ -1,4 +1,4 @@
-import type { IconName } from "./ui";
+import type { IconName } from "./components";
 import type { Session } from "./types";
 
 export type Mode = {
