@@ -4,6 +4,16 @@ import { clearAuth, loadAuth, saveAuth } from "./auth";
 import { ApiError, createControlPlaneClient, type ControlPlaneClient } from "./client";
 import { MODES, currentMode, modeUsesFeatureSelector, type Mode } from "./navigation";
 import "./styles.css";
+import {
+  BrandMark,
+  Card,
+  EmptyState,
+  Icon,
+  IconButton,
+  PageFrame,
+  StatCard,
+  cn
+} from "./ui";
 import type {
   APIToken,
   ApplianceIdentity,
@@ -174,7 +184,7 @@ function BootScreen(props: { message: string; error?: boolean }): React.JSX.Elem
   return (
     <div className="boot-screen">
       <div className="boot-card">
-        <div className="brand-mark">Z</div>
+        <BrandMark />
         <h1>{props.error ? "UI unavailable" : "Preparing appliance UI"}</h1>
         <p>{props.message}</p>
       </div>
@@ -312,10 +322,14 @@ function Shell(props: {
     navigate(path);
   }
 
-  function onUserAction(path: string) {
+  function closeTransientMenus() {
     setUserMenuOpen(false);
     setHelpMenuOpen(false);
     setFeatureMenuMode(null);
+  }
+
+  function onUserAction(path: string) {
+    closeTransientMenus();
     navigate(path);
   }
 
@@ -343,69 +357,105 @@ function Shell(props: {
     };
   }, [featureMenuMode]);
 
+  useEffect(() => {
+    if (!userMenuOpen && !helpMenuOpen) {
+      return;
+    }
+    const closeOnPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".top-navigation")) {
+        return;
+      }
+      setUserMenuOpen(false);
+      setHelpMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+        setHelpMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", closeOnPointer);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointer);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [helpMenuOpen, userMenuOpen]);
+
   return (
-    <div className="shell">
-      <header className="header">
-        <div className="header__brand">
-          <div className="brand-mark">Z</div>
+    <div className="grid min-h-screen grid-rows-[auto_1fr]">
+      <header className="top-navigation relative z-[70] flex items-center justify-between gap-6 overflow-visible border-b border-slate-200/80 bg-white px-6 py-4 shadow-sm shadow-slate-900/5 max-[680px]:flex-col max-[680px]:items-start">
+        <div className="flex items-center gap-3">
+          <BrandMark />
           <div>
-            <strong>Zon Appliance</strong>
-            <span>Control Plane UI</span>
+            <strong className="block text-sm font-bold text-slate-950">Zon Appliance</strong>
+            <span className="text-sm text-slate-500">Control Plane UI</span>
           </div>
         </div>
-        <div className="header__actions">
-          <button className="icon-button icon-button--muted" title="Search will be added later">
-            Search
-          </button>
-          <button className="icon-button icon-button--muted" title="Notifications API planned">
-            Alerts 0
-          </button>
-          <div className="menu-anchor">
-            <button
-              className="icon-button"
+        <div className="flex items-center gap-3 max-[680px]:w-full max-[680px]:flex-wrap max-[680px]:justify-start">
+          <IconButton
+            icon="search"
+            label="Search"
+            muted
+            onClick={closeTransientMenus}
+            title="Search will be added later"
+          />
+          <IconButton
+            icon="alerts"
+            label="Alerts"
+            badge={0}
+            muted
+            onClick={closeTransientMenus}
+            title="Notifications API planned"
+          />
+          <div className="relative">
+            <IconButton
+              icon="help"
+              label="Help"
               onClick={() => {
                 setHelpMenuOpen((open) => !open);
                 setUserMenuOpen(false);
                 setFeatureMenuMode(null);
               }}
-            >
-              Help
-            </button>
+            />
             {helpMenuOpen ? (
-              <div className="menu">
+              <div className="shell-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] grid min-w-56 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20 max-[680px]:left-0 max-[680px]:right-auto">
                 <button onClick={() => onUserAction("/admin/system-status")}>About appliance</button>
-                <button disabled>What&apos;s new</button>
-                <button disabled>Help center</button>
-                <button disabled>Ask for support</button>
+                <button onClick={closeTransientMenus}>What&apos;s new</button>
+                <button onClick={closeTransientMenus}>Help center</button>
+                <button onClick={closeTransientMenus}>Ask for support</button>
               </div>
             ) : null}
           </div>
-          <div className="menu-anchor">
+          <div className="relative">
             <button
-              className="profile-button"
+              className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-left transition hover:bg-slate-100"
               onClick={() => {
                 setUserMenuOpen((open) => !open);
                 setHelpMenuOpen(false);
                 setFeatureMenuMode(null);
               }}
             >
-              <span className="profile-button__avatar">{props.session.username.slice(0, 1).toUpperCase()}</span>
-              <span className="profile-button__meta">
-                <strong>{props.session.username}</strong>
-                <span>{props.session.authMethod}</span>
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 font-bold text-blue-950">
+                {props.session.username.slice(0, 1).toUpperCase()}
+              </span>
+              <span>
+                <strong className="block text-sm font-bold text-slate-950">{props.session.username}</strong>
+                <span className="text-sm text-slate-500">{props.session.authMethod}</span>
               </span>
             </button>
             {userMenuOpen ? (
-              <div className="menu">
-                <button disabled>Preferences</button>
-                <button disabled>Change password</button>
+              <div className="shell-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] grid min-w-56 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20 max-[680px]:left-0 max-[680px]:right-auto">
+                <button onClick={closeTransientMenus}>Preferences</button>
+                <button onClick={closeTransientMenus}>Change password</button>
                 <button onClick={() => onUserAction("/home/access")}>Manage API keys</button>
                 <button onClick={() => onUserAction("/home/session")}>User login details</button>
-                <button disabled>Logo options</button>
+                <button onClick={closeTransientMenus}>Logo options</button>
                 <button
                   onClick={() => {
                     void props.onLogout();
-                    setUserMenuOpen(false);
+                    closeTransientMenus();
                   }}
                 >
                   Sign out
@@ -415,47 +465,61 @@ function Shell(props: {
           </div>
         </div>
       </header>
-      <div className="workspace">
-        <div className="mode-navigation">
-          <aside className="mode-rail">
+      <div className="grid grid-cols-[110px_minmax(0,1fr)] items-start gap-5 p-5 max-[1180px]:grid-cols-[90px_minmax(0,1fr)] max-[940px]:grid-cols-1">
+        <div className="mode-navigation relative min-w-0">
+          <aside className="grid content-start gap-2 rounded-3xl border border-slate-200/90 bg-white/75 p-3 max-[940px]:grid-flow-col max-[940px]:auto-cols-fr max-[940px]:overflow-x-auto">
             {MODES.map((entry) => {
               const active = entry.id === mode.id;
               return (
                 <button
                   key={entry.id}
-                  className={`mode-rail__button${active ? " mode-rail__button--active" : ""}`}
+                  className={cn(
+                    "grid justify-items-center gap-2 rounded-2xl px-2 py-3 text-slate-500 transition hover:bg-slate-100 hover:text-slate-950",
+                    active && "bg-blue-950/10 text-blue-950"
+                  )}
                   aria-expanded={featureMenuMode?.id === entry.id ? "true" : undefined}
                   onClick={() => openMode(entry)}
                 >
-                  <span className="mode-rail__icon">{entry.icon}</span>
-                  <span className="mode-rail__label">{entry.label}</span>
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-white shadow-sm shadow-slate-900/5">
+                    <Icon name={entry.icon} />
+                  </span>
+                  <span className="text-xs font-bold">{entry.label}</span>
                 </button>
               );
             })}
           </aside>
           {featureMenuMode ? (
-            <div className="feature-popover" role="menu" aria-label={`${featureMenuMode.label} features`}>
-              <div className="feature-popover__header">
-                <span className="eyebrow">{featureMenuMode.label}</span>
-                <strong>Select a feature</strong>
+            <div
+              className="absolute left-[calc(100%+0.875rem)] top-0 z-40 w-64 rounded-3xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-900/15 max-[940px]:static max-[940px]:mt-3 max-[940px]:w-full"
+              role="menu"
+              aria-label={`${featureMenuMode.label} features`}
+            >
+              <div className="px-2 pb-2">
+                <span className="mb-1 inline-block text-xs font-bold uppercase tracking-[0.14em] text-blue-950">
+                  {featureMenuMode.label}
+                </span>
+                <strong className="block text-sm text-slate-950">Select feature</strong>
               </div>
-              <nav className="feature-list">
+              <nav className="grid gap-1">
                 {featureMenuMode.features.map((feature) => (
                   <button
                     key={feature.path}
-                    className={`feature-list__item${props.pathname.startsWith(feature.path) ? " feature-list__item--active" : ""}`}
+                    className={cn(
+                      "flex min-h-11 items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100 hover:text-slate-950",
+                      props.pathname.startsWith(feature.path) && "bg-blue-100 text-blue-950"
+                    )}
                     onClick={() => openFeature(feature.path)}
                     role="menuitem"
                   >
-                    <strong>{feature.label}</strong>
-                    <span>{feature.description}</span>
+                    <Icon name={feature.icon} className="h-4 w-4" />
+                    {feature.label}
                   </button>
                 ))}
               </nav>
             </div>
           ) : null}
         </div>
-        <main className="main-content">
+        <main className="min-w-0 w-full">
           <RouteView pathname={props.pathname} session={props.session} capabilities={props.capabilities} />
         </main>
       </div>
@@ -484,38 +548,6 @@ function RouteView(props: {
     return <AdminPage pathname={props.pathname} capabilities={props.capabilities} />;
   }
   return <HomePage pathname={props.pathname} session={props.session} capabilities={props.capabilities} />;
-}
-
-function PageFrame(props: {
-  title: string;
-  description: string;
-  tabs: Array<{ label: string; path: string }>;
-  pathname: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <section className="page-frame">
-      <div className="page-frame__header">
-        <div>
-          <span className="eyebrow">Appliance workspace</span>
-          <h1>{props.title}</h1>
-          <p>{props.description}</p>
-        </div>
-      </div>
-      <div className="tab-strip">
-        {props.tabs.map((tab) => (
-          <button
-            key={tab.path}
-            className={`tab-strip__item${props.pathname === tab.path ? " tab-strip__item--active" : ""}`}
-            onClick={() => navigate(tab.path)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-      <div className="page-frame__body">{props.children}</div>
-    </section>
-  );
 }
 
 function HomePage(props: {
@@ -579,10 +611,11 @@ function HomePage(props: {
       title="Home"
       description="Default landing page for operators, with dashboard status and user-facing access tools."
       pathname={props.pathname}
+      onNavigate={navigate}
       tabs={[
-        { label: "Overview", path: "/home" },
-        { label: "API Keys", path: "/home/access" },
-        { label: "Session", path: "/home/session" }
+        { label: "Overview", path: "/home", icon: "home" },
+        { label: "API Keys", path: "/home/access", icon: "key" },
+        { label: "Session", path: "/home/session", icon: "session" }
       ]}
     >
       {props.pathname === "/home/access" ? (
@@ -799,10 +832,11 @@ function BuilderPage(props: { pathname: string }): React.JSX.Element {
       title="Builder"
       description="Workspace creation, appliance-wide Git access, and build submission."
       pathname={props.pathname}
+      onNavigate={navigate}
       tabs={[
-        { label: "Workspaces", path: "/manage/builder" },
-        { label: "Git Access", path: "/manage/builder/git-access" },
-        { label: "Builds", path: "/manage/builder/builds" }
+        { label: "Workspaces", path: "/manage/builder", icon: "builder" },
+        { label: "Git Access", path: "/manage/builder/git-access", icon: "key" },
+        { label: "Builds", path: "/manage/builder/builds", icon: "artifacts" }
       ]}
     >
       {message ? <div className="message">{message}</div> : null}
@@ -999,7 +1033,8 @@ function DNSPage(): React.JSX.Element {
       title="DNS"
       description="Managed LAN DNS records for the appliance zone."
       pathname="/manage/dns"
-      tabs={[{ label: "Records", path: "/manage/dns" }]}
+      onNavigate={navigate}
+      tabs={[{ label: "Records", path: "/manage/dns", icon: "dns" }]}
     >
       {message ? <div className="message">{message}</div> : null}
       <div className="grid-two">
@@ -1102,9 +1137,10 @@ function ArtifactsPage(props: { pathname: string }): React.JSX.Element {
       title="Artifacts"
       description="Registry catalog visibility and grant management."
       pathname={props.pathname}
+      onNavigate={navigate}
       tabs={[
-        { label: "Catalog", path: "/manage/artifacts" },
-        { label: "Grants", path: "/manage/artifacts/grants" }
+        { label: "Catalog", path: "/manage/artifacts", icon: "catalog" },
+        { label: "Grants", path: "/manage/artifacts/grants", icon: "key" }
       ]}
     >
       {message ? <div className="message">{message}</div> : null}
@@ -1237,7 +1273,8 @@ function AnalyzePage(): React.JSX.Element {
       title="Workflow analysis"
       description="A lightweight operational analysis view for current builder workflow activity."
       pathname="/analyze/workflows"
-      tabs={[{ label: "Workflow Health", path: "/analyze/workflows" }]}
+      onNavigate={navigate}
+      tabs={[{ label: "Workflow Health", path: "/analyze/workflows", icon: "workflows" }]}
     >
       <div className="stats-grid">
         <StatCard label="Workspaces" value={String(workspaces.length)} />
@@ -1295,10 +1332,11 @@ function AdminPage(props: { pathname: string; capabilities: string[] }): React.J
       title="Administration"
       description="Appliance-wide operating posture, profile expansion points, and future licensing surfaces."
       pathname={props.pathname}
+      onNavigate={navigate}
       tabs={[
-        { label: "System Status", path: "/admin/system-status" },
-        { label: "Profiles", path: "/admin/profiles" },
-        { label: "Licensing", path: "/admin/licensing" }
+        { label: "System Status", path: "/admin/system-status", icon: "status" },
+        { label: "Profiles", path: "/admin/profiles", icon: "profiles" },
+        { label: "Licensing", path: "/admin/licensing", icon: "license" }
       ]}
     >
       {props.pathname === "/admin/profiles" ? (
@@ -1358,41 +1396,6 @@ function AdminPage(props: { pathname: string; capabilities: string[] }): React.J
       )}
     </PageFrame>
   );
-}
-
-function Card(props: {
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <section className="card">
-      <div className="card__header">
-        <div>
-          <h3>{props.title}</h3>
-          <p>{props.subtitle}</p>
-        </div>
-      </div>
-      <div className="card__body">{props.children}</div>
-    </section>
-  );
-}
-
-function StatCard(props: {
-  label: string;
-  value: string;
-  tone?: "success" | "neutral";
-}): React.JSX.Element {
-  return (
-    <div className={`stat-card${props.tone === "success" ? " stat-card--success" : ""}`}>
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </div>
-  );
-}
-
-function EmptyState(props: { message: string }): React.JSX.Element {
-  return <div className="empty-state">{props.message}</div>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

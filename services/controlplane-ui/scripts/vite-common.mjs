@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { loadEnv } from "vite";
 
 export function createViteConfig(mode) {
@@ -10,7 +11,7 @@ export function createViteConfig(mode) {
   const previewPort = Number(process.env.VITE_PREVIEW_PORT || process.env.VITE_PORT || "4173");
 
   return {
-    plugins: [react()],
+    plugins: [tailwindcss(), react()],
     build: {
       outDir,
       sourcemap: true,

@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   --bg: #f3f5f7;
   --panel: #ffffff;
@@ -14,6 +16,12 @@
   color: var(--text);
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
   background: var(--bg);
+}
+
+@layer components {
+  .shell-menu button {
+    @apply min-h-10 rounded-xl px-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:text-slate-400 disabled:hover:bg-transparent;
+  }
 }
 
 * {
