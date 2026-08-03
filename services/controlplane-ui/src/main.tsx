@@ -57,9 +57,30 @@ function navigate(path: string, replace = false): void {
 
 function formatTimestamp(value?: string): string {
   if (!value) {
-    return "Not available";
+    return "—";
   }
-  return new Date(value).toLocaleString();
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+  return new Date(parsed).toLocaleString();
+}
+
+/** Product/bundle version for display — strips dirty/build suffixes; prefers X.Y.Z when present. */
+function displayProductVersion(raw?: string | null): string {
+  const value = (raw ?? "").trim();
+  if (!value) {
+    return "—";
+  }
+  const semver = value.match(/(?:^|[^0-9A-Za-z])v?(\d+\.\d+\.\d+)\b/) ?? value.match(/^v?(\d+\.\d+\.\d+)\b/);
+  if (semver) {
+    return semver[1];
+  }
+  const dated = value.match(/(\d{4}\.\d{2}\.\d{2})/);
+  if (dated) {
+    return dated[1];
+  }
+  return value.replace(/-dirty$/i, "").replace(/\+.*$/, "");
 }
 
 function capabilityBadge(capability: string): string {
@@ -209,6 +230,26 @@ function AuthLayout(props: {
   const [domain, setDomain] = useState("local");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [productVersion, setProductVersion] = useState<string>("—");
+
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .getVersion()
+      .then((info) => {
+        if (!cancelled) {
+          setProductVersion(displayProductVersion(info.version));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProductVersion("—");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -229,6 +270,8 @@ function AuthLayout(props: {
       setSubmitting(false);
     }
   }
+
+  const year = new Date().getFullYear();
 
   return (
     <div className="auth-layout">
@@ -257,50 +300,72 @@ function AuthLayout(props: {
       </section>
       <section className="auth-form">
         <div className="auth-form__card">
-          <span className="eyebrow">{props.mode === "setup" ? "First-time setup" : "Secure sign-in"}</span>
-          <h2>{props.mode === "setup" ? "Create the first administrator" : "Sign in to the appliance"}</h2>
-          <form className="stack-form" onSubmit={handleSubmit}>
-            <label className="field">
-              <span>Domain</span>
-              <select
-                value={domain}
-                onChange={(event) => setDomain(event.target.value)}
-                disabled={props.mode === "setup"}
-              >
-                <option value="local">local</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Username</span>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            {props.mode === "setup" ? (
+          <div className="auth-form__main">
+            <header className="auth-form__brand">
+              <BrandMark size="lg" />
+              <h1>Welcome to Zon Appliance</h1>
+              <p className="auth-form__version">Version {productVersion}</p>
+              {props.mode === "setup" ? (
+                <p className="auth-form__lede">Create the first administrator to finish setup.</p>
+              ) : null}
+            </header>
+            <form className="stack-form auth-form__fields" onSubmit={handleSubmit}>
               <label className="field">
-                <span>Confirm password</span>
+                <span>Domain</span>
+                <select
+                  value={domain}
+                  onChange={(event) => setDomain(event.target.value)}
+                  disabled={props.mode === "setup"}
+                >
+                  <option value="local">local</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Username</span>
                 <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
                 />
               </label>
-            ) : null}
-            {error ? <div className="message message--error">{error}</div> : null}
-            <button className="button button--primary" disabled={submitting} type="submit">
-              {submitting
-                ? "Working..."
-                : props.mode === "setup"
-                  ? "Create administrator"
-                  : "Sign in"}
-            </button>
-          </form>
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={props.mode === "setup" ? "new-password" : "current-password"}
+                />
+              </label>
+              {props.mode === "setup" ? (
+                <label className="field">
+                  <span>Confirm password</span>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                  />
+                </label>
+              ) : null}
+              {error ? <div className="message message--error">{error}</div> : null}
+              <button className="button button--primary" disabled={submitting} type="submit">
+                {submitting
+                  ? "Working..."
+                  : props.mode === "setup"
+                    ? "Create administrator"
+                    : "Sign in"}
+              </button>
+            </form>
+          </div>
+          <footer className="auth-form__footer">
+            <p className="auth-form__copyright">© {year} Zon. All rights reserved.</p>
+            <nav className="auth-form__legal" aria-label="Legal and support">
+              <a href="#terms-and-conditions">Terms &amp; Conditions</a>
+              <span aria-hidden="true">·</span>
+              <a href="#help-center">Help Center</a>
+            </nav>
+          </footer>
         </div>
       </section>
     </div>

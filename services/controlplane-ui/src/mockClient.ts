@@ -191,7 +191,7 @@ export class MockControlPlaneClient {
 
   async getVersion(): Promise<Version> {
     return {
-      version: "mock-2026.08.02",
+      version: "1.0.0",
       commit: "mock",
       buildTime: now(),
       goVersion: "go1.26"
