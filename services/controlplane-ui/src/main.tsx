@@ -2,7 +2,7 @@ import React, { FormEvent, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { clearAuth, loadAuth, saveAuth } from "./auth";
 import { ApiError, createControlPlaneClient, type ControlPlaneClient } from "./client";
-import { MODES, currentMode, modeUsesFeaturePanel, type Mode } from "./navigation";
+import { MODES, currentMode, modeUsesFeatureSelector, type Mode } from "./navigation";
 import "./styles.css";
 import type {
   APIToken,
@@ -294,15 +294,54 @@ function Shell(props: {
   const mode = currentMode(props.pathname);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [featureMenuMode, setFeatureMenuMode] = useState<Mode | null>(null);
 
   function openMode(nextMode: Mode) {
+    setUserMenuOpen(false);
+    setHelpMenuOpen(false);
+    if (modeUsesFeatureSelector(nextMode)) {
+      setFeatureMenuMode((openMode) => (openMode?.id === nextMode.id ? null : nextMode));
+      return;
+    }
+    setFeatureMenuMode(null);
     navigate(nextMode.defaultPath);
+  }
+
+  function openFeature(path: string) {
+    setFeatureMenuMode(null);
+    navigate(path);
   }
 
   function onUserAction(path: string) {
     setUserMenuOpen(false);
+    setHelpMenuOpen(false);
+    setFeatureMenuMode(null);
     navigate(path);
   }
+
+  useEffect(() => {
+    if (!featureMenuMode) {
+      return;
+    }
+    const closeOnPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".mode-navigation")) {
+        return;
+      }
+      setFeatureMenuMode(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFeatureMenuMode(null);
+      }
+    };
+    window.addEventListener("pointerdown", closeOnPointer);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointer);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [featureMenuMode]);
 
   return (
     <div className="shell">
@@ -327,13 +366,14 @@ function Shell(props: {
               onClick={() => {
                 setHelpMenuOpen((open) => !open);
                 setUserMenuOpen(false);
+                setFeatureMenuMode(null);
               }}
             >
               Help
             </button>
             {helpMenuOpen ? (
               <div className="menu">
-                <button onClick={() => navigate("/admin/system-status")}>About appliance</button>
+                <button onClick={() => onUserAction("/admin/system-status")}>About appliance</button>
                 <button disabled>What&apos;s new</button>
                 <button disabled>Help center</button>
                 <button disabled>Ask for support</button>
@@ -346,6 +386,7 @@ function Shell(props: {
               onClick={() => {
                 setUserMenuOpen((open) => !open);
                 setHelpMenuOpen(false);
+                setFeatureMenuMode(null);
               }}
             >
               <span className="profile-button__avatar">{props.session.username.slice(0, 1).toUpperCase()}</span>
@@ -375,41 +416,45 @@ function Shell(props: {
         </div>
       </header>
       <div className="workspace">
-        <aside className="mode-rail">
-          {MODES.map((entry) => {
-            const active = entry.id === mode.id;
-            return (
-              <button
-                key={entry.id}
-                className={`mode-rail__button${active ? " mode-rail__button--active" : ""}`}
-                onClick={() => openMode(entry)}
-              >
-                <span className="mode-rail__icon">{entry.icon}</span>
-                <span className="mode-rail__label">{entry.label}</span>
-              </button>
-            );
-          })}
-        </aside>
-        {modeUsesFeaturePanel(mode) ? (
-          <aside className="feature-panel">
-            <div className="feature-panel__header">
-              <span className="eyebrow">{mode.label}</span>
-              <h2>{mode.label}</h2>
-            </div>
-            <nav className="feature-list">
-              {mode.features.map((feature) => (
+        <div className="mode-navigation">
+          <aside className="mode-rail">
+            {MODES.map((entry) => {
+              const active = entry.id === mode.id;
+              return (
                 <button
-                  key={feature.path}
-                  className={`feature-list__item${props.pathname.startsWith(feature.path) ? " feature-list__item--active" : ""}`}
-                  onClick={() => navigate(feature.path)}
+                  key={entry.id}
+                  className={`mode-rail__button${active ? " mode-rail__button--active" : ""}`}
+                  aria-expanded={featureMenuMode?.id === entry.id ? "true" : undefined}
+                  onClick={() => openMode(entry)}
                 >
-                  <strong>{feature.label}</strong>
-                  <span>{feature.description}</span>
+                  <span className="mode-rail__icon">{entry.icon}</span>
+                  <span className="mode-rail__label">{entry.label}</span>
                 </button>
-              ))}
-            </nav>
+              );
+            })}
           </aside>
-        ) : null}
+          {featureMenuMode ? (
+            <div className="feature-popover" role="menu" aria-label={`${featureMenuMode.label} features`}>
+              <div className="feature-popover__header">
+                <span className="eyebrow">{featureMenuMode.label}</span>
+                <strong>Select a feature</strong>
+              </div>
+              <nav className="feature-list">
+                {featureMenuMode.features.map((feature) => (
+                  <button
+                    key={feature.path}
+                    className={`feature-list__item${props.pathname.startsWith(feature.path) ? " feature-list__item--active" : ""}`}
+                    onClick={() => openFeature(feature.path)}
+                    role="menuitem"
+                  >
+                    <strong>{feature.label}</strong>
+                    <span>{feature.description}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+          ) : null}
+        </div>
         <main className="main-content">
           <RouteView pathname={props.pathname} session={props.session} capabilities={props.capabilities} />
         </main>

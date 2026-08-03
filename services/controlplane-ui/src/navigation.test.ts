@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { MODES, currentMode, modeUsesFeaturePanel } from "./navigation";
+import { MODES, currentMode, modeUsesFeatureSelector } from "./navigation";
 
 describe("navigation model", () => {
-  it("keeps Home as the direct landing page without a feature panel", () => {
+  it("keeps Home as the direct landing page without a feature selector", () => {
     const home = MODES.find((mode) => mode.id === "home");
 
     expect(home?.defaultPath).toBe("/home");
     expect(home?.features).toHaveLength(0);
-    expect(home && modeUsesFeaturePanel(home)).toBe(false);
+    expect(home && modeUsesFeatureSelector(home)).toBe(false);
   });
 
-  it("uses feature panels for Manage, Analyze, and Admin", () => {
+  it("uses transient feature selectors for Manage, Analyze, and Admin", () => {
     for (const id of ["manage", "analyze", "admin"]) {
       const mode = MODES.find((entry) => entry.id === id);
 
       expect(mode, `${id} mode should exist`).toBeDefined();
       expect(mode?.features.length).toBeGreaterThan(0);
-      expect(mode && modeUsesFeaturePanel(mode)).toBe(true);
+      expect(mode && modeUsesFeatureSelector(mode)).toBe(true);
     }
   });
 

@@ -87,6 +87,6 @@ export function currentMode(pathname: string): Mode {
   );
 }
 
-export function modeUsesFeaturePanel(mode: Mode): boolean {
+export function modeUsesFeatureSelector(mode: Mode): boolean {
   return mode.features.length > 0;
 }
