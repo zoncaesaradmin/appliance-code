@@ -1,4 +1,5 @@
 import type { IconName } from "./ui";
+import type { Session } from "./types";
 
 export type Mode = {
   id: string;
@@ -7,7 +8,37 @@ export type Mode = {
   icon: IconName;
   defaultPath: string;
   features: Array<{ label: string; path: string; description: string; icon: IconName }>;
+  visibleWhen: (context: NavigationContext) => boolean;
 };
+
+export type NavigationContext = {
+  session: Pick<Session, "permissions" | "username">;
+};
+
+const ADMIN_USERNAMES = new Set(["admin", "administrator"]);
+const ADMIN_PERMISSION_MARKERS = new Set([
+  "audit.export",
+  "audit.read",
+  "roles.create",
+  "roles.delete",
+  "system.operate",
+  "users.create",
+  "users.disable"
+]);
+
+function alwaysVisible(): boolean {
+  return true;
+}
+
+export function isSystemAdministrator(session: NavigationContext["session"]): boolean {
+  const username = session.username.trim().toLowerCase();
+  if (ADMIN_USERNAMES.has(username)) {
+    return true;
+  }
+  return session.permissions.some((permission) =>
+    ADMIN_PERMISSION_MARKERS.has(permission.trim().toLowerCase())
+  );
+}
 
 export const MODES: Mode[] = [
   {
@@ -16,7 +47,8 @@ export const MODES: Mode[] = [
     shortLabel: "HM",
     icon: "home",
     defaultPath: "/home",
-    features: []
+    features: [],
+    visibleWhen: alwaysVisible
   },
   {
     id: "manage",
@@ -43,7 +75,8 @@ export const MODES: Mode[] = [
         description: "Review artifact catalog and registry grants",
         icon: "artifacts"
       }
-    ]
+    ],
+    visibleWhen: alwaysVisible
   },
   {
     id: "analyze",
@@ -58,7 +91,8 @@ export const MODES: Mode[] = [
         description: "Operational view of current builder workflow activity",
         icon: "workflows"
       }
-    ]
+    ],
+    visibleWhen: alwaysVisible
   },
   {
     id: "admin",
@@ -85,13 +119,19 @@ export const MODES: Mode[] = [
         description: "License and entitlement placeholder",
         icon: "license"
       }
-    ]
+    ],
+    visibleWhen: (context) => isSystemAdministrator(context.session)
   }
 ];
 
-export function currentMode(pathname: string): Mode {
+export function visibleModes(context: NavigationContext): Mode[] {
+  return MODES.filter((mode) => mode.visibleWhen(context));
+}
+
+export function currentMode(pathname: string, modes: Mode[] = MODES): Mode {
   return (
-    MODES.find((mode) => pathname === mode.defaultPath || pathname.startsWith(`/${mode.id}/`)) ??
+    modes.find((mode) => pathname === mode.defaultPath || pathname.startsWith(`/${mode.id}/`)) ??
+    modes[0] ??
     MODES[0]
   );
 }

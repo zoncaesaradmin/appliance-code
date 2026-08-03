@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MODES, currentMode, modeUsesFeatureSelector } from "./navigation";
+import {
+  MODES,
+  currentMode,
+  isSystemAdministrator,
+  modeUsesFeatureSelector,
+  visibleModes
+} from "./navigation";
 
 describe("navigation model", () => {
   it("keeps Home as the direct landing page without a feature selector", () => {
@@ -28,5 +34,31 @@ describe("navigation model", () => {
 
   it("falls back to Home for unknown paths", () => {
     expect(currentMode("/does-not-exist").id).toBe("home");
+  });
+
+  it("keeps Admin visible for system administrator sessions", () => {
+    const modes = visibleModes({
+      session: { username: "admin", permissions: [] }
+    });
+
+    expect(modes.map((mode) => mode.id)).toContain("admin");
+  });
+
+  it("hides Admin for non-administrator sessions", () => {
+    const modes = visibleModes({
+      session: { username: "developer", permissions: ["builds.create", "artifacts.read"] }
+    });
+
+    expect(modes.map((mode) => mode.id)).toEqual(["home", "manage", "analyze"]);
+    expect(currentMode("/admin/system-status", modes).id).toBe("home");
+  });
+
+  it("recognizes administrator sessions from system permissions", () => {
+    expect(
+      isSystemAdministrator({
+        username: "operator",
+        permissions: ["system.operate"]
+      })
+    ).toBe(true);
   });
 });

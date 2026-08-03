@@ -2,7 +2,13 @@ import React, { FormEvent, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { clearAuth, loadAuth, saveAuth } from "./auth";
 import { ApiError, createControlPlaneClient, type ControlPlaneClient } from "./client";
-import { MODES, currentMode, modeUsesFeatureSelector, type Mode } from "./navigation";
+import {
+  currentMode,
+  isSystemAdministrator,
+  modeUsesFeatureSelector,
+  visibleModes,
+  type Mode
+} from "./navigation";
 import "./styles.css";
 import {
   BrandMark,
@@ -301,7 +307,8 @@ function Shell(props: {
   capabilities: string[];
   onLogout: () => Promise<void>;
 }): React.JSX.Element {
-  const mode = currentMode(props.pathname);
+  const navigationModes = visibleModes({ session: props.session });
+  const mode = currentMode(props.pathname, navigationModes);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [featureMenuMode, setFeatureMenuMode] = useState<Mode | null>(null);
@@ -383,6 +390,13 @@ function Shell(props: {
     };
   }, [helpMenuOpen, userMenuOpen]);
 
+  useEffect(() => {
+    if (props.pathname.startsWith("/admin") && !isSystemAdministrator(props.session)) {
+      closeTransientMenus();
+      navigate("/home", true);
+    }
+  }, [props.pathname, props.session]);
+
   return (
     <div className="grid min-h-screen grid-rows-[auto_1fr]">
       <header className="top-navigation relative z-[70] flex items-center justify-between gap-6 overflow-visible border-b border-slate-200/80 bg-white px-6 py-4 shadow-sm shadow-slate-900/5 max-[680px]:flex-col max-[680px]:items-start">
@@ -430,15 +444,15 @@ function Shell(props: {
           </div>
           <div className="relative">
             <button
-              className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-left transition hover:bg-slate-100"
+              className="flex h-12 items-center gap-3 rounded-[1.15rem] bg-white px-2 text-left transition hover:bg-slate-100"
               onClick={() => {
                 setUserMenuOpen((open) => !open);
                 setHelpMenuOpen(false);
                 setFeatureMenuMode(null);
               }}
             >
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-100 font-bold text-blue-950">
-                {props.session.username.slice(0, 1).toUpperCase()}
+              <span className="grid h-12 w-12 place-items-center rounded-[1.15rem] bg-blue-100 text-blue-950">
+                <Icon name="user" className="h-6 w-6" />
               </span>
               <span>
                 <strong className="block text-sm font-bold text-slate-950">{props.session.username}</strong>
@@ -468,7 +482,7 @@ function Shell(props: {
       <div className="grid grid-cols-[110px_minmax(0,1fr)] items-start gap-5 p-5 max-[1180px]:grid-cols-[90px_minmax(0,1fr)] max-[940px]:grid-cols-1">
         <div className="mode-navigation relative min-w-0">
           <aside className="grid content-start gap-2 rounded-3xl border border-slate-200/90 bg-white/75 p-3 max-[940px]:grid-flow-col max-[940px]:auto-cols-fr max-[940px]:overflow-x-auto">
-            {MODES.map((entry) => {
+            {navigationModes.map((entry) => {
               const active = entry.id === mode.id;
               return (
                 <button

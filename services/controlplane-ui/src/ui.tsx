@@ -22,11 +22,12 @@ export type IconName =
   | "search"
   | "session"
   | "status"
+  | "user"
   | "workflows";
 
 export function Icon(props: { name: IconName; className?: string }): React.JSX.Element {
   const common: SVGProps<SVGSVGElement> = {
-    className: cn("h-5 w-5", props.className),
+    className: cn(props.className ?? "h-5 w-5", "shrink-0"),
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
@@ -137,6 +138,13 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
           <path d="M4 21a8 8 0 0 1 16 0" />
         </svg>
       );
+    case "user":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M5 21a7 7 0 0 1 14 0" />
+        </svg>
+      );
     case "license":
       return (
         <svg {...common}>
@@ -196,8 +204,8 @@ export function Button({
         "relative inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-55",
         variant === "primary" && "bg-blue-950 text-white shadow-md shadow-blue-950/15 hover:bg-blue-900",
         variant === "ghost" && "bg-slate-100 text-slate-950 hover:bg-slate-200",
-        variant === "icon" && "h-10 w-10 rounded-2xl p-0 text-slate-700 hover:bg-slate-100",
-        variant === "mutedIcon" && "h-10 w-10 rounded-2xl bg-slate-100 p-0 text-slate-700 hover:bg-slate-200",
+        variant === "icon" && "h-12 w-12 rounded-[1.15rem] p-0 text-slate-700 hover:bg-slate-100",
+        variant === "mutedIcon" && "h-12 w-12 rounded-[1.15rem] bg-slate-100 p-0 text-slate-700 hover:bg-slate-200",
         className
       )}
     />
@@ -221,7 +229,7 @@ export function IconButton(props: {
       title={props.title || props.label}
       variant={props.muted ? "mutedIcon" : "icon"}
     >
-      <Icon name={props.icon} />
+      <Icon name={props.icon} className="h-6 w-6" />
       {props.badge && props.badge > 0 ? (
         <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-emerald-600 px-1 text-[0.68rem] font-bold text-white">
           {props.badge}
