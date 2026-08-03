@@ -163,6 +163,12 @@ func publicRoutes() []publicRoute {
 			}
 			return w.authenticatedOnly(deps.AuthH.Logout), nil
 		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/auth/password", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return w.authenticatedOnly(deps.AuthH.ChangePassword), nil
+		}},
 		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/auth/session", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.AuthH == nil {
 				return nil, fmt.Errorf("missing auth handlers")

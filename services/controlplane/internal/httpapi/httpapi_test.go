@@ -117,7 +117,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	deps := httpapi.Deps{
 		Logger:        logger,
 		Auth:          authDeps,
-		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions},
+		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users},
 		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
 		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
 		IdentityH: &httpapi.IdentityHandlers{
@@ -429,6 +429,62 @@ func TestLoginDefaultsOmittedOrEmptyDomainToLocal(t *testing.T) {
 				t.Fatalf("session.domain = %q, want local", session.Domain)
 			}
 		})
+	}
+}
+
+func TestChangePasswordRequiresCurrentPasswordAndForcesReLogin(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	token := ts.login(t, "admin", testPassword)
+	const nextPassword = "a-brand-new-long-password-99"
+
+	resp := ts.doJSON(t, "POST", "/api/v1/auth/password", token, fmt.Sprintf(
+		`{"currentPassword":%q,"newPassword":%q}`, "wrong-current-password", nextPassword,
+	))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("wrong current password status = %d, want 401", resp.StatusCode)
+	}
+
+	resp = ts.doJSON(t, "POST", "/api/v1/auth/password", token, fmt.Sprintf(
+		`{"currentPassword":%q,"newPassword":%q}`, testPassword, nextPassword,
+	))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("change password status = %d, want 204", resp.StatusCode)
+	}
+
+	resp = ts.doJSON(t, "GET", "/api/v1/auth/session", token, "")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old session after password change = %d, want 401", resp.StatusCode)
+	}
+
+	resp = ts.doJSON(t, "POST", "/api/v1/auth/login", "", fmt.Sprintf(
+		`{"username":"admin","password":%q}`, testPassword,
+	))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("old password login = %d, want 401", resp.StatusCode)
+	}
+
+	newToken := ts.login(t, "admin", nextPassword)
+	resp = ts.doJSON(t, "GET", "/api/v1/auth/session", newToken, "")
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("session with new password = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestChangePasswordRejectsUnauthenticatedCallers(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+
+	resp := ts.doJSON(t, "POST", "/api/v1/auth/password", "", `{"currentPassword":"x","newPassword":"y-long-enough"}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated change password = %d, want 401", resp.StatusCode)
 	}
 }
 

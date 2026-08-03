@@ -9,6 +9,7 @@ import {
   visibleModes,
   type Mode
 } from "./navigation";
+import { displayProductVersion } from "./productVersion";
 import "./styles.css";
 import {
   BrandMark,
@@ -64,23 +65,6 @@ function formatTimestamp(value?: string): string {
     return value;
   }
   return new Date(parsed).toLocaleString();
-}
-
-/** Product/bundle version for display — strips dirty/build suffixes; prefers X.Y.Z when present. */
-function displayProductVersion(raw?: string | null): string {
-  const value = (raw ?? "").trim();
-  if (!value) {
-    return "—";
-  }
-  const semver = value.match(/(?:^|[^0-9A-Za-z])v?(\d+\.\d+\.\d+)\b/) ?? value.match(/^v?(\d+\.\d+\.\d+)\b/);
-  if (semver) {
-    return semver[1];
-  }
-  const dated = value.match(/(\d{4}\.\d{2}\.\d{2})/);
-  if (dated) {
-    return dated[1];
-  }
-  return value.replace(/-dirty$/i, "").replace(/\+.*$/, "");
 }
 
 function capabilityBadge(capability: string): string {
@@ -204,6 +188,11 @@ function App(): React.JSX.Element {
       session={shellState.session}
       capabilities={shellState.capabilities}
       onLogout={handleLogout}
+      onSignedOut={() => {
+        clearAuth();
+        setShellState((current) => ({ ...current, session: null }));
+        navigate("/login", true);
+      }}
     />
   );
 }
@@ -384,11 +373,13 @@ function Shell(props: {
   session: Session;
   capabilities: string[];
   onLogout: () => Promise<void>;
+  onSignedOut: () => void;
 }): React.JSX.Element {
   const navigationModes = visibleModes({ session: props.session });
   const mode = currentMode(props.pathname, navigationModes);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [featureMenuMode, setFeatureMenuMode] = useState<Mode | null>(null);
 
   function openMode(nextMode: Mode) {
@@ -411,6 +402,11 @@ function Shell(props: {
     setUserMenuOpen(false);
     setHelpMenuOpen(false);
     setFeatureMenuMode(null);
+  }
+
+  function openAboutAppliance() {
+    closeTransientMenus();
+    setAboutOpen(true);
   }
 
   function onUserAction(path: string) {
@@ -477,7 +473,7 @@ function Shell(props: {
 
   useEffect(() => {
     if (props.pathname === "/home/session" || props.pathname === "/account") {
-      navigate("/account/session", true);
+      navigate("/account/profile", true);
       return;
     }
     if (props.pathname === "/home/access") {
@@ -523,7 +519,7 @@ function Shell(props: {
             />
             {helpMenuOpen ? (
               <div className="shell-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] grid min-w-56 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20 max-[680px]:left-0 max-[680px]:right-auto">
-                <button onClick={() => onUserAction("/admin/system-status")}>About appliance</button>
+                <button onClick={openAboutAppliance}>About appliance</button>
                 <button onClick={closeTransientMenus}>What&apos;s new</button>
                 <button onClick={closeTransientMenus}>Help center</button>
                 <button onClick={closeTransientMenus}>Ask for support</button>
@@ -549,11 +545,10 @@ function Shell(props: {
             </button>
             {userMenuOpen ? (
               <div className="shell-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] grid min-w-56 gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/20 max-[680px]:left-0 max-[680px]:right-auto">
-                <button onClick={closeTransientMenus}>Preferences</button>
-                <button onClick={closeTransientMenus}>Change password</button>
+                <button onClick={() => onUserAction("/account/profile")}>User profile</button>
+                <button onClick={() => onUserAction("/account/password")}>Change password</button>
                 <button onClick={() => onUserAction("/account/api-keys")}>Manage API keys</button>
                 <button onClick={() => onUserAction("/account/session")}>Session info</button>
-                <button onClick={closeTransientMenus}>Logo options</button>
                 <button
                   onClick={() => {
                     void props.onLogout();
@@ -622,8 +617,91 @@ function Shell(props: {
           ) : null}
         </div>
         <main className="min-w-0 w-full">
-          <RouteView pathname={props.pathname} session={props.session} capabilities={props.capabilities} />
+          <RouteView
+            pathname={props.pathname}
+            session={props.session}
+            capabilities={props.capabilities}
+            onSignedOut={props.onSignedOut}
+          />
         </main>
+      </div>
+      <AboutApplianceDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+    </div>
+  );
+}
+
+function AboutApplianceDialog(props: {
+  open: boolean;
+  onClose: () => void;
+}): React.JSX.Element | null {
+  const [productVersion, setProductVersion] = useState("");
+  const year = new Date().getFullYear();
+
+  useEffect(() => {
+    if (!props.open) {
+      return;
+    }
+    let cancelled = false;
+    client
+      .getVersion()
+      .then((info) => {
+        if (!cancelled) {
+          setProductVersion(displayProductVersion(info.version));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProductVersion("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.open]);
+
+  useEffect(() => {
+    if (!props.open) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        props.onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.open, props.onClose]);
+
+  if (!props.open) {
+    return null;
+  }
+
+  const versionLabel = productVersion ? `Version ${productVersion}` : "Version unavailable";
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+      role="presentation"
+      onClick={props.onClose}
+    >
+      <div
+        className="flex w-full max-w-md flex-col items-center rounded-[1.75rem] border border-slate-200 bg-white px-8 py-10 text-center shadow-2xl shadow-slate-900/25"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="about-appliance-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <BrandMark size="lg" />
+        <h2 id="about-appliance-title" className="mt-5 m-0 text-2xl font-bold tracking-tight text-slate-950">
+          Zon Appliance
+        </h2>
+        <p className="mt-2 m-0 text-sm font-semibold text-slate-500">{versionLabel}</p>
+        <p className="mt-6 m-0 max-w-sm text-xs leading-5 text-slate-500">
+          © {year} Zon. All rights reserved. Zon Appliance and related marks are trademarks of Zon.
+        </p>
+        <button className="button button--primary mt-8 min-w-36" type="button" onClick={props.onClose}>
+          Close
+        </button>
       </div>
     </div>
   );
@@ -633,9 +711,16 @@ function RouteView(props: {
   pathname: string;
   session: Session;
   capabilities: string[];
+  onSignedOut: () => void;
 }): React.JSX.Element {
   if (props.pathname.startsWith("/account")) {
-    return <AccountPage pathname={props.pathname} session={props.session} />;
+    return (
+      <AccountPage
+        pathname={props.pathname}
+        session={props.session}
+        onSignedOut={props.onSignedOut}
+      />
+    );
   }
   if (props.pathname.startsWith("/manage/builder")) {
     return <BuilderPage pathname={props.pathname} />;
@@ -658,11 +743,18 @@ function RouteView(props: {
 function AccountPage(props: {
   pathname: string;
   session: Session;
+  onSignedOut: () => void;
 }): React.JSX.Element {
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [tokenName, setTokenName] = useState("");
   const [createdToken, setCreatedToken] = useState<CreateTokenResponse | null>(null);
   const [message, setMessage] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   useEffect(() => {
     if (props.pathname !== "/account/api-keys") {
@@ -694,6 +786,29 @@ function AccountPage(props: {
     setTokens(await client.listTokens());
   }
 
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPasswordError("");
+    setPasswordMessage("");
+    if (newPassword !== confirmPassword) {
+      setPasswordError("New password and confirmation do not match.");
+      return;
+    }
+    setPasswordSubmitting(true);
+    try {
+      await client.changePassword(currentPassword, newPassword);
+      setPasswordMessage("Password changed. Sign in again with your new password.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      props.onSignedOut();
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : "Could not change the password.");
+    } finally {
+      setPasswordSubmitting(false);
+    }
+  }
+
   return (
     <PageFrame
       title={props.session.username}
@@ -701,7 +816,9 @@ function AccountPage(props: {
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
+        { label: "Profile", path: "/account/profile" },
         { label: "Session", path: "/account/session" },
+        { label: "Password", path: "/account/password" },
         { label: "API Keys", path: "/account/api-keys" }
       ]}
     >
@@ -741,9 +858,69 @@ function AccountPage(props: {
             </div>
           </Card>
         </div>
+      ) : props.pathname === "/account/password" ? (
+        <Card title="Change password" subtitle="Update your local appliance password">
+          <form className="stack-form" onSubmit={(event) => void changePassword(event)}>
+            <label className="field">
+              <span>Current password</span>
+              <input
+                type="password"
+                name="currentPassword"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>New password</span>
+              <input
+                type="password"
+                name="newPassword"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+              />
+            </label>
+            <label className="field">
+              <span>Confirm new password</span>
+              <input
+                type="password"
+                name="confirmPassword"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+              />
+            </label>
+            {passwordError ? <div className="message message--error">{passwordError}</div> : null}
+            {passwordMessage ? <div className="message">{passwordMessage}</div> : null}
+            <button className="button button--primary" type="submit" disabled={passwordSubmitting}>
+              {passwordSubmitting ? "Updating..." : "Update password"}
+            </button>
+          </form>
+        </Card>
+      ) : props.pathname === "/account/session" ? (
+        <Card title="Session information" subtitle="Details for the current interactive sign-in">
+          <div className="detail-list">
+            <div>
+              <span>Username</span>
+              <strong>{props.session.username}</strong>
+            </div>
+            <div>
+              <span>Auth method</span>
+              <strong>{props.session.authMethod}</strong>
+            </div>
+            <div>
+              <span>Domain</span>
+              <strong>{props.session.domain}</strong>
+            </div>
+          </div>
+        </Card>
       ) : (
         <div className="grid-two">
-          <Card title="User details" subtitle="Current authenticated session">
+          <Card title="Profile" subtitle="Your appliance user identity">
             <div className="detail-list">
               <div>
                 <span>Username</span>
@@ -753,14 +930,10 @@ function AccountPage(props: {
                 <span>User ID</span>
                 <strong>{props.session.userId}</strong>
               </div>
-            <div>
-              <span>Auth method</span>
-              <strong>{props.session.authMethod}</strong>
-            </div>
-            <div>
-              <span>Domain</span>
-              <strong>{props.session.domain}</strong>
-            </div>
+              <div>
+                <span>Domain</span>
+                <strong>{props.session.domain}</strong>
+              </div>
             </div>
           </Card>
           <Card title="Permissions" subtitle="Resolved control-plane permissions">

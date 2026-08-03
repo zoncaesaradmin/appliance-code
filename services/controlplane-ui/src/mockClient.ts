@@ -182,6 +182,10 @@ export class MockControlPlaneClient {
     return;
   }
 
+  async changePassword(): Promise<void> {
+    mockState.session = null;
+  }
+
   async getSession(): Promise<Session> {
     if (!mockState.session) {
       throw new Error("No mock session");

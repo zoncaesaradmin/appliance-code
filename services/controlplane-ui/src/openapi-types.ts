@@ -118,6 +118,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the current user's local password
+         * @description Verifies currentPassword for the authenticated interactive session user, then sets newPassword. On success every session family and API token for that user is revoked, so the caller must sign in again with the new password. API-token callers are rejected; only interactive sessions may change a password this way.
+         */
+        post: operations["changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/session": {
         parameters: {
             query?: never;
@@ -634,6 +654,18 @@ export interface components {
             /** Format: date-time */
             accessExpiresAt: string;
         };
+        ChangePasswordRequest: {
+            /**
+             * Format: password
+             * @description The caller's existing local password.
+             */
+            currentPassword: string;
+            /**
+             * Format: password
+             * @description Replacement password. Must satisfy the appliance password policy and must differ from currentPassword.
+             */
+            newPassword: string;
+        };
         Session: {
             userId: string;
             username: string;
@@ -1022,6 +1054,46 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password changed; existing sessions and API tokens were revoked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not an interactive session, invalid body, password policy failure, or new password equals the current password. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Missing authentication or incorrect current password. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getSession: {

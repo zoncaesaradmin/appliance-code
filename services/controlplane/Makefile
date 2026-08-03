@@ -20,7 +20,7 @@ TEST_CANONICAL_ORIGIN ?= http://$(TEST_PUBLIC_ADDR)
 TEST_PASSWORD_FILE ?=
 TEST_ADMIN_USERNAME ?= admin
 
-VERSION     ?= $(shell git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION     ?= $(shell git -C $(CURDIR) describe --tags --dirty 2>/dev/null || echo 0.0.0-dev)
 COMMIT      ?= $(shell git -C $(CURDIR) rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME  ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 

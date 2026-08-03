@@ -1,7 +1,7 @@
 // Package users owns local-user business logic above storage.UserStore:
-// creation, profile updates, disable/enable, and administrator-initiated
-// password reset, including the invariants that keep the appliance from
-// ever losing its last enabled administrator.
+// creation, profile updates, disable/enable, self-service password change,
+// and administrator-initiated password reset, including the invariants that
+// keep the appliance from ever losing its last enabled administrator.
 package users
 
 import (
@@ -256,7 +256,7 @@ func (s *Service) CompletePasswordReset(ctx context.Context, raw, newPassword st
 		return err
 	}
 
-	return s.setPasswordAndRevoke(ctx, audit.Actor{UserID: cred.UserID, Type: storage.AuditActorUser, AuthMethod: "password_reset"}, cred.UserID, newPassword, "users.password_reset.complete")
+	return s.setPasswordAndRevoke(ctx, audit.Actor{UserID: cred.UserID, Type: storage.AuditActorUser, AuthMethod: "password_reset"}, cred.UserID, newPassword, "users.password_reset.complete", "password reset")
 }
 
 // SetPasswordDirect sets userID's password without a reset-credential
@@ -264,14 +264,45 @@ func (s *Service) CompletePasswordReset(ctx context.Context, raw, newPassword st
 // the same policy validation and session/token revocation as
 // CompletePasswordReset.
 func (s *Service) SetPasswordDirect(ctx context.Context, actor audit.Actor, userID, newPassword string) error {
-	return s.setPasswordAndRevoke(ctx, actor, userID, newPassword, "users.password_reset.break_glass")
+	return s.setPasswordAndRevoke(ctx, actor, userID, newPassword, "users.password_reset.break_glass", "password reset")
+}
+
+// ChangePassword verifies currentPassword for userID and, on success, sets
+// newPassword, bumps credential version, and revokes every session and API
+// token the user owns. Callers must already have authenticated as userID
+// (interactive session). Wrong current passwords return
+// authn.ErrInvalidCredentials without revealing whether the account exists.
+func (s *Service) ChangePassword(ctx context.Context, actor audit.Actor, userID, currentPassword, newPassword string) error {
+	if currentPassword == "" || newPassword == "" {
+		return fmt.Errorf("users: currentPassword and newPassword are required")
+	}
+	if currentPassword == newPassword {
+		return fmt.Errorf("users: new password must differ from the current password")
+	}
+
+	cred, err := s.users.GetPasswordCredential(ctx, userID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return authn.ErrInvalidCredentials
+	}
+	if err != nil {
+		return err
+	}
+	params, err := authn.DecodeParams(cred.Params)
+	if err != nil {
+		return err
+	}
+	if !authn.VerifyPassword(currentPassword, cred.Salt, cred.Hash, params) {
+		return authn.ErrInvalidCredentials
+	}
+
+	return s.setPasswordAndRevoke(ctx, actor, userID, newPassword, "users.password.change", "password change")
 }
 
 // setPasswordAndRevoke validates newPassword, sets it, bumps the user's
 // credential version, and revokes every session and API token they own, all
 // in one transaction, then records a high-severity audit event under
 // action.
-func (s *Service) setPasswordAndRevoke(ctx context.Context, actor audit.Actor, userID, newPassword, action string) error {
+func (s *Service) setPasswordAndRevoke(ctx context.Context, actor audit.Actor, userID, newPassword, action, revokeReason string) error {
 	if err := authn.ValidatePasswordPolicy(newPassword); err != nil {
 		return err
 	}
@@ -293,7 +324,7 @@ func (s *Service) setPasswordAndRevoke(ctx context.Context, actor audit.Actor, u
 		if err := s.users.BumpCredentialVersion(ctx, userID); err != nil {
 			return err
 		}
-		if err := s.sessions.RevokeAllFamiliesForUser(ctx, userID, "password reset"); err != nil {
+		if err := s.sessions.RevokeAllFamiliesForUser(ctx, userID, revokeReason); err != nil {
 			return err
 		}
 		if err := s.tokens.RevokeAllForUser(ctx, userID); err != nil {

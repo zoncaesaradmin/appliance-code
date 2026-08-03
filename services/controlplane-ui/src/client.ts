@@ -60,6 +60,7 @@ export interface ControlPlaneClient {
   login(username: string, password: string, domain?: string): Promise<LoginResponse>;
   refresh(): Promise<LoginResponse>;
   logout(): Promise<void>;
+  changePassword(currentPassword: string, newPassword: string): Promise<void>;
   getSession(): Promise<Session>;
   getVersion(): Promise<Version>;
   getReady(): Promise<Health>;
@@ -150,6 +151,15 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     } finally {
       clearAuth();
     }
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await this.request("/api/v1/auth/password", {
+      method: "POST",
+      body: { currentPassword, newPassword },
+      retryAuth: false
+    });
+    clearAuth();
   }
 
   async getSession(): Promise<Session> {

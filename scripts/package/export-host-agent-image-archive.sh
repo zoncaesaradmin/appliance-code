@@ -81,11 +81,13 @@ for tool in skopeo python3 tar; do
 done
 
 if [[ -z "${IMAGE_TAG}" ]]; then
-  IMAGE_TAG="$(git -C "${REPO_ROOT}" describe --tags --always --dirty 2>/dev/null || true)"
+  IMAGE_TAG="${CODE_VERSION:-${PRODUCT_VERSION:-${VERSION:-}}}"
 fi
 if [[ -z "${IMAGE_TAG}" ]]; then
-  echo "export-host-agent-image-archive: unable to derive image tag from repo state" >&2
-  exit 1
+  IMAGE_TAG="$(git -C "${REPO_ROOT}" describe --tags --dirty 2>/dev/null || true)"
+fi
+if [[ -z "${IMAGE_TAG}" ]]; then
+  IMAGE_TAG="0.0.0-dev"
 fi
 IMAGE_TAG="$(sanitize_tag "${IMAGE_TAG}")"
 

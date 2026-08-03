@@ -16,7 +16,15 @@ VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
 GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(E2E_DIR)
-CONTROL_PLANE_CODE_VERSION := $(shell raw="$$(git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)"; printf '%s' "$$raw" | sed 's/[^A-Za-z0-9_.-]/-/g')
+# Product/release version for packaged images and /version. Prefer an explicit
+# CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
+# reachable git tag, not a bare commit SHA from `git describe --always`.
+CONTROL_PLANE_CODE_VERSION := $(shell \
+	if [ -n "$${IMAGE_TAG:-}" ]; then printf '%s' "$${IMAGE_TAG}"; \
+	elif [ -n "$${CODE_VERSION:-}" ]; then printf '%s' "$${CODE_VERSION}"; \
+	elif [ -n "$${PRODUCT_VERSION:-}" ]; then printf '%s' "$${PRODUCT_VERSION}"; \
+	else raw="$$(git -C $(CURDIR) describe --tags --dirty 2>/dev/null || echo 0.0.0-dev)"; printf '%s' "$$raw"; \
+	fi | sed 's/[^A-Za-z0-9_.-]/-/g')
 
 # Per-developer overrides (dev-container image/tag, engine, cache paths).
 # See dev-container/env.example. Included early so its plain `=`
@@ -205,31 +213,38 @@ clean:
 	done
 ## package-control-plane-image-archive: always build and export the control-plane
 ## image from this checkout as an OCI archive tarball for release-input packaging.
-## The image/archive version always comes from this repo's git describe identity.
+## Pass IMAGE_TAG/CODE_VERSION/PRODUCT_VERSION for the operator-facing product
+## version baked into /version (default: tagged release or 0.0.0-dev).
 package-control-plane-image-archive:
-	@out_file="$${OUT_FILE:-$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
+	@image_tag="$${IMAGE_TAG:-$${CODE_VERSION:-$${PRODUCT_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}}}"; \
+	out_file="$${OUT_FILE:-$(CURDIR)/.run/control-plane-api-$${image_tag}.tar}"; \
 	mkdir -p "$$(dirname "$$out_file")"; \
 	bash ./scripts/package/export-control-plane-image-archive.sh \
-		--out-file "$$out_file"
+		--out-file "$$out_file" \
+		--image-tag "$$image_tag"
 
 ## package-ui-image-archive: always build and export the UI service image from
 ## this checkout as an OCI archive tarball for release-input packaging.
 package-ui-image-archive:
-	@out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-ui-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
+	@image_tag="$${IMAGE_TAG:-$${CODE_VERSION:-$${PRODUCT_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}}}"; \
+	out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-ui-$${image_tag}.tar}"; \
 	mkdir -p "$$(dirname "$$out_file")"; \
 	bash ./scripts/package/export-ui-image-archive.sh \
-		--out-file "$$out_file"
+		--out-file "$$out_file" \
+		--image-tag "$$image_tag"
 
 ## package-host-agent-image-archive: always build and export the appliance
 ## host-agent service image as an OCI archive tarball for release-input
 ## packaging.
 package-host-agent-image-archive:
-	@out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).tar}"; \
+	@image_tag="$${IMAGE_TAG:-$${CODE_VERSION:-$${PRODUCT_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}}}"; \
+	out_file="$${OUT_FILE:-$(CURDIR)/.run/appliance-host-agent-$${image_tag}.tar}"; \
 	reference_out_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
 	mkdir -p "$$(dirname "$$out_file")" "$$(dirname "$$reference_out_file")"; \
 	bash ./scripts/package/export-host-agent-image-archive.sh \
 		--out-file "$$out_file" \
-		--reference-out-file "$$reference_out_file"
+		--reference-out-file "$$reference_out_file" \
+		--image-tag "$$image_tag"
 
 ## package-argo-controller-image-archive: always build and export the
 ## appliance-owned Argo workflow-controller wrapper image as an OCI archive

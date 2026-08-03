@@ -150,6 +150,18 @@ func (c *Client) Logout(ctx context.Context, accessToken string) error {
 	return c.do(ctx, http.MethodPost, "/api/v1/auth/logout", bearerCredential(accessToken), nil, nil)
 }
 
+// ChangePasswordRequest is the body for ChangePassword.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
+}
+
+// ChangePassword verifies the caller's current password and sets a new one.
+// On success every session and API token for that user is revoked.
+func (c *Client) ChangePassword(ctx context.Context, accessToken string, req ChangePasswordRequest) error {
+	return c.do(ctx, http.MethodPost, "/api/v1/auth/password", bearerCredential(accessToken), req, nil)
+}
+
 // Session returns the authenticated principal behind accessToken.
 func (c *Client) Session(ctx context.Context, accessToken string) (*SessionInfo, error) {
 	var result SessionInfo

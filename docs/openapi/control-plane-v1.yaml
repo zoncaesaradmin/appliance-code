@@ -139,6 +139,39 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/auth/password:
+    post:
+      summary: Change the current user's local password
+      description: >
+        Verifies currentPassword for the authenticated interactive session user,
+        then sets newPassword. On success every session family and API token for
+        that user is revoked, so the caller must sign in again with the new
+        password. API-token callers are rejected; only interactive sessions may
+        change a password this way.
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password changed; existing sessions and API tokens were revoked.
+        "400":
+          description: >
+            Not an interactive session, invalid body, password policy failure,
+            or new password equals the current password.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Missing authentication or incorrect current password.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/auth/session:
     get:
       summary: Get the current authenticated session
@@ -1031,6 +1064,20 @@ components:
         accessExpiresAt:
           type: string
           format: date-time
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          description: The caller's existing local password.
+        newPassword:
+          type: string
+          format: password
+          description: >
+            Replacement password. Must satisfy the appliance password policy
+            and must differ from currentPassword.
     Session:
       type: object
       required: [userId, username, domain, authMethod, permissions]

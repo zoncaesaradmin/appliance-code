@@ -7,7 +7,7 @@ DAEMON_BINARY := $(BIN_DIR)/appliance-host-agentd
 COVER_FILE  := coverage.out
 
 SERVICE_IMAGE_NAME ?= appliance-host-agent
-SERVICE_IMAGE_TAG ?= $(shell git -C $(CURDIR) describe --tags --always --dirty 2>/dev/null || echo dev)
+SERVICE_IMAGE_TAG ?= $(shell git -C $(CURDIR) describe --tags --dirty 2>/dev/null || echo 0.0.0-dev)
 RUNTIME_PROFILE ?= runtime
 SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE)

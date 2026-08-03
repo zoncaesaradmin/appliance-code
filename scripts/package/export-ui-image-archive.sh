@@ -10,9 +10,9 @@ exports it as an OCI archive tarball for release-input packaging.
 
 Options:
   --out-file PATH        Output OCI archive tar path. Required.
-  --image-tag VERSION    Local image tag to build/export.
-                         Default: the appliance-code repo `git describe`
-                         version for this checkout.
+  --image-tag VERSION    Local image tag / product version to build/export.
+                         Default: CODE_VERSION, PRODUCT_VERSION, VERSION,
+                         a reachable git tag, or 0.0.0-dev.
   --image-name NAME      Local image name. Default: appliance-ui.
   --node-image REF       Node build-stage base image. Default: UI_NODE_IMAGE
                          env or Containerfile default.
@@ -92,11 +92,13 @@ if ! command -v skopeo >/dev/null 2>&1; then
 fi
 
 if [[ -z "${IMAGE_TAG}" ]]; then
-  IMAGE_TAG="$(git -C "${REPO_ROOT}" describe --tags --always --dirty 2>/dev/null || true)"
+  IMAGE_TAG="${CODE_VERSION:-${PRODUCT_VERSION:-${VERSION:-}}}"
 fi
 if [[ -z "${IMAGE_TAG}" ]]; then
-  echo "export-ui-image-archive: unable to derive image tag from repo state" >&2
-  exit 1
+  IMAGE_TAG="$(git -C "${REPO_ROOT}" describe --tags --dirty 2>/dev/null || true)"
+fi
+if [[ -z "${IMAGE_TAG}" ]]; then
+  IMAGE_TAG="0.0.0-dev"
 fi
 IMAGE_TAG="$(sanitize_tag "${IMAGE_TAG}")"
 COMMIT="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || true)"
