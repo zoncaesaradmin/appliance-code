@@ -172,7 +172,7 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 	}
 	out := filepath.Join(tmp, "release-input.tgz")
 	cmd := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
-		"--out-file", out, "--code-version", "test", "--k3s-version", "v1.33.0+k3s1",
+		"--out-file", out, "--code-version", "1.2.3", "--k3s-version", "v1.33.0+k3s1",
 		"--control-plane-image", filepath.Join(tmp, "control-plane.tar"),
 		"--ui-image", filepath.Join(tmp, "ui.tar"),
 		"--host-agent-image", hostAgentArchive,
@@ -252,7 +252,7 @@ func TestReleaseInputRejectsUnpairedDNSImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
-		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "test",
+		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "1.2.3",
 		"--k3s-version", "v1", "--control-plane-image", dns, "--ui-image", dns,
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,

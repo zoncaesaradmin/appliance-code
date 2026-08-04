@@ -11,6 +11,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// embedded is a generated snapshot of repository-root metadata-bundle/base.
+// Edit the product files only under metadata-bundle/base/, then run
+// scripts/package/sync-embedded-metadata-bundle.sh (also run by make build).
+//
 //go:embed embedded/*
 var embeddedRoot embed.FS
 
@@ -33,6 +37,10 @@ func materializeEmbedded(dest, softwareVersion, metadataVersion string) error {
 		target := filepath.Join(dest, filepath.FromSlash(rel))
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
+		}
+		// Packaging/sync markers must not land in active bundle trees.
+		if filepath.Base(path) == "README.generated.md" {
+			return nil
 		}
 		data, err := embeddedRoot.ReadFile(path)
 		if err != nil {

@@ -86,10 +86,11 @@ PY
 
 mkdir -p "${OUT_DIR}"
 ARCHIVE="${OUT_DIR}/${DIR_NAME}.tar.zst"
+rm -f "${ARCHIVE}"
 (
   cd "${STAGE}"
   if command -v zstd >/dev/null 2>&1; then
-    tar -cf - "${DIR_NAME}" | zstd -q -o "${ARCHIVE}"
+    tar -cf - "${DIR_NAME}" | zstd -q -f -o "${ARCHIVE}"
   else
     # Air-gapped package hosts often lack zstd and python-zstandard. Use the
     # self-contained pack-tar-zst helper (vendored klauspost/compress, go 1.21)

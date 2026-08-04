@@ -255,7 +255,7 @@ func (s *Service) ensureActive(ctx context.Context) error {
 		return err
 	}
 	// Prefer a host-seeded tree (zonctl extract onto the hostPath mount)
-	// over re-materializing the embedded base policy.
+	// over re-materializing the embedded snapshot of metadata-bundle/base.
 	if b, err := LoadDirectory(dest); err == nil && CompatibleWithSoftware(s.software, b.Manifest.Metadata.MetadataVersion) == nil {
 		digest, _ := dirDigest(dest)
 		rec := storage.MetadataBundleRecord{

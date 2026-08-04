@@ -55,17 +55,29 @@ SERVICE_IMAGE_BUILD_ARGS = \
 
 include $(CURDIR)/../../build/service-image.mk
 
-.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean vendor
-# image and image-local come from build/service-image.mk
+REPO_ROOT := $(CURDIR)/../..
+SYNC_METADATA_EMBED := $(REPO_ROOT)/scripts/package/sync-embedded-metadata-bundle.sh
 
+.PHONY: build test lint coverage verify run stop test-start test-stop test-bootstrap-init test-live test-curl clean vendor sync-metadata-embed check-metadata-embed
+# image and image-local come from build/service-image.mk; sync embed first.
+image-local: sync-metadata-embed
+image: sync-metadata-embed
+
+## sync-metadata-embed: copy repo-root metadata-bundle/base into the Go embed tree
+sync-metadata-embed:
+	@bash "$(SYNC_METADATA_EMBED)"
+
+## check-metadata-embed: fail if Go embed tree drifts from metadata-bundle/base
+check-metadata-embed:
+	@bash "$(SYNC_METADATA_EMBED)" --check
 
 ## build: compile the local server binary into bin/
-build:
+build: sync-metadata-embed
 	mkdir -p $(BIN_DIR)
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) ./cmd/appliance-server
 
 ## test: run local unit tests with the race detector
-test:
+test: sync-metadata-embed
 	go test -race ./...
 
 ## vendor: refresh the vendored dependency tree (needed after bumping any

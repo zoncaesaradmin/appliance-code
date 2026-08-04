@@ -133,6 +133,13 @@ coverage:
 verify:
 	@set -e; \
 	mkdir -p "$(VERIFY_LOG_DIR)"; \
+	echo "verify stage: metadata-bundle embed check"; \
+	if ! bash ./scripts/package/sync-embedded-metadata-bundle.sh --check; then \
+		echo "verify: metadata-bundle embed check failed"; \
+		echo "verify: run ./scripts/package/sync-embedded-metadata-bundle.sh and commit the embedded snapshot"; \
+		exit 1; \
+	fi; \
+	echo "verify stage: metadata-bundle embed check passed"; \
 	echo "verify stage: build"; \
 	if ! $(MAKE) --no-print-directory build >"$(VERIFY_BUILD_LOG)" 2>&1; then \
 		echo "verify: build failed"; \
