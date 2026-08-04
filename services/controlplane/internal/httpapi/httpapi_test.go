@@ -58,6 +58,15 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			_ = json.NewEncoder(w).Encode(map[string]any{"uptimeSeconds": 123.45, "logicalCpuCount": 8})
 		case "/internal/v1/host/health":
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "hostRootAccessible": true})
+		case "/internal/v1/host/wifi-ap":
+			if r.Method == http.MethodGet || r.Method == http.MethodPut {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"desired": false, "actual": "inactive", "reason": "desired_off",
+					"managementAddress": "10.42.0.1", "security": "wpa2-psk",
+				})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		default:
 			http.NotFound(w, r)
 		}
@@ -285,7 +294,7 @@ func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	token := ts.login(t, "admin", testPassword)
 
-	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health"} {
+	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health", "/api/v1/host/wifi-ap"} {
 		resp := ts.doJSON(t, http.MethodGet, path, token, "")
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)

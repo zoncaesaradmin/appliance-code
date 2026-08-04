@@ -37,7 +37,14 @@ This avoids a design that grows by adding more per-field file scraping inside th
 
 ## Preferred Design
 
-The preferred design is a **host execution bridge** with a small host-side agent.
+## Host execution model (wifi-ap)
+
+The management WiFi access point is applied only through `appliance-host-agentd`
+(`PUT /internal/v1/host/wifi-ap`). Install-time enablement with
+`host_wifi_ap_enabled=true` installs offline host packages then calls that same
+API over the host agent Unix socket. Control-plane routes mirror it:
+`GET|PUT /api/v1/host/wifi-ap` (permissions `host.read` / `host.write`).
+
 
 ### Shape
 

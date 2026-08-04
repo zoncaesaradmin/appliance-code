@@ -27,7 +27,7 @@ func TestRegistryFromModulesConvertsHostAgentDescriptor(t *testing.T) {
 	if service.BaseURL != "http://host-agent.control.svc.cluster.local:8080" {
 		t.Fatalf("service.BaseURL = %q", service.BaseURL)
 	}
-	if len(service.Routes) != 3 {
-		t.Fatalf("len(service.Routes) = %d, want 3", len(service.Routes))
+	if len(service.Routes) != 5 {
+		t.Fatalf("len(service.Routes) = %d, want 5", len(service.Routes))
 	}
 }

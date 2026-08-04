@@ -6,7 +6,7 @@ usage() {
 usage: export-host-packages.sh --out-dir DIR [options]
 
 Stages the offline Ubuntu host package payload required by installer-owned
-host capabilities such as mDNS.
+host capabilities such as mDNS and management WiFi access point mode.
 
 Options:
   --out-dir DIR                  Destination root. Required. Packages are
@@ -14,9 +14,12 @@ Options:
   --os-version VERSION           Ubuntu version to package. Defaults to the
                                  current host/container VERSION_ID.
   --arch ARCH                    Debian architecture. Default: amd64.
+  --capability NAME              Repeatable capability whose root packages
+                                 should be included. Supported: mdns, wifi-ap.
+                                 When omitted, defaults to mdns (legacy).
   --package NAME                 Repeatable root package to include.
-                                 Defaults to avahi-daemon, avahi-utils,
-                                 and libnss-mdns.
+                                 Overrides --capability defaults when any
+                                 --package is supplied.
   --help                         Show this help.
 USAGE
 }
@@ -25,6 +28,7 @@ OUT_DIR=""
 OS_VERSION=""
 ARCH="amd64"
 ROOT_PACKAGES=()
+CAPABILITIES=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +42,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --arch)
       ARCH="${2:-}"
+      shift 2
+      ;;
+    --capability)
+      CAPABILITIES+=("${2:-}")
       shift 2
       ;;
     --package)
@@ -99,8 +107,35 @@ if [[ "${ARCH}" != "amd64" ]]; then
   exit 1
 fi
 
+capability_packages() {
+  case "$1" in
+    mdns)
+      printf '%s\n' avahi-daemon avahi-utils libnss-mdns
+      ;;
+    wifi-ap|wifi_ap|wifap)
+      printf '%s\n' hostapd dnsmasq iw wireless-regdb
+      ;;
+    *)
+      echo "export-host-packages: unknown capability: $1 (supported: mdns, wifi-ap)" >&2
+      return 1
+      ;;
+  esac
+}
+
 if [[ ${#ROOT_PACKAGES[@]} -eq 0 ]]; then
-  ROOT_PACKAGES=(avahi-daemon avahi-utils libnss-mdns)
+  if [[ ${#CAPABILITIES[@]} -eq 0 ]]; then
+    CAPABILITIES=(mdns)
+  fi
+  declare -A seen_pkg=()
+  for cap in "${CAPABILITIES[@]}"; do
+    while IFS= read -r pkg; do
+      [[ -z "${pkg}" ]] && continue
+      if [[ -z "${seen_pkg[${pkg}]+x}" ]]; then
+        ROOT_PACKAGES+=("${pkg}")
+        seen_pkg["${pkg}"]=1
+      fi
+    done < <(capability_packages "${cap}")
+  done
 fi
 
 OUT_DIR="$(cd "$(dirname "${OUT_DIR}")" && pwd)/$(basename "${OUT_DIR}")"

@@ -41,6 +41,7 @@ type Config struct {
 	FilesMaxUploadBytes   int64                     `json:"filesMaxUploadBytes"`
 	DNSReadyURL           string                    `json:"dnsReadyURL"`
 	HostMDNSEnabled       bool                      `json:"hostMDNSEnabled"`
+	HostWifiAPEnabled     bool                      `json:"hostWifiAPEnabled"`
 	DNSZoneName           string                    `json:"dnsZoneName"`
 	DNSConfigMapNamespace string                    `json:"dnsConfigMapNamespace"`
 	DNSConfigMapName      string                    `json:"dnsConfigMapName"`
@@ -207,6 +208,14 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			errs = append(errs, fmt.Sprintf("HOST_MDNS_ENABLED: %v", err))
 		} else {
 			cfg.HostMDNSEnabled = parsed
+		}
+	}
+	if v, ok := env[envPrefix+"HOST_WIFI_AP_ENABLED"]; ok {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("HOST_WIFI_AP_ENABLED: %v", err))
+		} else {
+			cfg.HostWifiAPEnabled = parsed
 		}
 	}
 

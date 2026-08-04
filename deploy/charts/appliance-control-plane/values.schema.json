@@ -295,6 +295,9 @@
         "hostMDNSEnabled": {
           "type": "boolean"
         },
+        "hostWifiAPEnabled": {
+          "type": "boolean"
+        },
         "dnsZoneName": {
           "type": "string"
         },

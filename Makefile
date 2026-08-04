@@ -287,12 +287,17 @@ package-coredns-image-archive:
 		$${DNS_VERSION:+--dns-version "$${DNS_VERSION}"}
 
 ## package-host-packages: export the offline Ubuntu host package payload
-## needed by installer-owned host capabilities such as mDNS.
+## needed by installer-owned host capabilities (mDNS, wifi-ap).
+## HOST_CAPABILITIES is a space-separated list (default: mdns).
 package-host-packages:
 	@out_dir="$${OUT_DIR:-$(CURDIR)/.run/host-packages}"; \
 	mkdir -p "$$(dirname "$$out_dir")"; \
+	caps="$${HOST_CAPABILITIES:-mdns}"; \
+	cap_args=(); \
+	for cap in $$caps; do cap_args+=(--capability "$$cap"); done; \
 	bash ./scripts/package/export-host-packages.sh \
 		--out-dir "$$out_dir" \
+		"$${cap_args[@]}" \
 		$${OS_VERSION:+--os-version "$${OS_VERSION}"} \
 		$${ARCH:+--arch "$${ARCH}"}
 
@@ -320,6 +325,7 @@ package-release-input-tar:
 	host_agent_reference_file="$(CURDIR)/.run/appliance-host-agent-$(CONTROL_PLANE_CODE_VERSION).reference"; \
 	host_agent_binary="$(CURDIR)/services/hostagent/bin/appliance-host-agentd"; \
 	host_mdns_enabled="$${HOST_MDNS_ENABLED:-false}"; \
+	host_wifi_ap_enabled="$${HOST_WIFI_AP_ENABLED:-false}"; \
 	host_packages_dir="$${HOST_PACKAGES_DIR:-$(CURDIR)/.run/host-packages}"; \
 	host_packages_os_version="$${HOST_PACKAGES_OS_VERSION:-$${OS_VERSION:-24.04}}"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
@@ -339,10 +345,15 @@ package-release-input-tar:
 	$(MAKE) --no-print-directory package-host-agent-image-archive \
 		OUT_FILE="$$host_agent_image" \
 		REFERENCE_OUT_FILE="$$host_agent_reference_file"; \
-	if [ "$$host_mdns_enabled" = "true" ] && [ -z "$${HOST_PACKAGES_DIR:-}" ]; then \
+	host_caps=""; \
+	if [ "$$host_mdns_enabled" = "true" ]; then host_caps="$$host_caps mdns"; fi; \
+	if [ "$$host_wifi_ap_enabled" = "true" ]; then host_caps="$$host_caps wifi-ap"; fi; \
+	host_caps="$$(echo "$$host_caps" | xargs)"; \
+	if [ -n "$$host_caps" ] && [ -z "$${HOST_PACKAGES_DIR:-}" ]; then \
 		$(MAKE) --no-print-directory package-host-packages \
 			OUT_DIR="$$host_packages_dir" \
-			OS_VERSION="$$host_packages_os_version"; \
+			OS_VERSION="$$host_packages_os_version" \
+			HOST_CAPABILITIES="$$host_caps"; \
 	fi; \
 	host_agent_image_ref="$$(tr -d '\r\n' < "$$host_agent_reference_file")"; \
 	if [ -n "$$argo_version" ] && [ -z "$${ARGO_CONTROLLER_IMAGE:-}" ]; then \
@@ -380,6 +391,7 @@ package-release-input-tar:
 		--host-agent-image-reference "$$host_agent_image_ref" \
 		--host-agent-binary "$$host_agent_binary" \
 		--host-mdns-enabled "$$host_mdns_enabled" \
+		--host-wifi-ap-enabled "$$host_wifi_ap_enabled" \
 		--zot-image "$$zot_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
 		--zot-version "$$zot_version" \
@@ -387,7 +399,7 @@ package-release-input-tar:
 		--dns-image-reference "$${DNS_IMAGE_REFERENCE}" \
 		--dns-version "$$dns_version" \
 		--k3s-version "$${K3S_VERSION}"; \
-	if [ "$$host_mdns_enabled" = "true" ]; then \
+	if [ -n "$$host_caps" ]; then \
 		set -- "$$@" --host-packages-dir "$$host_packages_dir" --host-packages-os-version "$$host_packages_os_version"; \
 	fi; \
 	if [ -n "$${LATEST_OUT_FILE:-}" ]; then set -- "$$@" --latest-out-file "$${LATEST_OUT_FILE}"; fi; \

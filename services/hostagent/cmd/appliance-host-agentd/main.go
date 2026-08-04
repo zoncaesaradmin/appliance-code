@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/hostagent/internal/bridge"
 	"appliance-code/services/hostagent/internal/httpapi"
 	"appliance-code/services/hostagent/internal/process"
+	"appliance-code/services/hostagent/internal/wifiap"
 )
 
 const (
@@ -50,8 +51,9 @@ func main() {
 		_ = os.Remove(socketPath)
 	}()
 
+	wifiManager := wifiap.NewManager()
 	server := &http.Server{
-		Handler:           httpapi.NewHandler(bridge.Local{Root: "/"}),
+		Handler:           httpapi.NewHandlerWithWifi(bridge.Local{Root: "/", Wifi: wifiManager}, wifiManager),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

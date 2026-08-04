@@ -22,8 +22,8 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 	if module.PrimaryCapability() != appliance.CapabilityHost {
 		t.Fatalf("PrimaryCapability = %q, want %q", module.PrimaryCapability(), appliance.CapabilityHost)
 	}
-	if len(module.Routes) != 3 {
-		t.Fatalf("len(module.Routes) = %d, want 3", len(module.Routes))
+	if len(module.Routes) != 5 {
+		t.Fatalf("len(module.Routes) = %d, want 5", len(module.Routes))
 	}
 }
 

@@ -77,7 +77,8 @@ const (
 	PermArtifactsGrantsRead  = "artifacts.grants.read"
 	PermArtifactsGrantsWrite = "artifacts.grants.write"
 
-	PermHostRead = "host.read"
+	PermHostRead  = "host.read"
+	PermHostWrite = "host.write"
 
 	PermDNSRecordsRead     = "dns.records.read"
 	PermDNSRecordsWrite    = "dns.records.write"
@@ -152,7 +153,8 @@ var AllPermissions = []storage.Permission{
 	{Name: PermArtifactsGrantsRead, Description: "Read artifact repository-prefix grants"},
 	{Name: PermArtifactsGrantsWrite, Description: "Manage artifact repository-prefix grants"},
 
-	{Name: PermHostRead, Description: "Read host health, stats, and identity information"},
+	{Name: PermHostRead, Description: "Read host health, stats, identity, and wifi-ap status information"},
+	{Name: PermHostWrite, Description: "Change host-managed capabilities such as the management wifi access point"},
 
 	{Name: PermDNSRecordsRead, Description: "Read LAN DNS A records"},
 	{Name: PermDNSRecordsWrite, Description: "Create, update, or delete any LAN DNS A record"},

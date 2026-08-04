@@ -109,6 +109,7 @@ config:
   # install; create them via the DNS records API/UI. Optional bootstrap_*
   # fields remain for rare operator overrides and stay empty by default.
   hostMDNSEnabled: false
+  hostWifiAPEnabled: false
   dnsZoneName: "appliance.internal"
   dnsConfigMapNamespace: "dns"
   dnsConfigMapName: "dns-server-config"

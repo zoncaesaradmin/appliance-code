@@ -20,7 +20,9 @@ func main() {
 	}
 
 	logger := process.NewLogger(cfg.ApplicationLogPath)
-	handler := httpapi.NewHandler(bridge.NewUnixSocketClient(cfg.SocketPath))
+	client := bridge.NewUnixSocketClient(cfg.SocketPath)
+	// Pod forwards host facts and wifi-ap control over the host-agentd socket.
+	handler := httpapi.NewHandlerWithWifi(client, client)
 	server := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,
