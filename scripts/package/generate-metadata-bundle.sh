@@ -91,20 +91,22 @@ ARCHIVE="${OUT_DIR}/${DIR_NAME}.tar.zst"
   if command -v zstd >/dev/null 2>&1; then
     tar -cf - "${DIR_NAME}" | zstd -q -o "${ARCHIVE}"
   else
-    # Air-gapped image/dev-run hosts often lack zstd and python-zstandard.
-    # Fall back to control-plane's vendored klauspost/compress compressor.
-    CONTROLPLANE_DIR="${REPO_ROOT}/services/controlplane"
-    if [[ ! -d "${CONTROLPLANE_DIR}" ]]; then
-      echo "generate-metadata-bundle: control-plane module not found at ${CONTROLPLANE_DIR}" >&2
+    # Air-gapped package hosts often lack zstd and python-zstandard. Use the
+    # self-contained pack-tar-zst helper (vendored klauspost/compress, go 1.21)
+    # with GOTOOLCHAIN=local so Go never tries to download a newer toolchain.
+    PACKER_DIR="${REPO_ROOT}/scripts/package/pack-tar-zst"
+    if [[ ! -d "${PACKER_DIR}/vendor" ]]; then
+      echo "generate-metadata-bundle: pack-tar-zst vendor tree missing at ${PACKER_DIR}" >&2
       exit 1
     fi
     if ! command -v go >/dev/null 2>&1; then
-      echo "generate-metadata-bundle: need zstd CLI, python zstandard, or go to write .tar.zst" >&2
+      echo "generate-metadata-bundle: need zstd CLI or go to write .tar.zst" >&2
       exit 1
     fi
     (
-      cd "${CONTROLPLANE_DIR}"
-      GOWORK=off CGO_ENABLED=0 go run -mod=vendor ./cmd/pack-tar-zst \
+      cd "${PACKER_DIR}"
+      GOWORK=off GOTOOLCHAIN=local GOSUMDB=off CGO_ENABLED=0 \
+        go run -mod=vendor . \
         -src "${STAGE}/${DIR_NAME}" \
         -out "${ARCHIVE}"
     )

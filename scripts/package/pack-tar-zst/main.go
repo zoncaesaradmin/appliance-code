@@ -1,6 +1,8 @@
-// Command pack-tar-zst writes a directory tree to a .tar.zst archive using the
-// control-plane module's vendored zstd (klauspost/compress). Used by packaging
-// scripts when the host has neither the zstd CLI nor the Python zstandard package.
+// Command pack-tar-zst writes a directory tree to a .tar.zst archive.
+// Packaging scripts use this when the host has neither the zstd CLI nor
+// the Python zstandard package. It is a tiny, self-contained module with
+// a vendored compressor so air-gapped builders need no module download and
+// no Go toolchain auto-upgrade.
 package main
 
 import (
@@ -47,9 +49,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	defer zw.Close()
 	tw := tar.NewWriter(zw)
-	defer tw.Close()
 
 	base := filepath.Base(srcDirAbs)
 	err = filepath.WalkDir(srcDirAbs, func(path string, d fs.DirEntry, walkErr error) error {
@@ -96,9 +96,12 @@ func main() {
 		return copyErr
 	})
 	if err != nil {
+		_ = tw.Close()
+		_ = zw.Close()
 		fatal(err)
 	}
 	if err := tw.Close(); err != nil {
+		_ = zw.Close()
 		fatal(err)
 	}
 	if err := zw.Close(); err != nil {
