@@ -44,6 +44,278 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/licensing/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get appliance licensing status */
+        get: operations["getLicensingStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/licensing/entitlements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List entitled capabilities */
+        get: operations["getLicensingEntitlements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/licensing/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Import an offline license document */
+        put: operations["importLicense"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/licensing/base-entitlement/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept the base/free entitlement */
+        post: operations["acceptBaseEntitlement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List system notifications */
+        get: operations["listNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/{id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge a notification */
+        post: operations["acknowledgeNotification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/setup-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get post-install setup state */
+        get: operations["getApplianceSetupState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List known appliance capabilities */
+        get: operations["listApplianceCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List appliance profiles from the active metadata bundle */
+        get: operations["listApplianceProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/profiles/{profileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an appliance profile */
+        get: operations["getApplianceProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/profiles/{profileId}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate profile activation */
+        post: operations["validateApplianceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/profiles/{profileId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate an appliance profile */
+        post: operations["activateApplianceProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/metadata-bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get active appliance metadata bundle status */
+        get: operations["getApplianceMetadataBundle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/metadata-bundle/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate a metadata bundle archive before install */
+        post: operations["validateApplianceMetadataBundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/metadata-bundle/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Install a signed appliance metadata bundle */
+        post: operations["installApplianceMetadataBundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/appliance/metadata-bundle/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Roll back to the previous appliance metadata bundle */
+        post: operations["rollbackApplianceMetadataBundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup/first-admin": {
         parameters: {
             query?: never;
@@ -619,6 +891,116 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LicensingStatus: {
+            /** @enum {string} */
+            state: "unresolved" | "base_free" | "licensed";
+            resolved: boolean;
+            profileActivationAvailable: boolean;
+            entitledCapabilities: string[];
+            /** Format: date-time */
+            acceptedAt?: string;
+            summary?: {
+                [key: string]: unknown;
+            };
+        };
+        LicensingEntitlements: {
+            capabilities: string[];
+        };
+        ImportLicenseRequest: {
+            document: string;
+        };
+        NotificationList: {
+            items: components["schemas"]["Notification"][];
+        };
+        Notification: {
+            id: string;
+            kind: string;
+            title: string;
+            body: string;
+            severity: string;
+            actionUrl?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ApplianceSetupState: {
+            activeProfile: string;
+            desiredProfile?: string;
+            activationStatus?: string;
+            activeMetadataVersion?: string;
+            previousMetadataVersion?: string;
+            licensingUnresolved: boolean;
+            licensingState: string;
+            profileActivationAvailable: boolean;
+            metadataBundleManagementAvailable: boolean;
+            blockingSetupActions: string[];
+            alertNotificationIds: string[];
+        };
+        ApplianceCapabilityCatalog: {
+            items: components["schemas"]["ApplianceCapabilityInfo"][];
+        };
+        ApplianceCapabilityInfo: {
+            id: string;
+            displayName?: string;
+            dependencies: string[];
+            conflicts?: string[];
+            requiredArtifacts?: string[];
+            requiredEntitlement?: string;
+        };
+        ApplianceProfileList: {
+            items: components["schemas"]["ApplianceProfile"][];
+        };
+        ApplianceProfile: {
+            id: string;
+            displayName: string;
+            description: string;
+            builtIn: boolean;
+            active: boolean;
+            capabilities: string[];
+            metadataVersion?: string;
+        };
+        ProfileValidationResult: {
+            profileId: string;
+            metadataVersion?: string;
+            ok: boolean;
+            groups: components["schemas"]["ProfileValidationGroup"][];
+        };
+        ProfileValidationGroup: {
+            name: string;
+            ok: boolean;
+            message?: string;
+            errors?: string[];
+        };
+        ProfileActivationResponse: {
+            activation: components["schemas"]["ProfileActivationResult"];
+            validation: components["schemas"]["ProfileValidationResult"];
+        };
+        ProfileActivationResult: {
+            profileId: string;
+            status: string;
+            message: string;
+            requiresRestart: boolean;
+        };
+        ApplianceMetadataBundleStatus: {
+            softwareVersion: string;
+            activeMetadataVersion: string;
+            activeDigest?: string;
+            previousMetadataVersion?: string;
+            previousDigest?: string;
+            directoryName?: string;
+            canRollback: boolean;
+        };
+        MetadataBundleArchiveRequest: {
+            archivePath: string;
+            signature?: string;
+        };
+        MetadataBundleValidationResult: {
+            ok: boolean;
+            groups: components["schemas"]["ProfileValidationGroup"][];
+        };
+        MetadataBundleInstallResponse: {
+            status: components["schemas"]["ApplianceMetadataBundleStatus"];
+            validation: components["schemas"]["MetadataBundleValidationResult"];
+        };
         SetupStatus: {
             initialized: boolean;
         };
@@ -894,6 +1276,7 @@ export interface components {
         TokenID: string;
         GrantID: string;
         RepositoryPath: string;
+        ProfileId: string;
     };
     requestBodies: never;
     headers: never;
@@ -939,6 +1322,379 @@ export interface operations {
                     "application/json": components["schemas"]["CapabilitiesResponse"];
                 };
             };
+        };
+    };
+    getLicensingStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Licensing status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicensingStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getLicensingEntitlements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Entitled capabilities. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicensingEntitlements"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    importLicense: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportLicenseRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated licensing status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicensingStatus"];
+                };
+            };
+            400: components["responses"]["ValidationProblem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    acceptBaseEntitlement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated licensing status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicensingStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notifications. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    acknowledgeNotification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Acknowledged. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getApplianceSetupState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup state for UI shell. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplianceSetupState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    listApplianceCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Capability catalog. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplianceCapabilityCatalog"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listApplianceProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile catalog. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplianceProfileList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getApplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: components["parameters"]["ProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplianceProfile"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    validateApplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: components["parameters"]["ProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Validation result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileValidationResult"];
+                };
+            };
+        };
+    };
+    activateApplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profileId: components["parameters"]["ProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Activation accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileActivationResponse"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getApplianceMetadataBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata bundle status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplianceMetadataBundleStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    validateApplianceMetadataBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    archive: string;
+                    signature?: string;
+                };
+                "application/json": components["schemas"]["MetadataBundleArchiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Validation result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataBundleValidationResult"];
+                };
+            };
+            400: components["responses"]["ValidationProblem"];
+        };
+    };
+    installApplianceMetadataBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    archive: string;
+                    signature?: string;
+                };
+                "application/json": components["schemas"]["MetadataBundleArchiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Install accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataBundleInstallResponse"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    rollbackApplianceMetadataBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rollback completed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplianceMetadataBundleStatus"];
+                };
+            };
+            409: components["responses"]["Conflict"];
         };
     };
     createFirstAdmin: {

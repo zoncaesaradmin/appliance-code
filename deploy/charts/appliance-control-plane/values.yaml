@@ -136,6 +136,10 @@ persistence:
   size: 10Gi
   accessMode: ReadWriteOnce
   dataDir: /var/lib/appliance/data
+  # Host-visible extracted metadata bundles; zonctl seeds this before Helm.
+  # Mounted over dataDir/metadata-bundles so the control plane prefers the
+  # install-time archive over the embedded fallback.
+  metadataBundlesHostPath: /data/zon/metadata-bundles
 
 workspaceStorage:
   enabled: true

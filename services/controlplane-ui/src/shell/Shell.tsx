@@ -5,6 +5,7 @@ import {
   IconButton,
   cn
 } from "../components";
+import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
 import {
   currentMode,
@@ -30,6 +31,29 @@ export function Shell(props: {
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [featureMenuMode, setFeatureMenuMode] = useState<Mode | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<
+    Array<{ id: string; title: string; body: string; actionUrl?: string }>
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void client
+      .listNotifications()
+      .then((items) => {
+        if (!cancelled) {
+          setNotifications(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNotifications([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.pathname]);
 
   function openMode(nextMode: Mode) {
     setUserMenuOpen(false);
@@ -50,6 +74,7 @@ export function Shell(props: {
   function closeTransientMenus() {
     setUserMenuOpen(false);
     setHelpMenuOpen(false);
+    setNotificationsOpen(false);
     setFeatureMenuMode(null);
   }
 
@@ -88,7 +113,7 @@ export function Shell(props: {
   }, [featureMenuMode]);
 
   useEffect(() => {
-    if (!userMenuOpen && !helpMenuOpen) {
+    if (!userMenuOpen && !helpMenuOpen && !notificationsOpen) {
       return;
     }
     const closeOnPointer = (event: PointerEvent) => {
@@ -98,11 +123,13 @@ export function Shell(props: {
       }
       setUserMenuOpen(false);
       setHelpMenuOpen(false);
+      setNotificationsOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setUserMenuOpen(false);
         setHelpMenuOpen(false);
+        setNotificationsOpen(false);
       }
     };
     window.addEventListener("pointerdown", closeOnPointer);
@@ -111,7 +138,7 @@ export function Shell(props: {
       window.removeEventListener("pointerdown", closeOnPointer);
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [helpMenuOpen, userMenuOpen]);
+  }, [helpMenuOpen, notificationsOpen, userMenuOpen]);
 
   useEffect(() => {
     if (props.pathname.startsWith("/admin") && !isSystemAdministrator(props.session)) {
@@ -148,14 +175,62 @@ export function Shell(props: {
             onClick={closeTransientMenus}
             title="Search will be added later"
           />
-          <IconButton
-            icon="alerts"
-            label="Alerts"
-            badge={0}
-            muted
-            onClick={closeTransientMenus}
-            title="Notifications API planned"
-          />
+          <div className="relative">
+            <IconButton
+              icon="alerts"
+              label="Alerts"
+              badge={notifications.length}
+              muted={notifications.length === 0}
+              onClick={() => {
+                setNotificationsOpen((open) => !open);
+                setHelpMenuOpen(false);
+                setUserMenuOpen(false);
+                setFeatureMenuMode(null);
+              }}
+              title={
+                notifications.length
+                  ? `${notifications.length} notification${notifications.length === 1 ? "" : "s"}`
+                  : "No notifications"
+              }
+            />
+            {notificationsOpen ? (
+              <div className="shell-menu absolute right-0 top-[calc(100%+0.5rem)] z-[80] grid min-w-80 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-900/20 max-[680px]:left-0 max-[680px]:right-auto">
+                {notifications.length === 0 ? (
+                  <p className="m-0 px-2 py-3 text-sm text-slate-500">No active notifications.</p>
+                ) : (
+                  notifications.map((note) => (
+                    <div key={note.id} className="rounded-2xl bg-slate-50 p-3 text-left">
+                      <strong className="block text-sm text-slate-950">{note.title}</strong>
+                      <p className="mt-1 mb-3 text-sm leading-5 text-slate-500">{note.body}</p>
+                      <div className="button-row">
+                        {note.actionUrl ? (
+                          <button
+                            onClick={() => {
+                              closeTransientMenus();
+                              navigate(note.actionUrl!);
+                            }}
+                          >
+                            Open
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => {
+                            void client.acknowledgeNotification(note.id).then(() =>
+                              setNotifications((current) =>
+                                current.filter((item) => item.id !== note.id)
+                              )
+                            );
+                          }}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+          </div>
           <div className="relative">
             <IconButton
               icon="help"
@@ -163,6 +238,7 @@ export function Shell(props: {
               onClick={() => {
                 setHelpMenuOpen((open) => !open);
                 setUserMenuOpen(false);
+                setNotificationsOpen(false);
                 setFeatureMenuMode(null);
               }}
             />
@@ -181,6 +257,7 @@ export function Shell(props: {
               onClick={() => {
                 setUserMenuOpen((open) => !open);
                 setHelpMenuOpen(false);
+                setNotificationsOpen(false);
                 setFeatureMenuMode(null);
               }}
             >

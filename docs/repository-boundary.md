@@ -38,6 +38,7 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
   release-input/
   release-input.json
   control-plane.oci.tar.zst
+  appliance-metadata-bundle-<product-version>.0.tar.zst
   appliance-chart-<version>.tgz
   argo-workflows-chart-<version>.tgz
   argo-crds/
@@ -57,6 +58,9 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
 - product version, source revision, build identity, creation time, and schema version
 - digest and size of every file
 - control-plane image digest and supported architectures
+- appliance metadata-bundle archive path, digest, size, metadata version,
+  compatible software version, top-level directory name, and validation
+  evidence
 - Argo controller/executor image digests and supported architectures when the
   Argo workflow engine is enabled in the release-input set
 - chart version, application version, and required values-schema version
@@ -71,7 +75,16 @@ The set is signed and immutable. Rebuilding any member creates a new candidate i
 
 ## Release Output Contract
 
-`appliance-release` turns one accepted input set into one complete air-gap bundle containing supported-host package prerequisites, K3s, K3s platform images, product/dependency OCI images, chart, installer, schemas, scanner data, notices, SBOMs, provenance, and checksums.
+`appliance-release` turns one accepted input set into one complete air-gap bundle containing supported-host package prerequisites, K3s, K3s platform images, product/dependency OCI images, chart, installer, schemas, the separate appliance metadata-bundle artifact, scanner data, notices, SBOMs, provenance, and checksums.
+
+The appliance metadata bundle is a directory tree packaged as a compressed
+archive, for example `appliance-metadata-bundle-4.3.2.0.tar.zst` containing
+`appliance-metadata-bundle-4.3.2.0/`. The archive remains a separate file inside
+the final bundle and is listed in the signed release manifest with its own
+path, size, digest, metadata version, compatible software version, and top-level
+directory name. It may also be embedded or mounted by product components for
+runtime convenience, but that does not replace the separate signed-bundle
+artifact contract.
 
 There is no connected production package in v1. A machine with internet access may install the same air-gap bundle, but installation and runtime never fetch missing components or switch behavior based on connectivity.
 

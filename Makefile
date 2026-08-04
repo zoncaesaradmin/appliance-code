@@ -87,7 +87,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-host-packages package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -288,6 +288,13 @@ package-host-packages:
 		--out-dir "$$out_dir" \
 		$${OS_VERSION:+--os-version "$${OS_VERSION}"} \
 		$${ARCH:+--arch "$${ARCH}"}
+
+## package-metadata-bundle: generate the base appliance metadata-bundle archive.
+package-metadata-bundle:
+	@bash ./scripts/package/generate-metadata-bundle.sh \
+		$${SOFTWARE_VERSION:+--software-version "$${SOFTWARE_VERSION}"} \
+		$${METADATA_REVISION:+--metadata-revision "$${METADATA_REVISION}"} \
+		--out-dir "$${OUT_DIR:-$(CURDIR)/.run/metadata-bundle}"
 
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.

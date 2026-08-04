@@ -93,6 +93,15 @@ const (
 	PermSystemOperate = "system.operate"
 	PermAuditRead     = "audit.read"
 	PermAuditExport   = "audit.export"
+
+	PermLicensingRead            = "licensing.read"
+	PermLicensingManage          = "licensing.manage"
+	PermMetadataRead             = "metadata.read"
+	PermMetadataManage           = "metadata.manage"
+	PermProfilesRead             = "profiles.read"
+	PermProfilesActivate         = "profiles.activate"
+	PermNotificationsRead        = "notifications.read"
+	PermNotificationsAcknowledge = "notifications.acknowledge"
 )
 
 // AllPermissions is the complete published v1 permission catalog.
@@ -156,6 +165,15 @@ var AllPermissions = []storage.Permission{
 	{Name: PermSystemOperate, Description: "Perform system operations"},
 	{Name: PermAuditRead, Description: "Read audit events"},
 	{Name: PermAuditExport, Description: "Export audit events"},
+
+	{Name: PermLicensingRead, Description: "Read appliance licensing status and entitlements"},
+	{Name: PermLicensingManage, Description: "Import licenses and accept base entitlements"},
+	{Name: PermMetadataRead, Description: "Read active appliance metadata bundle status"},
+	{Name: PermMetadataManage, Description: "Validate, install, or roll back appliance metadata bundles"},
+	{Name: PermProfilesRead, Description: "Read appliance profile catalog from the active metadata bundle"},
+	{Name: PermProfilesActivate, Description: "Validate and activate appliance profiles"},
+	{Name: PermNotificationsRead, Description: "Read system notifications"},
+	{Name: PermNotificationsAcknowledge, Description: "Acknowledge system notifications"},
 }
 
 func allPermissionNames() []string {
@@ -203,6 +221,8 @@ var BuiltInRoles = []BuiltInRole{
 			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRead,
+			PermNotificationsRead,
+			PermLicensingRead,
 		},
 	},
 	{

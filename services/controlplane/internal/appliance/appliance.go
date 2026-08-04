@@ -167,6 +167,31 @@ func ResolveProfileWithCatalog(name string, catalog ProfileCatalog) (ResolvedPro
 	return ResolvedProfile{Name: profile, Capabilities: set}, nil
 }
 
+// IsKnownCapability reports whether capability is in the published catalog.
+func IsKnownCapability(capability Capability) bool {
+	_, ok := capabilityCatalog[capability]
+	return ok
+}
+
+// KnownCapabilities returns every published capability in stable order.
+func KnownCapabilities() []Capability {
+	names := make([]Capability, 0, len(capabilityCatalog))
+	for capability := range capabilityCatalog {
+		names = append(names, capability)
+	}
+	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
+	return names
+}
+
+// CapabilityDependencies returns direct dependencies for a capability.
+func CapabilityDependencies(capability Capability) ([]Capability, bool) {
+	def, ok := capabilityCatalog[capability]
+	if !ok {
+		return nil, false
+	}
+	return append([]Capability(nil), def.Dependencies...), true
+}
+
 func cloneProfileCatalog(catalog ProfileCatalog) ProfileCatalog {
 	cloned := make(ProfileCatalog, len(catalog))
 	for profile, definition := range catalog {

@@ -355,6 +355,10 @@
         "dataDir": {
           "type": "string",
           "minLength": 1
+        },
+        "metadataBundlesHostPath": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

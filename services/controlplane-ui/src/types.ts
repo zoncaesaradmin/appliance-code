@@ -193,3 +193,101 @@ export interface Job {
 export interface ListResponse<T> {
   items: T[];
 }
+
+export interface LicensingStatus {
+  state: "unresolved" | "base_free" | "licensed" | string;
+  resolved: boolean;
+  profileActivationAvailable: boolean;
+  entitledCapabilities: string[];
+  acceptedAt?: string;
+  summary?: Record<string, unknown>;
+}
+
+export interface ApplianceSetupState {
+  activeProfile: string;
+  desiredProfile?: string;
+  activationStatus?: string;
+  activeMetadataVersion?: string;
+  previousMetadataVersion?: string;
+  licensingUnresolved: boolean;
+  licensingState: string;
+  profileActivationAvailable: boolean;
+  metadataBundleManagementAvailable: boolean;
+  blockingSetupActions: string[];
+  alertNotificationIds: string[];
+}
+
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  severity: string;
+  actionUrl?: string;
+  createdAt: string;
+}
+
+export interface ApplianceCapabilityInfo {
+  id: string;
+  displayName?: string;
+  dependencies: string[];
+  conflicts?: string[];
+  requiredArtifacts?: string[];
+  requiredEntitlement?: string;
+}
+
+export interface ApplianceProfile {
+  id: string;
+  displayName: string;
+  description: string;
+  builtIn: boolean;
+  active: boolean;
+  capabilities: string[];
+  metadataVersion?: string;
+}
+
+export interface ProfileValidationGroup {
+  name: string;
+  ok: boolean;
+  message?: string;
+  errors?: string[];
+}
+
+export interface ProfileValidationResult {
+  profileId: string;
+  metadataVersion?: string;
+  ok: boolean;
+  groups: ProfileValidationGroup[];
+}
+
+export interface ProfileActivationResult {
+  profileId: string;
+  status: string;
+  message: string;
+  requiresRestart: boolean;
+}
+
+export interface ProfileActivationResponse {
+  activation: ProfileActivationResult;
+  validation: ProfileValidationResult;
+}
+
+export interface ApplianceMetadataBundleStatus {
+  softwareVersion: string;
+  activeMetadataVersion: string;
+  activeDigest?: string;
+  previousMetadataVersion?: string;
+  previousDigest?: string;
+  directoryName?: string;
+  canRollback: boolean;
+}
+
+export interface MetadataBundleValidationResult {
+  ok: boolean;
+  groups: ProfileValidationGroup[];
+}
+
+export interface MetadataBundleInstallResponse {
+  status: ApplianceMetadataBundleStatus;
+  validation: MetadataBundleValidationResult;
+}

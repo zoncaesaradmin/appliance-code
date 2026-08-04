@@ -14,7 +14,11 @@ import type {
   DNSRecordsResult,
   Health,
   Job,
+  LicensingStatus,
   LoginResponse,
+  NotificationItem,
+  ProfileActivationResponse,
+  ProfileValidationResult,
   RegistryDescriptor,
   RegistryGrant,
   Session,
@@ -24,7 +28,13 @@ import type {
   UpsertDNSRecordRequest,
   Version,
   WorkProfile,
-  Workspace
+  Workspace,
+  ApplianceCapabilityInfo,
+  ApplianceProfile,
+  ApplianceMetadataBundleStatus,
+  ApplianceSetupState,
+  MetadataBundleInstallResponse,
+  MetadataBundleValidationResult
 } from "./types";
 
 export class ApiError extends Error {
@@ -88,6 +98,21 @@ export interface ControlPlaneClient {
   listRegistryGrants(): Promise<RegistryGrant[]>;
   createRegistryGrant(request: CreateRegistryGrantRequest): Promise<RegistryGrant>;
   deleteRegistryGrant(id: string): Promise<void>;
+  getLicensingStatus(): Promise<LicensingStatus>;
+  getLicensingEntitlements(): Promise<string[]>;
+  acceptBaseEntitlement(): Promise<LicensingStatus>;
+  importLicense(document: string): Promise<LicensingStatus>;
+  getApplianceSetupState(): Promise<ApplianceSetupState>;
+  listNotifications(): Promise<NotificationItem[]>;
+  acknowledgeNotification(id: string): Promise<void>;
+  listApplianceCapabilities(): Promise<ApplianceCapabilityInfo[]>;
+  listApplianceProfiles(): Promise<ApplianceProfile[]>;
+  validateApplianceProfile(id: string): Promise<ProfileValidationResult>;
+  activateApplianceProfile(id: string): Promise<ProfileActivationResponse>;
+  getMetadataBundleStatus(): Promise<ApplianceMetadataBundleStatus>;
+  validateMetadataBundle(file: File, signature?: string): Promise<MetadataBundleValidationResult>;
+  installMetadataBundle(file: File, signature?: string): Promise<MetadataBundleInstallResponse>;
+  rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus>;
 }
 
 type RequestOptions = {
@@ -325,6 +350,101 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     await this.request(`/api/v1/registry/grants/${encodeURIComponent(id)}`, {
       method: "DELETE"
     });
+  }
+
+  async getLicensingStatus(): Promise<LicensingStatus> {
+    return this.request("/api/v1/licensing/status");
+  }
+
+  async getLicensingEntitlements(): Promise<string[]> {
+    const response = await this.request<{ capabilities: string[] }>("/api/v1/licensing/entitlements");
+    return response.capabilities;
+  }
+
+  async acceptBaseEntitlement(): Promise<LicensingStatus> {
+    return this.request("/api/v1/licensing/base-entitlement/accept", { method: "POST" });
+  }
+
+  async importLicense(document: string): Promise<LicensingStatus> {
+    return this.request("/api/v1/licensing/license", {
+      method: "PUT",
+      body: { document }
+    });
+  }
+
+  async getApplianceSetupState(): Promise<ApplianceSetupState> {
+    return this.request("/api/v1/appliance/setup-state");
+  }
+
+  async listNotifications(): Promise<NotificationItem[]> {
+    const response = await this.request<{ items: NotificationItem[] }>("/api/v1/notifications");
+    return response.items;
+  }
+
+  async acknowledgeNotification(id: string): Promise<void> {
+    await this.request(`/api/v1/notifications/${encodeURIComponent(id)}/acknowledge`, {
+      method: "POST"
+    });
+  }
+
+  async listApplianceCapabilities(): Promise<ApplianceCapabilityInfo[]> {
+    const response = await this.request<{ items: ApplianceCapabilityInfo[] }>(
+      "/api/v1/appliance/capabilities"
+    );
+    return response.items;
+  }
+
+  async listApplianceProfiles(): Promise<ApplianceProfile[]> {
+    const response = await this.request<{ items: ApplianceProfile[] }>("/api/v1/appliance/profiles");
+    return response.items;
+  }
+
+  async validateApplianceProfile(id: string): Promise<ProfileValidationResult> {
+    return this.request(`/api/v1/appliance/profiles/${encodeURIComponent(id)}/validate`, {
+      method: "POST"
+    });
+  }
+
+  async activateApplianceProfile(id: string): Promise<ProfileActivationResponse> {
+    return this.request(`/api/v1/appliance/profiles/${encodeURIComponent(id)}/activate`, {
+      method: "POST"
+    });
+  }
+
+  async getMetadataBundleStatus(): Promise<ApplianceMetadataBundleStatus> {
+    return this.request("/api/v1/appliance/metadata-bundle");
+  }
+
+  async validateMetadataBundle(file: File, signature = "offline-dev"): Promise<MetadataBundleValidationResult> {
+    return this.uploadMetadataBundle("/api/v1/appliance/metadata-bundle/validate", file, signature);
+  }
+
+  async installMetadataBundle(file: File, signature = "offline-dev"): Promise<MetadataBundleInstallResponse> {
+    return this.uploadMetadataBundle("/api/v1/appliance/metadata-bundle/install", file, signature);
+  }
+
+  async rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus> {
+    return this.request("/api/v1/appliance/metadata-bundle/rollback", { method: "POST" });
+  }
+
+  private async uploadMetadataBundle<T>(path: string, file: File, signature: string): Promise<T> {
+    const form = new FormData();
+    form.append("archive", file);
+    form.append("signature", signature);
+    const auth = loadAuth();
+    const headers: Record<string, string> = {};
+    if (auth?.accessToken) {
+      headers.Authorization = `Bearer ${auth.accessToken}`;
+    }
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: form
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return (await response.json()) as T;
   }
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {

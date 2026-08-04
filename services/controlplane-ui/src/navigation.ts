@@ -108,15 +108,21 @@ export const MODES: Mode[] = [
         icon: "status"
       },
       {
+        label: "Metadata Bundle",
+        path: "/admin/metadata-bundle",
+        description: "Install and roll back signed appliance metadata bundles",
+        icon: "profiles"
+      },
+      {
         label: "Profiles",
         path: "/admin/profiles",
-        description: "Profile management entry points for future rollout",
+        description: "Activate profiles from the active metadata bundle",
         icon: "profiles"
       },
       {
         label: "Licensing",
         path: "/admin/licensing",
-        description: "License and entitlement placeholder",
+        description: "License and entitlement management",
         icon: "license"
       }
     ],

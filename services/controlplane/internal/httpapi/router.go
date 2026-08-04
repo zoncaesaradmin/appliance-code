@@ -32,6 +32,11 @@ type Deps struct {
 	LANDNSPublishH   *LANDNSPublishHandlers
 	BuildsH          *BuildHandlers
 	DevflowsH        *DeveloperWorkflowHandlers
+	LicensingH       *LicensingHandlers
+	SetupStateH      *SetupStateHandlers
+	NotificationsH   *NotificationHandlers
+	ProfilesH        *ProfileHandlers
+	MetadataH        *MetadataBundleHandlers
 	MCPHandler       http.Handler
 	ProxiedServices  []ServiceProxyRegistration
 }
@@ -174,6 +179,102 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing auth handlers")
 			}
 			return w.authenticatedOnly(deps.AuthH.Session), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/licensing/status", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.LicensingH == nil {
+				return nil, fmt.Errorf("missing licensing handlers")
+			}
+			return w.protect(roles.PermLicensingRead, deps.LicensingH.Status), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/licensing/entitlements", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.LicensingH == nil {
+				return nil, fmt.Errorf("missing licensing handlers")
+			}
+			return w.protect(roles.PermLicensingRead, deps.LicensingH.Entitlements), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "PUT /api/v1/licensing/license", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.LicensingH == nil {
+				return nil, fmt.Errorf("missing licensing handlers")
+			}
+			return w.protect(roles.PermLicensingManage, deps.LicensingH.ImportLicense), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/licensing/base-entitlement/accept", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.LicensingH == nil {
+				return nil, fmt.Errorf("missing licensing handlers")
+			}
+			return w.protect(roles.PermLicensingManage, deps.LicensingH.AcceptBase), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/setup-state", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.SetupStateH == nil {
+				return nil, fmt.Errorf("missing setup-state handlers")
+			}
+			return w.authenticatedOnly(deps.SetupStateH.Get), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/notifications", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.NotificationsH == nil {
+				return nil, fmt.Errorf("missing notification handlers")
+			}
+			return w.protect(roles.PermNotificationsRead, deps.NotificationsH.List), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/notifications/{id}/acknowledge", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.NotificationsH == nil {
+				return nil, fmt.Errorf("missing notification handlers")
+			}
+			return w.protect(roles.PermNotificationsAcknowledge, deps.NotificationsH.Acknowledge), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/capabilities", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.ProfilesH == nil {
+				return nil, fmt.Errorf("missing profile handlers")
+			}
+			return w.protect(roles.PermProfilesRead, deps.ProfilesH.ListCapabilities), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/profiles", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.ProfilesH == nil {
+				return nil, fmt.Errorf("missing profile handlers")
+			}
+			return w.protect(roles.PermProfilesRead, deps.ProfilesH.List), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/profiles/{profileId}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.ProfilesH == nil {
+				return nil, fmt.Errorf("missing profile handlers")
+			}
+			return w.protect(roles.PermProfilesRead, deps.ProfilesH.Get), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/appliance/profiles/{profileId}/validate", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.ProfilesH == nil {
+				return nil, fmt.Errorf("missing profile handlers")
+			}
+			return w.protect(roles.PermProfilesActivate, deps.ProfilesH.Validate), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/appliance/profiles/{profileId}/activate", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.ProfilesH == nil {
+				return nil, fmt.Errorf("missing profile handlers")
+			}
+			return w.protect(roles.PermProfilesActivate, deps.ProfilesH.Activate), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/metadata-bundle", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.MetadataH == nil {
+				return nil, fmt.Errorf("missing metadata-bundle handlers")
+			}
+			return w.protect(roles.PermMetadataRead, deps.MetadataH.Status), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/appliance/metadata-bundle/validate", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.MetadataH == nil {
+				return nil, fmt.Errorf("missing metadata-bundle handlers")
+			}
+			return w.protect(roles.PermMetadataManage, deps.MetadataH.Validate), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/appliance/metadata-bundle/install", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.MetadataH == nil {
+				return nil, fmt.Errorf("missing metadata-bundle handlers")
+			}
+			return w.protect(roles.PermMetadataManage, deps.MetadataH.Install), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/appliance/metadata-bundle/rollback", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.MetadataH == nil {
+				return nil, fmt.Errorf("missing metadata-bundle handlers")
+			}
+			return w.protect(roles.PermMetadataManage, deps.MetadataH.Rollback), nil
 		}},
 		{capability: appliance.CapabilityBase, pattern: "/internal/auth/check", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.ForwardAuthH == nil {

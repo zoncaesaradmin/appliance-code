@@ -1,0 +1,15 @@
+apiVersion: metadata.zon/v1
+kind: ApplianceMetadataBundle
+schemaVersion: 1
+metadata:
+  softwareVersion: "0.0.0-dev"
+  metadataVersion: "0.0.0-dev.0"
+  createdAt: "2026-08-03T00:00:00Z"
+  vendor: zon
+sections:
+  - profiles
+  - capabilities
+  - activation
+  - ui
+  - notifications
+  - mcp-tools

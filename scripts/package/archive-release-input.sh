@@ -74,6 +74,9 @@ Options:
   --provenance-dir DIR             Existing provenance directory to copy.
   --notices-dir DIR                Existing notices directory to copy.
   --tests-dir DIR                  Existing tests directory to copy.
+  --metadata-bundle PATH             Appliance metadata-bundle archive
+                                   (appliance-metadata-bundle-X.Y.Z.N.tar.zst).
+                                   Defaults to generating from metadata-bundle/base.
   --help                           Show this help.
 USAGE
 }
@@ -120,6 +123,7 @@ SBOM_DIR=""
 PROVENANCE_DIR=""
 NOTICES_DIR=""
 TESTS_DIR=""
+METADATA_BUNDLE=""
 SUPPORTED_UPGRADE_SOURCES=()
 
 while [[ $# -gt 0 ]]; do
@@ -262,6 +266,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tests-dir)
       TESTS_DIR="${2:-}"
+      shift 2
+      ;;
+    --metadata-bundle)
+      METADATA_BUNDLE="${2:-}"
       shift 2
       ;;
     --help|-h)
@@ -613,10 +621,24 @@ CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
 
+if [[ -z "${METADATA_BUNDLE}" ]]; then
+  METADATA_BUNDLE="$("${SCRIPT_DIR}/generate-metadata-bundle.sh" --software-version "${CODE_VERSION}" --out-dir "${REPO_ROOT}/.run/metadata-bundle")"
+fi
+if [[ ! -f "${METADATA_BUNDLE}" ]]; then
+  echo "archive-release-input: metadata bundle not found: ${METADATA_BUNDLE}" >&2
+  exit 1
+fi
+METADATA_BUNDLE_BASENAME="$(basename "${METADATA_BUNDLE}")"
+if [[ ! "${METADATA_BUNDLE_BASENAME}" =~ ^appliance-metadata-bundle-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\.tar\.zst$ ]]; then
+  echo "archive-release-input: metadata bundle basename must be appliance-metadata-bundle-X.Y.Z.N.tar.zst, got ${METADATA_BUNDLE_BASENAME}" >&2
+  exit 1
+fi
+
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
+cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
 if bool_true "${HOST_MDNS_ENABLED}"; then
   copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
 fi
@@ -709,6 +731,7 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
     "${CHART_ARCHIVE}" \
     "${ZOT_CHART_ARCHIVE}" \
     "${DNS_CHART_ARCHIVE}" \
+    "${METADATA_BUNDLE_BASENAME}" \
     "${CONFIG_SCHEMA_BASENAME}" \
     "${COMPATIBILITY_BASENAME}"
   do
@@ -842,6 +865,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "zotChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" "${ZOT_CHART_ARCHIVE}")${OPTIONAL_ZOT_IMAGE_JSON},
     "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON},
+    "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
     "checksums": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}" "${CHECKSUMS_BASENAME}"),

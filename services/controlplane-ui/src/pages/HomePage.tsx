@@ -3,7 +3,7 @@ import { Card, EmptyState, PageFrame, StatCard } from "../components";
 import { client } from "../lib/api";
 import { capabilityBadge } from "../lib/format";
 import { navigate } from "../lib/navigate";
-import type { ApplianceIdentity, Session, Version } from "../types";
+import type { ApplianceIdentity, ApplianceSetupState, Session, Version } from "../types";
 
 export function HomePage(props: {
   pathname: string;
@@ -13,17 +13,20 @@ export function HomePage(props: {
   const [version, setVersion] = useState<Version | null>(null);
   const [health, setHealth] = useState("unknown");
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
+  const [setupState, setSetupState] = useState<ApplianceSetupState | null>(null);
 
   useEffect(() => {
     void (async () => {
-      const [nextVersion, nextHealth, nextIdentity] = await Promise.all([
+      const [nextVersion, nextHealth, nextIdentity, nextSetup] = await Promise.all([
         client.getVersion().catch(() => null),
         client.getReady().then((value) => value.status).catch(() => "degraded"),
-        client.getIdentity().catch(() => null)
+        client.getIdentity().catch(() => null),
+        client.getApplianceSetupState().catch(() => null)
       ]);
       setVersion(nextVersion);
       setHealth(nextHealth);
       setIdentity(nextIdentity);
+      setSetupState(nextSetup);
     })();
   }, []);
 
@@ -44,6 +47,14 @@ export function HomePage(props: {
         </Card>
       ) : (
         <div className="stack">
+          {setupState?.licensingUnresolved ? (
+            <Card title="Licensing setup required" subtitle="Complete licensing after first login">
+              <EmptyState message="Licensing is not configured. Configure licensing to unlock entitled capabilities, or continue with the base entitlement." />
+              <button className="button button--primary" onClick={() => navigate("/admin/licensing")}>
+                Open Licensing
+              </button>
+            </Card>
+          ) : null}
           <div className="stats-grid">
             <StatCard label="Readiness" value={health} tone={health === "ready" ? "success" : "neutral"} />
             <StatCard label="Capabilities" value={String(props.capabilities.length)} />

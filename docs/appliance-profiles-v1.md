@@ -12,6 +12,10 @@ This is a control-plane behavior contract. It does not introduce multiple
 bundle variants for v1. The appliance still ships as one complete signed
 offline bundle.
 
+The post-install metadata-bundle, profile catalog, licensing, notification, and
+profile activation plan is captured in
+[Appliance Metadata Bundle, Profiles, And Licensing Plan](profile-license-management-plan.md).
+
 ## Terminology
 
 - `appliance profile`: a product-level selection a user or installer makes
@@ -72,17 +76,27 @@ The initial v1 appliance profiles are:
 
 | Appliance profile | Default | Resolved appliance capabilities |
 | --- | --- | --- |
-| `core` | Yes | `base`, `workflows` |
-| `builder` | No | `base`, `workflows`, `build`, `artifact` |
-| `storage` | No | `base`, `artifact` |
-| `landns` | No | `base`, `dns` |
-| `storage-landns` | No | `base`, `artifact`, `dns` |
-| `builder-landns` | No | `base`, `workflows`, `build`, `artifact`, `dns` |
-| `builder-storage-landns` | No | `base`, `workflows`, `build`, `artifact`, `dns` |
+| `core` | Yes (default base profile) | `base`, `host`, `workflows` |
+| `builder` | No | `base`, `host`, `workflows`, `build`, `artifact` |
+| `storage` | No | `base`, `host`, `artifact` |
+| `landns` | No | `base`, `host`, `dns` |
+| `storage-landns` | No | `base`, `host`, `artifact`, `dns` |
+| `builder-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
+| `builder-storage-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
 
 Notes:
 
-- `core` is the default v1 product profile.
+- `core` is the default v1 product profile (also called the default base profile
+  in installer messaging). Display name in the Admin UI may show as
+  `Base (core)`.
+- Licensing is **never** required or checked during installation. After first
+  login the UI shows an unresolved-licensing alert until an administrator
+  imports an offline license or accepts the base/free entitlement. See
+  [Appliance Metadata Bundle, Profiles, And Licensing Plan](profile-license-management-plan.md).
+- Install-time profile selection is limited to these built-in profiles.
+  Post-install profile additions and profile-rule changes come from a signed
+  appliance metadata bundle for the exact running software version; administrators
+  do not create or edit profile definitions directly in v1.
 - `builder-landns` is builder ∪ landns. `builder-storage-landns` is the
   product name for builder ∪ storage/registry ∪ dns; both resolve to the
   same capability set because storage/registry are already covered by

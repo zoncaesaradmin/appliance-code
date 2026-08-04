@@ -12,7 +12,11 @@ import type {
   DNSRecordsResult,
   Health,
   Job,
+  LicensingStatus,
   LoginResponse,
+  NotificationItem,
+  ProfileActivationResponse,
+  ProfileValidationResult,
   RegistryDescriptor,
   RegistryGrant,
   Session,
@@ -22,7 +26,13 @@ import type {
   UpsertDNSRecordRequest,
   Version,
   WorkProfile,
-  Workspace
+  Workspace,
+  ApplianceCapabilityInfo,
+  ApplianceProfile,
+  ApplianceMetadataBundleStatus,
+  ApplianceSetupState,
+  MetadataBundleInstallResponse,
+  MetadataBundleValidationResult
 } from "./types";
 
 function now(): string {
@@ -47,6 +57,10 @@ type MockState = {
   latestJob: Job | null;
   repositories: string[];
   grants: RegistryGrant[];
+  licensingState: "unresolved" | "base_free" | "licensed";
+  entitledCapabilities: string[];
+  profiles: ApplianceProfile[];
+  acknowledgedNotifications: string[];
 };
 
 const mockState: MockState = {
@@ -57,7 +71,19 @@ const mockState: MockState = {
     username: "admin",
     domain: "local",
     authMethod: "password",
-    permissions: ["dns.records.write", "artifacts.write", "artifacts.read"]
+    permissions: [
+      "dns.records.write",
+      "artifacts.write",
+      "artifacts.read",
+      "licensing.read",
+      "licensing.manage",
+      "metadata.read",
+      "metadata.manage",
+      "profiles.read",
+      "profiles.activate",
+      "notifications.read",
+      "notifications.acknowledge"
+    ]
   },
   tokens: [
     {
@@ -137,7 +163,20 @@ const mockState: MockState = {
       actions: ["pull", "push"],
       createdAt: now()
     }
-  ]
+  ],
+  licensingState: "unresolved",
+  entitledCapabilities: [],
+  profiles: [
+    {
+      id: "core",
+      displayName: "Base (core)",
+      description: "Default base appliance profile.",
+      builtIn: true,
+      active: true,
+      capabilities: ["base", "host", "workflows"]
+    }
+  ],
+  acknowledgedNotifications: []
 };
 
 mockState.currentWorkspaceId = mockState.workspaces[0]?.id ?? null;
@@ -406,5 +445,144 @@ export class MockControlPlaneClient {
 
   async deleteRegistryGrant(id: string): Promise<void> {
     mockState.grants = mockState.grants.filter((grant) => grant.id !== id);
+  }
+
+  async getLicensingStatus(): Promise<LicensingStatus> {
+    return {
+      state: mockState.licensingState,
+      resolved: mockState.licensingState !== "unresolved",
+      profileActivationAvailable: mockState.licensingState !== "unresolved",
+      entitledCapabilities: mockState.entitledCapabilities
+    };
+  }
+
+  async getLicensingEntitlements(): Promise<string[]> {
+    return mockState.entitledCapabilities;
+  }
+
+  async acceptBaseEntitlement(): Promise<LicensingStatus> {
+    mockState.licensingState = "base_free";
+    mockState.entitledCapabilities = ["base", "host", "workflows"];
+    return this.getLicensingStatus();
+  }
+
+  async importLicense(document: string): Promise<LicensingStatus> {
+    void document;
+    mockState.licensingState = "licensed";
+    mockState.entitledCapabilities = ["base", "host", "workflows", "build", "artifact", "dns"];
+    return this.getLicensingStatus();
+  }
+
+  async getApplianceSetupState(): Promise<ApplianceSetupState> {
+    return {
+      activeProfile: "core",
+      activeMetadataVersion: "0.0.0.0",
+      licensingUnresolved: mockState.licensingState === "unresolved",
+      licensingState: mockState.licensingState,
+      profileActivationAvailable: mockState.licensingState !== "unresolved",
+      metadataBundleManagementAvailable: true,
+      blockingSetupActions: mockState.licensingState === "unresolved" ? ["licensing"] : [],
+      alertNotificationIds:
+        mockState.licensingState === "unresolved" &&
+        !mockState.acknowledgedNotifications.includes("licensing-unresolved")
+          ? ["licensing-unresolved"]
+          : []
+    };
+  }
+
+  async listNotifications(): Promise<NotificationItem[]> {
+    if (
+      mockState.licensingState !== "unresolved" ||
+      mockState.acknowledgedNotifications.includes("licensing-unresolved")
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: "licensing-unresolved",
+        kind: "licensing",
+        title: "Licensing is not configured",
+        body: "Configure licensing to unlock entitled capabilities, or continue with the base entitlement.",
+        severity: "warning",
+        actionUrl: "/admin/licensing",
+        createdAt: now()
+      }
+    ];
+  }
+
+  async acknowledgeNotification(id: string): Promise<void> {
+    mockState.acknowledgedNotifications = [...mockState.acknowledgedNotifications, id];
+  }
+
+  async listApplianceCapabilities(): Promise<ApplianceCapabilityInfo[]> {
+    return [
+      { id: "base", dependencies: [] },
+      { id: "host", dependencies: ["base"] },
+      { id: "workflows", dependencies: ["base"] },
+      { id: "artifact", dependencies: ["base"] },
+      { id: "build", dependencies: ["base", "workflows", "artifact"] },
+      { id: "dns", dependencies: ["base"] }
+    ];
+  }
+
+  async listApplianceProfiles(): Promise<ApplianceProfile[]> {
+    return mockState.profiles;
+  }
+
+  async validateApplianceProfile(id: string): Promise<ProfileValidationResult> {
+    return {
+      profileId: id,
+      ok: true,
+      groups: [
+        { name: "profile_definition", ok: true, message: "Profile definition is valid" },
+        { name: "bundle_availability", ok: true, message: "Required bundle artifacts are present" },
+        {
+          name: "license_entitlement",
+          ok: mockState.licensingState !== "unresolved",
+          message: "License entitlement allows requested capabilities"
+        }
+      ]
+    };
+  }
+
+  async activateApplianceProfile(id: string): Promise<ProfileActivationResponse> {
+    const validation = await this.validateApplianceProfile(id);
+    return {
+      activation: {
+        profileId: id,
+        status: "pending_restart",
+        message: `Profile ${id} accepted; restart required.`,
+        requiresRestart: true
+      },
+      validation
+    };
+  }
+
+  async getMetadataBundleStatus(): Promise<ApplianceMetadataBundleStatus> {
+    return {
+      softwareVersion: "0.0.0-dev",
+      activeMetadataVersion: "0.0.0.0",
+      canRollback: false,
+      directoryName: "appliance-metadata-bundle-0.0.0.0"
+    };
+  }
+
+  async validateMetadataBundle(_file: File, _signature?: string): Promise<MetadataBundleValidationResult> {
+    return {
+      ok: true,
+      groups: [{ name: "schema", ok: true, message: "Schema is valid" }]
+    };
+  }
+
+  async installMetadataBundle(file: File, signature?: string): Promise<MetadataBundleInstallResponse> {
+    const validation = await this.validateMetadataBundle(file, signature);
+    return {
+      status: await this.getMetadataBundleStatus(),
+      validation
+    };
+  }
+
+  async rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus> {
+    return this.getMetadataBundleStatus();
   }
 }

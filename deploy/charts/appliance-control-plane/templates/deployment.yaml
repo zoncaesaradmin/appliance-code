@@ -72,6 +72,8 @@ spec:
             {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.dataDir }}
+            - name: metadata-bundles
+              mountPath: {{ .Values.persistence.dataDir }}/metadata-bundles
             {{- end }}
             - name: keys
               mountPath: {{ .Values.persistence.dataDir }}/keys
@@ -91,6 +93,10 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "appliance-control-plane.fullname" . }}-data
+        - name: metadata-bundles
+          hostPath:
+            path: {{ .Values.persistence.metadataBundlesHostPath }}
+            type: DirectoryOrCreate
         {{- end }}
         - name: keys
           secret:

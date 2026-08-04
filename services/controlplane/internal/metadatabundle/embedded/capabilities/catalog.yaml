@@ -1,0 +1,49 @@
+capabilities:
+  base:
+    displayName: Base
+    requires: []
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.base
+    artifacts:
+      required: [control-plane-image, control-plane-chart]
+  host:
+    displayName: Host
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.host
+    artifacts:
+      required: [host-agent-image]
+  workflows:
+    displayName: Workflows
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.workflows
+    artifacts:
+      required: [workflow-templates]
+  build:
+    displayName: Build
+    requires: [base, host, workflows, artifact]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.build
+    artifacts:
+      required: [dev-build-image, workspace-provisioner-image, argo-workflow-templates]
+  artifact:
+    displayName: Artifact
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.artifact
+    artifacts:
+      required: [zot-image, appliance-registry-chart]
+  dns:
+    displayName: LAN DNS
+    requires: [base, host]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.dns
+    artifacts:
+      required: [coredns-image, appliance-dns-chart]

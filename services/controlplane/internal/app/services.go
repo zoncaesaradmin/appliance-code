@@ -19,7 +19,11 @@ import (
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/dnsrecords"
 	"appliance-code/services/controlplane/internal/keys"
+	"appliance-code/services/controlplane/internal/licensing"
 	"appliance-code/services/controlplane/internal/logging"
+	"appliance-code/services/controlplane/internal/metadatabundle"
+	"appliance-code/services/controlplane/internal/notifications"
+	"appliance-code/services/controlplane/internal/profiles"
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
@@ -66,6 +70,10 @@ type Services struct {
 	Devflows           *devflows.Service
 	BuilderGit         *buildergit.Service
 	DNS                *dnsrecords.Service
+	Licensing          *licensing.Service
+	Metadata           *metadatabundle.Service
+	Profiles           *profiles.Service
+	Notifications      *notifications.Service
 
 	Keys  *keys.Material
 	Audit *audit.Recorder
@@ -117,7 +125,17 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	auditStore := sqlite.NewAuditStore(db)
 	registryGrantStore := sqlite.NewRegistryGrantStore(db)
 	dnsRecordStore := sqlite.NewDNSRecordStore(db)
+	licensingStore := sqlite.NewLicensingStore(db)
+	metadataStore := sqlite.NewMetadataBundleStore(db)
 	recorder := audit.NewRecorder(auditStore)
+	licensingSvc := licensing.NewService(db, licensingStore, recorder)
+	metadataSvc, err := metadatabundle.NewService(db, metadataStore, recorder, cfg.DataDir)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("app: initializing metadata bundle: %w", err)
+	}
+	profilesSvc := profiles.NewService(db, licensingStore, licensingSvc, metadataSvc, recorder, string(resolved.Name), profiles.CompleteBundleChecker{})
+	notificationsSvc := notifications.NewService(licensingSvc, licensingStore)
 
 	var zotClient zotadapter.Client
 	var registryAuthorizer *registryauth.Authorizer
@@ -250,6 +268,10 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Devflows:           devflowsSvc,
 		BuilderGit:         builderGitSvc,
 		DNS:                dnsSvc,
+		Licensing:          licensingSvc,
+		Metadata:           metadataSvc,
+		Profiles:           profilesSvc,
+		Notifications:      notificationsSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 	}, nil
