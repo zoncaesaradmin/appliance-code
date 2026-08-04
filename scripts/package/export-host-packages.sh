@@ -113,7 +113,10 @@ capability_packages() {
       printf '%s\n' avahi-daemon avahi-utils libnss-mdns
       ;;
     wifi-ap|wifi_ap|wifap)
-      printf '%s\n' hostapd dnsmasq iw wireless-regdb
+      # Ship binaries only. The full "dnsmasq" Debian package installs and
+      # starts a stock unit on :53 which fights appliance-dns (hostNetwork).
+      # host-agentd invokes /usr/sbin/dnsmasq with appliance-owned config.
+      printf '%s\n' hostapd dnsmasq-base iw wireless-regdb
       ;;
     *)
       echo "export-host-packages: unknown capability: $1 (supported: mdns, wifi-ap)" >&2
