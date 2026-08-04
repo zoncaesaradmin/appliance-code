@@ -292,6 +292,22 @@ export interface MetadataBundleInstallResponse {
   validation: MetadataBundleValidationResult;
 }
 
+export interface HostInfo {
+  hostname: string;
+  operatingSystem: string;
+  kernelVersion?: string;
+  architecture: string;
+  containerHostname?: string;
+}
+
+export interface HostHealth {
+  status: string;
+  hostRootAccessible: boolean;
+  procMounted: boolean;
+  hostnameReadable: boolean;
+  osReleaseReadable: boolean;
+}
+
 export interface HostWifiAPStatus {
   desired: boolean;
   actual: string;

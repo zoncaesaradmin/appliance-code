@@ -1,5 +1,10 @@
 // Package wifiap implements host-side management WiFi access-point apply
 // and status for the appliance host agent daemon.
+//
+// The AP fixed IPv4 is ManagementAddress (https://10.42.0.1/). That address is
+// always a TLS SAN and must be published on the Traefik Service as an
+// externalIP so AP clients reach HTTPS on :443 — ServiceLB alone only covers
+// the node LAN address (see appliance-ctl helm.EnsureTraefikManagementExternalIPs).
 package wifiap
 
 import "context"

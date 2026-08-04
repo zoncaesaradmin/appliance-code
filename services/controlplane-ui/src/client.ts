@@ -35,6 +35,8 @@ import type {
   ApplianceSetupState,
   MetadataBundleInstallResponse,
   MetadataBundleValidationResult,
+  HostInfo,
+  HostHealth,
   HostWifiAPStatus,
   HostWifiAPApplyRequest,
   HostMDNSStatus,
@@ -117,6 +119,8 @@ export interface ControlPlaneClient {
   validateMetadataBundle(file: File, signature?: string): Promise<MetadataBundleValidationResult>;
   installMetadataBundle(file: File, signature?: string): Promise<MetadataBundleInstallResponse>;
   rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus>;
+  getHostInfo(): Promise<HostInfo>;
+  getHostHealth(): Promise<HostHealth>;
   getHostWifiAP(): Promise<HostWifiAPStatus>;
   applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus>;
   getHostMDNS(): Promise<HostMDNSStatus>;
@@ -433,6 +437,14 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus> {
     return this.request("/api/v1/appliance/metadata-bundle/rollback", { method: "POST" });
+  }
+
+  async getHostInfo(): Promise<HostInfo> {
+    return this.request("/api/v1/host/info");
+  }
+
+  async getHostHealth(): Promise<HostHealth> {
+    return this.request("/api/v1/host/health");
   }
 
   async getHostWifiAP(): Promise<HostWifiAPStatus> {

@@ -33,6 +33,8 @@ import type {
   ApplianceSetupState,
   MetadataBundleInstallResponse,
   MetadataBundleValidationResult,
+  HostInfo,
+  HostHealth,
   HostWifiAPStatus,
   HostWifiAPApplyRequest,
   HostMDNSStatus,
@@ -609,6 +611,26 @@ export class MockControlPlaneClient {
 
   async rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus> {
     return this.getMetadataBundleStatus();
+  }
+
+  async getHostInfo(): Promise<HostInfo> {
+    return {
+      hostname: "mock-host",
+      operatingSystem: "Ubuntu 24.04 LTS",
+      kernelVersion: "6.8.0-mock",
+      architecture: "amd64",
+      containerHostname: "host-agent"
+    };
+  }
+
+  async getHostHealth(): Promise<HostHealth> {
+    return {
+      status: "ok",
+      hostRootAccessible: true,
+      procMounted: true,
+      hostnameReadable: true,
+      osReleaseReadable: true
+    };
   }
 
   async getHostWifiAP(): Promise<HostWifiAPStatus> {

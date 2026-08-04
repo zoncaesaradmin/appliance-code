@@ -192,7 +192,8 @@ proxy). Notable Admin host configuration routes:
 
 | Browser route | UI surface | Downstream control-plane call(s) | Success behavior |
 | --- | --- | --- | --- |
-| `GET /admin/host-services` | `AdminHostServicesPage` | `GET /api/v1/host/mdns`; `GET /api/v1/host/wifi-ap` | HTML SPA shows status cards |
+| `GET /admin/host-services` | `AdminHostServicesPage` Connectivity tab | `GET /api/v1/appliance/identity`; `GET /api/v1/host/info`; `GET /api/v1/host/health`; `GET /api/v1/host/wifi-ap` | Host network + Wi-Fi AP cards; independent load so one failure does not block the others |
+| `GET /admin/host-services/mdns` | `AdminHostServicesPage` mDNS tab | `GET /api/v1/host/mdns` | mDNS status card |
 | Enable/Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | Card refresh with status JSON |
 | Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Card refresh; soft reasons such as `packages_missing` |
 | Disable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:false}` | Card refresh |
