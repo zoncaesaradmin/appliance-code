@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"appliance-code/services/hostagent/internal/host"
+	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/wifiap"
 )
 
@@ -24,11 +25,14 @@ type Bridge interface {
 	Health(ctx context.Context) (host.Health, error)
 	WifiAPStatus(ctx context.Context) (wifiap.Status, error)
 	WifiAPApply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error)
+	MDNSStatus(ctx context.Context) (mdns.Status, error)
+	MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error)
 }
 
 type Local struct {
 	Root string
 	Wifi wifiap.Controller
+	MDNS mdns.Controller
 }
 
 func (l Local) wifi() wifiap.Controller {
@@ -36,6 +40,13 @@ func (l Local) wifi() wifiap.Controller {
 		return l.Wifi
 	}
 	return wifiap.NewManager()
+}
+
+func (l Local) mdnsCtrl() mdns.Controller {
+	if l.MDNS != nil {
+		return l.MDNS
+	}
+	return mdns.NewManager()
 }
 
 func (l Local) Ping(context.Context) error {
@@ -60,6 +71,14 @@ func (l Local) WifiAPStatus(ctx context.Context) (wifiap.Status, error) {
 
 func (l Local) WifiAPApply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error) {
 	return l.wifi().Apply(ctx, req)
+}
+
+func (l Local) MDNSStatus(ctx context.Context) (mdns.Status, error) {
+	return l.mdnsCtrl().Status(ctx)
+}
+
+func (l Local) MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error) {
+	return l.mdnsCtrl().Apply(ctx, req)
 }
 
 type UnixSocketClient struct {
@@ -117,14 +136,38 @@ func (c *UnixSocketClient) WifiAPApply(ctx context.Context, req wifiap.ApplyRequ
 	return status, err
 }
 
-// WifiController adapts the Unix socket client to wifiap.Controller so the
-// in-cluster host-agent pod can implement the same HTTP routes as the daemon.
+func (c *UnixSocketClient) MDNSStatus(ctx context.Context) (mdns.Status, error) {
+	var status mdns.Status
+	err := c.do(ctx, http.MethodGet, "/internal/v1/host/mdns", nil, &status)
+	return status, err
+}
+
+func (c *UnixSocketClient) MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error) {
+	var status mdns.Status
+	err := c.do(ctx, http.MethodPut, "/internal/v1/host/mdns", req, &status)
+	return status, err
+}
+
+// WifiController adapters so the pod can implement wifiap.Controller.
 func (c *UnixSocketClient) Status(ctx context.Context) (wifiap.Status, error) {
 	return c.WifiAPStatus(ctx)
 }
 
 func (c *UnixSocketClient) Apply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error) {
 	return c.WifiAPApply(ctx, req)
+}
+
+// MDNSController adapters for mdns.Controller on the pod.
+type MDNSSocketAdapter struct {
+	Client *UnixSocketClient
+}
+
+func (a MDNSSocketAdapter) Status(ctx context.Context) (mdns.Status, error) {
+	return a.Client.MDNSStatus(ctx)
+}
+
+func (a MDNSSocketAdapter) Apply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error) {
+	return a.Client.MDNSApply(ctx, req)
 }
 
 func (c *UnixSocketClient) do(ctx context.Context, method, path string, body any, target any) error {

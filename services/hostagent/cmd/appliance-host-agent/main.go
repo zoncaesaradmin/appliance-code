@@ -21,8 +21,8 @@ func main() {
 
 	logger := process.NewLogger(cfg.ApplicationLogPath)
 	client := bridge.NewUnixSocketClient(cfg.SocketPath)
-	// Pod forwards host facts and wifi-ap control over the host-agentd socket.
-	handler := httpapi.NewHandlerWithWifi(client, client)
+	// Pod forwards host facts, wifi-ap, and mdns control over the host-agentd socket.
+	handler := httpapi.NewHandlerWithControllers(client, client, bridge.MDNSSocketAdapter{Client: client})
 	server := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

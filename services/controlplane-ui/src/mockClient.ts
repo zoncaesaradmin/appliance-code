@@ -32,7 +32,11 @@ import type {
   ApplianceMetadataBundleStatus,
   ApplianceSetupState,
   MetadataBundleInstallResponse,
-  MetadataBundleValidationResult
+  MetadataBundleValidationResult,
+  HostWifiAPStatus,
+  HostWifiAPApplyRequest,
+  HostMDNSStatus,
+  HostMDNSApplyRequest
 } from "./types";
 
 function now(): string {
@@ -61,6 +65,8 @@ type MockState = {
   entitledCapabilities: string[];
   profiles: ApplianceProfile[];
   acknowledgedNotifications: string[];
+  wifiAP: HostWifiAPStatus;
+  mdns: HostMDNSStatus;
 };
 
 const mockState: MockState = {
@@ -82,7 +88,9 @@ const mockState: MockState = {
       "profiles.read",
       "profiles.activate",
       "notifications.read",
-      "notifications.acknowledge"
+      "notifications.acknowledge",
+      "host.read",
+      "host.write"
     ]
   },
   tokens: [
@@ -176,7 +184,24 @@ const mockState: MockState = {
       capabilities: ["base", "host", "workflows"]
     }
   ],
-  acknowledgedNotifications: []
+  acknowledgedNotifications: [],
+  wifiAP: {
+    desired: false,
+    actual: "inactive",
+    reason: "desired_off",
+    managementAddress: "10.42.0.1",
+    security: "wpa2-psk",
+    supportedCapable: true,
+    message: "wifi access point is not desired"
+  },
+  mdns: {
+    desired: false,
+    actual: "inactive",
+    reason: "desired_off",
+    service: "avahi-daemon.service",
+    supportedCapable: true,
+    message: "mdns is not desired"
+  }
 };
 
 mockState.currentWorkspaceId = mockState.workspaces[0]?.id ?? null;
@@ -584,5 +609,74 @@ export class MockControlPlaneClient {
 
   async rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus> {
     return this.getMetadataBundleStatus();
+  }
+
+  async getHostWifiAP(): Promise<HostWifiAPStatus> {
+    return { ...mockState.wifiAP };
+  }
+
+  async applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus> {
+    if (!request.desired) {
+      mockState.wifiAP = {
+        desired: false,
+        actual: "inactive",
+        reason: "desired_off",
+        managementAddress: "10.42.0.1",
+        security: "wpa2-psk",
+        supportedCapable: true,
+        message: "wifi access point is not desired"
+      };
+      return { ...mockState.wifiAP };
+    }
+    if (!request.psk || request.psk.length < 8) {
+      mockState.wifiAP = {
+        desired: true,
+        actual: "inactive",
+        reason: "psk_missing",
+        managementAddress: "10.42.0.1",
+        security: "wpa2-psk",
+        supportedCapable: true,
+        message: "valid WPA2 PSK is required to activate the access point",
+        ssid: "mock-host-AP"
+      };
+      return { ...mockState.wifiAP };
+    }
+    mockState.wifiAP = {
+      desired: true,
+      actual: "active",
+      ssid: "mock-host-AP",
+      iface: "wlan0",
+      managementAddress: "10.42.0.1",
+      security: "wpa2-psk",
+      supportedCapable: true,
+      message: "management wifi access point is active"
+    };
+    return { ...mockState.wifiAP };
+  }
+
+  async getHostMDNS(): Promise<HostMDNSStatus> {
+    return { ...mockState.mdns };
+  }
+
+  async applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus> {
+    if (!request.desired) {
+      mockState.mdns = {
+        desired: false,
+        actual: "inactive",
+        reason: "desired_off",
+        service: "avahi-daemon.service",
+        supportedCapable: true,
+        message: "mdns is not desired"
+      };
+      return { ...mockState.mdns };
+    }
+    mockState.mdns = {
+      desired: true,
+      actual: "active",
+      service: "avahi-daemon.service",
+      supportedCapable: true,
+      message: "mdns (avahi-daemon) is active"
+    };
+    return { ...mockState.mdns };
   }
 }

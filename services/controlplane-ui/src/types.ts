@@ -291,3 +291,33 @@ export interface MetadataBundleInstallResponse {
   status: ApplianceMetadataBundleStatus;
   validation: MetadataBundleValidationResult;
 }
+
+export interface HostWifiAPStatus {
+  desired: boolean;
+  actual: string;
+  reason?: string;
+  ssid?: string;
+  iface?: string;
+  managementAddress: string;
+  security: string;
+  supportedCapable?: boolean;
+  message?: string;
+}
+
+export interface HostWifiAPApplyRequest {
+  desired: boolean;
+  psk?: string;
+}
+
+export interface HostMDNSStatus {
+  desired: boolean;
+  actual: string;
+  reason?: string;
+  service: string;
+  supportedCapable?: boolean;
+  message?: string;
+}
+
+export interface HostMDNSApplyRequest {
+  desired: boolean;
+}

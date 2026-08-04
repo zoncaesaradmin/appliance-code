@@ -7,6 +7,8 @@ import type {
   ApplianceIdentity,
   ApplianceMetadataBundleStatus,
   ApplianceProfile,
+  HostMDNSStatus,
+  HostWifiAPStatus,
   LicensingStatus,
   MetadataBundleValidationResult,
   ProfileValidationResult,
@@ -19,10 +21,12 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
     props.pathname === "/admin/metadata-bundle" || props.pathname.startsWith("/admin/metadata-bundle/");
   const isLicensing =
     props.pathname === "/admin/licensing" || props.pathname.startsWith("/admin/licensing/");
+  const isHostServices =
+    props.pathname === "/admin/host-services" || props.pathname.startsWith("/admin/host-services/");
   const isSystemStatus =
     props.pathname === "/admin/system-status" ||
     props.pathname.startsWith("/admin/system-status/") ||
-    (!isProfiles && !isLicensing && !isMetadata);
+    (!isProfiles && !isLicensing && !isMetadata && !isHostServices);
 
   if (isProfiles) {
     return <AdminProfilesPage />;
@@ -33,7 +37,240 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
   if (isLicensing) {
     return <AdminLicensingPage />;
   }
+  if (isHostServices) {
+    return <AdminHostServicesPage />;
+  }
   return <AdminSystemStatusPage pathname={props.pathname} capabilities={props.capabilities} />;
+}
+
+function AdminHostServicesPage(): React.JSX.Element {
+  const [wifi, setWifi] = useState<HostWifiAPStatus | null>(null);
+  const [mdns, setMdns] = useState<HostMDNSStatus | null>(null);
+  const [psk, setPsk] = useState("");
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    const [nextWifi, nextMdns] = await Promise.all([
+      client.getHostWifiAP().catch((err: unknown) => {
+        throw err;
+      }),
+      client.getHostMDNS().catch((err: unknown) => {
+        throw err;
+      })
+    ]);
+    setWifi(nextWifi);
+    setMdns(nextMdns);
+  }
+
+  useEffect(() => {
+    void (async () => {
+      setError("");
+      try {
+        await refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load host services status.");
+      }
+    })();
+  }, []);
+
+  async function applyMDNS(desired: boolean) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const status = await client.applyHostMDNS({ desired });
+      setMdns(status);
+      if (status.reason === "packages_missing") {
+        setError(status.message || "mDNS packages are not installed on this host.");
+      } else if (status.actual === "failed") {
+        setError(status.message || "mDNS apply failed.");
+      } else {
+        setMessage(desired ? "mDNS enabled." : "mDNS disabled.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update mDNS.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyWifi(desired: boolean) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const status = await client.applyHostWifiAP({
+        desired,
+        psk: desired ? psk : undefined
+      });
+      setWifi(status);
+      if (desired) {
+        setPsk("");
+      }
+      if (status.reason === "packages_missing" || status.reason === "psk_missing") {
+        setError(status.message || status.reason);
+      } else if (status.actual === "failed") {
+        setError(status.message || "Wi-Fi access point apply failed.");
+      } else if (status.reason === "no_capable_hardware" || status.reason === "radio_in_use") {
+        setError(status.message || status.reason);
+      } else {
+        setMessage(desired ? "Wi-Fi access point enabled." : "Wi-Fi access point disabled.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update Wi-Fi access point.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <PageFrame
+      title="Host Services"
+      eyebrow=""
+      description="Configure services that belong to this appliance host (this one physical or virtual machine)."
+      pathname="/admin/host-services"
+      onNavigate={navigate}
+      tabs={[{ label: "Overview", path: "/admin/host-services" }]}
+    >
+      {error ? <div className="message message--error">{error}</div> : null}
+      {message ? <div className="message">{message}</div> : null}
+      <div className="grid-two">
+        <Card title="mDNS" subtitle="Local hostname advertisement (avahi-daemon)">
+          {mdns ? (
+            <div className="detail-list">
+              <div>
+                <span>Desired</span>
+                <strong>{mdns.desired ? "On" : "Off"}</strong>
+              </div>
+              <div>
+                <span>Actual</span>
+                <strong>{mdns.actual}</strong>
+              </div>
+              <div>
+                <span>Service</span>
+                <strong>{mdns.service}</strong>
+              </div>
+              {mdns.reason ? (
+                <div>
+                  <span>Reason</span>
+                  <strong>{mdns.reason}</strong>
+                </div>
+              ) : null}
+              {mdns.message ? (
+                <div>
+                  <span>Detail</span>
+                  <strong>{mdns.message}</strong>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <EmptyState message="Loading mDNS status..." />
+          )}
+          <div className="button-row" style={{ marginTop: "1rem", display: "flex", gap: "0.75rem" }}>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={busy || mdns?.desired === true}
+              onClick={() => void applyMDNS(true)}
+            >
+              Enable mDNS
+            </button>
+            <button
+              className="button"
+              type="button"
+              disabled={busy || mdns?.desired === false}
+              onClick={() => void applyMDNS(false)}
+            >
+              Disable mDNS
+            </button>
+          </div>
+        </Card>
+
+        <Card title="Wi-Fi access point" subtitle="Management-only AP at https://10.42.0.1/">
+          {wifi ? (
+            <div className="detail-list">
+              <div>
+                <span>Desired</span>
+                <strong>{wifi.desired ? "On" : "Off"}</strong>
+              </div>
+              <div>
+                <span>Actual</span>
+                <strong>{wifi.actual}</strong>
+              </div>
+              <div>
+                <span>SSID</span>
+                <strong>{wifi.ssid || "—"}</strong>
+              </div>
+              <div>
+                <span>Interface</span>
+                <strong>{wifi.iface || "—"}</strong>
+              </div>
+              <div>
+                <span>Management URL</span>
+                <strong>https://{wifi.managementAddress}/</strong>
+              </div>
+              <div>
+                <span>Security</span>
+                <strong>{wifi.security}</strong>
+              </div>
+              {wifi.reason ? (
+                <div>
+                  <span>Reason</span>
+                  <strong>{wifi.reason}</strong>
+                </div>
+              ) : null}
+              {wifi.message ? (
+                <div>
+                  <span>Detail</span>
+                  <strong>{wifi.message}</strong>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <EmptyState message="Loading Wi-Fi AP status..." />
+          )}
+          <form
+            className="stack-form"
+            style={{ marginTop: "1rem" }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void applyWifi(true);
+            }}
+          >
+            <p className="muted">
+              SSID is derived from this host&apos;s hostname (no override). Each enable requires a new
+              WPA2 passphrase. Offline Wi-Fi packages must already be present on the host.
+            </p>
+            <label className="field">
+              <span>WPA2 passphrase (required to enable)</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={psk}
+                onChange={(event) => setPsk(event.target.value)}
+                placeholder="8–63 characters"
+              />
+            </label>
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <button className="button button--primary" type="submit" disabled={busy || psk.trim().length < 8}>
+                Enable Wi-Fi AP
+              </button>
+              <button
+                className="button"
+                type="button"
+                disabled={busy || wifi?.desired === false}
+                onClick={() => void applyWifi(false)}
+              >
+                Disable Wi-Fi AP
+              </button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    </PageFrame>
+  );
 }
 
 function AdminSystemStatusPage(props: {

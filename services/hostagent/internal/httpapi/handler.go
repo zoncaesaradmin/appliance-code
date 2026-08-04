@@ -6,27 +6,35 @@ import (
 	"strings"
 
 	"appliance-code/services/hostagent/internal/bridge"
+	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/wifiap"
 )
 
 type Handler struct {
 	bridge bridge.Bridge
 	wifi   wifiap.Controller
+	mdns   mdns.Controller
 }
 
-// NewHandler returns the host-agent HTTP API. When wifi is nil, a production
-// wifiap.Manager is used (daemon path). Pass a nil controller only from tests
-// that do not exercise wifi-ap routes.
+// NewHandler returns the host-agent HTTP API with production wifi and mdns managers.
 func NewHandler(hostBridge bridge.Bridge) http.Handler {
-	return NewHandlerWithWifi(hostBridge, wifiap.NewManager())
+	return NewHandlerWithControllers(hostBridge, wifiap.NewManager(), mdns.NewManager())
 }
 
-// NewHandlerWithWifi allows tests to inject a wifi controller.
+// NewHandlerWithWifi keeps older call sites working (mdns uses production manager).
 func NewHandlerWithWifi(hostBridge bridge.Bridge, wifi wifiap.Controller) http.Handler {
+	return NewHandlerWithControllers(hostBridge, wifi, mdns.NewManager())
+}
+
+// NewHandlerWithControllers allows tests and mains to inject controllers.
+func NewHandlerWithControllers(hostBridge bridge.Bridge, wifi wifiap.Controller, mdnsCtrl mdns.Controller) http.Handler {
 	if wifi == nil {
 		wifi = wifiap.NewManager()
 	}
-	handler := &Handler{bridge: hostBridge, wifi: wifi}
+	if mdnsCtrl == nil {
+		mdnsCtrl = mdns.NewManager()
+	}
+	handler := &Handler{bridge: hostBridge, wifi: wifi, mdns: mdnsCtrl}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handler.healthz)
 	mux.HandleFunc("GET /internal/v1/host/info", handler.info)
@@ -34,6 +42,8 @@ func NewHandlerWithWifi(hostBridge bridge.Bridge, wifi wifiap.Controller) http.H
 	mux.HandleFunc("GET /internal/v1/host/health", handler.health)
 	mux.HandleFunc("GET /internal/v1/host/wifi-ap", handler.wifiAPGet)
 	mux.HandleFunc("PUT /internal/v1/host/wifi-ap", handler.wifiAPPut)
+	mux.HandleFunc("GET /internal/v1/host/mdns", handler.mdnsGet)
+	mux.HandleFunc("PUT /internal/v1/host/mdns", handler.mdnsPut)
 	return mux
 }
 
@@ -95,6 +105,29 @@ func (h *Handler) wifiAPPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status, err := h.wifi.Apply(r.Context(), req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) mdnsGet(w http.ResponseWriter, r *http.Request) {
+	status, err := h.mdns.Status(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) mdnsPut(w http.ResponseWriter, r *http.Request) {
+	var req mdns.ApplyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid mdns apply body")
+		return
+	}
+	status, err := h.mdns.Apply(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

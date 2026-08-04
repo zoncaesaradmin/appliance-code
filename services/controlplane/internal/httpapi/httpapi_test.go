@@ -67,6 +67,15 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 				return
 			}
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		case "/internal/v1/host/mdns":
+			if r.Method == http.MethodGet || r.Method == http.MethodPut {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"desired": false, "actual": "inactive", "reason": "desired_off",
+					"service": "avahi-daemon.service", "supportedCapable": true,
+				})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		default:
 			http.NotFound(w, r)
 		}
@@ -294,7 +303,7 @@ func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	token := ts.login(t, "admin", testPassword)
 
-	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health", "/api/v1/host/wifi-ap"} {
+	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health", "/api/v1/host/wifi-ap", "/api/v1/host/mdns"} {
 		resp := ts.doJSON(t, http.MethodGet, path, token, "")
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)

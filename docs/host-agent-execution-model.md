@@ -37,7 +37,7 @@ This avoids a design that grows by adding more per-field file scraping inside th
 
 ## Preferred Design
 
-## Host execution model (wifi-ap)
+## Host execution model (wifi-ap and mDNS)
 
 The management WiFi access point is applied only through `appliance-host-agentd`
 (`PUT /internal/v1/host/wifi-ap`). Install-time enablement with
@@ -45,6 +45,11 @@ The management WiFi access point is applied only through `appliance-host-agentd`
 API over the host agent Unix socket. Control-plane routes mirror it:
 `GET|PUT /api/v1/host/wifi-ap` (permissions `host.read` / `host.write`).
 
+Host mDNS (`avahi-daemon`) is applied through the same host-agentd path:
+`GET|PUT /internal/v1/host/mdns`, mirrored as `GET|PUT /api/v1/host/mdns`.
+Enabling without offline mDNS packages yields soft status `packages_missing`.
+Admin UI **Host Services** (`/admin/host-services`) is the day-2 configuration
+surface for both host features.
 
 ### Shape
 

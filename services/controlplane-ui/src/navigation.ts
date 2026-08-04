@@ -124,6 +124,12 @@ export const MODES: Mode[] = [
         path: "/admin/licensing",
         description: "License and entitlement management",
         icon: "license"
+      },
+      {
+        label: "Host Services",
+        path: "/admin/host-services",
+        description: "Configure this host: mDNS and management Wi-Fi AP",
+        icon: "status"
       }
     ],
     visibleWhen: (context) => isSystemAdministrator(context.session)

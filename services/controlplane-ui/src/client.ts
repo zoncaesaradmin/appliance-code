@@ -34,7 +34,11 @@ import type {
   ApplianceMetadataBundleStatus,
   ApplianceSetupState,
   MetadataBundleInstallResponse,
-  MetadataBundleValidationResult
+  MetadataBundleValidationResult,
+  HostWifiAPStatus,
+  HostWifiAPApplyRequest,
+  HostMDNSStatus,
+  HostMDNSApplyRequest
 } from "./types";
 
 export class ApiError extends Error {
@@ -113,6 +117,10 @@ export interface ControlPlaneClient {
   validateMetadataBundle(file: File, signature?: string): Promise<MetadataBundleValidationResult>;
   installMetadataBundle(file: File, signature?: string): Promise<MetadataBundleInstallResponse>;
   rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus>;
+  getHostWifiAP(): Promise<HostWifiAPStatus>;
+  applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus>;
+  getHostMDNS(): Promise<HostMDNSStatus>;
+  applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus>;
 }
 
 type RequestOptions = {
@@ -425,6 +433,22 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus> {
     return this.request("/api/v1/appliance/metadata-bundle/rollback", { method: "POST" });
+  }
+
+  async getHostWifiAP(): Promise<HostWifiAPStatus> {
+    return this.request("/api/v1/host/wifi-ap");
+  }
+
+  async applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus> {
+    return this.request("/api/v1/host/wifi-ap", { method: "PUT", body: request });
+  }
+
+  async getHostMDNS(): Promise<HostMDNSStatus> {
+    return this.request("/api/v1/host/mdns");
+  }
+
+  async applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus> {
+    return this.request("/api/v1/host/mdns", { method: "PUT", body: request });
   }
 
   private async uploadMetadataBundle<T>(path: string, file: File, signature: string): Promise<T> {

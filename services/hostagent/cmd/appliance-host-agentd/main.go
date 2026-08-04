@@ -11,6 +11,7 @@ import (
 
 	"appliance-code/services/hostagent/internal/bridge"
 	"appliance-code/services/hostagent/internal/httpapi"
+	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/process"
 	"appliance-code/services/hostagent/internal/wifiap"
 )
@@ -52,8 +53,13 @@ func main() {
 	}()
 
 	wifiManager := wifiap.NewManager()
+	mdnsManager := mdns.NewManager()
 	server := &http.Server{
-		Handler:           httpapi.NewHandlerWithWifi(bridge.Local{Root: "/", Wifi: wifiManager}, wifiManager),
+		Handler: httpapi.NewHandlerWithControllers(
+			bridge.Local{Root: "/", Wifi: wifiManager, MDNS: mdnsManager},
+			wifiManager,
+			mdnsManager,
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

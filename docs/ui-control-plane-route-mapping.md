@@ -185,6 +185,21 @@ If the workflow is still running, later `GET /api/v1/workspaces` or
 `GET /api/v1/current-workspace` calls will trigger reconciliation and move the
 workspace from `pending` to `ready` or `failed`.
 
+## Browser SPA mapping (current controlplane-ui)
+
+The SPA talks to the control-plane API **directly** (not via a Go UI reverse
+proxy). Notable Admin host configuration routes:
+
+| Browser route | UI surface | Downstream control-plane call(s) | Success behavior |
+| --- | --- | --- | --- |
+| `GET /admin/host-services` | `AdminHostServicesPage` | `GET /api/v1/host/mdns`; `GET /api/v1/host/wifi-ap` | HTML SPA shows status cards |
+| Enable/Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | Card refresh with status JSON |
+| Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Card refresh; soft reasons such as `packages_missing` |
+| Disable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:false}` | Card refresh |
+
+Permissions: `host.read` for status, `host.write` for apply. Admin mode visibility
+still requires a system-administrator session for the left-rail entry.
+
 ## Maintenance Rule
 
 Whenever a UI route is added, removed, or changed, and whenever a UI handler

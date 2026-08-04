@@ -33,6 +33,7 @@ describe("navigation model", () => {
     expect(currentMode("/admin/system-status/resources").id).toBe("admin");
     expect(currentMode("/admin/profiles").id).toBe("admin");
     expect(currentMode("/admin/licensing").id).toBe("admin");
+    expect(currentMode("/admin/host-services").id).toBe("admin");
   });
 
   it("falls back to Home for unknown paths", () => {

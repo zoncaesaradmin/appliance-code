@@ -143,7 +143,11 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		st.SSIDBase = base
 	}
 	if st.SSIDBase == "" {
-		st.SSIDBase = "appliance"
+		if host, herr := os.Hostname(); herr == nil && strings.TrimSpace(host) != "" {
+			st.SSIDBase = strings.TrimSpace(host)
+		} else {
+			st.SSIDBase = "appliance"
+		}
 	}
 	ssid, err := DeriveSSID(st.SSIDBase)
 	if err != nil {
@@ -176,12 +180,7 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	}
 
 	psk := strings.TrimSpace(req.PSK)
-	if psk == "" {
-		// Reuse previously stored PSK when re-applying without new secret.
-		if existing, err := m.loadPSK(); err == nil {
-			psk = existing
-		}
-	}
+	// Every enable requires an explicit PSK (do not reuse stored secret).
 	if err := ValidatePSK(psk); err != nil {
 		_ = m.saveState(st)
 		status, _ := m.Status(ctx)
