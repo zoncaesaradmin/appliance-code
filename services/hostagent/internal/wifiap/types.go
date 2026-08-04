@@ -7,6 +7,7 @@ import "context"
 const (
 	// ManagementAddress is the fixed IPv4 address on the AP interface.
 	// It is always a TLS SAN so browsers can open https://10.42.0.1/.
+	// This /24 must stay outside K3s pod CIDR (appliance uses 10.44.0.0/16).
 	ManagementAddress = "10.42.0.1"
 	// ManagementCIDR is the AP management subnet.
 	ManagementCIDR = "10.42.0.1/24"
