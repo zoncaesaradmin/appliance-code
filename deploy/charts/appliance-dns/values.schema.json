@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["replicaCount", "image", "service", "hostNetwork", "upstreamResolvers", "localZone", "logs"],
+  "required": ["replicaCount", "image", "service", "hostNetwork", "upstreamResolvers", "localZone", "managementAP", "logs"],
   "properties": {
     "replicaCount": {"type": "integer", "const": 1},
     "image": {
@@ -32,6 +32,14 @@
         "name": {"type": "string", "minLength": 1},
         "hostname": {"type": "string"},
         "ipv4": {"type": "string", "minLength": 1}
+      }
+    },
+    "managementAP": {
+      "type": "object",
+      "required": ["hostname", "ipv4"],
+      "properties": {
+        "hostname": {"type": "string", "const": "manage.ap"},
+        "ipv4": {"type": "string", "const": "10.42.0.1"}
       }
     },
     "logs": {

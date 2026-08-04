@@ -54,6 +54,7 @@ func TestHardenedDNSRender(t *testing.T) {
 		"success 9984 30",
 		"denial 9984 1 0",
 		"ns  3600 IN A 192.0.2.10",
+		"10.42.0.1 manage.ap",
 		"path: /health", "path: /ready",
 	} {
 		if !strings.Contains(out, want) {

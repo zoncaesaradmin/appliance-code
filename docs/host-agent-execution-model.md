@@ -49,7 +49,10 @@ Host mDNS (`avahi-daemon`) is applied through the same host-agentd path:
 `GET|PUT /internal/v1/host/mdns`, mirrored as `GET|PUT /api/v1/host/mdns`.
 Enabling without offline mDNS packages yields soft status `packages_missing`.
 Admin UI **Host Services** (`/admin/host-services`) is the day-2 configuration
-surface for both host features.
+surface for both host features. Management AP browser access is
+`https://manage.ap/` (fixed A record `manage.ap` → `10.42.0.1` in CoreDNS when
+installed; AP-local dnsmasq serves the same name when host `:53` is free) or
+`https://10.42.0.1/`. Both names are install-time TLS SANs.
 
 ### Shape
 

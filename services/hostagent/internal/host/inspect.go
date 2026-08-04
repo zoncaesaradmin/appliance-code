@@ -12,11 +12,12 @@ import (
 )
 
 type Info struct {
-	Hostname          string `json:"hostname"`
-	OperatingSystem   string `json:"operatingSystem"`
-	KernelVersion     string `json:"kernelVersion,omitempty"`
-	Architecture      string `json:"architecture"`
-	ContainerHostname string `json:"containerHostname,omitempty"`
+	Hostname          string        `json:"hostname"`
+	OperatingSystem   string        `json:"operatingSystem"`
+	KernelVersion     string        `json:"kernelVersion,omitempty"`
+	Architecture      string        `json:"architecture"`
+	ContainerHostname string        `json:"containerHostname,omitempty"`
+	Network           NetworkStatus `json:"network"`
 }
 
 type Stats struct {
@@ -51,6 +52,7 @@ func CollectInfo(root string) (Info, error) {
 		KernelVersion:     kernelVersion,
 		Architecture:      runtime.GOARCH,
 		ContainerHostname: containerHostname,
+		Network:           CollectNetwork(root),
 	}, nil
 }
 

@@ -40,6 +40,13 @@ localZone:
   hostname: ""
   ipv4: 127.0.0.1
 
+# Fixed management Wi-Fi AP hostname (AP-unaware). Always resolved to the
+# fixed AP address so https://manage.ap/ works when CoreDNS owns host :53.
+# Host-agentd may also serve this name via dnsmasq when :53 is free on 10.42.0.1.
+managementAP:
+  hostname: manage.ap
+  ipv4: 10.42.0.1
+
 logs:
   # Host-visible DNS service log directory. zonctl prepares ownership before
   # Helm runs. The appliance CoreDNS wrapper tees stdout/stderr into

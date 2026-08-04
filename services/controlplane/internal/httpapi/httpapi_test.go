@@ -62,7 +62,8 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			if r.Method == http.MethodGet || r.Method == http.MethodPut {
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"desired": false, "actual": "inactive", "reason": "desired_off",
-					"managementAddress": "10.42.0.1", "security": "wpa2-psk",
+					"managementAddress": "10.42.0.1", "managementHostname": "manage.ap",
+					"managementURL": "https://manage.ap/", "security": "wpa2-psk",
 				})
 				return
 			}

@@ -45,6 +45,109 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
   return <AdminSystemStatusPage pathname={props.pathname} capabilities={props.capabilities} />;
 }
 
+function EyeIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="password-field__icon"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon(): React.JSX.Element {
+  return (
+    <svg
+      className="password-field__icon"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
+
+function formatMediaStatus(
+  media: import("../types").HostMediaStatus | undefined,
+  _label: string
+): string {
+  if (!media) {
+    return "Unknown";
+  }
+  if (!media.present) {
+    return "Not present";
+  }
+  const state = media.enabled ? "Enabled (up)" : "Disabled (down)";
+  const addrs = (media.ipv4Addresses || []).filter(Boolean);
+  if (addrs.length === 0) {
+    const ifaces = (media.interfaces || []).filter(Boolean);
+    return ifaces.length > 0 ? `${state} · ${ifaces.join(", ")}` : state;
+  }
+  return `${state} · ${addrs.join(", ")}`;
+}
+
+function formatPrimaryLAN(network: import("../types").HostNetworkStatus | undefined): string {
+  if (!network?.primaryLANIPv4) {
+    return "";
+  }
+  const source = network.primaryLANSource || "unknown";
+  const sourceLabel =
+    source === "ethernet" ? "Ethernet" : source === "wifi" ? "Wi-Fi" : source;
+  return `${network.primaryLANIPv4} (${sourceLabel})`;
+}
+
+function formatConfiguredNodeIPv4(nodeIPv4: string | undefined): string {
+  const ip = (nodeIPv4 || "").trim();
+  if (!ip) {
+    return "";
+  }
+  if (ip === "10.42.0.1" || ip.startsWith("10.42.0.")) {
+    return `${ip} (configured; Wi-Fi AP range — live LAN preferred above)`;
+  }
+  return `${ip} (configured)`;
+}
+
+function formatLinkKind(link: import("../types").HostNetworkLink): string {
+  if (link.role === "management-ap") {
+    return "Wi-Fi AP management";
+  }
+  if (link.kind === "ethernet") {
+    return "Ethernet";
+  }
+  if (link.kind === "wifi") {
+    return "Wi-Fi";
+  }
+  return link.kind || "interface";
+}
+
+function formatLinkAddresses(link: import("../types").HostNetworkLink): string {
+  const addrs = (link.ipv4Addresses || []).filter(Boolean);
+  if (addrs.length === 0) {
+    return "no IPv4";
+  }
+  return addrs.join(", ");
+}
+
 function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const isMDNS = props.pathname === "/admin/host-services/mdns";
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
@@ -57,6 +160,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const [mdnsError, setMdnsError] = useState("");
   const [message, setMessage] = useState("");
   const [psk, setPsk] = useState("");
+  const [showPsk, setShowPsk] = useState(false);
   const [wifiBusy, setWifiBusy] = useState(false);
   const [mdnsBusy, setMdnsBusy] = useState(false);
   const [networkLoaded, setNetworkLoaded] = useState(false);
@@ -160,6 +264,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       setWifi(status);
       if (desired) {
         setPsk("");
+        setShowPsk(false);
       }
       if (status.reason === "packages_missing" || status.reason === "psk_missing") {
         setWifiError(status.message || status.reason);
@@ -262,7 +367,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
         </Card>
       ) : (
         <div className="grid-two">
-          <Card title="Host network" subtitle="LAN-facing host identity and inspector health">
+          <Card title="Host network" subtitle="Live host interfaces from host-agent (not install-time chart values)">
             {hostInfo || identity ? (
               <div className="detail-list">
                 <div>
@@ -274,9 +379,35 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                   <strong>{identity?.fqdn || "—"}</strong>
                 </div>
                 <div>
-                  <span>Node IPv4</span>
-                  <strong>{identity?.nodeIPv4 || "—"}</strong>
+                  <span>Primary LAN IPv4</span>
+                  <strong>
+                    {formatPrimaryLAN(hostInfo?.network) ||
+                      formatConfiguredNodeIPv4(identity?.nodeIPv4) ||
+                      "—"}
+                  </strong>
                 </div>
+                <div>
+                  <span>Ethernet</span>
+                  <strong>{formatMediaStatus(hostInfo?.network?.ethernet, "Ethernet")}</strong>
+                </div>
+                <div>
+                  <span>Wi-Fi (client / LAN)</span>
+                  <strong>{formatMediaStatus(hostInfo?.network?.wifi, "Wi-Fi")}</strong>
+                </div>
+                <div>
+                  <span>Wi-Fi AP (management)</span>
+                  <strong>{formatMediaStatus(hostInfo?.network?.wifiAP, "Wi-Fi AP")}</strong>
+                </div>
+                {(hostInfo?.network?.links || []).map((link) => (
+                  <div key={`${link.name}-${link.role}`}>
+                    <span>
+                      {link.name} ({formatLinkKind(link)})
+                    </span>
+                    <strong>
+                      {formatLinkAddresses(link)} · {link.state === "up" ? "up" : "down"}
+                    </strong>
+                  </div>
+                ))}
                 <div>
                   <span>Operating system</span>
                   <strong>{hostInfo?.operatingSystem || "—"}</strong>
@@ -305,13 +436,9 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                 }
               />
             )}
-            <p className="muted" style={{ marginTop: "1rem" }}>
-              Node IPv4 is the management/LAN address configured for this appliance. Detailed
-              per-interface Ethernet tables are not exposed yet.
-            </p>
           </Card>
 
-          <Card title="Wi-Fi access point" subtitle="Management-only AP at https://10.42.0.1/">
+          <Card title="Wi-Fi access point" subtitle="Management AP at https://manage.ap/ (also https://10.42.0.1/)">
             <div className={`host-service-panel${wifiBusy ? " is-busy" : ""}`} aria-busy={wifiBusy}>
               {wifi ? (
                 <div className="detail-list">
@@ -333,7 +460,26 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                   </div>
                   <div>
                     <span>Management URL</span>
-                    <strong>https://{wifi.managementAddress}/</strong>
+                    <strong>
+                      {wifi.managementURL ||
+                        (wifi.managementHostname
+                          ? `https://${wifi.managementHostname}/`
+                          : `https://${wifi.managementAddress}/`)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Management IPv4</span>
+                    <strong>{wifi.managementAddress || "10.42.0.1"}</strong>
+                  </div>
+                  <div>
+                    <span>Local DNS for manage.ap</span>
+                    <strong>
+                      {wifi.localDNSServing === true
+                        ? "Yes (AP dnsmasq)"
+                        : wifi.localDNSServing === false
+                          ? "No (host DNS / CoreDNS)"
+                          : "—"}
+                    </strong>
                   </div>
                   <div>
                     <span>Security</span>
@@ -379,22 +525,33 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       void applyWifi(true);
                     }}
                   >
-                    <p className="muted">
-                      SSID is derived from this host&apos;s hostname (no override). Each enable
-                      requires a new WPA2 passphrase. Offline Wi-Fi packages must already be present
-                      on the host.
-                    </p>
-                    <label className="field">
-                      <span>WPA2 passphrase (required to enable)</span>
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        value={psk}
-                        onChange={(event) => setPsk(event.target.value)}
-                        placeholder="8–63 characters"
-                        disabled={wifiBusy}
-                      />
-                    </label>
+                    <p className="muted">Each enable requires a new WPA2 passphrase for security.</p>
+                    <div className="field">
+                      <label htmlFor="wifi-ap-psk">WPA2 passphrase (required to enable)</label>
+                      <span className="password-field">
+                        <input
+                          id="wifi-ap-psk"
+                          type={showPsk ? "text" : "password"}
+                          autoComplete="new-password"
+                          value={psk}
+                          onChange={(event) => setPsk(event.target.value)}
+                          placeholder="8–63 characters"
+                          disabled={wifiBusy}
+                          spellCheck={false}
+                        />
+                        <button
+                          className="password-field__toggle"
+                          type="button"
+                          disabled={wifiBusy}
+                          aria-label={showPsk ? "Hide passphrase" : "Show passphrase"}
+                          aria-pressed={showPsk}
+                          title={showPsk ? "Hide passphrase" : "Show passphrase"}
+                          onClick={() => setShowPsk((v) => !v)}
+                        >
+                          {showPsk ? <EyeOffIcon /> : <EyeIcon />}
+                        </button>
+                      </span>
+                    </div>
                     <button
                       className="button button--primary"
                       type="submit"

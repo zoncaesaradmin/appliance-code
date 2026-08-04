@@ -192,6 +192,8 @@ const mockState: MockState = {
     actual: "inactive",
     reason: "desired_off",
     managementAddress: "10.42.0.1",
+    managementHostname: "manage.ap",
+    managementURL: "https://manage.ap/",
     security: "wpa2-psk",
     supportedCapable: true,
     message: "wifi access point is not desired"
@@ -619,7 +621,45 @@ export class MockControlPlaneClient {
       operatingSystem: "Ubuntu 24.04 LTS",
       kernelVersion: "6.8.0-mock",
       architecture: "amd64",
-      containerHostname: "host-agent"
+      containerHostname: "host-agent",
+      network: {
+        primaryLANIPv4: "192.168.1.151",
+        primaryLANSource: "ethernet",
+        ethernet: {
+          present: true,
+          enabled: true,
+          interfaces: ["enp1s0"],
+          ipv4Addresses: ["192.168.1.151"]
+        },
+        wifi: {
+          present: true,
+          enabled: false,
+          interfaces: ["wlp2s0"],
+          ipv4Addresses: []
+        },
+        wifiAP: {
+          present: true,
+          enabled: true,
+          interfaces: ["wlan0"],
+          ipv4Addresses: ["10.42.0.1"]
+        },
+        links: [
+          {
+            name: "enp1s0",
+            kind: "ethernet",
+            state: "up",
+            role: "lan",
+            ipv4Addresses: ["192.168.1.151"]
+          },
+          {
+            name: "wlan0",
+            kind: "wifi",
+            state: "up",
+            role: "management-ap",
+            ipv4Addresses: ["10.42.0.1"]
+          }
+        ]
+      }
     };
   }
 
@@ -644,6 +684,8 @@ export class MockControlPlaneClient {
         actual: "inactive",
         reason: "desired_off",
         managementAddress: "10.42.0.1",
+        managementHostname: "manage.ap",
+        managementURL: "https://manage.ap/",
         security: "wpa2-psk",
         supportedCapable: true,
         message: "wifi access point is not desired"
@@ -656,6 +698,8 @@ export class MockControlPlaneClient {
         actual: "inactive",
         reason: "psk_missing",
         managementAddress: "10.42.0.1",
+        managementHostname: "manage.ap",
+        managementURL: "https://manage.ap/",
         security: "wpa2-psk",
         supportedCapable: true,
         message: "valid WPA2 PSK is required to activate the access point",
@@ -669,9 +713,12 @@ export class MockControlPlaneClient {
       ssid: "mock-host-AP",
       iface: "wlan0",
       managementAddress: "10.42.0.1",
+      managementHostname: "manage.ap",
+      managementURL: "https://manage.ap/",
+      localDNSServing: true,
       security: "wpa2-psk",
       supportedCapable: true,
-      message: "management wifi access point is active"
+      message: "management wifi access point is active; open https://manage.ap/"
     };
     return { ...mockState.wifiAP };
   }

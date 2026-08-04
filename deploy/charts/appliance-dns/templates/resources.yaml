@@ -12,6 +12,13 @@ data:
         log
         health :{{ .Values.probes.healthPort }}
         ready :{{ .Values.probes.readyPort }}
+        # Fixed management Wi-Fi AP name → 10.42.0.1. Present whenever
+        # appliance-dns is installed, independent of AP enabled state.
+        # On AP clients this is how manage.ap works when CoreDNS owns host :53.
+        hosts {
+            {{ .Values.managementAP.ipv4 }} {{ .Values.managementAP.hostname }}
+            fallthrough
+        }
         # Zone sync bumps the SOA serial on every ConfigMap patch. Poll every
         # 1s so new/updated A records are served almost immediately; ConfigMap
         # symlink updates often miss fsnotify, and the file-plugin default is 1m.

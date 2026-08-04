@@ -298,6 +298,31 @@ export interface HostInfo {
   kernelVersion?: string;
   architecture: string;
   containerHostname?: string;
+  network?: HostNetworkStatus;
+}
+
+export interface HostMediaStatus {
+  present: boolean;
+  enabled: boolean;
+  interfaces?: string[];
+  ipv4Addresses?: string[];
+}
+
+export interface HostNetworkLink {
+  name: string;
+  kind: string;
+  state: string;
+  ipv4Addresses?: string[];
+  role: string;
+}
+
+export interface HostNetworkStatus {
+  primaryLANIPv4?: string;
+  primaryLANSource?: string;
+  ethernet: HostMediaStatus;
+  wifi: HostMediaStatus;
+  wifiAP: HostMediaStatus;
+  links?: HostNetworkLink[];
 }
 
 export interface HostHealth {
@@ -315,6 +340,9 @@ export interface HostWifiAPStatus {
   ssid?: string;
   iface?: string;
   managementAddress: string;
+  managementHostname?: string;
+  managementURL?: string;
+  localDNSServing?: boolean;
   security: string;
   supportedCapable?: boolean;
   message?: string;

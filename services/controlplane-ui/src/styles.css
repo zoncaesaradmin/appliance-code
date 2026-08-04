@@ -280,6 +280,7 @@ button {
 }
 
 .field span,
+.field > label,
 .detail-list span {
   color: var(--muted);
   font-size: 0.92rem;
@@ -292,6 +293,51 @@ button {
   border-radius: 14px;
   background: #fff;
   padding: 0 14px;
+}
+
+.password-field {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.password-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 48px;
+}
+
+.password-field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.password-field__toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.password-field__toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.password-field__icon {
+  display: block;
 }
 
 .checkbox-row {
