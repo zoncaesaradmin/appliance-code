@@ -201,6 +201,11 @@ func TestApplyActivatesFreeRadio(t *testing.T) {
 	if !strings.Contains(string(files.data["/cfg/hostapd.conf"]), "ssid=kitchen-AP") {
 		t.Fatalf("hostapd conf missing ssid: %s", files.data["/cfg/hostapd.conf"])
 	}
+	if conf, ok := files.data["/cfg/dnsmasq.conf"]; !ok {
+		t.Fatal("expected dnsmasq.conf written")
+	} else if !strings.Contains(string(conf), "port=0") {
+		t.Fatalf("dnsmasq must disable DNS (port=0) so appliance-dns can bind :53:\n%s", conf)
+	}
 	if strings.Contains(string(files.data["/state/state.json"]), "long-enough") {
 		t.Fatal("psk must not be stored in state.json")
 	}
