@@ -57,7 +57,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const [mdnsError, setMdnsError] = useState("");
   const [message, setMessage] = useState("");
   const [psk, setPsk] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [wifiBusy, setWifiBusy] = useState(false);
+  const [mdnsBusy, setMdnsBusy] = useState(false);
   const [networkLoaded, setNetworkLoaded] = useState(false);
   const [wifiLoaded, setWifiLoaded] = useState(false);
   const [mdnsLoaded, setMdnsLoaded] = useState(false);
@@ -127,7 +128,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   }, [props.pathname]);
 
   async function applyMDNS(desired: boolean) {
-    setBusy(true);
+    setMdnsBusy(true);
     setMdnsError("");
     setMessage("");
     try {
@@ -143,12 +144,12 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     } catch (err) {
       setMdnsError(err instanceof Error ? err.message : "Could not update mDNS.");
     } finally {
-      setBusy(false);
+      setMdnsBusy(false);
     }
   }
 
   async function applyWifi(desired: boolean) {
-    setBusy(true);
+    setWifiBusy(true);
     setWifiError("");
     setMessage("");
     try {
@@ -172,10 +173,13 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     } catch (err) {
       setWifiError(err instanceof Error ? err.message : "Could not update Wi-Fi access point.");
     } finally {
-      setBusy(false);
+      setWifiBusy(false);
     }
   }
 
+  // true → only Disable; false → only Enable; null → loading/unavailable.
+  const wifiOn: boolean | null = wifi ? wifi.desired || wifi.actual === "active" : null;
+  const mdnsOn: boolean | null = mdns ? mdns.desired || mdns.actual === "active" : null;
   const pageError = isMDNS ? mdnsError : [networkError, wifiError].filter(Boolean).join(" ");
 
   return (
@@ -194,55 +198,66 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       {message ? <div className="message">{message}</div> : null}
       {isMDNS ? (
         <Card title="mDNS" subtitle="Local hostname advertisement (avahi-daemon)">
-          {mdns ? (
-            <div className="detail-list">
-              <div>
-                <span>Desired</span>
-                <strong>{mdns.desired ? "On" : "Off"}</strong>
-              </div>
-              <div>
-                <span>Actual</span>
-                <strong>{mdns.actual}</strong>
-              </div>
-              <div>
-                <span>Service</span>
-                <strong>{mdns.service}</strong>
-              </div>
-              {mdns.reason ? (
+          <div className={`host-service-panel${mdnsBusy ? " is-busy" : ""}`} aria-busy={mdnsBusy}>
+            {mdns ? (
+              <div className="detail-list">
                 <div>
-                  <span>Reason</span>
-                  <strong>{mdns.reason}</strong>
+                  <span>Desired</span>
+                  <strong>{mdns.desired ? "On" : "Off"}</strong>
                 </div>
+                <div>
+                  <span>Actual</span>
+                  <strong>{mdns.actual}</strong>
+                </div>
+                <div>
+                  <span>Service</span>
+                  <strong>{mdns.service}</strong>
+                </div>
+                {mdns.reason ? (
+                  <div>
+                    <span>Reason</span>
+                    <strong>{mdns.reason}</strong>
+                  </div>
+                ) : null}
+                {mdns.message ? (
+                  <div>
+                    <span>Detail</span>
+                    <strong>{mdns.message}</strong>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <EmptyState
+                message={mdnsLoaded ? "mDNS status is unavailable." : "Loading mDNS status..."}
+              />
+            )}
+            <div className="host-service-panel__actions">
+              {mdnsOn === true ? (
+                <button
+                  className="button button--ghost"
+                  type="button"
+                  disabled={mdnsBusy}
+                  onClick={() => void applyMDNS(false)}
+                >
+                  {mdnsBusy ? "Disabling mDNS…" : "Disable mDNS"}
+                </button>
               ) : null}
-              {mdns.message ? (
-                <div>
-                  <span>Detail</span>
-                  <strong>{mdns.message}</strong>
-                </div>
+              {mdnsOn === false ? (
+                <button
+                  className="button button--primary"
+                  type="button"
+                  disabled={mdnsBusy}
+                  onClick={() => void applyMDNS(true)}
+                >
+                  {mdnsBusy ? "Enabling mDNS…" : "Enable mDNS"}
+                </button>
+              ) : null}
+              {mdnsOn === null ? (
+                <button className="button button--ghost" type="button" disabled>
+                  {mdnsLoaded ? "Status unavailable" : "Loading…"}
+                </button>
               ) : null}
             </div>
-          ) : (
-            <EmptyState
-              message={mdnsLoaded ? "mDNS status is unavailable." : "Loading mDNS status..."}
-            />
-          )}
-          <div className="button-row" style={{ marginTop: "1rem", display: "flex", gap: "0.75rem" }}>
-            <button
-              className="button button--primary"
-              type="button"
-              disabled={busy || mdns?.desired === true}
-              onClick={() => void applyMDNS(true)}
-            >
-              Enable mDNS
-            </button>
-            <button
-              className="button"
-              type="button"
-              disabled={busy || mdns?.desired === false}
-              onClick={() => void applyMDNS(false)}
-            >
-              Disable mDNS
-            </button>
           </div>
         </Card>
       ) : (
@@ -297,90 +312,105 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
           </Card>
 
           <Card title="Wi-Fi access point" subtitle="Management-only AP at https://10.42.0.1/">
-            {wifi ? (
-              <div className="detail-list">
-                <div>
-                  <span>Desired</span>
-                  <strong>{wifi.desired ? "On" : "Off"}</strong>
-                </div>
-                <div>
-                  <span>Actual</span>
-                  <strong>{wifi.actual}</strong>
-                </div>
-                <div>
-                  <span>SSID</span>
-                  <strong>{wifi.ssid || "—"}</strong>
-                </div>
-                <div>
-                  <span>Interface</span>
-                  <strong>{wifi.iface || "—"}</strong>
-                </div>
-                <div>
-                  <span>Management URL</span>
-                  <strong>https://{wifi.managementAddress}/</strong>
-                </div>
-                <div>
-                  <span>Security</span>
-                  <strong>{wifi.security}</strong>
-                </div>
-                {wifi.reason ? (
+            <div className={`host-service-panel${wifiBusy ? " is-busy" : ""}`} aria-busy={wifiBusy}>
+              {wifi ? (
+                <div className="detail-list">
                   <div>
-                    <span>Reason</span>
-                    <strong>{wifi.reason}</strong>
+                    <span>Desired</span>
+                    <strong>{wifi.desired ? "On" : "Off"}</strong>
                   </div>
-                ) : null}
-                {wifi.message ? (
                   <div>
-                    <span>Detail</span>
-                    <strong>{wifi.message}</strong>
+                    <span>Actual</span>
+                    <strong>{wifi.actual}</strong>
                   </div>
-                ) : null}
-              </div>
-            ) : (
-              <EmptyState
-                message={wifiLoaded ? "Wi-Fi AP status is unavailable." : "Loading Wi-Fi AP status..."}
-              />
-            )}
-            <form
-              className="stack-form"
-              style={{ marginTop: "1rem" }}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void applyWifi(true);
-              }}
-            >
-              <p className="muted">
-                SSID is derived from this host&apos;s hostname (no override). Each enable requires a
-                new WPA2 passphrase. Offline Wi-Fi packages must already be present on the host.
-              </p>
-              <label className="field">
-                <span>WPA2 passphrase (required to enable)</span>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  value={psk}
-                  onChange={(event) => setPsk(event.target.value)}
-                  placeholder="8–63 characters"
+                  <div>
+                    <span>SSID</span>
+                    <strong>{wifi.ssid || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Interface</span>
+                    <strong>{wifi.iface || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Management URL</span>
+                    <strong>https://{wifi.managementAddress}/</strong>
+                  </div>
+                  <div>
+                    <span>Security</span>
+                    <strong>{wifi.security}</strong>
+                  </div>
+                  {wifi.reason ? (
+                    <div>
+                      <span>Reason</span>
+                      <strong>{wifi.reason}</strong>
+                    </div>
+                  ) : null}
+                  {wifi.message ? (
+                    <div>
+                      <span>Detail</span>
+                      <strong>{wifi.message}</strong>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyState
+                  message={
+                    wifiLoaded ? "Wi-Fi AP status is unavailable." : "Loading Wi-Fi AP status..."
+                  }
                 />
-              </label>
-              <div style={{ display: "flex", gap: "0.75rem" }}>
-                <button
-                  className="button button--primary"
-                  type="submit"
-                  disabled={busy || psk.trim().length < 8}
-                >
-                  Enable Wi-Fi AP
-                </button>
-                <button
-                  className="button"
-                  type="button"
-                  disabled={busy || wifi?.desired === false}
-                  onClick={() => void applyWifi(false)}
-                >
-                  Disable Wi-Fi AP
-                </button>
+              )}
+              <div className="host-service-panel__actions">
+                {wifiOn === true ? (
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    disabled={wifiBusy}
+                    onClick={() => void applyWifi(false)}
+                  >
+                    {wifiBusy ? "Disabling Wi-Fi AP…" : "Disable Wi-Fi AP"}
+                  </button>
+                ) : null}
+                {wifiOn === false ? (
+                  <form
+                    className="stack-form"
+                    style={{ width: "100%" }}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void applyWifi(true);
+                    }}
+                  >
+                    <p className="muted">
+                      SSID is derived from this host&apos;s hostname (no override). Each enable
+                      requires a new WPA2 passphrase. Offline Wi-Fi packages must already be present
+                      on the host.
+                    </p>
+                    <label className="field">
+                      <span>WPA2 passphrase (required to enable)</span>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={psk}
+                        onChange={(event) => setPsk(event.target.value)}
+                        placeholder="8–63 characters"
+                        disabled={wifiBusy}
+                      />
+                    </label>
+                    <button
+                      className="button button--primary"
+                      type="submit"
+                      disabled={wifiBusy || psk.trim().length < 8}
+                    >
+                      {wifiBusy ? "Enabling Wi-Fi AP…" : "Enable Wi-Fi AP"}
+                    </button>
+                  </form>
+                ) : null}
+                {wifiOn === null ? (
+                  <button className="button button--ghost" type="button" disabled>
+                    {wifiLoaded ? "Status unavailable" : "Loading…"}
+                  </button>
+                ) : null}
               </div>
-            </form>
+            </div>
           </Card>
         </div>
       )}
