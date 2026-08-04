@@ -91,19 +91,23 @@ ARCHIVE="${OUT_DIR}/${DIR_NAME}.tar.zst"
   if command -v zstd >/dev/null 2>&1; then
     tar -cf - "${DIR_NAME}" | zstd -q -o "${ARCHIVE}"
   else
-    python3 - "${DIR_NAME}" "${ARCHIVE}" <<'PY'
-import tarfile, sys
-from pathlib import Path
-try:
-    import zstandard as zstd
-except ImportError:
-    # Fallback: write uncompressed tar then note; prefer klauspost via go tool if needed
-    raise SystemExit("zstd CLI or python zstandard package required")
-name, archive = sys.argv[1], sys.argv[2]
-cctx = zstd.ZstdCompressor()
-with open(archive, "wb") as out, cctx.stream_writer(out) as compressor, tarfile.open(fileobj=compressor, mode="w|") as tar:
-    tar.add(name)
-PY
+    # Air-gapped image/dev-run hosts often lack zstd and python-zstandard.
+    # Fall back to control-plane's vendored klauspost/compress compressor.
+    CONTROLPLANE_DIR="${REPO_ROOT}/services/controlplane"
+    if [[ ! -d "${CONTROLPLANE_DIR}" ]]; then
+      echo "generate-metadata-bundle: control-plane module not found at ${CONTROLPLANE_DIR}" >&2
+      exit 1
+    fi
+    if ! command -v go >/dev/null 2>&1; then
+      echo "generate-metadata-bundle: need zstd CLI, python zstandard, or go to write .tar.zst" >&2
+      exit 1
+    fi
+    (
+      cd "${CONTROLPLANE_DIR}"
+      GOWORK=off CGO_ENABLED=0 go run -mod=vendor ./cmd/pack-tar-zst \
+        -src "${STAGE}/${DIR_NAME}" \
+        -out "${ARCHIVE}"
+    )
   fi
 )
 
