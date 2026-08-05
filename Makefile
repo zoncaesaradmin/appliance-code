@@ -558,15 +558,28 @@ dev-sudo-setup: dev-registry-auth-check
 		&& [ "$$(DEV_IMAGE_TAG=$$probe_tag sudo -n env 2>/dev/null | sed -n 's/^DEV_IMAGE_TAG=//p')" = "$$probe_tag" ]; then \
 		: already configured; \
 	else \
-		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
+		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path"; \
+		if [ -n "$${APPLIANCE_BUILD_SUDO_PASSWORD:-}" ]; then \
+			echo "dev-sudo-setup: using APPLIANCE_BUILD_SUDO_PASSWORD (non-interactive sudo -S)"; \
+			_sudo() { printf '%s\n' "$${APPLIANCE_BUILD_SUDO_PASSWORD}" | sudo -S -p '' "$$@"; }; \
+			_sudo_tee() { ( printf '%s\n' "$${APPLIANCE_BUILD_SUDO_PASSWORD}"; cat ) | sudo -S -p '' tee "$$1" >/dev/null; }; \
+		elif [ -t 0 ]; then \
+			echo "dev-sudo-setup: interactive sudo (export APPLIANCE_BUILD_SUDO_PASSWORD for non-interactive/CI)"; \
+			_sudo() { sudo "$$@"; }; \
+			_sudo_tee() { sudo tee "$$1" >/dev/null; }; \
+		else \
+			echo "dev-sudo-setup: no TTY and APPLIANCE_BUILD_SUDO_PASSWORD is unset; cannot write sudoers non-interactively" >&2; \
+			echo "dev-sudo-setup: export APPLIANCE_BUILD_SUDO_PASSWORD on the build host (release e2e injects it when bootstrap_needs_sudo is true)" >&2; \
+			exit 1; \
+		fi; \
 		{ \
 			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
 			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG\""; \
-		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
-		sudo chmod 0440 "$(SUDOERS_FILE)"; \
-		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
+		} | _sudo_tee "$(SUDOERS_FILE)"; \
+		_sudo chmod 0440 "$(SUDOERS_FILE)"; \
+		if ! _sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
 			echo "dev-sudo-setup: sudoers validation failed, rolling back"; \
-			sudo rm -f "$(SUDOERS_FILE)"; \
+			_sudo rm -f "$(SUDOERS_FILE)"; \
 			exit 1; \
 		fi; \
 		echo "dev-sudo-setup: passwordless sudo + env passthrough for podman configured at $(SUDOERS_FILE)"; \
