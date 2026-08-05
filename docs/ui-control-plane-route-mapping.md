@@ -197,6 +197,25 @@ proxy). Notable Admin host configuration routes:
 | Enable or Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | One action button from status (`desired`/`actual`); busy label while apply runs; card refresh |
 | Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Shown only when AP is off; single PSK field (no confirm) with show/hide toggle; busy “Enabling…”; opens as `https://manage.ap/` (fixed IP `https://10.42.0.1/`); soft reasons such as `packages_missing` |
 | Disable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:false}` | Shown only when AP is on; busy “Disabling…” then switches to enable control |
+| `GET /admin/licensing` | `AdminLicensingPage` | `GET /api/v1/licensing/status` | Status + accept/import forms |
+| Accept base entitlement | `acceptBase` + `withViewSync` | `POST /api/v1/licensing/base-entitlement/accept` | Local status update; button greys when `resolved`; `requestViewSync` for `shell.alerts` / `shell.bootstrap` / `page` (+ tags `licensing`, `setup`) so header alerts and home card clear without navigating away |
+| Import offline license | `importLicense` + `withViewSync` | `PUT /api/v1/licensing/license` | Same view-sync plan as accept; status refresh |
+| Header Alerts | `Shell` notifications menu | `GET /api/v1/notifications`; dismiss → `POST /api/v1/notifications/{id}/acknowledge` | Re-fetched on route change and whenever `shell.alerts` is invalidated via view-sync |
+
+### View sync (generic post-mutation UI invalidation)
+
+Mutations that change shared chrome or cross-page setup must not hard-code the
+notification widget. After success they call `requestViewSync` /
+`withViewSync` (`services/controlplane-ui/src/lib/viewSync.ts`) with a plan:
+
+- **regions**: `shell.alerts` | `shell.bootstrap` | `page` | `app`
+- **tags** (optional): domain topics such as `licensing`, `setup`, `profiles`
+
+Subscribers:
+
+- `Shell` listens to `shell.alerts`
+- `App` listens to `shell.bootstrap` / `app`
+- Pages opt in with `useViewSyncGeneration("page")` and/or `useViewSyncTag(...)`
 
 Permissions: `host.read` for status, `host.write` for apply. Admin mode visibility
 still requires a system-administrator session for the left-rail entry.

@@ -4,6 +4,7 @@ import { AuthLayout } from "./AuthLayout";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
+import { useViewSyncGeneration } from "../lib/viewSyncHooks";
 import { Shell } from "../shell/Shell";
 import type { CapabilitiesResponse, Session } from "../types";
 import type { AppShellState } from "./AppShellState";
@@ -18,6 +19,8 @@ export function App(): React.JSX.Element {
   });
   const [bootError, setBootError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const bootstrapSync = useViewSyncGeneration("shell.bootstrap");
+  const appSync = useViewSyncGeneration("app");
 
   useEffect(() => {
     const onPopState = () => setPathname(window.location.pathname || "/");
@@ -62,6 +65,44 @@ export function App(): React.JSX.Element {
       ignore = true;
     };
   }, [refreshKey]);
+
+  // After mutations that declare shell.bootstrap / app, refresh capabilities
+  // and session without returning to the boot screen.
+  useEffect(() => {
+    if (bootstrapSync === 0 && appSync === 0) {
+      return;
+    }
+    if (!shellState.session && !loadAuth()) {
+      return;
+    }
+    let ignore = false;
+    void (async () => {
+      try {
+        const [capabilities, session] = await Promise.all([
+          client.getCapabilities().catch(() => ({ capabilities: [] } as CapabilitiesResponse)),
+          client.getSession().catch(() => null)
+        ]);
+        if (ignore) {
+          return;
+        }
+        if (!session) {
+          clearAuth();
+          setShellState((current) => ({ ...current, session: null, capabilities: [] }));
+          return;
+        }
+        setShellState((current) => ({
+          ...current,
+          capabilities: capabilities.capabilities,
+          session
+        }));
+      } catch {
+        // Keep existing shell state; surface errors on the next full boot.
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [bootstrapSync, appSync, shellState.session]);
 
   useEffect(() => {
     if (shellState.booting) {

@@ -3,6 +3,8 @@ import { Card, EmptyState, PageFrame } from "../components";
 import { client } from "../lib/api";
 import { formatTimestamp } from "../lib/format";
 import { navigate } from "../lib/navigate";
+import { requestViewSync, withViewSync } from "../lib/viewSync";
+import { useViewSyncGeneration, useViewSyncTag } from "../lib/viewSyncHooks";
 import type {
   ApplianceIdentity,
   ApplianceMetadataBundleStatus,
@@ -669,6 +671,8 @@ function AdminLicensingPage(): React.JSX.Element {
   const [error, setError] = useState("");
   const [document, setDocument] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const pageSync = useViewSyncGeneration("page");
+  const licensingTag = useViewSyncTag("licensing");
 
   async function refresh() {
     setStatus(await client.getLicensingStatus());
@@ -678,14 +682,30 @@ function AdminLicensingPage(): React.JSX.Element {
     void refresh().catch((err) =>
       setError(err instanceof Error ? err.message : "Could not load licensing status.")
     );
-  }, []);
+  }, [pageSync, licensingTag]);
+
+  // Shared post-success plan: other views that care about setup/alerts re-fetch
+  // without this page knowing about the notification widget implementation.
+  const licensingResolvedSync = {
+    regions: ["shell.alerts", "shell.bootstrap", "page"] as const,
+    tags: ["licensing", "setup"]
+  };
 
   async function acceptBase() {
     setSubmitting(true);
     setError("");
     setMessage("");
     try {
-      setStatus(await client.acceptBaseEntitlement());
+      setStatus(
+        await withViewSync(
+          () => client.acceptBaseEntitlement(),
+          {
+            regions: [...licensingResolvedSync.regions],
+            tags: [...licensingResolvedSync.tags],
+            reason: "licensing.base-accepted"
+          }
+        )
+      );
       setMessage("Base/free entitlement accepted. Licensing is now resolved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not accept base entitlement.");
@@ -700,7 +720,16 @@ function AdminLicensingPage(): React.JSX.Element {
     setError("");
     setMessage("");
     try {
-      setStatus(await client.importLicense(document));
+      setStatus(
+        await withViewSync(
+          () => client.importLicense(document),
+          {
+            regions: [...licensingResolvedSync.regions],
+            tags: [...licensingResolvedSync.tags],
+            reason: "licensing.import"
+          }
+        )
+      );
       setDocument("");
       setMessage("Offline license imported successfully.");
     } catch (err) {
@@ -709,6 +738,10 @@ function AdminLicensingPage(): React.JSX.Element {
       setSubmitting(false);
     }
   }
+
+  const licensingResolved = Boolean(status?.resolved);
+  const acceptBaseDisabled = submitting || licensingResolved;
+  const importDisabled = submitting || !document.trim();
 
   return (
     <PageFrame
@@ -758,8 +791,15 @@ function AdminLicensingPage(): React.JSX.Element {
             Accepting base/free entitlement marks licensing as resolved and keeps advanced
             capabilities unavailable until a fuller offline license is imported.
           </p>
-          <button className="button button--primary" disabled={submitting} onClick={() => void acceptBase()}>
-            {submitting ? "Working..." : "Accept base entitlement"}
+          {licensingResolved ? (
+            <p className="muted">Base entitlement is already accepted (or a fuller license is active).</p>
+          ) : null}
+          <button
+            className="button button--primary"
+            disabled={acceptBaseDisabled}
+            onClick={() => void acceptBase()}
+          >
+            {submitting ? "Working..." : licensingResolved ? "Base entitlement accepted" : "Accept base entitlement"}
           </button>
         </Card>
       </div>
@@ -772,9 +812,10 @@ function AdminLicensingPage(): React.JSX.Element {
               value={document}
               onChange={(event) => setDocument(event.target.value)}
               placeholder='{"version":1,"issuer":"zon","capabilities":["base"],"signature":"offline-dev"}'
+              disabled={submitting}
             />
           </label>
-          <button className="button button--primary" type="submit" disabled={submitting || !document.trim()}>
+          <button className="button button--primary" type="submit" disabled={importDisabled}>
             Import license
           </button>
         </form>
@@ -790,6 +831,8 @@ function AdminProfilesPage(): React.JSX.Element {
   const [error, setError] = useState("");
   const [validation, setValidation] = useState<ProfileValidationResult | null>(null);
   const [pendingActivate, setPendingActivate] = useState<string | null>(null);
+  const pageSync = useViewSyncGeneration("page");
+  const licensingTag = useViewSyncTag("licensing");
 
   async function refresh() {
     const [nextLicensing, nextProfiles] = await Promise.all([
@@ -802,9 +845,9 @@ function AdminProfilesPage(): React.JSX.Element {
 
   useEffect(() => {
     void refresh().catch((err) =>
-      setError(err instanceof Error ? err.message : "Could not load profiles.")
+      setError(err instanceof Error ? err.message : "Could not load appliance profiles.")
     );
-  }, []);
+  }, [pageSync, licensingTag]);
 
   async function validateProfile(id: string) {
     setError("");
@@ -820,6 +863,11 @@ function AdminProfilesPage(): React.JSX.Element {
       setPendingActivate(null);
       setMessage(result.activation.message);
       await refresh();
+      requestViewSync({
+        regions: ["shell.bootstrap", "page"],
+        tags: ["profiles", "setup"],
+        reason: "profiles.activated"
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not activate profile.");
     }

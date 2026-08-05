@@ -3,6 +3,7 @@ import { Card, EmptyState, PageFrame, StatCard } from "../components";
 import { client } from "../lib/api";
 import { capabilityBadge } from "../lib/format";
 import { navigate } from "../lib/navigate";
+import { useViewSyncGeneration, useViewSyncTag } from "../lib/viewSyncHooks";
 import type { ApplianceIdentity, ApplianceSetupState, Session, Version } from "../types";
 
 export function HomePage(props: {
@@ -14,6 +15,8 @@ export function HomePage(props: {
   const [health, setHealth] = useState("unknown");
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
   const [setupState, setSetupState] = useState<ApplianceSetupState | null>(null);
+  const pageSync = useViewSyncGeneration("page");
+  const setupTag = useViewSyncTag("setup");
 
   useEffect(() => {
     void (async () => {
@@ -28,7 +31,7 @@ export function HomePage(props: {
       setIdentity(nextIdentity);
       setSetupState(nextSetup);
     })();
-  }, []);
+  }, [pageSync, setupTag]);
 
   return (
     <PageFrame

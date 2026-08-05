@@ -7,6 +7,7 @@ import {
 } from "../components";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
+import { useViewSyncGeneration } from "../lib/viewSyncHooks";
 import {
   currentMode,
   isSystemAdministrator,
@@ -35,6 +36,9 @@ export function Shell(props: {
   const [notifications, setNotifications] = useState<
     Array<{ id: string; title: string; body: string; actionUrl?: string }>
   >([]);
+  // Re-fetch header alerts after any successful mutation that invalidates
+  // shell.alerts (pathname change remains a secondary refresh trigger).
+  const alertsSync = useViewSyncGeneration("shell.alerts");
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +57,7 @@ export function Shell(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.pathname]);
+  }, [props.pathname, alertsSync]);
 
   function openMode(nextMode: Mode) {
     setUserMenuOpen(false);
