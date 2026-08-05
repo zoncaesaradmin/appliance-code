@@ -154,7 +154,6 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
-		"--host-mdns-enabled", "true",
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
 		"--zot-image", zotArchive,
@@ -229,7 +228,6 @@ func TestReleaseInputRejectsUnpairedZotImage(t *testing.T) {
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
-		"--host-mdns-enabled", "true",
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
 		"--zot-image", zot).CombinedOutput()

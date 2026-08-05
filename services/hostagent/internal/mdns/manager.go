@@ -66,7 +66,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		status.SupportedCapable = false
 		if st.Desired {
 			status.Reason = ReasonPackagesMissing
-			status.Message = "mdns packages (avahi-daemon) are not installed on this host; reinstall with host mDNS packages enabled"
+			status.Message = "mdns packages (avahi-daemon) are not installed on this host; complete product install stages host packages for day-2 enablement"
 		} else {
 			status.Reason = ReasonDesiredOff
 			status.Message = "mdns is not desired"
@@ -122,7 +122,7 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		status, _ := m.Status(ctx)
 		status.Desired = true
 		status.Reason = ReasonPackagesMissing
-		status.Message = "mdns packages (avahi-daemon) are not installed on this host; reinstall with host mDNS packages enabled"
+		status.Message = "mdns packages (avahi-daemon) are not installed on this host; complete product install stages host packages for day-2 enablement"
 		return status, nil
 	}
 	if err := m.saveState(st); err != nil {

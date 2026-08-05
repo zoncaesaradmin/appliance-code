@@ -292,12 +292,6 @@
         "dnsReadyURL": {
           "type": "string"
         },
-        "hostMDNSEnabled": {
-          "type": "boolean"
-        },
-        "hostWifiAPEnabled": {
-          "type": "boolean"
-        },
         "dnsZoneName": {
           "type": "string"
         },

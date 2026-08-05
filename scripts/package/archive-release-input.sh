@@ -29,20 +29,14 @@ Options:
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
                                    Defaults to services/hostagent/bin/appliance-host-agentd.
   --host-packages-dir DIR          Offline host package directory to copy into
-                                   release-input as host-packages/.
+                                   release-input as host-packages/ (required for
+                                   the complete product super-set).
                                    Layout must be OS/version/arch, for example
                                    ubuntu/24.04/amd64/*.deb.
-                                   Used when host mDNS and/or WiFi AP is enabled.
   --host-packages-os-version VER   Ubuntu baseline expected under
                                    host-packages/ubuntu/<VER>/amd64/.
                                    Defaults to the OS_VERSION environment
-                                   variable. Required when any host package
-                                   capability is enabled.
-  --host-mdns-enabled true|false   Whether this release-input should enable host
-                                   mDNS packaging. Defaults to false.
-  --host-wifi-ap-enabled true|false
-                                   Whether this release-input should enable
-                                   management WiFi AP packaging. Defaults to false.
+                                   variable. Required for the complete product.
   --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
   --zot-image-reference REF        Canonical registry.local/zot@sha256:...
                                    platform-manifest reference.
@@ -105,8 +99,6 @@ HOST_AGENT_IMAGE_REFERENCE=""
 HOST_AGENT_BINARY=""
 HOST_PACKAGES_DIR=""
 HOST_PACKAGES_OS_VERSION="${OS_VERSION:-}"
-HOST_MDNS_ENABLED="${HOST_MDNS_ENABLED:-false}"
-HOST_WIFI_AP_ENABLED="${HOST_WIFI_AP_ENABLED:-false}"
 ZOT_IMAGE=""
 ZOT_IMAGE_REFERENCE=""
 ZOT_VERSION=""
@@ -182,14 +174,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --host-packages-os-version)
       HOST_PACKAGES_OS_VERSION="${2:-}"
-      shift 2
-      ;;
-    --host-mdns-enabled)
-      HOST_MDNS_ENABLED="${2:-}"
-      shift 2
-      ;;
-    --host-wifi-ap-enabled)
-      HOST_WIFI_AP_ENABLED="${2:-}"
       shift 2
       ;;
     --zot-image)
@@ -304,10 +288,13 @@ if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
 host_packages_required() {
-  bool_true "${HOST_MDNS_ENABLED}" || bool_true "${HOST_WIFI_AP_ENABLED}"
+  # Super-set packaging: host package payload is always part of the complete
+  # product release-input. Install flags (host mDNS / Wi-Fi AP enablement) only
+  # decide whether zonctl turns those packages on at install time.
+  true
 }
 
-if host_packages_required && [[ -z "${HOST_PACKAGES_DIR}" ]]; then
+if [[ -z "${HOST_PACKAGES_DIR}" ]]; then
   HOST_PACKAGES_DIR="${REPO_ROOT}/.run/host-packages"
 fi
 
@@ -349,17 +336,15 @@ if [[ ! -f "${HOST_AGENT_BINARY}" ]]; then
   echo "archive-release-input: host-agent binary not found: ${HOST_AGENT_BINARY}" >&2
   exit 1
 fi
-if host_packages_required; then
-  if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
-    echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR}" >&2
-    exit 1
-  fi
-  if [[ -z "${HOST_PACKAGES_OS_VERSION}" ]]; then
-    echo "archive-release-input: --host-packages-os-version is required when host mDNS or WiFi AP is enabled (or set OS_VERSION in the environment)" >&2
-    exit 2
-  fi
-  require_host_packages_baseline "${HOST_PACKAGES_DIR}" "${HOST_PACKAGES_OS_VERSION}"
+if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
+  echo "archive-release-input: host packages directory not found: ${HOST_PACKAGES_DIR} (complete product always packages host-packages)" >&2
+  exit 1
 fi
+if [[ -z "${HOST_PACKAGES_OS_VERSION}" ]]; then
+  echo "archive-release-input: --host-packages-os-version is required for host packages (or set OS_VERSION in the environment)" >&2
+  exit 2
+fi
+require_host_packages_baseline "${HOST_PACKAGES_DIR}" "${HOST_PACKAGES_OS_VERSION}"
 if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
   echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
   exit 2
@@ -651,9 +636,7 @@ cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
 cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
-if host_packages_required; then
-  copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
-fi
+copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
 if [[ -n "${ZOT_IMAGE}" ]]; then
   ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
   cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
@@ -857,11 +840,8 @@ if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
   OPTIONAL_EXTRA_OCI_IMAGES_JSON+=']'
 fi
 
-HOST_PACKAGES_JSON=""
-if host_packages_required; then
-  HOST_PACKAGES_JSON=',
+HOST_PACKAGES_JSON=',
     "hostPackages": '"$(render_dir_artifact "host-packages")"
-fi
 
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {

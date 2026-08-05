@@ -41,7 +41,7 @@ This avoids a design that grows by adding more per-field file scraping inside th
 
 The management WiFi access point is applied only through `appliance-host-agentd`
 (`PUT /internal/v1/host/wifi-ap`). Install-time enablement with
-`host_wifi_ap_enabled=true` installs offline host packages then calls that same
+Install stages offline host packages from the super-set bundle; day-2 Admin UI/API calls that same
 API over the host agent Unix socket. Control-plane routes mirror it:
 `GET|PUT /api/v1/host/wifi-ap` (permissions `host.read` / `host.write`).
 
