@@ -34,7 +34,7 @@ Applies to the user's real build server, publish/artifact server, and target app
 
 - Limit edits to files **inside the git repositories** you were asked to work in (`appliance-code`, `appliance-ctl`, `appliance-release`).
 - Do **not** create or modify user runtime files outside the repo, including but not limited to:
-  - `~/appliance-release.config.yaml` (or `$APPLIANCE_RELEASE_CONFIG` / any personal config path)
+  - `~/appliance-release.config.yaml` (or any personal config path)
   - `~/build-catalog.yaml` (or any personal build-catalog path outside the repo)
 - Update only **in-repo examples and references** such as `.agents/skills/release/references/config.example.yaml` and `build-catalog.example.yaml`. Tell the user what to copy into their home/runtime config if needed.
 - Do not edit other home-directory or machine-local paths (dotfiles, secrets, SSH config, host inputs under `/home/.../ci/inputs`, etc.) unless the user explicitly asks in the current turn.
