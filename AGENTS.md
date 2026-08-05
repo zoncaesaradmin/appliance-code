@@ -65,6 +65,7 @@ These rules apply to all implementation and documentation in this repository.
 - Do not treat “make verify passed in one repo” as sufficient when the release flow spans `appliance-release`, `appliance-ctl`, and `appliance-code`; verify each edited repo and explicitly re-check the shared contract.
 - Do not hand off another long release-flow run while a known cross-repo contract mismatch remains.
 
+
 ## UI To API Observability Contract
 
 - When the browser talks to the UI service and the UI service talks to the control-plane API on the browser's behalf, keep that boundary explicit in code, logs, and documentation.
