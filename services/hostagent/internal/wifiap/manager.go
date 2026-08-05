@@ -177,7 +177,10 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		if err := m.saveState(st); err != nil {
 			return Status{}, err
 		}
+		// Wipe secrets and generated runtime config so disable is a full cleanup.
 		_ = m.files().Remove(m.pskPath())
+		_ = m.files().Remove(m.hostapdConfPath())
+		_ = m.files().Remove(m.dnsmasqConfPath())
 		return m.Status(ctx)
 	}
 

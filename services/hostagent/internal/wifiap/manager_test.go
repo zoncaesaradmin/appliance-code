@@ -288,6 +288,60 @@ func (m *matchingRunner) CombinedOutput(ctx context.Context, name string, args .
 	return m.inner.CombinedOutput(ctx, name, args...)
 }
 
+func TestApplyDisableCleansGeneratedConfigs(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"hostapd": true, "dnsmasq": true, "iw": true, "ip": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+			"iw list": `Wiphy phy0
+	Supported interface modes:
+		 * managed
+		 * AP
+`,
+			"iw dev wlan0 link": "Not connected.",
+		},
+	}
+	m := &Manager{
+		ConfigDir:  "/cfg",
+		StateDir:   "/state",
+		RuntimeDir: "/run",
+		Runner:     runner,
+		Files:      files,
+		PortBinder: FixedPortBinder{Allow: true},
+	}
+	if _, err := m.Apply(context.Background(), ApplyRequest{
+		Desired:  true,
+		PSK:      "long-enough-secret",
+		SSIDBase: "kitchen",
+	}); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if _, ok := files.data["/cfg/hostapd.conf"]; !ok {
+		t.Fatal("expected hostapd conf after enable")
+	}
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: false})
+	if err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	if status.Desired {
+		t.Fatal("expected desired false after disable")
+	}
+	if _, ok := files.data["/cfg/hostapd.conf"]; ok {
+		t.Fatal("disable must remove hostapd.conf")
+	}
+	if _, ok := files.data["/cfg/dnsmasq.conf"]; ok {
+		t.Fatal("disable must remove dnsmasq.conf")
+	}
+	if _, ok := files.data["/state/psk"]; ok {
+		t.Fatal("disable must remove psk")
+	}
+}
+
 func TestApplyRejectsSoftWhenRadioInUse(t *testing.T) {
 	files := newMemFile()
 	runner := &fakeRunner{

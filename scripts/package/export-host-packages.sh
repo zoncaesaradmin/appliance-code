@@ -99,7 +99,7 @@ if [[ -z "${OS_VERSION}" ]]; then
   OS_VERSION="${CURRENT_OS_VERSION}"
 fi
 if [[ "${OS_VERSION}" != "${CURRENT_OS_VERSION}" ]]; then
-  echo "export-host-packages: requested Ubuntu ${OS_VERSION}, but the current packaging environment is Ubuntu ${CURRENT_OS_VERSION}; use a matching Ubuntu build environment or provide a prebuilt host package override" >&2
+  echo "export-host-packages: requested Ubuntu ${OS_VERSION}, but the current packaging environment is Ubuntu ${CURRENT_OS_VERSION}; use a matching Ubuntu build environment" >&2
   exit 1
 fi
 if [[ "${ARCH}" != "amd64" ]]; then
