@@ -51,6 +51,46 @@ func TestAcceptBaseEntitlement(t *testing.T) {
 	}
 }
 
+func TestAcceptBaseEntitlementIdempotent(t *testing.T) {
+	svc, _ := openLicensing(t)
+	if _, err := svc.AcceptBaseEntitlement(context.Background(), audit.SystemActor); err != nil {
+		t.Fatal(err)
+	}
+	st, err := svc.AcceptBaseEntitlement(context.Background(), audit.SystemActor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != storage.LicensingBaseFree {
+		t.Fatalf("got %+v", st)
+	}
+}
+
+func TestAcceptBaseEntitlementDoesNotDowngradeLicensed(t *testing.T) {
+	svc, _ := openLicensing(t)
+	doc := `{
+		"version":1,
+		"issuer":"zon",
+		"capabilities":["base","host","workflows","artifact"],
+		"signature":"offline-dev",
+		"validFrom":"2020-01-01T00:00:00Z",
+		"validTo":"2099-01-01T00:00:00Z"
+	}`
+	if _, err := svc.ImportLicense(context.Background(), audit.SystemActor, doc); err != nil {
+		t.Fatal(err)
+	}
+	st, err := svc.AcceptBaseEntitlement(context.Background(), audit.SystemActor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != storage.LicensingLicensed {
+		t.Fatalf("state=%s, want licensed preserved", st.State)
+	}
+	ok, err := svc.IsCapabilityEntitled(context.Background(), "artifact")
+	if err != nil || !ok {
+		t.Fatalf("artifact entitled=%v err=%v", ok, err)
+	}
+}
+
 func TestImportLicenseRejectsBadSignature(t *testing.T) {
 	svc, _ := openLicensing(t)
 	_, err := svc.ImportLicense(context.Background(), audit.SystemActor, `{

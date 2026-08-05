@@ -77,6 +77,44 @@ func runBootstrapInit(argv []string) error {
 	return nil
 }
 
+// runLicensingAcceptBase implements
+// `appliance-server licensing accept-base`: node-local acceptance of the
+// base/free entitlement so install automation can resolve licensing without
+// browser login. Safe to rerun when licensing is already resolved.
+func runLicensingAcceptBase(argv []string) error {
+	fs := flag.NewFlagSet("licensing accept-base", flag.ContinueOnError)
+	if err := fs.Parse(argv); err != nil {
+		return err
+	}
+
+	_, services, err := loadConfigAndServices()
+	if err != nil {
+		return err
+	}
+	defer services.DB.Close()
+
+	if services.Licensing == nil {
+		return fmt.Errorf("licensing service is not configured")
+	}
+
+	actor := audit.Actor{Type: storage.AuditActorSystem, AuthMethod: "bootstrap"}
+	st, err := services.Licensing.Status(context.Background())
+	if err != nil {
+		return err
+	}
+	if st.Resolved {
+		fmt.Printf("licensing: already resolved (state %s); accept-base skipped\n", st.State)
+		return nil
+	}
+
+	st, err = services.Licensing.AcceptBaseEntitlement(context.Background(), actor)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("licensing: accepted base entitlement (state %s)\n", st.State)
+	return nil
+}
+
 // runRecoveryResetPassword implements
 // `appliance-server recovery reset-password`: a node-local, root-equivalent
 // operator sets a user's password directly, bypassing normal login. It
@@ -122,9 +160,9 @@ func runRecoveryResetPassword(argv []string) error {
 	return nil
 }
 
-// dispatchCLI handles the bootstrap and recovery subcommands. It returns
-// (handled, err): handled is false when args don't match any subcommand, so
-// main falls through to running the server normally.
+// dispatchCLI handles the bootstrap, licensing, and recovery subcommands. It
+// returns (handled, err): handled is false when args don't match any
+// subcommand, so main falls through to running the server normally.
 func dispatchCLI(args []string) (handled bool, err error) {
 	if len(args) < 1 {
 		return false, nil
@@ -136,6 +174,16 @@ func dispatchCLI(args []string) (handled bool, err error) {
 			return true, fmt.Errorf("usage: appliance-server bootstrap init --admin-username <username> --admin-password-file <path>")
 		}
 		return true, runBootstrapInit(args[2:])
+	case "licensing":
+		if len(args) < 2 {
+			return true, fmt.Errorf("usage: appliance-server licensing <accept-base>")
+		}
+		switch args[1] {
+		case "accept-base":
+			return true, runLicensingAcceptBase(args[2:])
+		default:
+			return true, fmt.Errorf("usage: appliance-server licensing <accept-base>")
+		}
 	case "recovery":
 		if len(args) < 2 {
 			return true, fmt.Errorf("usage: appliance-server recovery <reset-password> ...")

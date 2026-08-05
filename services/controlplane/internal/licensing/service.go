@@ -113,6 +113,13 @@ func (s *Service) AcceptBaseEntitlement(ctx context.Context, actor audit.Actor) 
 		if err != nil {
 			return err
 		}
+		// Idempotent for install-time and UI retries: leaving base_free as-is
+		// is success. An existing offline license must not be downgraded to
+		// base/free by re-accepting the default entitlement.
+		if rec.State == storage.LicensingBaseFree || rec.State == storage.LicensingLicensed {
+			out, err = s.Status(txCtx)
+			return err
+		}
 		now := s.now().UTC()
 		summary, _ := json.Marshal(map[string]any{
 			"mode":         "base_free",
