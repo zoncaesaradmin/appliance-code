@@ -27,7 +27,7 @@ data:
       },
       "log": {
         "level": "info",
-        "output": "/var/log/zot/application.log"
+        "output": "/data/zon/logs/artifactserver/application.log"
       }
     }
 ---
@@ -105,7 +105,7 @@ spec:
               mountPath: /data/zon/logs/artifactserver
       {{- end }}
       containers:
-        - name: zot
+        - name: artifact-server
           image: {{ include "appliance-registry.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args: ["serve", "/etc/zot/config.json"]
@@ -128,7 +128,8 @@ spec:
             - {name: config, mountPath: /etc/zot, readOnly: true}
             - {name: auth-key, mountPath: /etc/zot/auth, readOnly: true}
             - {name: data, mountPath: /var/lib/registry}
-            - {name: logs, mountPath: /var/log/zot}
+            # Same host-visible path as other services (/data/zon/logs/<svc>).
+            - {name: logs, mountPath: /data/zon/logs/artifactserver}
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: config
@@ -188,7 +189,7 @@ spec:
       ports:
         - {protocol: TCP, port: {{ .Values.service.port }}}
     {{- end }}
-  # Zot has no runtime egress dependency. Response traffic is statefully allowed.
+  # Artifact server has no runtime egress dependency. Response traffic is statefully allowed.
   egress: []
 {{- end }}
 {{- if .Values.ingress.enabled }}

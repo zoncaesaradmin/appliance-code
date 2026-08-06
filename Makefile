@@ -87,7 +87,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-zot-image-archive package-coredns-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-artifact-server-image-archive package-coredns-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -265,14 +265,20 @@ package-argo-controller-image-archive:
 		$${ARGO_CONTROLLER_BASE_IMAGE:+--base-image "$${ARGO_CONTROLLER_BASE_IMAGE}"} \
 		$${ARGO_VERSION:+--image-tag "$${ARGO_VERSION}"}
 
-## package-zot-image-archive: export the pinned upstream Zot image using the
-## canonical bundled annotation and platform-manifest digest reference.
-package-zot-image-archive:
-	@out_file="$${OUT_FILE:-$(CURDIR)/.run/zot.tar}"; \
-	bash ./scripts/package/export-zot-image-archive.sh \
+## package-artifact-server-image-archive: build the appliance artifact-server
+## wrapper (upstream registry binary + thin entrypoint; native application.log
+## via chart config) and export it with the canonical bundled annotation and
+## platform-manifest digest reference (registry.local/zot install contract).
+package-artifact-server-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/artifact-server.tar}"; \
+	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	src_image="$${ARTIFACT_SERVER_SOURCE_IMAGE:-$${ZOT_SOURCE_IMAGE:-}}"; \
+	version="$${ARTIFACT_SERVER_VERSION:-$${ZOT_VERSION:-}}"; \
+	bash ./scripts/package/export-artifact-server-image-archive.sh \
 		--out-file "$$out_file" \
-		$${ZOT_SOURCE_IMAGE:+--source-image "$${ZOT_SOURCE_IMAGE}"} \
-		$${ZOT_VERSION:+--zot-version "$${ZOT_VERSION}"}
+		--reference-out-file "$$reference_file" \
+		$${src_image:+--source-image "$$src_image"} \
+		$${version:+--version "$$version"}
 
 ## package-coredns-image-archive: build the appliance CoreDNS wrapper
 ## (upstream binary + log tee entrypoint) and export it with the canonical
@@ -329,9 +335,9 @@ package-release-input-tar:
 	host_packages_os_version="$${HOST_PACKAGES_OS_VERSION:-$${OS_VERSION:-24.04}}"; \
 	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
 	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
-	zot_version="$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
-	zot_image="$${ZOT_IMAGE:-$(CURDIR)/.run/zot-$$zot_version.tar}"; \
-	zot_reference_file="$(CURDIR)/.run/zot-$$zot_version.reference"; \
+	artifact_server_version="$${ARTIFACT_SERVER_VERSION:-$${ZOT_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}}"; \
+	artifact_server_image="$${ARTIFACT_SERVER_IMAGE:-$${ZOT_IMAGE:-$(CURDIR)/.run/artifact-server-$$artifact_server_version.tar}}"; \
+	artifact_server_reference_file="$(CURDIR)/.run/artifact-server-$$artifact_server_version.reference"; \
 	dns_version="$${DNS_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-dns/Chart.yaml)}"; \
 	dns_image="$${DNS_IMAGE:-$(CURDIR)/.run/coredns-$$dns_version.tar}"; \
 	dns_reference_file="$(CURDIR)/.run/coredns-$$dns_version.reference"; \
@@ -359,13 +365,20 @@ package-release-input-tar:
 		ARGO_CONTROLLER_IMAGE="$$argo_controller_image"; \
 		ARGO_CONTROLLER_IMAGE_REFERENCE="$${ARGO_CONTROLLER_IMAGE_REFERENCE:-$$argo_controller_image_ref}"; \
 	fi; \
-	if [ -z "$${ZOT_IMAGE:-}" ]; then \
-		bash ./scripts/package/export-zot-image-archive.sh \
-			--out-file "$$zot_image" \
-			--reference-out-file "$$zot_reference_file" \
-			--zot-version "$$zot_version" \
-			$${ZOT_SOURCE_IMAGE:+--source-image "$${ZOT_SOURCE_IMAGE}"}; \
-		ZOT_IMAGE_REFERENCE="$$(tr -d '\r\n' < "$$zot_reference_file")"; \
+	if [ -z "$${ARTIFACT_SERVER_IMAGE:-}" ] && [ -z "$${ZOT_IMAGE:-}" ]; then \
+		src_image="$${ARTIFACT_SERVER_SOURCE_IMAGE:-$${ZOT_SOURCE_IMAGE:-}}"; \
+		$(MAKE) --no-print-directory package-artifact-server-image-archive \
+			OUT_FILE="$$artifact_server_image" \
+			REFERENCE_OUT_FILE="$$artifact_server_reference_file" \
+			ARTIFACT_SERVER_VERSION="$$artifact_server_version" \
+			$${src_image:+ARTIFACT_SERVER_SOURCE_IMAGE="$$src_image"}; \
+		ARTIFACT_SERVER_IMAGE_REFERENCE="$$(tr -d '\r\n' < "$$artifact_server_reference_file")"; \
+		ZOT_IMAGE_REFERENCE="$$ARTIFACT_SERVER_IMAGE_REFERENCE"; \
+	elif [ -n "$${ZOT_IMAGE:-}" ]; then \
+		artifact_server_image="$${ZOT_IMAGE}"; \
+		ZOT_IMAGE_REFERENCE="$${ZOT_IMAGE_REFERENCE:-}"; \
+	else \
+		ZOT_IMAGE_REFERENCE="$${ARTIFACT_SERVER_IMAGE_REFERENCE:-$${ZOT_IMAGE_REFERENCE:-}}"; \
 	fi; \
 	if [ -z "$${DNS_IMAGE:-}" ]; then \
 		bash ./scripts/package/export-coredns-image-archive.sh \
@@ -387,9 +400,9 @@ package-release-input-tar:
 		--host-agent-binary "$$host_agent_binary" \
 		--host-packages-dir "$$host_packages_dir" \
 		--host-packages-os-version "$$host_packages_os_version" \
-		--zot-image "$$zot_image" \
+		--zot-image "$$artifact_server_image" \
 		--zot-image-reference "$${ZOT_IMAGE_REFERENCE}" \
-		--zot-version "$$zot_version" \
+		--zot-version "$$artifact_server_version" \
 		--dns-image "$$dns_image" \
 		--dns-image-reference "$${DNS_IMAGE_REFERENCE}" \
 		--dns-version "$$dns_version" \

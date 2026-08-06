@@ -19,11 +19,12 @@ persistence:
   size: 100Gi
 
 logs:
-  # Host-visible OCI registry (artifactserver) log directory. zonctl prepares
-  # ownership before Helm apply; zot writes application.log under the mounted
-  # container path /var/log/zot. The prepare init container also touches
-  # application.log as mode 0644 so host operators can read it (upstream zot
-  # would otherwise create the file as 0600).
+  # Host-visible OCI registry (artifact-server) log directory. zonctl prepares
+  # ownership before Helm apply; the container mounts this same path and the
+  # artifact-server process writes application.log there via config
+  # log.output. The prepare init container also touches application.log as
+  # mode 0644 so host operators can read it (the process would otherwise
+  # create the file as 0600).
   hostPath: /data/zon/logs/artifactserver
   prepare:
     enabled: false

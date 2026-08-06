@@ -1,0 +1,28 @@
+ARG BASE_IMAGE=ghcr.io/project-zot/zot-linux-amd64:v2.1.8
+
+FROM ${BASE_IMAGE} AS upstream
+
+# Alpine wrapper keeps packaging consistent with Argo controller / CoreDNS
+# (services/* + make image-local / image). Primary operator logs still come
+# from the artifact-server native file logger (config log.output →
+# application.log on the mounted host path); this image does not tee
+# stdout/stderr.
+#
+# Upstream implementation today is the pinned project-zot binary; the
+# appliance name is artifact-server so we can swap implementations later.
+FROM alpine:3.24.1
+
+RUN apk add --no-cache bash ca-certificates
+
+# Published upstream image (stacker) places the binary here.
+COPY --from=upstream /usr/local/bin/zot-linux-amd64 /usr/local/bin/artifact-server
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
+RUN chmod 0755 /usr/local/bin/artifact-server /usr/local/bin/entrypoint.sh
+
+# Matches appliance-registry chart podSecurityContext runAsUser/runAsGroup.
+USER 10003:10003
+
+# Chart args (serve /etc/zot/config.json) are appended after the entrypoint.
+# Config path /etc/zot remains the chart mount for the current implementation.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
