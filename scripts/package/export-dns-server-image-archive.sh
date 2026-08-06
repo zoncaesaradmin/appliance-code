@@ -3,14 +3,15 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: export-coredns-image-archive.sh --out-file PATH [options]
+usage: export-dns-server-image-archive.sh --out-file PATH [options]
 
-Builds the appliance-owned CoreDNS wrapper image (upstream binary + log
-entrypoint that tees stdout/stderr into /data/zon/logs/dns) and exports it
-as an OCI archive.
+Builds the appliance-owned DNS server wrapper image (upstream CoreDNS binary
++ log entrypoint that tees stdout/stderr into /data/zon/logs/dns) and exports
+it as an OCI archive.
 
 The archive annotation is registry.local/coredns:bundled and the emitted
-workload reference is registry.local/coredns@sha256:<archive index digest>.
+workload reference is registry.local/coredns@sha256:<archive index digest>
+(install OCI contract; upstream engine is CoreDNS).
 
 Options:
   --out-file PATH           Output OCI archive tar. Required.
@@ -23,15 +24,15 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SERVICE_DIR="${REPO_ROOT}/services/coredns"
+SERVICE_DIR="${REPO_ROOT}/services/dns-server"
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-dns/Chart.yaml"
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
 SOURCE_IMAGE=""
 DNS_VERSION=""
 LOCAL_IMAGE_PREFIX="localhost"
-IMAGE_NAME="appliance-coredns"
-UPSTREAM_LOCAL_NAME="appliance-coredns-upstream"
+IMAGE_NAME="appliance-dns-server"
+UPSTREAM_LOCAL_NAME="appliance-dns-server-upstream"
 PREFETCH_RETRIES=5
 
 retry() {
@@ -57,17 +58,17 @@ while [[ $# -gt 0 ]]; do
     --source-image) SOURCE_IMAGE="${2:-}"; shift 2 ;;
     --dns-version) DNS_VERSION="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
-    *) echo "export-coredns-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+    *) echo "export-dns-server-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
 if [[ -z "${OUT_FILE}" ]]; then
-  echo "export-coredns-image-archive: --out-file is required" >&2
+  echo "export-dns-server-image-archive: --out-file is required" >&2
   exit 2
 fi
 for tool in buildah skopeo python3 tar; do
   command -v "${tool}" >/dev/null 2>&1 || {
-    echo "export-coredns-image-archive: ${tool} is required on PATH" >&2
+    echo "export-dns-server-image-archive: ${tool} is required on PATH" >&2
     exit 1
   }
 done
@@ -78,7 +79,7 @@ fi
 # Accept chart form v1.14.4 or compatibility form 1.14.4; registry.k8s.io tags use v.
 DNS_VERSION="${DNS_VERSION#v}"
 if [[ -z "${DNS_VERSION}" ]]; then
-  echo "export-coredns-image-archive: unable to derive dns version from ${CHART_YAML}" >&2
+  echo "export-dns-server-image-archive: unable to derive dns version from ${CHART_YAML}" >&2
   exit 1
 fi
 IMAGE_TAG="v${DNS_VERSION}"
@@ -138,7 +139,7 @@ if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
   printf '%s\n' "${REFERENCE}" >"${REFERENCE_OUT_FILE}"
 fi
 
-echo "created CoreDNS wrapper OCI archive: ${OUT_FILE}"
+echo "created dns-server wrapper OCI archive: ${OUT_FILE}"
 echo "wrapped upstream image: ${SOURCE_IMAGE}"
 echo "archive annotation: registry.local/coredns:bundled"
 echo "image reference: ${REFERENCE}"

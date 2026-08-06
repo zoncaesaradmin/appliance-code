@@ -87,7 +87,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-coredns-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -281,13 +281,13 @@ package-artifact-server-image-archive:
 		$${src_image:+--source-image "$$src_image"} \
 		$${version:+--version "$$version"}
 
-## package-coredns-image-archive: build the appliance CoreDNS wrapper
+## package-dns-server-image-archive: build the appliance dns-server wrapper
 ## (upstream binary + log tee entrypoint) and export it with the canonical
 ## bundled annotation and platform-manifest digest reference.
-package-coredns-image-archive:
-	@out_file="$${OUT_FILE:-$(CURDIR)/.run/coredns.tar}"; \
+package-dns-server-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/dns-server.tar}"; \
 	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
-	bash ./scripts/package/export-coredns-image-archive.sh \
+	bash ./scripts/package/export-dns-server-image-archive.sh \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
 		$${DNS_SOURCE_IMAGE:+--source-image "$${DNS_SOURCE_IMAGE}"} \
@@ -340,8 +340,8 @@ package-release-input-tar:
 	artifact_server_image="$${ARTIFACT_SERVER_IMAGE:-$(CURDIR)/.run/artifact-server-$$artifact_server_version.tar}"; \
 	artifact_server_reference_file="$(CURDIR)/.run/artifact-server-$$artifact_server_version.reference"; \
 	dns_version="$${DNS_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-dns/Chart.yaml)}"; \
-	dns_image="$${DNS_IMAGE:-$(CURDIR)/.run/coredns-$$dns_version.tar}"; \
-	dns_reference_file="$(CURDIR)/.run/coredns-$$dns_version.reference"; \
+	dns_image="$${DNS_IMAGE:-$(CURDIR)/.run/dns-server-$$dns_version.tar}"; \
+	dns_reference_file="$(CURDIR)/.run/dns-server-$$dns_version.reference"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
 	workflow_controller_image_ref="localhost/appliance-workflow-controller:$$workflows_version"; \
@@ -378,7 +378,7 @@ package-release-input-tar:
 		ARTIFACT_SERVER_IMAGE_REFERENCE="$${ARTIFACT_SERVER_IMAGE_REFERENCE:-}"; \
 	fi; \
 	if [ -z "$${DNS_IMAGE:-}" ]; then \
-		bash ./scripts/package/export-coredns-image-archive.sh \
+		bash ./scripts/package/export-dns-server-image-archive.sh \
 			--out-file "$$dns_image" \
 			--reference-out-file "$$dns_reference_file" \
 			--dns-version "$$dns_version" \

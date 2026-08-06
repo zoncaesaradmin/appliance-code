@@ -7,7 +7,7 @@
 {{- end -}}
 
 {{- define "appliance-registry.deploymentName" -}}
-{{- default "artifactserver" .Values.deploymentNameOverride | trunc 63 | trimSuffix "-" -}}
+{{- default "artifact-server" .Values.deploymentNameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "appliance-registry.namespace" -}}

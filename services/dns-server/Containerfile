@@ -2,8 +2,8 @@ ARG BASE_IMAGE=registry.k8s.io/coredns/coredns:v1.14.4
 
 FROM ${BASE_IMAGE} AS upstream
 
-# Alpine wrapper adds bash+tee so we can mirror CoreDNS stdout/stderr into
-# /data/zon/logs/dns (upstream distroless image has no shell).
+# Alpine wrapper adds bash+tee so we can mirror DNS server (CoreDNS) stdout/stderr
+# into /data/zon/logs/dns (upstream distroless image has no shell).
 #
 # Port 53 bind for UID 10004 is provided by zonctl hostdns.Prepare, which
 # sets net.ipv4.ip_unprivileged_port_start=0 on the node. Do not wrap PID 1

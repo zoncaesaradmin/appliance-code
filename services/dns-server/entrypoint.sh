@@ -22,6 +22,6 @@ chmod 0644 "${STDOUT_LOG}" "${STDERR_LOG}"
 # preserving the usual kubectl logs stream.
 exec > >(tee -a "${STDOUT_LOG}") 2> >(tee -a "${STDERR_LOG}" >&2)
 
-printf '[%s] starting coredns\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf '[%s] starting dns-server\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 exec /coredns "$@"
