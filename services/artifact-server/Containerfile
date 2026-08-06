@@ -2,17 +2,24 @@ ARG BASE_IMAGE=ghcr.io/project-zot/zot-linux-amd64:v2.1.8
 
 FROM ${BASE_IMAGE} AS upstream
 
-# Alpine wrapper keeps packaging consistent with Argo controller / CoreDNS
-# (services/* + make image-local / image). Primary operator logs still come
-# from the artifact-server native file logger (config log.output →
-# application.log on the mounted host path); this image does not tee
-# stdout/stderr.
+# Wrapper keeps packaging consistent with other services/* images (make image /
+# image-local + thin entrypoint). Primary operator logs still come from the
+# artifact-server native file logger (config log.output → application.log on
+# the mounted host path); this image does not tee stdout/stderr.
 #
 # Upstream implementation today is the pinned project-zot binary; the
 # appliance name is artifact-server so we can swap implementations later.
-FROM alpine:3.24.1
+#
+# Final base must provide glibc (/lib64/ld-linux-x86-64.so.2). The upstream
+# zot-linux-amd64 binary is dynamically linked; Alpine/musl cannot execute it
+# (execve fails with "cannot execute: required file not found" / exit 127).
+# CoreDNS and Argo wrappers can stay on Alpine because those upstream binaries
+# are statically linked.
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache bash ca-certificates
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends bash ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 # Published upstream image (stacker) places the binary here.
 COPY --from=upstream /usr/local/bin/zot-linux-amd64 /usr/local/bin/artifact-server

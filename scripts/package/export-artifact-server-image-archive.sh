@@ -105,6 +105,20 @@ make -C "${SERVICE_DIR}" image-local \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BASE_IMAGE="${UPSTREAM_LOCAL_REF}"
 
+# Fail closed if the wrapped binary cannot exec in the final image (classic
+# symptom of copying a glibc-linked upstream binary onto a musl base).
+SMOKE_CID="$(buildah from --quiet "${IMAGE_REF}")"
+cleanup_smoke() {
+  buildah rm "${SMOKE_CID}" >/dev/null 2>&1 || true
+}
+trap 'cleanup_smoke' EXIT
+if ! buildah run --user 0 "${SMOKE_CID}" -- /usr/local/bin/artifact-server --help >/dev/null; then
+  echo "export-artifact-server-image-archive: wrapped artifact-server binary failed to execute in ${IMAGE_REF} (check glibc/musl base mismatch)" >&2
+  exit 1
+fi
+cleanup_smoke
+trap - EXIT
+
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 LAYOUT="${TMP_DIR}/oci"
