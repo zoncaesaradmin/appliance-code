@@ -95,7 +95,7 @@ This lane belongs primarily in `../appliance-release` because it must prove:
 - Traefik routing
 - control-plane pod behavior
 - Artifact Server pod behavior
-- Argo presence and packaging wiring
+- Workflow Controller presence and packaging wiring
 - offline install/upgrade/restore behavior
 
 The source repo should supply reusable E2E client binaries or `go run`

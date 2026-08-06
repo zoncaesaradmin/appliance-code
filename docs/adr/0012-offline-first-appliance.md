@@ -10,14 +10,14 @@ The appliance is intended primarily for disconnected environments. Maintaining c
 ## Decision
 
 - V1 has one production distribution: a complete signed air-gap bundle for the supported host platform.
-- The bundle contains the pinned package closure needed on the supported host baseline, K3s binaries and platform images, the control plane, zot, Argo controller/executor, Buildah and utility task images, Helm chart, CRDs, scanner database, configuration schemas, migrations, verification keys, SBOMs, provenance, notices, and offline conformance tests.
+- The bundle contains the pinned package closure needed on the supported host baseline, K3s binaries and platform images, the control plane, zot, workflow controller/executor, Buildah and utility task images, Helm chart, CRDs, scanner database, configuration schemas, migrations, verification keys, SBOMs, provenance, notices, and offline conformance tests.
 - Installation, startup, normal operation, authentication, registry use, builds, backup, restore, diagnostics, and upgrade require no public internet access and must pass with public egress denied.
 - There is no connected installer. The same bundle may be installed on a network-connected host, but connectivity does not change acquisition or runtime behavior.
 - Components do not self-update, refresh from public services, phone home, perform external license checks, or dynamically fetch plugins. Updates arrive only as new signed offline bundles.
 - Controlled release assembly may acquire upstream artifacts in a connected trusted environment. It verifies, pins, records, and closes every dependency before publishing the bundle.
 - User-directed access to explicitly allowlisted internal Git servers, DNS/NTP, backup targets, clients, or future enterprise identity systems is permitted. These are operator-provided deployment inputs, not hidden product dependencies.
 - Build recipes cannot assume public package repositories or base-image registries. Required inputs must come from the submitted context, appliance zot, or explicitly configured internal allowlists.
-- V1 ships one complete topology including Argo; package profiles and workload-only installation are deferred.
+- V1 ships one complete topology including the workflow engine; package profiles and workload-only installation are deferred.
 
 ## Consequences
 

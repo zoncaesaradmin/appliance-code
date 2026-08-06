@@ -1,8 +1,9 @@
 // Package builds owns build request business logic: submitting one build
 // per request as an isolated workflows.Engine run, reconciling its status
 // into durable storage, cancellation, and log access. It does not own
-// Argo/Buildah specifics; internal/workflows and internal/workflows/argo
-// (not implemented in this pass, see that package's doc comment) own that.
+// workflow-engine/Buildah specifics; internal/workflows and
+// internal/workflows/engine (not implemented in this pass, see that
+// package's doc comment) own that.
 package builds
 
 import (

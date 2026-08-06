@@ -1,4 +1,4 @@
-{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
+{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -20,6 +20,6 @@ spec:
     path: {{ .Values.workspaceStorage.rootDir | quote }}
     type: DirectoryOrCreate
   claimRef:
-    namespace: {{ include "appliance-control-plane.argoWorkflowNamespace" . }}
+    namespace: {{ include "appliance-control-plane.workflowNamespace" . }}
     name: {{ include "appliance-control-plane.workspaceClaimName" . }}
 {{- end }}

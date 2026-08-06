@@ -823,8 +823,8 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if got, _ := data["APPLIANCE_WORKFLOW_INSTANCE_ID"].(string); got != "appliance" {
 		t.Fatalf("APPLIANCE_WORKFLOW_INSTANCE_ID = %q, want appliance", got)
 	}
-	if got, _ := data["APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT"].(string); got != "argo-workflows-executor" {
-		t.Fatalf("APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT = %q, want argo-workflows-executor", got)
+	if got, _ := data["APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT"].(string); got != "appliance-workflows-executor" {
+		t.Fatalf("APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT = %q, want appliance-workflows-executor", got)
 	}
 	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
 		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want workspace provisioner image", got)
@@ -853,7 +853,7 @@ func TestBuilderWorkspacePrepareJobOptInFailsFast(t *testing.T) {
 	}
 }
 
-func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
+func TestBuilderWorkflowRBACRenders(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
@@ -868,11 +868,11 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		t.Fatal("expected control-plane Deployment")
 	}
 	if automount, _ := at(dep, "spec", "template", "spec", "automountServiceAccountToken").(bool); !automount {
-		t.Fatal("builder/argo deployment should mount a service account token")
+		t.Fatal("builder/workflows deployment should mount a service account token")
 	}
 	role := findByKindAndName(docs, "Role", controlPlaneDeploymentName+"-workflows")
 	if role == nil {
-		t.Fatal("expected workflow Role for builder/argo")
+		t.Fatal("expected workflow Role for builder/workflows")
 	}
 	if ns, _ := at(role, "metadata", "namespace").(string); ns != "appliance-builds" {
 		t.Fatalf("workflow Role namespace = %q, want appliance-builds", ns)
@@ -882,15 +882,15 @@ func TestBuilderArgoWorkflowRBACRenders(t *testing.T) {
 		t.Fatal("workflow Role should allow create/get/update on secrets for builder Git access")
 	}
 	if rb := findByKindAndName(docs, "RoleBinding", controlPlaneDeploymentName+"-workflows"); rb == nil {
-		t.Fatal("expected workflow RoleBinding for builder/argo")
+		t.Fatal("expected workflow RoleBinding for builder/workflows")
 	}
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
 		t.Fatal("expected control-plane ConfigMap")
 	}
 	data, _ := at(cm, "data").(map[string]any)
-	if _, ok := data["APPLIANCE_ARGO_WORKFLOW_NAMESPACE"]; ok {
-		t.Fatal("control-plane ConfigMap should not expose APPLIANCE_ARGO_WORKFLOW_NAMESPACE once the namespace is fixed in code")
+	if _, ok := data["APPLIANCE_WORKFLOW_NAMESPACE"]; ok {
+		t.Fatal("control-plane ConfigMap should not expose APPLIANCE_WORKFLOW_NAMESPACE once the namespace is fixed in code")
 	}
 }
 

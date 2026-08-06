@@ -1,0 +1,17 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "appliance-workflows.fullname" . }}-controller
+  namespace: {{ include "appliance-workflows.workflowsNamespace" . }}
+  labels:
+    {{- include "appliance-workflows.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "appliance-workflows.controllerServiceAccountName" . }}
+    namespace: {{ include "appliance-workflows.workflowsNamespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "appliance-workflows.fullname" . }}-controller
+{{- end }}

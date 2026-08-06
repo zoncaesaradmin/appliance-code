@@ -12,7 +12,7 @@ data:
   APPLIANCE_CANONICAL_ORIGIN: {{ .Values.config.canonicalOrigin | quote }}
   APPLIANCE_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   APPLIANCE_TRUSTED_PROXY_COUNT: {{ .Values.config.trustedProxyCount | quote }}
-  APPLIANCE_WORKFLOW_ENGINE: "argo"
+  APPLIANCE_WORKFLOW_ENGINE: "workflows"
   APPLIANCE_WORKFLOW_INSTANCE_ID: {{ .Values.config.workflowInstanceID | quote }}
   APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT: {{ .Values.config.workflowExecutorServiceAccount | quote }}
   APPLIANCE_BUILD_CATALOG_JSON: {{ .Values.config.buildCatalog | default dict | toJson | quote }}

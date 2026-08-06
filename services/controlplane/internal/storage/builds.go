@@ -29,7 +29,7 @@ func (s BuildStatus) Terminal() bool {
 }
 
 // Build is the durable record of one build request: its source
-// attribution, target artifact, builder image, and outcome. Argo Workflow
+// attribution, target artifact, builder image, and outcome. Workflow
 // state is operational, not durable; WorkflowName is only a reference used
 // to reconcile status, never authoritative on its own.
 type Build struct {

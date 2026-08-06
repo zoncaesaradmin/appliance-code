@@ -433,9 +433,9 @@ func TestRestartRecovery(t *testing.T) {
 	h.fake.SetStatus(build.WorkflowName, workflows.Status{Phase: workflows.PhaseSucceeded})
 
 	// Rebuild the service (simulating a fresh process) against the same DB
-	// and the same underlying engine (simulating Argo state surviving a
-	// control-plane restart, which is the plan's stated model: Argo holds
-	// operational state, SQLite holds durable state).
+	// and the same underlying engine (simulating workflow engine state
+	// surviving a control-plane restart, which is the plan's stated model:
+	// the workflow engine holds operational state, SQLite holds durable state).
 	recorder := audit.NewRecorder(sqlite.NewAuditStore(h.db))
 	freshSvc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, recorder,
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,

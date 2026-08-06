@@ -159,7 +159,7 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 		"--host-packages-os-version", "24.04",
 		"--artifact-server-image", artifactServerArchive,
 		"--artifact-server-image-reference", "registry.local/artifact-server@sha256:"+digest,
-		"--artifact-server-version", "2.1.8", "--argo-crds-dir", crds)
+		"--artifact-server-version", "2.1.8", "--workflows-crds-dir", crds)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("archive release input: %v\n%s", err, output)
 	}

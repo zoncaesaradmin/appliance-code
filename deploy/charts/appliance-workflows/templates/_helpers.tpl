@@ -1,12 +1,12 @@
-{{- define "argo-workflows.name" -}}
+{{- define "appliance-workflows.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "argo-workflows.fullname" -}}
+{{- define "appliance-workflows.fullname" -}}
 {{- if .Values.fullnameOverride -}}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
-{{- $name := include "argo-workflows.name" . -}}
+{{- $name := include "appliance-workflows.name" . -}}
 {{- if contains $name .Release.Name -}}
 {{- .Release.Name | trunc 63 | trimSuffix "-" -}}
 {{- else -}}
@@ -15,56 +15,56 @@
 {{- end -}}
 {{- end -}}
 
-{{- define "argo-workflows.labels" -}}
+{{- define "appliance-workflows.labels" -}}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-app.kubernetes.io/name: {{ include "argo-workflows.name" . }}
+app.kubernetes.io/name: {{ include "appliance-workflows.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
-{{- define "argo-workflows.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "argo-workflows.name" . }}
+{{- define "appliance-workflows.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-workflows.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
-{{- define "argo-workflows.workflowsNamespace" -}}
+{{- define "appliance-workflows.workflowsNamespace" -}}
 {{- .Values.namespace.workflows -}}
 {{- end -}}
 
-{{- define "argo-workflows.buildsNamespace" -}}
+{{- define "appliance-workflows.buildsNamespace" -}}
 {{- .Values.namespace.builds -}}
 {{- end -}}
 
-{{- define "argo-workflows.managedNamespace" -}}
+{{- define "appliance-workflows.managedNamespace" -}}
 {{- if .Values.controller.managedNamespace -}}
 {{- .Values.controller.managedNamespace -}}
 {{- else -}}
-{{- include "argo-workflows.buildsNamespace" . -}}
+{{- include "appliance-workflows.buildsNamespace" . -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "argo-workflows.controllerServiceAccountName" -}}
+{{- define "appliance-workflows.controllerServiceAccountName" -}}
 {{- if .Values.serviceAccount.controller.name -}}
 {{- .Values.serviceAccount.controller.name -}}
 {{- else -}}
-{{- printf "%s-controller" (include "argo-workflows.fullname" .) -}}
+{{- printf "%s-controller" (include "appliance-workflows.fullname" .) -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "argo-workflows.executorServiceAccountName" -}}
+{{- define "appliance-workflows.executorServiceAccountName" -}}
 {{- if .Values.serviceAccount.executor.name -}}
 {{- .Values.serviceAccount.executor.name -}}
 {{- else -}}
-{{- printf "%s-executor" (include "argo-workflows.fullname" .) -}}
+{{- printf "%s-executor" (include "appliance-workflows.fullname" .) -}}
 {{- end -}}
 {{- end -}}
 
-{{- define "argo-workflows.configMapName" -}}
-{{- printf "%s-config" (include "argo-workflows.fullname" .) -}}
+{{- define "appliance-workflows.configMapName" -}}
+{{- printf "%s-config" (include "appliance-workflows.fullname" .) -}}
 {{- end -}}
 
-{{- define "argo-workflows.image" -}}
+{{- define "appliance-workflows.image" -}}
 {{- $image := .image -}}
 {{- if $image.digest -}}
 {{- printf "%s@%s" $image.repository $image.digest -}}

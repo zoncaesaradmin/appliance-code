@@ -14,7 +14,7 @@ This register tracks architecture decisions for the appliance control plane. An 
 | [0008](adr/0008-zot-oci-artifact-registry.md) | Artifact Server for OCI images and generic OCI/ORAS artifacts | Accepted with conformance gate | 2026-07-03 | Auth, ORAS, extensions, storage, restore, upgrade, and air-gap tests |
 | [0009](adr/0009-oci-toolchain.md) | Buildah, Podman, Skopeo, ORAS, Artifact Server, and Helm with explicit responsibilities | Accepted with compatibility gates | 2026-07-03 | Shared auth, trust policy, client matrix, build corpus, and air-gap tests |
 | [0010](adr/0010-v1-security-and-operations-defaults.md) | Concrete v1 auth, MCP, RBAC, HTTP, audit, telemetry, supply-chain, support, and Artifact Server defaults | Accepted with validation gates | 2026-07-03 | Security-policy, failure, air-gap, and minimum-host validation suites |
-| [0011](adr/0011-argo-workflows-engine.md) | Namespace-scoped Argo Workflows behind the control plane in the complete appliance | Accepted with validation gate | 2026-07-03 | CRD/RBAC, template admission, lifecycle, restart, upgrade, and air-gap tests |
+| [0011](adr/0011-argo-workflows-engine.md) | Namespace-scoped workflow engine behind the control plane in the complete appliance | Accepted with validation gate | 2026-07-03 | CRD/RBAC, template admission, lifecycle, restart, upgrade, and air-gap tests |
 | [0012](adr/0012-offline-first-appliance.md) | One complete air-gap package with no install-time or runtime public-network dependency | Accepted | 2026-07-03 | Egress-denied install, operation, update, restore, and conformance suites |
 
 ## Release Data Still To Pin

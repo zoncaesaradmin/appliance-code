@@ -1,4 +1,4 @@
-package argo
+package engine
 
 import (
 	"encoding/json"
@@ -31,7 +31,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	engine, err := New(Config{
 		Namespace:              "appliance-builds",
 		InstanceID:             "appliance",
-		ExecutorServiceAccount: "appliance-argo-workflows-executor",
+		ExecutorServiceAccount: "appliance-workflows-executor",
 		BaseURL:                server.URL,
 		BearerToken:            "test-token",
 		HTTPClient:             server.Client(),
@@ -48,7 +48,7 @@ func TestSubmitCreatesStructuredWorkflow(t *testing.T) {
 	}
 	body, _ := json.Marshal(got)
 	text := string(body)
-	for _, want := range []string{"SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-argo-workflows-executor", "podSpecPatch", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10010", "fsGroup", "20000", "OnRootMismatch", "GOPATH", "/tmp/appliance-home/go", "GOCACHE", "GOMODCACHE"} {
+	for _, want := range []string{"SOURCE_COMMIT_SHA", "buildah bud", "workflows.argoproj.io/controller-instanceid", "appliance", "appliance-workflows-executor", "podSpecPatch", "RuntimeDefault", "runAsNonRoot", "runAsUser", "10010", "fsGroup", "20000", "OnRootMismatch", "GOPATH", "/tmp/appliance-home/go", "GOCACHE", "GOMODCACHE"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workflow JSON missing %q: %s", want, text)
 		}

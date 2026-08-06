@@ -258,8 +258,8 @@ Instead, the selected appliance profile is passed as product configuration
 into the control plane, and the control plane resolves that into appliance
 capabilities locally.
 
-The complete v1 bundle still ships the full topology, including Argo and
-Artifact Server. Appliance profiles change control-plane activation and exposure rules,
+The complete v1 bundle still ships the full topology, including the workflow
+engine and Artifact Server. Appliance profiles change control-plane activation and exposure rules,
 not the release-bundle shape. In this phase, DNS-bearing profiles only change
 profile/capability resolution and downstream install-time decisions; they do
 not yet add a separate DNS runtime workload.

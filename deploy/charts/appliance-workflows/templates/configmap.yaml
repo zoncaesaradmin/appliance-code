@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "appliance-workflows.configMapName" . }}
+  namespace: {{ include "appliance-workflows.workflowsNamespace" . }}
+  labels:
+    {{- include "appliance-workflows.labels" . | nindent 4 }}
+data:
+  instanceID: {{ .Values.config.instanceID | quote }}

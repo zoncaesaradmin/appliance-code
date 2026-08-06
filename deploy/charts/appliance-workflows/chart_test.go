@@ -32,7 +32,7 @@ func renderChart(t *testing.T, extraArgs ...string) []map[string]any {
 	t.Helper()
 	requireHelm(t)
 
-	args := append([]string{"template", "argo-workflows", chartDir(t), "--namespace", "workflows"}, extraArgs...)
+	args := append([]string{"template", "appliance-workflows", chartDir(t), "--namespace", "workflows"}, extraArgs...)
 	cmd := exec.Command("helm", args...)
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
@@ -94,7 +94,7 @@ func TestHelmLint(t *testing.T) {
 
 func TestWorkflowControllerDoesNotUseExternalHelperImages(t *testing.T) {
 	docs := renderChart(t)
-	dep := findByKindAndName(docs, "Deployment", "argo-workflows")
+	dep := findByKindAndName(docs, "Deployment", "appliance-workflows")
 	if dep == nil {
 		t.Fatal("expected workflow-controller Deployment")
 	}

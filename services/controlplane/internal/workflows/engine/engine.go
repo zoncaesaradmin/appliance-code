@@ -1,7 +1,7 @@
-// Package argo implements workflows.Engine using Argo Workflow CRDs through
+// Package engine implements workflows.Engine using Argo Workflow CRDs through
 // the Kubernetes API. It intentionally depends only on the small workflow
 // domain contract from internal/workflows and the standard library.
-package argo
+package engine
 
 import (
 	"bytes"
@@ -57,10 +57,10 @@ type Engine struct {
 
 func New(cfg Config) (*Engine, error) {
 	if strings.TrimSpace(cfg.Namespace) == "" {
-		return nil, fmt.Errorf("argo: namespace is required")
+		return nil, fmt.Errorf("workflow engine: namespace is required")
 	}
 	if strings.TrimSpace(cfg.BaseURL) == "" {
-		return nil, fmt.Errorf("argo: base URL is required")
+		return nil, fmt.Errorf("workflow engine: base URL is required")
 	}
 	client := cfg.HTTPClient
 	if client == nil {
@@ -80,11 +80,11 @@ func NewInCluster(namespace, instanceID, executorServiceAccount string) (*Engine
 	host := os.Getenv("KUBERNETES_SERVICE_HOST")
 	port := os.Getenv("KUBERNETES_SERVICE_PORT")
 	if host == "" || port == "" {
-		return nil, fmt.Errorf("argo: KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT are required for in-cluster mode")
+		return nil, fmt.Errorf("workflow engine: KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT are required for in-cluster mode")
 	}
 	token, err := os.ReadFile(filepath.Join(serviceAccountDir, "token"))
 	if err != nil {
-		return nil, fmt.Errorf("argo: read service account token: %w", err)
+		return nil, fmt.Errorf("workflow engine: read service account token: %w", err)
 	}
 	caPool := x509.NewCertPool()
 	if ca, err := os.ReadFile(filepath.Join(serviceAccountDir, "ca.crt")); err == nil {
@@ -124,7 +124,7 @@ func (e *Engine) Status(ctx context.Context, name string) (workflows.Status, err
 		} `json:"status"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return workflows.Status{}, fmt.Errorf("argo: decode workflow status: %w", err)
+		return workflows.Status{}, fmt.Errorf("workflow engine: decode workflow status: %w", err)
 	}
 	return workflows.Status{Phase: mapPhase(payload.Status.Phase), Message: payload.Status.Message}, nil
 }
@@ -149,7 +149,7 @@ func (e *Engine) Logs(ctx context.Context, name string) (string, error) {
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(body, &pods); err != nil {
-		return "", fmt.Errorf("argo: decode workflow pods: %w", err)
+		return "", fmt.Errorf("workflow engine: decode workflow pods: %w", err)
 	}
 	if len(pods.Items) == 0 || pods.Items[0].Metadata.Name == "" {
 		return "", workflows.ErrNotFound
@@ -177,7 +177,7 @@ func (e *Engine) do(ctx context.Context, method, path, contentType string, body 
 	}
 	resp, err := e.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("argo: %s %s: %w", method, path, err)
+		return nil, fmt.Errorf("workflow engine: %s %s: %w", method, path, err)
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
@@ -185,7 +185,7 @@ func (e *Engine) do(ctx context.Context, method, path, contentType string, body 
 		return nil, workflows.ErrNotFound
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("argo: %s %s returned %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(respBody)))
+		return nil, fmt.Errorf("workflow engine: %s %s returned %d: %s", method, path, resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
 	return respBody, nil
 }
@@ -249,16 +249,16 @@ func workflowObject(namespace, instanceID, executorServiceAccount string, spec w
 
 func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string]any, map[string]any, error) {
 	if strings.TrimSpace(spec.Name) == "" || strings.TrimSpace(spec.BuilderImageDigest) == "" {
-		return nil, nil, fmt.Errorf("argo: workflow spec is missing required fields")
+		return nil, nil, fmt.Errorf("workflow engine: workflow spec is missing required fields")
 	}
 	volumeMounts := []map[string]any{}
 	volumes := []map[string]any{}
 	env := []map[string]any{}
 	if strings.TrimSpace(spec.SourceCredentialRef) != "" || strings.TrimSpace(spec.SourceCredentialSecret) != "" || strings.TrimSpace(spec.KnownHostsSecret) != "" {
-		return nil, nil, fmt.Errorf("argo: HTTPS Git workflows do not accept SSH credential inputs")
+		return nil, nil, fmt.Errorf("workflow engine: HTTPS Git workflows do not accept SSH credential inputs")
 	}
 	if kind == workflows.KindWorkspacePrepare && strings.TrimSpace(spec.GitCredentialSecret) == "" {
-		return nil, nil, fmt.Errorf("argo: workspace prepare requires builder Git HTTPS credentials")
+		return nil, nil, fmt.Errorf("workflow engine: workspace prepare requires builder Git HTTPS credentials")
 	}
 	if strings.TrimSpace(spec.GitCredentialSecret) != "" {
 		volumeMounts = append(volumeMounts, map[string]any{"name": "git-access", "mountPath": gitCredentialDir, "readOnly": true})
@@ -305,7 +305,7 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		)
 		if strings.TrimSpace(spec.WorkspaceName) != "" && strings.TrimSpace(spec.WorkspaceRepo) != "" {
 			if strings.TrimSpace(spec.WorkspaceRootDir) == "" || strings.TrimSpace(spec.WorkspaceClaimName) == "" {
-				return nil, nil, fmt.Errorf("argo: workspace build requires workspace storage")
+				return nil, nil, fmt.Errorf("workflow engine: workspace build requires workspace storage")
 			}
 			labels["workflows.appliance.local/workspace"] = spec.WorkspaceName
 			labels["workflows.appliance.local/repo"] = spec.WorkspaceRepo
@@ -408,13 +408,13 @@ func ensureToolHomeScript() string {
 
 func buildCommandScript(spec workflows.Spec) (string, error) {
 	if spec.TargetRepository == "" || spec.TargetTag == "" {
-		return "", fmt.Errorf("argo: workflow spec is missing required build fields")
+		return "", fmt.Errorf("workflow engine: workflow spec is missing required build fields")
 	}
 	workspaceBuild := strings.TrimSpace(spec.WorkspaceName) != "" && strings.TrimSpace(spec.WorkspaceRepo) != ""
 	var preamble string
 	if workspaceBuild {
 		if strings.TrimSpace(spec.WorkspaceRootDir) == "" {
-			return "", fmt.Errorf("argo: workspace build requires workspace root dir")
+			return "", fmt.Errorf("workflow engine: workspace build requires workspace root dir")
 		}
 		preamble = ensureToolHomeScript() + `repo_dir="$WORKSPACE_ROOT_DIR/$WORKSPACE_NAME/$WORKSPACE_REPO"
 if [ ! -d "$repo_dir" ]; then
@@ -425,7 +425,7 @@ cd "$repo_dir"
 `
 	} else {
 		if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" {
-			return "", fmt.Errorf("argo: workflow spec is missing required build source fields")
+			return "", fmt.Errorf("workflow engine: workflow spec is missing required build source fields")
 		}
 		preamble = gitAuthPreamble(spec.GitCredentialSecret) + ensureToolHomeScript() + `mkdir -p /workspace/src
 appliance_git_clone "$SOURCE_REPO_URL" /workspace/src
@@ -439,17 +439,17 @@ cd /workspace/src
 buildah push "$TARGET_IMAGE"`, nil
 	case "script", "repo_script":
 		if firstExecutionArg(spec) == "" {
-			return "", fmt.Errorf("argo: script execution requires one args entry")
+			return "", fmt.Errorf("workflow engine: script execution requires one args entry")
 		}
 		return preamble + `chmod +x "$SCRIPT_PATH"
 "./$SCRIPT_PATH"`, nil
 	case "make", "make_target":
 		if firstExecutionArg(spec) == "" {
-			return "", fmt.Errorf("argo: make execution requires one args entry")
+			return "", fmt.Errorf("workflow engine: make execution requires one args entry")
 		}
 		return preamble + `make "$MAKE_TARGET" TARGET_IMAGE="$TARGET_IMAGE" CONTAINERFILE_PATH="$CONTAINERFILE_PATH"`, nil
 	default:
-		return "", fmt.Errorf("argo: unsupported execution mode %q", spec.Execution)
+		return "", fmt.Errorf("workflow engine: unsupported execution mode %q", spec.Execution)
 	}
 }
 
@@ -462,7 +462,7 @@ func firstExecutionArg(spec workflows.Spec) string {
 
 func workspaceCommandScript(spec workflows.Spec) (string, error) {
 	if strings.TrimSpace(spec.WorkspaceRootDir) == "" || strings.TrimSpace(spec.WorkspaceClaimName) == "" || strings.TrimSpace(spec.WorkspaceName) == "" || len(spec.WorkspaceRepos) == 0 {
-		return "", fmt.Errorf("argo: workspace workflow spec is missing required fields")
+		return "", fmt.Errorf("workflow engine: workspace workflow spec is missing required fields")
 	}
 	var b strings.Builder
 	b.WriteString(gitAuthPreamble(spec.GitCredentialSecret))
@@ -483,7 +483,7 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 	b.WriteString("cd \"$workspace_dir\"\n")
 	for _, repo := range spec.WorkspaceRepos {
 		if strings.TrimSpace(repo.Name) == "" || strings.TrimSpace(repo.URL) == "" || strings.TrimSpace(repo.Ref) == "" {
-			return "", fmt.Errorf("argo: workspace repo spec is missing required fields")
+			return "", fmt.Errorf("workflow engine: workspace repo spec is missing required fields")
 		}
 		repoDir := shellQuote(repo.Name)
 		repoURL := shellQuote(repo.URL)

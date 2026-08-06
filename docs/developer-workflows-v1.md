@@ -49,8 +49,8 @@ submission.
   catalog `imageTagTemplate` supplies another value using `{workspace}` /
   `{target}`.
 - Build execution uses the workflow engine interface. Local tests use the fake
-  workflow engine, while production builder-profile deployments use the Argo
-  adapter through Kubernetes API calls.
+  workflow engine, while production builder-profile deployments use the
+  workflow-engine adapter through Kubernetes API calls.
 - V1 workspaces are materialized onto the shared workspace PVC under the fixed
   host-visible root `/data/zon/workspaces/<workspace-name>`. Current-workspace
   builds run against the repo directories already present under that workspace;
@@ -104,7 +104,7 @@ state in the `appliance-builds` namespace rather than in the build catalog.
   `PUT /api/v1/builder/git-access`.
 - Workspace creation and workspace prepare fail closed with
   `412 Precondition Failed` until that shared credential exists.
-- Argo workspace-prepare workflow pods mount the resulting Kubernetes Secret and
+- Workspace-prepare workflow pods mount the resulting Kubernetes Secret and
   use `GIT_ASKPASS` (not interactive prompts or brittle `http.extraHeader`
   config) for HTTPS `git clone` calls. Current-workspace build workflows do
   not clone and do not require that credential.
@@ -128,9 +128,9 @@ permissions authorize the authenticated principal. Both checks must pass.
 ## Implementation Evidence
 
 The service/API/MCP contract is covered with fake-workflow tests so local
-validation does not require a live K3s/Argo environment. Production
-builder-profile deployments use the Argo workflow engine when
-`workflowEngine` is `argo`.
+validation does not require a live K3s/workflow-engine environment. Production
+builder-profile deployments use the workflow engine when
+`workflowEngine` is `workflows`.
 
 Covered by tests:
 
@@ -151,7 +151,7 @@ Covered by tests:
   permission;
 - workflow status messages and logs returned through REST/MCP are redacted for
   configured sensitive markers and private-key PEM blocks;
-- Argo workflow submission/status/log/cancel behavior through the Kubernetes
+- Workflow submission/status/log/cancel behavior through the Kubernetes
   API adapter;
 - local live-server e2e starts in builder profile with a valid build catalog
   and verifies the developer workflow REST SDK surface plus the initial builder
@@ -159,7 +159,7 @@ Covered by tests:
 - local live-server e2e starts in core and storage profiles and verifies
   developer workflow REST routes return `404`, MCP build tools are absent from
   `tools/list`, and direct disabled build tool calls return tool-not-found;
-- Helm rendering for builder-profile Argo RBAC and service account token
+- Helm rendering for builder-profile workflow RBAC and service account token
   mounting;
 - release-input/bundle plumbing for extra pinned OCI images used by builder
   workflow pods.

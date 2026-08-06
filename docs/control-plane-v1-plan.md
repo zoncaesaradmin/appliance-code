@@ -12,7 +12,7 @@ The goal for v1 is a single control plane server that exposes:
 
 The server must support the basic appliance flows for local users, builds, artifacts, and automation, while remaining easy to extend later for external identity providers such as LDAP/AD, SAML, and OIDC.
 
-V1 is an offline-first product with one production package: a complete signed air-gap appliance bundle. Installation and runtime must work with public network egress denied. The bundle contains every product dependency, including supported-host package prerequisites, K3s and its images, the control plane, Artifact Server, Argo, OCI task images, scanner data, charts, CRDs, and verification material.
+V1 is an offline-first product with one production package: a complete signed air-gap appliance bundle. Installation and runtime must work with public network egress denied. The bundle contains every product dependency, including supported-host package prerequisites, K3s and its images, the control plane, Artifact Server, the workflow engine, OCI task images, scanner data, charts, CRDs, and verification material.
 
 Local development and source-repo validation still remain mandatory. The
 control plane must build, run, and pass end-to-end tests on a normal
@@ -95,9 +95,9 @@ This keeps the front-door security model unified and lets us apply one authn/aut
 
 Use K3s as the appliance Kubernetes substrate and Traefik as the ingress controller.
 
-The pod, Argo workflow, Job, routing, namespace, network, and storage layout is captured in the [K3s deployment topology](deployment-topology.md).
+The pod, workflow, Job, routing, namespace, network, and storage layout is captured in the [K3s deployment topology](deployment-topology.md).
 
-Deploy a namespace-scoped Argo Workflow Controller behind the control plane as part of the single complete v1 appliance. The control plane submits only appliance-generated `Workflow` resources and remains the sole public API, identity, authorization, audit, and durable-state authority.
+Deploy a namespace-scoped Workflow Controller behind the control plane as part of the single complete v1 appliance. The control plane submits only appliance-generated `Workflow` resources and remains the sole public API, identity, authorization, audit, and durable-state authority.
 
 Expected front-door routing:
 
@@ -150,7 +150,7 @@ Use one named tool for each responsibility:
 
 K3s uses its embedded container runtime internally. That is a K3s implementation detail, not an application-facing toolchain choice, and the control plane must not mount or call its runtime socket.
 
-The Go server should invoke these capabilities only through narrow domain interfaces. In K3s, build and related multi-step operations run as appliance-generated Argo Workflows; direct local adapters may be used only in explicit development/test lanes. It must not shell out to Podman during normal control-plane request handling. Local Go build/test/run remains independent of all OCI tools and Argo; toolchain integration tests are separate, explicitly gated lanes.
+The Go server should invoke these capabilities only through narrow domain interfaces. In K3s, build and related multi-step operations run as appliance-generated Workflows; direct local adapters may be used only in explicit development/test lanes. It must not shell out to Podman during normal control-plane request handling. Local Go build/test/run remains independent of all OCI tools and the workflow engine; toolchain integration tests are separate, explicitly gated lanes.
 
 ### 4. One Automation Credential Type
 
@@ -441,8 +441,8 @@ The system creates:
 
 1. Client calls `POST /api/v1/builds` with an API token.
 2. Control plane authenticates and authorizes the request.
-3. Build service renders a versioned, allowlisted workflow template and creates an Argo `Workflow` through the Kubernetes API.
-4. Argo Workflow Controller reconciles the workflow into isolated Buildah, verification, SBOM, and scan task pods as required.
+3. Build service renders a versioned, allowlisted workflow template and creates a `Workflow` through the Kubernetes API.
+4. The Workflow Controller reconciles the workflow into isolated Buildah, verification, SBOM, and scan task pods as required.
 5. The control plane reconciles Workflow status into its durable build state and exposes status/logs/cancellation through appliance APIs.
 
 ## Proposed Repo Structure
@@ -468,7 +468,7 @@ services/
       registryauth/
       artifactserver/
       workflows/
-        argo/
+        engine/
       builds/
         buildah/
       images/
@@ -517,8 +517,8 @@ Recommended layering within `services/controlplane/internal`:
 - `authn/` owns local login, session JWTs, API token verification, and provider interfaces
 - `authz/` owns RBAC policy evaluation
 - feature packages own business logic
-- `workflows/argo/` owns constrained Workflow rendering, submission, observation, termination, status translation, and TTL behavior; it does not own business authorization or durable build state
-- `builds/buildah/` owns Buildah task specifications, result parsing, and cleanup but not build authorization, Argo reconciliation, or lifecycle policy
+- `workflows/engine/` owns constrained Workflow rendering, submission, observation, termination, status translation, and TTL behavior; it does not own business authorization or durable build state
+- `builds/buildah/` owns Buildah task specifications, result parsing, and cleanup but not build authorization, workflow-engine reconciliation, or lifecycle policy
 - `images/skopeo/` owns image inspection/copy/promotion command contracts and result translation
 - `artifacts/oras/` owns generic OCI artifact media-type/referrer operations and result translation
 - `scanning/grype/` owns vulnerability scan Job contracts, database-bundle identity, and normalized finding translation
@@ -529,7 +529,7 @@ Recommended layering within `services/controlplane/internal`:
 
 Interface ownership rules:
 
-- `workflows` defines a workflow-engine contract in domain terms; `workflows/argo` implements it with appliance-owned Argo `Workflow` resources without leaking arbitrary YAML into handlers.
+- `workflows` defines a workflow-engine contract in domain terms; `workflows/engine` implements it with appliance-owned `Workflow` resources without leaking arbitrary YAML into handlers.
 - `builds` defines the `Builder` contract and build result model; `builds/buildah` supplies typed workflow tasks composed by the workflow service.
 - `images` defines inspect, copy/promote, and verify contracts; `images/skopeo` implements them without leaking transport-specific command syntax into handlers.
 - `artifacts` defines typed artifact/referrer contracts; `artifacts/oras` implements them.
@@ -608,17 +608,17 @@ Required conformance spike:
 
 Exit criterion: Artifact Server scores at least 4.0/5 under the evidence-based rating and all ADR 0008 conformance gates pass against the pinned image, extension set, ingress, and storage configuration.
 
-### P0 Decision: Argo Workflows Behind The Control Plane
+### P0 Decision: Workflow Engine Behind The Control Plane
 
-Use Argo Workflows as the workflow engine in the complete v1 appliance. See [ADR 0011](adr/0011-argo-workflows-engine.md).
+Use Argo Workflows as the underlying workflow engine implementation in the complete v1 appliance. See [ADR 0011](adr/0011-argo-workflows-engine.md).
 
 - Deploy one namespace-scoped Workflow Controller and manage workflows only in the dedicated build namespace.
 - Do not expose Argo Server/UI through Traefik and do not create a second user identity or authorization path.
 - The control plane creates, reads, watches, and terminates only appliance-labeled Workflows assembled from versioned templates, with read-only access to their task-pod status/logs; users cannot submit raw Workflow YAML or arbitrary images/commands.
-- Argo is operational state, not durable product state. Persist build/workflow intent, transitions, ownership, results, and audit in SQLite; apply Workflow and pod TTLs after reconciliation.
-- Do not enable workflow archive/offloading in v1 and do not introduce PostgreSQL solely for Argo. Reassess archive storage when PostgreSQL becomes the appliance database or retention requirements justify it.
-- Package CRDs with explicit ownership and upgrade ordering. Pin controller/executor images by digest and validate Argo/K3s compatibility, RBAC, cancellation, restart reconciliation, and air-gap behavior.
-- The single v1 appliance bundle includes Argo and the build namespace. Modular chart boundaries remain, but release-bundle profile selection is deferred.
+- The workflow engine is operational state, not durable product state. Persist build/workflow intent, transitions, ownership, results, and audit in SQLite; apply Workflow and pod TTLs after reconciliation.
+- Do not enable workflow archive/offloading in v1 and do not introduce PostgreSQL solely for the workflow engine. Reassess archive storage when PostgreSQL becomes the appliance database or retention requirements justify it.
+- Package CRDs with explicit ownership and upgrade ordering. Pin controller/executor images by digest and validate workflow-engine/K3s compatibility, RBAC, cancellation, restart reconciliation, and air-gap behavior.
+- The single v1 appliance bundle includes the workflow engine and the build namespace. Modular chart boundaries remain, but release-bundle profile selection is deferred.
 
 ### P0 Decision: Trusted Builds With Ephemeral Rootless Buildah
 
@@ -627,7 +627,7 @@ A build request can execute attacker-controlled source code. A Kubernetes Job is
 Accepted v1 boundary:
 
 - Builds are available only to trusted developers and automation identities; v1 does not claim hostile tenant isolation.
-- Use one appliance-generated Argo Workflow per build with ephemeral, rootless Buildah task pods and never mount a host runtime socket.
+- Use one appliance-generated Workflow per build with ephemeral, rootless Buildah task pods and never mount a host runtime socket.
 - Accept `Containerfile` builds from allowlisted internal HTTPS Git sources at immutable commit SHAs and publish OCI output to the artifact server. A file literally named `Dockerfile` is accepted only as a Buildah-compatible filename alias.
 - Isolate any required builder security-profile exception to the build namespace. See [ADR 0003](adr/0003-trusted-build-boundary.md).
 
@@ -684,7 +684,7 @@ Use daily coordinated, encrypted, off-appliance recovery sets with initial RPO 2
 Required release contract:
 
 - State inventory: control-plane SQLite and keys, K3s state/token, Artifact Server storage root and extension state, chart values, certificates, and appliance configuration.
-- K3s recovery and release inputs must preserve Argo CRDs/configuration, pinned workflow templates, controller settings, and enough operation identity to reconcile or safely fail any workflow that was in flight at backup time.
+- K3s recovery and release inputs must preserve workflow CRDs/configuration, pinned workflow templates, controller settings, and enough operation identity to reconcile or safely fail any workflow that was in flight at backup time.
 - Stated RPO and RTO targets, backup schedule, retention, destination, encryption, integrity checks, and free-space thresholds.
 - Coordinated Artifact Server storage snapshot procedure with tested GC/dedupe/scrub quiescence and documented consistency assumptions.
 - Restore onto a clean replacement node, not only in-place restore.
@@ -698,7 +698,7 @@ The chart and manifests must provide secure defaults rather than relying on inst
 
 - Dedicated namespaces and service accounts with least-privilege Role/RoleBinding objects; no `cluster-admin` for the server or workflow engine. The server may mutate appliance-owned Workflow CRs and read their task-pod status/logs, but cannot create arbitrary pods.
 - Pod Security Admission labels and restricted security contexts for control-plane and supporting workloads.
-- Default-deny NetworkPolicies with explicit flows among Traefik, control plane, DNS, Kubernetes API, Argo Workflow Controller, Artifact Server, and workflow task pods. Confirm that the selected K3s CNI/network-policy controller enforces them.
+- Default-deny NetworkPolicies with explicit flows among Traefik, control plane, DNS, Kubernetes API, the Workflow Controller, Artifact Server, and workflow task pods. Confirm that the selected K3s CNI/network-policy controller enforces them.
 - Resource requests/limits, priority where justified, disruption behavior, topology assumptions, and ephemeral-storage limits.
 - `readOnlyRootFilesystem`, non-root UID/GID, dropped capabilities, `allowPrivilegeEscalation: false`, and `automountServiceAccountToken: false` unless a pod genuinely needs Kubernetes API access.
 - Pin every image by digest in the air-gap bundle. Define offline image preload, internal DNS/NTP, IPv4/IPv6 stance, and behavior with all public egress denied.
@@ -1024,7 +1024,7 @@ Implementation will go more smoothly if we treat the work as parallel tracks wit
 
 - Build request model
 - Build state machine
-- Argo workflow-engine adapter, template catalog, reconciliation, cancellation, and TTL handling
+- Workflow-engine adapter, template catalog, reconciliation, cancellation, and TTL handling
 - Rootless Buildah workflow task implementation
 - Skopeo image inspection/copy/promotion adapter
 - ORAS generic artifact adapter
@@ -1043,7 +1043,7 @@ Implementation will go more smoothly if we treat the work as parallel tracks wit
 ### Workstream H: Operations And Packaging
 
 - K3s manifests or charts
-- Argo CRDs, namespace-scoped controller, workflow RBAC, and build namespace
+- Workflow CRDs, namespace-scoped controller, workflow RBAC, and build namespace
 - Traefik ingress config
 - Secret wiring
 - Backup and restore hooks
@@ -1059,7 +1059,7 @@ Execute tasks in ID order unless their dependency column allows parallel work. A
 | E0-01 | Validate and pin Go, K3s, Traefik, Argo Workflows, Artifact Server, Buildah, Podman, Skopeo, ORAS, Helm, Syft, Grype, release-only Cosign, SQLite driver, and MCP revisions/digests starting from [compatibility candidates](compatibility-candidates.md) | None | Machine-readable compatibility manifest and license/provenance inventory |
 | E0-02 | Record data classification, trust boundaries, abuse cases, and accepted v1 security claims | E0-01 | Reviewed threat model covering auth, builds, registry, K3s, backup, and supply chain |
 | E0-03 | Prove Artifact Server external-token flow and selected full/minimal extension set | E0-01 | ADR 0008 test report and rating at or above its acceptance threshold |
-| E0-04 | Prove namespace-scoped Argo plus rootless non-privileged Buildah in the supported K3s/host configuration | E0-01, E0-02 | ADR 0003/0011 report including CRD/RBAC scope, workflow lifecycle, storage driver, isolation, cleanup, cancellation, restart, and OCI output |
+| E0-04 | Prove the namespace-scoped workflow engine plus rootless non-privileged Buildah in the supported K3s/host configuration | E0-01, E0-02 | ADR 0003/0011 report including CRD/RBAC scope, workflow lifecycle, storage driver, isolation, cleanup, cancellation, restart, and OCI output |
 | E0-05 | Prove SQLite migration, disk-full, online backup, corruption detection, and clean restore | E0-01 | ADR 0004 test report and fixture scripts |
 | E0-06 | Validate ADR 0010 canonical origin, listeners, TLS/network/configuration, auth/RBAC, audit, telemetry, supply-chain, support, and Artifact Server defaults | E0-02, E0-03, E0-04, E0-05 | Versioned validation evidence with no failed P0 gate |
 | E1-01 | Create Go module, command entrypoint, package boundaries, dependency policy, Makefile, and CI/local verification lane | E0-01 | `make verify` passes on the supported local development host |
@@ -1069,10 +1069,10 @@ Execute tasks in ID order unless their dependency column allows parallel work. A
 | E2-02 | Implement permission catalog, built-in/custom roles, authorization service, last-admin invariant, and audit | E2-01, E0-06 | Route/resource authorization matrix and durable audit tests |
 | E2-03 | Publish and implement OpenAPI auth/user/role/token contracts and generated or conformance-tested client fixtures | E2-01, E2-02 | OpenAPI lint, compatibility, positive, and negative HTTP suites |
 | E3-01 | Implement the pinned MCP Streamable HTTP shell with empty tools and shared auth/RBAC | E2-02 | MCP conformance/interoperability and REST-equivalence tests |
-| E4-01 | Create Helm chart, K3s values, Traefik routes, Argo CRDs/controller, security policies, storage, secret wiring, and complete air-gap inputs | E1-02, E0-06 | Render/schema/policy tests plus egress-denied clean-host install and restart smoke tests for the one complete topology |
+| E4-01 | Create Helm chart, K3s values, Traefik routes, workflow CRDs/controller, security policies, storage, secret wiring, and complete air-gap inputs | E1-02, E0-06 | Render/schema/policy tests plus egress-denied clean-host install and restart smoke tests for the one complete topology |
 | E5-01 | Implement registry token issuer, scope intersection, signing/rotation, and `artifactserver` | E2-02, E0-03, E4-01 | Podman/Buildah/Skopeo/Helm/ORAS auth, deny, expiry, revoke, and rotation suite |
 | E5-02 | Implement artifact catalog/referrers, Skopeo image operations, ORAS artifact operations, quotas, retention, and reconciliation | E5-01 | OCI conformance, media-type, referrer, extension-RBAC, GC/scrub/dedupe, and restore suite |
-| E6-01 | Implement build API/state machine, Argo workflow adapter/templates, Buildah tasks, credential files, logs, cancellation, deadlines, TTL, and cleanup | E2-02, E0-04, E5-01 | Success/failure/security/resource/controller-restart/control-plane-restart matrix with immutable output attribution |
+| E6-01 | Implement build API/state machine, workflow-engine adapter/templates, Buildah tasks, credential files, logs, cancellation, deadlines, TTL, and cleanup | E2-02, E0-04, E5-01 | Success/failure/security/resource/controller-restart/control-plane-restart matrix with immutable output attribution |
 | E6-02 | Add Skopeo post-build verification, Podman runtime smoke test, Syft SBOM, Grype vulnerability evidence, provenance attachment, and artifact linkage | E6-01, E5-02 | Digest, policy, provenance, SBOM, scan-database, redaction, and cleanup evidence |
 | E7-01 | Implement backup, clean-node restore, upgrade, restore-based rollback, diagnostics, and support bundle | E4-01, E5-02, E6-02 | Automated RPO/RTO, N-1 upgrade, failed-upgrade, and clean-node restore drills |
 | E7-02 | Assemble the complete air-gap release-input closure and hand it to `appliance-release` | E7-01 | Signed manifests/checksums, required host-package inventory, all runtime images/data, SBOMs, provenance, notices, compatibility data, and egress-denied install evidence |
@@ -1178,7 +1178,7 @@ Sequence to run later on a real target host/cluster, before the phase that gates
 
 1. Provision the supported Ubuntu 24.04 LTS/amd64/ext4 host (or equivalent CI runner) with the pinned K3s release installed air-gapped, per ADR 0001. This host is the only place E0-03 through E0-06 evidence may be produced.
 2. E0-03 (before Phase 5): deploy the pinned Artifact Server image; run login/pull/push, ORAS/referrers, denied/malformed-scope, token-expiry, user-disable/token-revocation, extension-authorization, storage restart/disk-exhaustion/scrub/dedupe/GC, air-gap, and OCI Distribution conformance tests from real Podman/Skopeo/Buildah/Helm/ORAS clients. Record the ADR 0008 rating and test report.
-3. E0-04 (before Phase 6): deploy the namespace-scoped Argo Workflow Controller and a rootless Buildah task pod under the pinned Pod Security Admission policy; prove no privileged mode, no host runtime socket, and no unaccepted security-profile exception is required. Record the ADR 0003/0011 report.
+3. E0-04 (before Phase 6): deploy the namespace-scoped Workflow Controller and a rootless Buildah task pod under the pinned Pod Security Admission policy; prove no privileged mode, no host runtime socket, and no unaccepted security-profile exception is required. Record the ADR 0003/0011 report.
 4. E0-05 (before Phase 1's storage work is trusted for production, and again before Phase 7): run the SQLite volume/backup/disk-full/restore spike on the real appliance filesystem or storage class. Record the ADR 0004 test report and fixture scripts.
 5. E0-06 (before Phase 4): with E0-03 through E0-05 evidence in hand, validate the full ADR 0010 default set (canonical origin, listeners, TLS/network/configuration, auth/RBAC, audit, telemetry, supply-chain, support, Artifact Server defaults) on the same host. Record versioned validation evidence; a failed gate reopens the relevant ADR rather than being silently waived.
 
@@ -1240,7 +1240,7 @@ Exit gate:
 Deliverables:
 
 - Helm chart as the primary deployment package plus minimal raw manifests/values for debugging and CI.
-- Traefik routes, Argo CRDs and namespace-scoped Workflow Controller, TLS secret modes, persistent volume, probes, security contexts, Pod Security Admission, RBAC, NetworkPolicies, quotas, and pinned images for the single complete topology.
+- Traefik routes, workflow CRDs and namespace-scoped Workflow Controller, TLS secret modes, persistent volume, probes, security contexts, Pod Security Admission, RBAC, NetworkPolicies, quotas, and pinned images for the single complete topology.
 - K3s-supported version matrix, host prerequisites, internal DNS/NTP, offline image-preload contract, and capacity floor.
 - Automated install, uninstall-with-data-preservation, restart, node-reboot, certificate, and smoke tests.
 
@@ -1268,9 +1268,9 @@ Exit gate:
 
 Deliverables:
 
-- Build API/state machine, idempotency, Argo template catalog/adapter, status reconciliation, logs, explicit cancellation, deadlines, workflow/pod TTL, cleanup, and retry rules.
+- Build API/state machine, idempotency, workflow template catalog/adapter, status reconciliation, logs, explicit cancellation, deadlines, workflow/pod TTL, cleanup, and retry rules.
 - Isolation controls selected in Phase 0, per-build identities/secrets, network policy, quotas, concurrency, approved builder images, artifact publication, and provenance metadata.
-- Recovery reconciliation after control-plane, Argo Workflow Controller, or K3s restart.
+- Recovery reconciliation after control-plane, Workflow Controller, or K3s restart.
 
 Exit gate:
 
@@ -1300,7 +1300,7 @@ Already accepted:
 - One Go server for REST and MCP, with shared authn/authz.
 - Dedicated, product-managed single-node K3s with Traefik; Helm under an installer wrapper for release packaging ([ADR 0001](adr/0001-dedicated-k3s-appliance.md)).
 - Artifact Server with control-plane-issued OCI access tokens and generic OCI/ORAS artifact support ([ADR 0008](adr/0008-zot-oci-artifact-registry.md)); the Distribution and Nexus decisions in ADRs 0007 and 0002 are superseded.
-- Namespace-scoped Argo Workflows behind the control plane in the complete v1 appliance ([ADR 0011](adr/0011-argo-workflows-engine.md)).
+- Namespace-scoped workflow engine behind the control plane in the complete v1 appliance ([ADR 0011](adr/0011-argo-workflows-engine.md)).
 - Trusted-only rootless Buildah workflow tasks for the first build implementation ([ADR 0003](adr/0003-trusted-build-boundary.md)).
 - Buildah, Podman, Skopeo, ORAS, Artifact Server, and Helm responsibilities are fixed by the explicit OCI toolchain contract ([ADR 0009](adr/0009-oci-toolchain.md)).
 - SQLite behind storage interfaces for the control plane; one replica while SQLite is active ([ADR 0004](adr/0004-control-plane-sqlite.md)).
@@ -1343,7 +1343,7 @@ I would keep the following here, because they are part of the product contract a
 - database schema and migrations
 - built-in roles and permission seed data
 - Kubernetes deployment manifests or Helm chart for the control plane and directly-coupled services
-- Argo Workflows CRD/controller configuration, workflow templates, and compatibility tests for the complete topology
+- Workflow-engine CRD/controller configuration, workflow templates, and compatibility tests for the complete topology
 - local development deployment assets
 - smoke tests that prove the server works on K3s
 - local Make targets and scripts for direct host execution without containers
@@ -1357,7 +1357,7 @@ The public release repo owns artifacts that are release-engineering oriented rat
 - signed release manifests
 - public-facing packaging metadata
 - release notes and upgrade channel metadata
-- image pinning, including Argo controller/executor images, and bill-of-materials snapshots
+- image pinning, including workflow controller/executor images, and bill-of-materials snapshots
 - offline update and air-gap distribution packaging
 
 ### Accepted Split
@@ -1368,7 +1368,7 @@ The complete ownership matrix and handoff contract are in [Repository Boundary](
 
 ## Accepted Initial Install Path
 
-V1 uses one complete air-gap bundle containing a lifecycle CLI, pinned K3s, all required OCI images and data, Argo CRDs, and the canonical Helm chart.
+V1 uses one complete air-gap bundle containing a lifecycle CLI, pinned K3s, all required OCI images and data, workflow CRDs, and the canonical Helm chart.
 
 - `appliance-release` owns the user-facing lifecycle CLI and complete bundle.
 - The lifecycle CLI performs host preflight, installs bundled K3s, preloads images, applies CRDs, installs the chart, generates secrets, bootstraps the server, and verifies health.
@@ -1377,15 +1377,15 @@ V1 uses one complete air-gap bundle containing a lifecycle CLI, pinned K3s, all 
 - There is no connected installer, release-bundle profile selection, remote fallback, or installation onto arbitrary existing clusters in v1.
 - The same bundle and code path are used whether or not the target host happens to have internet connectivity.
 
-### Argo Packaging Contract
+### Workflow Engine Packaging Contract
 
-Argo introduces cluster-scoped CRDs whose lifecycle cannot be delegated casually to normal Helm templating. Package it as follows:
+The workflow engine introduces cluster-scoped CRDs whose lifecycle cannot be delegated casually to normal Helm templating. Package it as follows:
 
-- This repo owns the tested Argo integration: typed workflow templates, namespace-scoped controller configuration, RBAC, NetworkPolicies, chart values/schema, and conformance tests.
-- Publish the exact Argo CRDs as a separate versioned release input. The installer applies or upgrades that bundle before the appliance Helm release, verifies the served/storage versions, and refuses an unsupported downgrade.
+- This repo owns the tested workflow-engine integration: typed workflow templates, namespace-scoped controller configuration, RBAC, NetworkPolicies, chart values/schema, and conformance tests.
+- Publish the exact workflow CRDs as a separate versioned release input. The installer applies or upgrades that bundle before the appliance Helm release, verifies the served/storage versions, and refuses an unsupported downgrade.
 - The appliance chart always creates the workflow/build namespaces, controller, service accounts, policies, quotas, and template configuration in v1. It never deploys Argo Server/UI or a workflow-archive database.
-- Do not add an Argo-disable value or artifact-only chart variant in v1. Modularity remains an internal code boundary, not a packaging choice.
-- The air-gap bundle includes pinned Argo controller/executor images, CRDs, licenses/notices, SBOM/provenance, and the compatibility evidence tied to the K3s release.
+- Do not add a workflow-engine-disable value or artifact-only chart variant in v1. Modularity remains an internal code boundary, not a packaging choice.
+- The air-gap bundle includes pinned workflow controller/executor images, CRDs, licenses/notices, SBOM/provenance, and the compatibility evidence tied to the K3s release.
 - Upgrade order is preflight and backup, quiesce workflow submission, reconcile/stop in-flight workflows, upgrade CRDs, upgrade controller/chart, verify reconciliation, then re-enable submissions. Restore uses the release version recorded in the recovery set.
 
 ## Recommendation On Database Path
@@ -1497,7 +1497,7 @@ Suggested outputs from this repo:
 
 - versioned control plane image
 - versioned Helm chart or manifest bundle
-- versioned Argo CRD bundle, controller/executor image identities, and workflow-template catalog
+- versioned workflow CRD bundle, controller/executor image identities, and workflow-template catalog
 - migration bundle
 - default configuration schema
 - compatibility matrix for registry and Kubernetes versions
@@ -1533,7 +1533,7 @@ Meaning:
 
 - `deploy/dev` for fast local and CI environments
 - `deploy/k3s` for appliance-oriented manifests
-- `deploy/charts/appliance-control-plane` for the appliance chart, including optional Argo controller and workflow CRD/profile wiring
+- `deploy/charts/appliance-control-plane` for the appliance chart, including optional workflow controller and workflow CRD/profile wiring
 - `scripts/package` only for producing and validating this repo's signed release-input closure; host installers and final air-gap bundle assembly belong in `appliance-release`
 
 ## Acceptance Criteria For V1
@@ -1547,7 +1547,7 @@ Functional acceptance:
 3. The last effective administrator cannot be removed or disabled accidentally.
 4. REST and MCP use the same identity and authorization decisions; MCP conforms to its pinned protocol and documented auth mode with an empty tool set.
 5. Podman, Skopeo, Buildah, Helm, and ORAS login and authorized/denied image/artifact operations, malformed scope rejection, expiry, disable, and revocation work through the standard OCI token flow.
-6. Builds run through appliance-generated Argo Workflows and support idempotent create, status, logs, cancel, timeout, controller/control-plane restart reconciliation, cleanup, and artifact attribution without exposing Argo directly.
+6. Builds run through appliance-generated Workflows and support idempotent create, status, logs, cancel, timeout, controller/control-plane restart reconciliation, cleanup, and artifact attribution without exposing the workflow engine directly.
 
 Security acceptance:
 
@@ -1558,8 +1558,8 @@ Security acceptance:
 
 Reliability and operations acceptance:
 
-11. The appliance survives process, pod, Argo Workflow Controller, Artifact Server, and node restart without state loss or duplicate artifact publication and reports dependency degradation accurately.
-12. Automated backup and clean-node restore cover control-plane state, keys, K3s recovery material, Argo CRDs/configuration/templates and in-flight reconciliation policy, Artifact Server storage and required extension state, certificates, and configuration within stated RPO/RTO.
+11. The appliance survives process, pod, Workflow Controller, Artifact Server, and node restart without state loss or duplicate artifact publication and reports dependency degradation accurately.
+12. Automated backup and clean-node restore cover control-plane state, keys, K3s recovery material, workflow CRDs/configuration/templates and in-flight reconciliation policy, Artifact Server storage and required extension state, certificates, and configuration within stated RPO/RTO.
 13. Disk/inode exhaustion, corrupt/incompatible schema or artifact content, expired certificate, unavailable Kubernetes API, unavailable Artifact Server, and interrupted migration/upgrade fail safely and produce actionable diagnostics.
 14. Upgrade from every supported source version and the declared rollback or restore path pass automated tests.
 15. Capacity metrics, alerts, bounded logs, and a secret-redacted support bundle are documented and tested.

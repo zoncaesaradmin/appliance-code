@@ -92,7 +92,7 @@ IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
 
 # Prefetch linux/amd64 upstream into local storage so the wrapper build can
-# use --pull-never (same pattern as the Argo controller wrapper).
+# use --pull-never (same pattern as the workflow controller wrapper).
 retry "${PREFETCH_RETRIES}" \
   skopeo copy --override-os linux --override-arch amd64 \
     "docker://${SOURCE_IMAGE}" "containers-storage:${UPSTREAM_LOCAL_REF}"

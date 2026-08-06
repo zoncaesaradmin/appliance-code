@@ -98,7 +98,7 @@ func Default() Config {
 		BuildDefaultDeadline:           30 * time.Minute,
 		WorkflowEngine:                 "fake",
 		WorkflowInstanceID:             "appliance",
-		WorkflowExecutorServiceAccount: "argo-workflows-executor",
+		WorkflowExecutorServiceAccount: "appliance-workflows-executor",
 		WorkspaceRootDir:               "/data/zon/workspaces",
 		WorkspaceClaimName:             "appliance-workspaces",
 	}
@@ -406,9 +406,9 @@ func (c Config) Validate() error {
 	}
 
 	switch c.WorkflowEngine {
-	case "fake", "argo":
+	case "fake", "workflows":
 	default:
-		errs = append(errs, `workflowEngine must be one of "fake", "argo"`)
+		errs = append(errs, `workflowEngine must be one of "fake", "workflows"`)
 	}
 
 	durations := map[string]time.Duration{

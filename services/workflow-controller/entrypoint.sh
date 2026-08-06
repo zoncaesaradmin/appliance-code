@@ -2,7 +2,7 @@
 set -euo pipefail
 
 LOG_ROOT="/data/zon/logs"
-SERVICE_LOG_DIR="${LOG_ROOT}/argo-controller"
+SERVICE_LOG_DIR="${LOG_ROOT}/workflow-controller"
 STDOUT_LOG="${SERVICE_LOG_DIR}/stdout.log"
 STDERR_LOG="${SERVICE_LOG_DIR}/stderr.log"
 

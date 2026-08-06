@@ -1,9 +1,9 @@
-{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
+{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "appliance-control-plane.workspaceClaimName" . }}
-  namespace: {{ include "appliance-control-plane.argoWorkflowNamespace" . }}
+  namespace: {{ include "appliance-control-plane.workflowNamespace" . }}
   labels:
     {{- include "appliance-control-plane.labels" . | nindent 4 }}
 spec:

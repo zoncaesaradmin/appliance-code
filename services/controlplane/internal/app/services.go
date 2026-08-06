@@ -32,12 +32,12 @@ import (
 	"appliance-code/services/controlplane/internal/tokens"
 	"appliance-code/services/controlplane/internal/users"
 	"appliance-code/services/controlplane/internal/workflows"
-	"appliance-code/services/controlplane/internal/workflows/argo"
+	"appliance-code/services/controlplane/internal/workflows/engine"
 )
 
 const (
 	SessionAudience               = "appliance-api"
-	argoWorkflowNamespace         = "appliance-builds"
+	workflowNamespace             = "appliance-builds"
 	artifactServerAudience        = "artifact-server"
 	internalArtifactServerSubject = "appliance-control-plane"
 )
@@ -160,12 +160,12 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		switch cfg.WorkflowEngine {
 		case "fake":
 			workflowEngine = workflows.NewFake()
-		case "argo":
+		case "workflows":
 			var err error
-			workflowEngine, err = argo.NewInCluster(argoWorkflowNamespace, cfg.WorkflowInstanceID, cfg.WorkflowExecutorServiceAccount)
+			workflowEngine, err = engine.NewInCluster(workflowNamespace, cfg.WorkflowInstanceID, cfg.WorkflowExecutorServiceAccount)
 			if err != nil {
 				db.Close()
-				return nil, fmt.Errorf("app: wiring argo workflow engine: %w", err)
+				return nil, fmt.Errorf("app: wiring workflow engine: %w", err)
 			}
 		}
 	}
@@ -180,14 +180,14 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 			return nil, fmt.Errorf("app: deriving build catalog git hosts: %w", err)
 		}
 		secretManager := buildergit.SecretManager(buildergit.NewMemorySecretManager())
-		if cfg.WorkflowEngine == "argo" {
+		if cfg.WorkflowEngine == "workflows" {
 			secretManager, err = buildergit.NewInClusterSecretManager()
 			if err != nil {
 				db.Close()
 				return nil, fmt.Errorf("app: wiring builder Git secret manager: %w", err)
 			}
 		}
-		builderGitSvc, err = buildergit.NewService(secretManager, argoWorkflowNamespace, buildergit.DefaultSecretName, allowedGitHosts)
+		builderGitSvc, err = buildergit.NewService(secretManager, workflowNamespace, buildergit.DefaultSecretName, allowedGitHosts)
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring builder Git service: %w", err)

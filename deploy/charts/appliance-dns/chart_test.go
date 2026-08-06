@@ -187,7 +187,7 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 		"--dns-image", dnsArchive,
 		"--dns-image-reference", "registry.local/coredns@sha256:"+digest,
 		"--dns-version", "1.14.4",
-		"--argo-crds-dir", crds)
+		"--workflows-crds-dir", crds)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("archive release input: %v\n%s", err, output)
 	}

@@ -15,7 +15,7 @@ FROM ${BASE_IMAGE} AS upstream
 # Final base must provide glibc (/lib64/ld-linux-x86-64.so.2). The upstream
 # zot-linux-amd64 binary is dynamically linked; Alpine/musl cannot execute it
 # (execve fails with "cannot execute: required file not found" / exit 127).
-# CoreDNS and Argo wrappers can stay on Alpine because those upstream binaries
+# CoreDNS and workflow-controller wrappers can stay on Alpine because those upstream binaries
 # are statically linked.
 #
 # Bundle export prefetches RUNTIME_BASE_IMAGE into local storage and rebuilds

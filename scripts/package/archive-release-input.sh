@@ -56,17 +56,18 @@ Options:
                                    builder task image required by a profile.
   --extra-oci-image-reference REF  Repeatable canonical image reference for the
                                    corresponding --extra-oci-image.
-  --argo-version VERSION           Optional pinned Argo Workflows version.
-  --argo-controller-image PATH     Optional Argo controller image archive.
-  --argo-controller-image-reference REF
-                                   Canonical Argo controller image reference
+  --workflows-version VERSION      Optional pinned workflows engine version.
+  --workflow-controller-image PATH
+                                   Optional workflow controller image archive.
+  --workflow-controller-image-reference REF
+                                   Canonical workflow controller image reference
                                    contained in the OCI archive.
-  --argo-executor-image PATH       Optional Argo executor image archive.
-  --argo-executor-image-reference REF
-                                   Canonical Argo executor image reference
+  --workflow-executor-image PATH  Optional workflow executor image archive.
+  --workflow-executor-image-reference REF
+                                   Canonical workflow executor image reference
                                    contained in the OCI archive.
-  --argo-crds-dir DIR              Optional directory containing the versioned
-                                   Argo CRD bundle to copy into release-input.
+  --workflows-crds-dir DIR         Optional directory containing the versioned
+                                   workflow CRD bundle to copy into release-input.
   --k3s-version VERSION            Pinned K3s version. Required.
   --chart-version VERSION          Chart version. Defaults to code version.
   --supported-upgrade-source VER   Repeatable. Adds a supported upgrade
@@ -85,7 +86,7 @@ USAGE
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
-ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/argo-workflows"
+WORKFLOWS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-workflows"
 ARTIFACT_SERVER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
 DNS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-dns"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
@@ -109,12 +110,12 @@ ARTIFACT_SERVER_VERSION=""
 DNS_IMAGE=""
 DNS_IMAGE_REFERENCE=""
 DNS_VERSION=""
-ARGO_VERSION=""
-ARGO_CONTROLLER_IMAGE=""
-ARGO_CONTROLLER_IMAGE_REFERENCE=""
-ARGO_EXECUTOR_IMAGE=""
-ARGO_EXECUTOR_IMAGE_REFERENCE=""
-ARGO_CRDS_DIR=""
+WORKFLOWS_VERSION=""
+WORKFLOW_CONTROLLER_IMAGE=""
+WORKFLOW_CONTROLLER_IMAGE_REFERENCE=""
+WORKFLOW_EXECUTOR_IMAGE=""
+WORKFLOW_EXECUTOR_IMAGE_REFERENCE=""
+WORKFLOWS_CRDS_DIR=""
 EXTRA_OCI_IMAGES=()
 EXTRA_OCI_IMAGE_REFERENCES=()
 K3S_VERSION=""
@@ -212,28 +213,28 @@ while [[ $# -gt 0 ]]; do
       EXTRA_OCI_IMAGE_REFERENCES+=("${2:-}")
       shift 2
       ;;
-    --argo-version)
-      ARGO_VERSION="${2:-}"
+    --workflows-version)
+      WORKFLOWS_VERSION="${2:-}"
       shift 2
       ;;
-    --argo-controller-image)
-      ARGO_CONTROLLER_IMAGE="${2:-}"
+    --workflow-controller-image)
+      WORKFLOW_CONTROLLER_IMAGE="${2:-}"
       shift 2
       ;;
-    --argo-controller-image-reference)
-      ARGO_CONTROLLER_IMAGE_REFERENCE="${2:-}"
+    --workflow-controller-image-reference)
+      WORKFLOW_CONTROLLER_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
-    --argo-executor-image)
-      ARGO_EXECUTOR_IMAGE="${2:-}"
+    --workflow-executor-image)
+      WORKFLOW_EXECUTOR_IMAGE="${2:-}"
       shift 2
       ;;
-    --argo-executor-image-reference)
-      ARGO_EXECUTOR_IMAGE_REFERENCE="${2:-}"
+    --workflow-executor-image-reference)
+      WORKFLOW_EXECUTOR_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
-    --argo-crds-dir)
-      ARGO_CRDS_DIR="${2:-}"
+    --workflows-crds-dir)
+      WORKFLOWS_CRDS_DIR="${2:-}"
       shift 2
       ;;
     --k3s-version)
@@ -473,12 +474,12 @@ if [[ ! -d "${DNS_CHART_DIR}" ]]; then
   echo "archive-release-input: missing appliance-dns chart: ${DNS_CHART_DIR}" >&2
   exit 1
 fi
-if [[ -n "${ARGO_CONTROLLER_IMAGE}" && ! -f "${ARGO_CONTROLLER_IMAGE}" ]]; then
-  echo "archive-release-input: Argo controller image not found: ${ARGO_CONTROLLER_IMAGE}" >&2
+if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" && ! -f "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
+  echo "archive-release-input: workflow controller image not found: ${WORKFLOW_CONTROLLER_IMAGE}" >&2
   exit 1
 fi
-if [[ -n "${ARGO_EXECUTOR_IMAGE}" && ! -f "${ARGO_EXECUTOR_IMAGE}" ]]; then
-  echo "archive-release-input: Argo executor image not found: ${ARGO_EXECUTOR_IMAGE}" >&2
+if [[ -n "${WORKFLOW_EXECUTOR_IMAGE}" && ! -f "${WORKFLOW_EXECUTOR_IMAGE}" ]]; then
+  echo "archive-release-input: workflow executor image not found: ${WORKFLOW_EXECUTOR_IMAGE}" >&2
   exit 1
 fi
 if [[ ${#EXTRA_OCI_IMAGES[@]} -ne ${#EXTRA_OCI_IMAGE_REFERENCES[@]} ]]; then
@@ -499,11 +500,11 @@ if [[ ${#EXTRA_OCI_IMAGES[@]} -gt 0 ]]; then
     fi
   done
 fi
-if [[ -n "${ARGO_CRDS_DIR}" && ! -d "${ARGO_CRDS_DIR}" ]]; then
-  echo "archive-release-input: Argo CRDs directory not found: ${ARGO_CRDS_DIR}" >&2
+if [[ -n "${WORKFLOWS_CRDS_DIR}" && ! -d "${WORKFLOWS_CRDS_DIR}" ]]; then
+  echo "archive-release-input: workflows CRDs directory not found: ${WORKFLOWS_CRDS_DIR}" >&2
   exit 1
 fi
-# The Argo Workflows chart is always packaged when its source directory
+# The workflows chart is always packaged when its source directory
 # exists in this checkout (see below) — there is no opt-out flag — and
 # ADR 0011 requires it in the complete v1 appliance. A release-input
 # bundle that ships the chart without its CRDs installs a workflow
@@ -512,8 +513,8 @@ fi
 # times out and rolls the whole install back. Refuse to produce that
 # bundle at packaging time rather than let it surface as a confusing
 # install-time failure.
-if [[ -d "${ARGO_CHART_DIR}" && -z "${ARGO_CRDS_DIR}" ]]; then
-  echo "archive-release-input: packaging the Argo Workflows chart (${ARGO_CHART_DIR}) requires --argo-crds-dir; the workflow controller cannot start without its CRDs" >&2
+if [[ -d "${WORKFLOWS_CHART_DIR}" && -z "${WORKFLOWS_CRDS_DIR}" ]]; then
+  echo "archive-release-input: packaging the workflows chart (${WORKFLOWS_CHART_DIR}) requires --workflows-crds-dir; the workflow controller cannot start without its CRDs" >&2
   exit 1
 fi
 if [[ ! -f "${VALUES_SCHEMA_PATH}" ]]; then
@@ -615,7 +616,7 @@ HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
 ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
-ARGO_CHART_ARCHIVE="argo-workflows-chart-${CODE_VERSION}.tgz"
+WORKFLOWS_CHART_ARCHIVE="workflows-chart-${CODE_VERSION}.tgz"
 ARTIFACT_SERVER_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
 DNS_CHART_ARCHIVE="appliance-dns-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
@@ -651,16 +652,16 @@ if [[ -n "${DNS_IMAGE}" ]]; then
 fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
-ARGO_CONTROLLER_BASENAME=""
-ARGO_EXECUTOR_BASENAME=""
+WORKFLOW_CONTROLLER_BASENAME=""
+WORKFLOW_EXECUTOR_BASENAME=""
 EXTRA_OCI_BASENAMES=()
-if [[ -n "${ARGO_CONTROLLER_IMAGE}" ]]; then
-  ARGO_CONTROLLER_BASENAME="$(basename "${ARGO_CONTROLLER_IMAGE}")"
-  cp "${ARGO_CONTROLLER_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}"
+if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
+  WORKFLOW_CONTROLLER_BASENAME="$(basename "${WORKFLOW_CONTROLLER_IMAGE}")"
+  cp "${WORKFLOW_CONTROLLER_IMAGE}" "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}"
 fi
-if [[ -n "${ARGO_EXECUTOR_IMAGE}" ]]; then
-  ARGO_EXECUTOR_BASENAME="$(basename "${ARGO_EXECUTOR_IMAGE}")"
-  cp "${ARGO_EXECUTOR_IMAGE}" "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}"
+if [[ -n "${WORKFLOW_EXECUTOR_IMAGE}" ]]; then
+  WORKFLOW_EXECUTOR_BASENAME="$(basename "${WORKFLOW_EXECUTOR_IMAGE}")"
+  cp "${WORKFLOW_EXECUTOR_IMAGE}" "${RELEASE_INPUT_DIR}/${WORKFLOW_EXECUTOR_BASENAME}"
 fi
 if [[ ${#EXTRA_OCI_IMAGES[@]} -gt 0 ]]; then
   for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
@@ -682,14 +683,14 @@ mkdir -p "${TMP_DIR}/appliance-dns-chart"
 cp -R "${DNS_CHART_DIR}/." "${TMP_DIR}/appliance-dns-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" appliance-dns-chart
 
-if [[ -d "${ARGO_CHART_DIR}" ]]; then
-  mkdir -p "${TMP_DIR}/argo-workflows-chart"
-  cp -R "${ARGO_CHART_DIR}/." "${TMP_DIR}/argo-workflows-chart/"
-  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" argo-workflows-chart
+if [[ -d "${WORKFLOWS_CHART_DIR}" ]]; then
+  mkdir -p "${TMP_DIR}/workflows-chart"
+  cp -R "${WORKFLOWS_CHART_DIR}/." "${TMP_DIR}/workflows-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" workflows-chart
 fi
 
-if [[ -n "${ARGO_CRDS_DIR}" ]]; then
-  copy_dir_or_empty "${ARGO_CRDS_DIR}" "${RELEASE_INPUT_DIR}/argo-crds"
+if [[ -n "${WORKFLOWS_CRDS_DIR}" ]]; then
+  copy_dir_or_empty "${WORKFLOWS_CRDS_DIR}" "${RELEASE_INPUT_DIR}/workflows-crds"
 fi
 
 {
@@ -698,8 +699,8 @@ fi
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
   printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
   printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
-  if [[ -n "${ARGO_VERSION}" ]]; then
-    printf ',\n  "argoVersion": "%s"' "${ARGO_VERSION}"
+  if [[ -n "${WORKFLOWS_VERSION}" ]]; then
+    printf ',\n  "workflowsVersion": "%s"' "${WORKFLOWS_VERSION}"
   fi
   if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
     printf ',\n  "supportedUpgradeSources": ['
@@ -736,8 +737,8 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   do
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${file}" | sed 's/^sha256://')" "${file}"
   done
-  if [[ -f "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" | sed 's/^sha256://')" "${ARGO_CHART_ARCHIVE}"
+  if [[ -f "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" | sed 's/^sha256://')" "${WORKFLOWS_CHART_ARCHIVE}"
   fi
   if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_BASENAME}" | sed 's/^sha256://')" "${ARTIFACT_SERVER_BASENAME}"
@@ -745,11 +746,11 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -n "${DNS_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" | sed 's/^sha256://')" "${DNS_BASENAME}"
   fi
-  if [[ -n "${ARGO_CONTROLLER_BASENAME}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${ARGO_CONTROLLER_BASENAME}"
+  if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_CONTROLLER_BASENAME}"
   fi
-  if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" | sed 's/^sha256://')" "${ARGO_EXECUTOR_BASENAME}"
+  if [[ -n "${WORKFLOW_EXECUTOR_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_EXECUTOR_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_EXECUTOR_BASENAME}"
   fi
   if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
     for extra_basename in "${EXTRA_OCI_BASENAMES[@]}"; do
@@ -792,9 +793,9 @@ if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
   SUPPORTED_UPGRADES_JSON+=']'
 fi
 
-ARGO_COMPATIBILITY_JSON=""
-if [[ -n "${ARGO_VERSION}" ]]; then
-  ARGO_COMPATIBILITY_JSON=', "argoVersion": "'"${ARGO_VERSION}"'"'
+WORKFLOWS_COMPATIBILITY_JSON=""
+if [[ -n "${WORKFLOWS_VERSION}" ]]; then
+  WORKFLOWS_COMPATIBILITY_JSON=', "workflowsVersion": "'"${WORKFLOWS_VERSION}"'"'
 fi
 ARTIFACT_SERVER_COMPATIBILITY_JSON=', "artifactServerVersion": "'"${ARTIFACT_SERVER_VERSION}"'"'
 DNS_COMPATIBILITY_JSON=', "dnsVersion": "'"${DNS_VERSION}"'"'
@@ -811,22 +812,22 @@ if [[ -n "${DNS_BASENAME}" ]]; then
     "dnsImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" "${DNS_BASENAME}" "${DNS_IMAGE_REFERENCE}")"
 fi
 
-OPTIONAL_ARGO_ARTIFACTS_JSON=""
-if [[ -f "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" ]]; then
-  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
-    "argoWorkflowsChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" "${ARGO_CHART_ARCHIVE}")"
+OPTIONAL_WORKFLOWS_ARTIFACTS_JSON=""
+if [[ -f "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" ]]; then
+  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
+    "workflowsChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" "${WORKFLOWS_CHART_ARCHIVE}")"
 fi
-if [[ -d "${RELEASE_INPUT_DIR}/argo-crds" ]]; then
-  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
-    "argoCRDs": '"$(render_dir_artifact "argo-crds")"
+if [[ -d "${RELEASE_INPUT_DIR}/workflows-crds" ]]; then
+  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
+    "workflowsCRDs": '"$(render_dir_artifact "workflows-crds")"
 fi
-if [[ -n "${ARGO_CONTROLLER_BASENAME}" ]]; then
-  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
-    "argoControllerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_CONTROLLER_BASENAME}" "${ARGO_CONTROLLER_BASENAME}" "${ARGO_CONTROLLER_IMAGE_REFERENCE}")"
+if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
+  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
+    "workflowControllerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" "${WORKFLOW_CONTROLLER_BASENAME}" "${WORKFLOW_CONTROLLER_IMAGE_REFERENCE}")"
 fi
-if [[ -n "${ARGO_EXECUTOR_BASENAME}" ]]; then
-  OPTIONAL_ARGO_ARTIFACTS_JSON+=',
-    "argoExecutorImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARGO_EXECUTOR_BASENAME}" "${ARGO_EXECUTOR_BASENAME}" "${ARGO_EXECUTOR_IMAGE_REFERENCE}")"
+if [[ -n "${WORKFLOW_EXECUTOR_BASENAME}" ]]; then
+  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
+    "workflowExecutorImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${WORKFLOW_EXECUTOR_BASENAME}" "${WORKFLOW_EXECUTOR_BASENAME}" "${WORKFLOW_EXECUTOR_IMAGE_REFERENCE}")"
 fi
 
 OPTIONAL_EXTRA_OCI_IMAGES_JSON=""
@@ -868,11 +869,11 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "sbom": $(render_dir_artifact "sbom"),
     "provenance": $(render_dir_artifact "provenance"),
     "notices": $(render_dir_artifact "notices"),
-    "tests": $(render_dir_artifact "tests")${OPTIONAL_ARGO_ARTIFACTS_JSON}${OPTIONAL_EXTRA_OCI_IMAGES_JSON}
+    "tests": $(render_dir_artifact "tests")${OPTIONAL_WORKFLOWS_ARTIFACTS_JSON}${OPTIONAL_EXTRA_OCI_IMAGES_JSON}
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${WORKFLOWS_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

@@ -66,12 +66,12 @@ config:
   logLevel: info
   trustedProxyCount: 1
   workflowInstanceID: appliance
-  # Must match the ServiceAccount the argo-workflows chart actually
-  # creates: "<argo-workflows.fullname>-executor", where fullname is
-  # pinned via that chart's own fullnameOverride: "argo-workflows".
+  # Must match the ServiceAccount the appliance-workflows chart actually
+  # creates: "<appliance-workflows.fullname>-executor", where fullname is
+  # pinned via that chart's own fullnameOverride: "appliance-workflows".
   # These are two independent charts with no template-level link between
   # them, so this string has to be kept in sync by hand.
-  workflowExecutorServiceAccount: argo-workflows-executor
+  workflowExecutorServiceAccount: appliance-workflows-executor
   # Developer workflow catalog used by the builder profile. For workspace
   # creation this contains workspace profiles and HTTPS Git repos. Build targets
   # are optional and are not required to materialize workspaces. Keep this empty
@@ -85,7 +85,7 @@ config:
   # Appliance-owned generic image used by workspace provisioning workflows.
   # zonctl injects this from the signed bundle for build-capable profiles.
   workspaceProvisionerImageDigest: ""
-  # Single bundled builder/dev-container image used by all Argo build pods.
+  # Single bundled builder/dev-container image used by all workflow build pods.
   # zonctl injects this from the signed bundle (dev-build) for
   # build-capable profiles. Build catalogs must not set per-target builder digests.
   builderImageDigest: ""
@@ -181,7 +181,7 @@ serviceAccount:
   create: true
   name: ""
   # No Kubernetes API access is needed by the control plane yet; Phase 6
-  # (build vertical slice) adds a narrowly scoped Role for Argo Workflow
+  # (build vertical slice) adds a narrowly scoped Role for Workflow
   # submission, at which point this is revisited.
   automountServiceAccountToken: false
 

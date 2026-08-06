@@ -30,7 +30,7 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.build
     artifacts:
-      required: [dev-build-image, workspace-provisioner-image, argo-workflow-templates]
+      required: [dev-build-image, workspace-provisioner-image, workflow-templates]
   artifact:
     displayName: Artifact
     requires: [base]

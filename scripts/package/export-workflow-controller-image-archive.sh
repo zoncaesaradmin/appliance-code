@@ -3,9 +3,9 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-usage: export-argo-controller-image-archive.sh --out-file PATH [options]
+usage: export-workflow-controller-image-archive.sh --out-file PATH [options]
 
-Builds the appliance-owned Argo workflow-controller wrapper image into
+Builds the appliance-owned workflow-controller wrapper image into
 local container storage and exports it as an OCI archive tarball for
 release-input packaging.
 
@@ -15,25 +15,25 @@ Options:
                          Default: quay.io/argoproj/workflow-controller:<chart appVersion>.
   --image-tag VERSION    Local image tag to build/export.
                          Default: the chart appVersion.
-  --image-name NAME      Local image name. Default: appliance-argo-controller.
+  --image-name NAME      Local image name. Default: appliance-workflow-controller.
   --help                 Show this help.
 EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SERVICE_DIR="${REPO_ROOT}/services/argo-controller"
-CHART_YAML="${REPO_ROOT}/deploy/charts/argo-workflows/Chart.yaml"
+SERVICE_DIR="${REPO_ROOT}/services/workflow-controller"
+CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-workflows/Chart.yaml"
 
 OUT_FILE=""
 BASE_IMAGE=""
 IMAGE_TAG=""
-IMAGE_NAME="appliance-argo-controller"
+IMAGE_NAME="appliance-workflow-controller"
 LOCAL_IMAGE_PREFIX="localhost"
-UPSTREAM_LOCAL_NAME="appliance-argo-controller-upstream"
+UPSTREAM_LOCAL_NAME="appliance-workflow-controller-upstream"
 PREFETCH_RETRIES=5
 
-derive_argo_version() {
+derive_workflows_version() {
   sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${CHART_YAML}"
 }
 
@@ -80,7 +80,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "export-argo-controller-image-archive: unknown argument: $1" >&2
+      echo "export-workflow-controller-image-archive: unknown argument: $1" >&2
       usage >&2
       exit 2
       ;;
@@ -88,23 +88,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${OUT_FILE}" ]]; then
-  echo "export-argo-controller-image-archive: --out-file is required" >&2
+  echo "export-workflow-controller-image-archive: --out-file is required" >&2
   usage >&2
   exit 2
 fi
 
 for tool in buildah skopeo; do
   if ! command -v "${tool}" >/dev/null 2>&1; then
-    echo "export-argo-controller-image-archive: ${tool} is required on PATH" >&2
+    echo "export-workflow-controller-image-archive: ${tool} is required on PATH" >&2
     exit 1
   fi
 done
 
 if [[ -z "${IMAGE_TAG}" ]]; then
-  IMAGE_TAG="$(derive_argo_version)"
+  IMAGE_TAG="$(derive_workflows_version)"
 fi
 if [[ -z "${IMAGE_TAG}" ]]; then
-  echo "export-argo-controller-image-archive: unable to derive image tag from ${CHART_YAML}" >&2
+  echo "export-workflow-controller-image-archive: unable to derive image tag from ${CHART_YAML}" >&2
   exit 1
 fi
 IMAGE_TAG="$(sanitize_tag "${IMAGE_TAG}")"
@@ -133,7 +133,7 @@ make -C "${SERVICE_DIR}" image-local \
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 
-echo "created Argo controller image archive:"
+echo "created workflow-controller image archive:"
 echo "  ${OUT_FILE}"
 echo "wrapped base image:"
 echo "  ${BASE_IMAGE}"

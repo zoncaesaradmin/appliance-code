@@ -11,7 +11,7 @@ Containerfile build instructions execute arbitrary code. Kubernetes pods and roo
 
 V1 supports trusted builds only. It is not a hostile multi-tenant build service.
 
-- Buildah is the only supported image builder. Use a pinned Buildah image in ephemeral task pods within one appliance-generated Argo Workflow per build.
+- Buildah is the only supported image builder. Use a pinned Buildah image in ephemeral task pods within one appliance-generated Workflow per build.
 - The supported v1 input is a `Containerfile` from an HTTPS Git repository on an operator allowlist at an immutable commit SHA. A file literally named `Dockerfile` is accepted as Buildah-compatible input, but no separate toolchain or behavior is implied by that filename.
 - The supported output is an OCI image pushed directly to zot. Produce OCI format unless a proven client-compatibility requirement forces another manifest format.
 - Only authenticated principals with `builds.create` may submit builds. Administrators grant that permission only to trusted developers and automation identities.
@@ -41,7 +41,7 @@ Buildah compatibility must be tested against the accepted Containerfile corpus. 
 - Negative admission tests for host mounts, devices, privilege, capabilities, namespace sharing, floating Git refs, redirects, and disallowed source hosts
 - Egress, DNS rebinding, source-secret and registry-token redaction, resource exhaustion, disk/inode exhaustion, timeout, cancellation, and orphan cleanup tests
 - Base-image digest pinning, Skopeo remote verification, OCI manifest/media-type checks, multi-architecture policy, SBOM/provenance attachment, and output attribution tests
-- Control-plane, Argo Workflow Controller, and K3s restart reconciliation plus Buildah storage cleanup tests
+- Control-plane, Workflow Controller, and K3s restart reconciliation plus Buildah storage cleanup tests
 
 ## References
 

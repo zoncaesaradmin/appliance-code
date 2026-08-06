@@ -12,8 +12,8 @@ stable across releases.
 | --- | ---: | ---: | --- |
 | Control plane | 10001 | 10001 | Main API service |
 | Control plane UI | 10002 | 10002 | Browser-facing UI service |
-| Argo workflow controller wrapper | 65532 | 65532 | Upstream non-root controller identity |
-| Builder/workspace workflow pods | 10010 | 10010 | Appliance-generated Argo workflow workloads |
+| Workflow controller wrapper | 65532 | 65532 | Upstream non-root controller identity |
+| Builder/workspace workflow pods | 10010 | 10010 | Appliance-generated workflow workloads |
 | Shared appliance filesystem group | n/a | 20000 | Supplemental group for shared writable storage |
 
 Do not reuse a service UID as the shared filesystem GID. Shared writable mounts

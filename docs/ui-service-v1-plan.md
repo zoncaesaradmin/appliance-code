@@ -19,8 +19,8 @@ service is a small server-driven web layer that renders HTML and calls the
 control-plane APIs.
 
 This does not create a second appliance bundle variant. The complete offline
-bundle continues to ship the control plane, UI service, Artifact Server, Argo Workflows,
-and all required images and charts as one product package.
+bundle continues to ship the control plane, UI service, Artifact Server, the
+Workflow Controller, and all required images and charts as one product package.
 
 ## Product Direction
 

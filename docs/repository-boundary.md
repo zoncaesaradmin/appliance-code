@@ -17,7 +17,7 @@ The boundary is an artifact handoff, not a source-code dependency. `appliance-re
 | REST, MCP, authn/authz, and audit behavior | Owns | Documents released behavior |
 | SQLite schema and migrations | Owns and embeds/packages | Invokes through supported application lifecycle only |
 | Artifact Server and registry integration behavior | Owns | Packages pinned validated image/config inputs |
-| Argo workflow templates and adapter | Owns | Packages approved product inputs when enabled |
+| Workflow templates and adapter | Owns | Packages approved product inputs when enabled |
 | Canonical Helm chart and schema | Owns | Installs the exact packaged chart; never forks it |
 | Development manifests and local Go lane | Owns | Out of scope |
 | Component compatibility evidence | Produces | Verifies and publishes accepted matrix |
@@ -40,10 +40,10 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
   control-plane.oci.tar.zst
   appliance-metadata-bundle-<product-version>.0.tar.zst
   appliance-chart-<version>.tgz
-  argo-workflows-chart-<version>.tgz
-  argo-crds/
-  argo-controller.oci.tar.zst
-  argo-executor.oci.tar.zst
+  workflows-chart-<version>.tgz
+  workflows-crds/
+  workflow-controller.oci.tar.zst
+  workflow-executor.oci.tar.zst
   configuration.schema.json
   compatibility.json
   checksums.txt
@@ -61,10 +61,10 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
 - appliance metadata-bundle archive path, digest, size, metadata version,
   compatible software version, top-level directory name, and validation
   evidence
-- Argo controller/executor image digests and supported architectures when the
-  Argo workflow engine is enabled in the release-input set
+- workflow controller/executor image digests and supported architectures when
+  the workflow engine is enabled in the release-input set
 - chart version, application version, and required values-schema version
-- Argo version, CRD bundle identity, and workflow-controller chart identity
+- workflows engine version, CRD bundle identity, and workflow-controller chart identity
 - database migration compatibility and minimum/maximum source version
 - required K3s/Kubernetes, Traefik, Artifact Server, Buildah, Podman, Skopeo, ORAS, Syft, Grype, and Helm compatibility identities
 - configuration and bootstrap contract versions

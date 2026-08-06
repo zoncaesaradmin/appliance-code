@@ -34,12 +34,12 @@ They now have:
   - `stdout.log`
   - `stderr.log`
 
-The Argo Workflow Controller and CoreDNS use the same wrapper-entrypoint
+The Workflow Controller and CoreDNS use the same wrapper-entrypoint
 pattern so host operators can read:
 
 ```text
-/data/zon/logs/argo-controller/stdout.log
-/data/zon/logs/argo-controller/stderr.log
+/data/zon/logs/workflow-controller/stdout.log
+/data/zon/logs/workflow-controller/stderr.log
 /data/zon/logs/dns/stdout.log
 /data/zon/logs/dns/stderr.log
 ```
@@ -73,7 +73,7 @@ Today, the important always-running Go services log to `stdout`:
 
 - control plane
 - UI service
-- Argo Workflow Controller
+- Workflow Controller
 
 That means the practical runtime sources today are:
 
@@ -87,7 +87,7 @@ Useful target-host commands today:
 sudo kubectl get pods -A
 sudo kubectl -n control logs deploy/api-server
 sudo kubectl -n control logs deploy/ui-server
-sudo kubectl -n workflows logs deploy/argo-workflows
+sudo kubectl -n workflows logs deploy/appliance-workflows
 sudo kubectl -n appliance-builds get pods
 sudo kubectl -n appliance-builds logs <pod-name>
 sudo journalctl -u k3s -f
@@ -127,7 +127,7 @@ Examples:
 ```text
 /data/zon/logs/api-server/
 /data/zon/logs/ui/
-/data/zon/logs/argo-controller/
+/data/zon/logs/workflow-controller/
 /data/zon/logs/artifactserver/
 /data/zon/logs/dns/
 ```
@@ -311,7 +311,7 @@ subdirectories, for example:
 ```text
 /data/zon/logs/api-server/
 /data/zon/logs/ui/
-/data/zon/logs/argo-controller/
+/data/zon/logs/workflow-controller/
 /data/zon/logs/builds/
 ```
 
@@ -365,7 +365,7 @@ Scope:
 
 - control plane deployment
 - UI deployment
-- Argo Workflow Controller deployment
+- Workflow Controller deployment
 
 Deliverables:
 
@@ -380,7 +380,7 @@ Acceptance:
 - `kubectl logs` still works
 - `/data/zon/logs/api-server/stdout.log` exists
 - `/data/zon/logs/ui/stdout.log` exists
-- `/data/zon/logs/argo-controller/stdout.log` exists
+- `/data/zon/logs/workflow-controller/stdout.log` exists
 
 ### Phase 2. Control-plane and UI application file logging
 
@@ -486,7 +486,7 @@ Examples:
 ```text
 /data/zon/logs/api-server/
 /data/zon/logs/ui/
-/data/zon/logs/argo-controller/
+/data/zon/logs/workflow-controller/
 /data/zon/logs/builds/
 ```
 

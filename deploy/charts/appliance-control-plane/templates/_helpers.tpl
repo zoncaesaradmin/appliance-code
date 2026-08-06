@@ -92,9 +92,9 @@ ServiceAccount name.
 {{- end -}}
 
 {{/*
-Whether the control plane should get API access for Argo workflow submission.
+Whether the control plane should get API access for workflow submission.
 */}}
-{{- define "appliance-control-plane.argoWorkflowEnabled" -}}
+{{- define "appliance-control-plane.workflowsEnabled" -}}
 {{- if or (eq .Values.config.applianceProfile "builder") (eq .Values.config.applianceProfile "builder-landns") (eq .Values.config.applianceProfile "builder-storage-landns") -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
@@ -109,14 +109,14 @@ Whether the control plane manages LAN DNS zone ConfigMap sync.
 Whether the control-plane ServiceAccount token must be mounted.
 */}}
 {{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
-{{- if or (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
+{{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 
 {{/*
-Fixed namespace for appliance-owned Argo workflows in v1.
+Fixed namespace for appliance-owned workflows in v1.
 */}}
-{{- define "appliance-control-plane.argoWorkflowNamespace" -}}
+{{- define "appliance-control-plane.workflowNamespace" -}}
 appliance-builds
 {{- end -}}
 

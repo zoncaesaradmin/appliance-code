@@ -87,7 +87,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-argo-controller-image-archive package-artifact-server-image-archive package-coredns-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-coredns-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -253,17 +253,17 @@ package-host-agent-image-archive:
 		--reference-out-file "$$reference_out_file" \
 		--image-tag "$$image_tag"
 
-## package-argo-controller-image-archive: always build and export the
-## appliance-owned Argo workflow-controller wrapper image as an OCI archive
+## package-workflow-controller-image-archive: always build and export the
+## appliance-owned workflow-controller wrapper image as an OCI archive
 ## tarball for release-input packaging.
-package-argo-controller-image-archive:
-	@argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
-	out_file="$${OUT_FILE:-$(CURDIR)/.run/argo-controller-$$argo_version.tar}"; \
+package-workflow-controller-image-archive:
+	@workflows_version="$${WORKFLOWS_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-workflows/Chart.yaml)}"; \
+	out_file="$${OUT_FILE:-$(CURDIR)/.run/workflow-controller-$$workflows_version.tar}"; \
 	mkdir -p "$$(dirname "$$out_file")"; \
-	bash ./scripts/package/export-argo-controller-image-archive.sh \
+	bash ./scripts/package/export-workflow-controller-image-archive.sh \
 		--out-file "$$out_file" \
-		$${ARGO_CONTROLLER_BASE_IMAGE:+--base-image "$${ARGO_CONTROLLER_BASE_IMAGE}"} \
-		$${ARGO_VERSION:+--image-tag "$${ARGO_VERSION}"}
+		$${WORKFLOW_CONTROLLER_BASE_IMAGE:+--base-image "$${WORKFLOW_CONTROLLER_BASE_IMAGE}"} \
+		$${WORKFLOWS_VERSION:+--image-tag "$${WORKFLOWS_VERSION}"}
 
 ## package-artifact-server-image-archive: build the appliance artifact-server
 ## wrapper (upstream registry binary + thin entrypoint; native application.log
@@ -318,13 +318,13 @@ package-metadata-bundle:
 
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.
-## ARGO_CRDS_DIR is required: the Argo Workflows chart is always packaged
+## WORKFLOWS_CRDS_DIR is required: the workflows chart is always packaged
 ## (ADR 0011 requires it in the complete v1 appliance), and a bundle
 ## shipping the chart without its CRDs installs a workflow controller
 ## that crash-loops forever on startup.
 package-release-input-tar:
-	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${ARGO_CRDS_DIR:-}" ]; then \
-		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, and ARGO_CRDS_DIR" >&2; \
+	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${WORKFLOWS_CRDS_DIR:-}" ]; then \
+		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, and WORKFLOWS_CRDS_DIR" >&2; \
 		exit 2; \
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
@@ -334,8 +334,8 @@ package-release-input-tar:
 	host_agent_binary="$(CURDIR)/services/hostagent/bin/appliance-host-agentd"; \
 	host_packages_dir="$${HOST_PACKAGES_DIR:-$(CURDIR)/.run/host-packages}"; \
 	host_packages_os_version="$${HOST_PACKAGES_OS_VERSION:-$${OS_VERSION:-24.04}}"; \
-	argo_version="$${ARGO_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/argo-workflows/Chart.yaml)}"; \
-	argo_controller_image="$(CURDIR)/.run/argo-controller-$$argo_version.tar"; \
+	workflows_version="$${WORKFLOWS_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-workflows/Chart.yaml)}"; \
+	workflow_controller_image="$(CURDIR)/.run/workflow-controller-$$workflows_version.tar"; \
 	artifact_server_version="$${ARTIFACT_SERVER_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
 	artifact_server_image="$${ARTIFACT_SERVER_IMAGE:-$(CURDIR)/.run/artifact-server-$$artifact_server_version.tar}"; \
 	artifact_server_reference_file="$(CURDIR)/.run/artifact-server-$$artifact_server_version.reference"; \
@@ -344,7 +344,7 @@ package-release-input-tar:
 	dns_reference_file="$(CURDIR)/.run/coredns-$$dns_version.reference"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
-	argo_controller_image_ref="localhost/appliance-argo-controller:$$argo_version"; \
+	workflow_controller_image_ref="localhost/appliance-workflow-controller:$$workflows_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
 	$(MAKE) --no-print-directory -C ./services/hostagent build; \
@@ -358,13 +358,13 @@ package-release-input-tar:
 			HOST_CAPABILITIES="$${HOST_CAPABILITIES:-mdns wifi-ap}"; \
 	fi; \
 	host_agent_image_ref="$$(tr -d '\r\n' < "$$host_agent_reference_file")"; \
-	if [ -n "$$argo_version" ] && [ -z "$${ARGO_CONTROLLER_IMAGE:-}" ]; then \
-		$(MAKE) --no-print-directory package-argo-controller-image-archive \
-			OUT_FILE="$$argo_controller_image" \
-			ARGO_VERSION="$$argo_version" \
-			ARGO_CONTROLLER_BASE_IMAGE="$${ARGO_CONTROLLER_BASE_IMAGE:-quay.io/argoproj/workflow-controller:$$argo_version}"; \
-		ARGO_CONTROLLER_IMAGE="$$argo_controller_image"; \
-		ARGO_CONTROLLER_IMAGE_REFERENCE="$${ARGO_CONTROLLER_IMAGE_REFERENCE:-$$argo_controller_image_ref}"; \
+	if [ -n "$$workflows_version" ] && [ -z "$${WORKFLOW_CONTROLLER_IMAGE:-}" ]; then \
+		$(MAKE) --no-print-directory package-workflow-controller-image-archive \
+			OUT_FILE="$$workflow_controller_image" \
+			WORKFLOWS_VERSION="$$workflows_version" \
+			WORKFLOW_CONTROLLER_BASE_IMAGE="$${WORKFLOW_CONTROLLER_BASE_IMAGE:-quay.io/argoproj/workflow-controller:$$workflows_version}"; \
+		WORKFLOW_CONTROLLER_IMAGE="$$workflow_controller_image"; \
+		WORKFLOW_CONTROLLER_IMAGE_REFERENCE="$${WORKFLOW_CONTROLLER_IMAGE_REFERENCE:-$$workflow_controller_image_ref}"; \
 	fi; \
 	if [ -z "$${ARTIFACT_SERVER_IMAGE:-}" ]; then \
 		src_image="$${ARTIFACT_SERVER_SOURCE_IMAGE:-}"; \
@@ -412,12 +412,12 @@ package-release-input-tar:
 	if [ -n "$${PROVENANCE_DIR:-}" ]; then set -- "$$@" --provenance-dir "$${PROVENANCE_DIR}"; fi; \
 	if [ -n "$${NOTICES_DIR:-}" ]; then set -- "$$@" --notices-dir "$${NOTICES_DIR}"; fi; \
 	if [ -n "$${TESTS_DIR:-}" ]; then set -- "$$@" --tests-dir "$${TESTS_DIR}"; fi; \
-	if [ -n "$$argo_version" ]; then set -- "$$@" --argo-version "$$argo_version"; fi; \
-	if [ -n "$${ARGO_CONTROLLER_IMAGE:-}" ]; then set -- "$$@" --argo-controller-image "$${ARGO_CONTROLLER_IMAGE}"; fi; \
-	if [ -n "$${ARGO_CONTROLLER_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --argo-controller-image-reference "$${ARGO_CONTROLLER_IMAGE_REFERENCE}"; fi; \
-	if [ -n "$${ARGO_EXECUTOR_IMAGE:-}" ]; then set -- "$$@" --argo-executor-image "$${ARGO_EXECUTOR_IMAGE}"; fi; \
-	if [ -n "$${ARGO_EXECUTOR_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --argo-executor-image-reference "$${ARGO_EXECUTOR_IMAGE_REFERENCE}"; fi; \
-	if [ -n "$${ARGO_CRDS_DIR:-}" ]; then set -- "$$@" --argo-crds-dir "$${ARGO_CRDS_DIR}"; fi; \
+	if [ -n "$$workflows_version" ]; then set -- "$$@" --workflows-version "$$workflows_version"; fi; \
+	if [ -n "$${WORKFLOW_CONTROLLER_IMAGE:-}" ]; then set -- "$$@" --workflow-controller-image "$${WORKFLOW_CONTROLLER_IMAGE}"; fi; \
+	if [ -n "$${WORKFLOW_CONTROLLER_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --workflow-controller-image-reference "$${WORKFLOW_CONTROLLER_IMAGE_REFERENCE}"; fi; \
+	if [ -n "$${WORKFLOW_EXECUTOR_IMAGE:-}" ]; then set -- "$$@" --workflow-executor-image "$${WORKFLOW_EXECUTOR_IMAGE}"; fi; \
+	if [ -n "$${WORKFLOW_EXECUTOR_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --workflow-executor-image-reference "$${WORKFLOW_EXECUTOR_IMAGE_REFERENCE}"; fi; \
+	if [ -n "$${WORKFLOWS_CRDS_DIR:-}" ]; then set -- "$$@" --workflows-crds-dir "$${WORKFLOWS_CRDS_DIR}"; fi; \
 	bash ./scripts/package/archive-release-input.sh "$$@"
 
 # --- Developer Container (Linux only — see docs/dev-container.md) -----

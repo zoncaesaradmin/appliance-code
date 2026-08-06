@@ -396,7 +396,7 @@ func (c Catalog) BuilderImageDigests() []string {
 }
 
 // ResolveBuilderImage maps a catalog builderImageDigest value to the digests-
-// pinned image used for the Argo build pod. Empty and short names such as
+// pinned image used for the workflow build pod. Empty and short names such as
 // "dev-build" resolve to applianceBuilderDigest from install. A digest-
 // pinned override is returned unchanged for allowlist checks.
 func ResolveBuilderImage(ref, applianceBuilderDigest string) (string, error) {

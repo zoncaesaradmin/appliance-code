@@ -7,4 +7,4 @@ alwaysApply: true
 
 Follow `.cursor/rules/appliance-cross-repo-e2e.mdc` for the full cross-repo dependency map, OCI contract, change→check matrix, and done-gate.
 
-Minimum: never change only one side of a producer/consumer pair; `make verify` in every edited repo among `appliance-code`, `appliance-ctl`, and `appliance-release`; walk export → bundle → preload/tag → values → control-plane → Argo before declaring a fix done.
+Minimum: never change only one side of a producer/consumer pair; `make verify` in every edited repo among `appliance-code`, `appliance-ctl`, and `appliance-release`; walk export → bundle → preload/tag → values → control-plane → workflow engine before declaring a fix done.

@@ -1,3 +1,3 @@
-{{- if and .Values.workspaceStorage.enabled .Values.workspaceStorage.prepareJob.enabled (eq (include "appliance-control-plane.argoWorkflowEnabled" .) "true") }}
+{{- if and .Values.workspaceStorage.enabled .Values.workspaceStorage.prepareJob.enabled (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
 {{- fail "workspaceStorage.prepareJob.enabled is not supported; prepare the workspace host directory with zonctl or manually before Helm runs" }}
 {{- end }}

@@ -84,7 +84,7 @@ Useful event names:
 `POST /api/v1/workspaces` is now asynchronous.
 
 The control-plane API creates the workspace row immediately, sets it as the
-current workspace, creates a `workspace_prepare` job, submits the Argo workflow,
+current workspace, creates a `workspace_prepare` job, submits the workflow,
 and returns the first known workspace state in the response body.
 
 Expected workspace state progression:
@@ -173,7 +173,7 @@ next places to inspect are:
    - `GET /api/v1/jobs/{jobId}`
    - `GET /api/v1/jobs/{jobId}/steps`
    - `GET /api/v1/jobs/{jobId}/logs`
-3. Argo runtime state in the build namespace:
+3. Workflow-engine runtime state in the build namespace:
    - `kubectl -n appliance-builds get workflows`
    - `kubectl -n appliance-builds get pods`
    - `kubectl -n appliance-builds logs <workspace-prepare-pod>`
