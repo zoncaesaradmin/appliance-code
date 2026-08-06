@@ -1,4 +1,6 @@
 ARG BASE_IMAGE=ghcr.io/project-zot/zot-linux-amd64:v2.1.8
+# glibc runtime for the dynamically linked upstream binary (see FROM below).
+ARG RUNTIME_BASE_IMAGE=debian:bookworm-slim
 
 FROM ${BASE_IMAGE} AS upstream
 
@@ -15,7 +17,10 @@ FROM ${BASE_IMAGE} AS upstream
 # (execve fails with "cannot execute: required file not found" / exit 127).
 # CoreDNS and Argo wrappers can stay on Alpine because those upstream binaries
 # are statically linked.
-FROM debian:bookworm-slim
+#
+# Bundle export prefetches RUNTIME_BASE_IMAGE into local storage and rebuilds
+# with --pull-never (same as the upstream BASE_IMAGE prefetch).
+FROM ${RUNTIME_BASE_IMAGE}
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends bash ca-certificates \

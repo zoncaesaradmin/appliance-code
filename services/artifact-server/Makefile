@@ -13,7 +13,10 @@ ARTIFACT_SERVER_VERSION ?= $(shell sed -n 's/^appVersion: *"\{0,1\}v\{0,1\}\([^"
 SERVICE_IMAGE_TAG ?= v$(ARTIFACT_SERVER_VERSION)
 # Current upstream pull ref (implementation detail; not the appliance name).
 BASE_IMAGE ?= ghcr.io/project-zot/zot-linux-amd64:v$(ARTIFACT_SERVER_VERSION)
+# glibc base for the dynamically linked upstream binary (not Alpine/musl).
+RUNTIME_BASE_IMAGE ?= debian:bookworm-slim
 SERVICE_IMAGE_BUILD_ARGS = \
-	--build-arg BASE_IMAGE=$(BASE_IMAGE)
+	--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+	--build-arg RUNTIME_BASE_IMAGE=$(RUNTIME_BASE_IMAGE)
 
 include $(CURDIR)/../../build/service-image.mk

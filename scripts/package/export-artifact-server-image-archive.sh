@@ -19,7 +19,10 @@ Options:
   --source-image REF        Upstream image to wrap. Default:
                             ghcr.io/project-zot/zot-linux-amd64:v<version>
   --version VERSION         Compatibility version. Defaults to chart appVersion.
-  
+
+Environment:
+  RUNTIME_SOURCE_IMAGE      glibc runtime base pulled for --pull-never builds.
+                            Default: debian:bookworm-slim
 EOF
 }
 
@@ -34,6 +37,10 @@ ARTIFACT_SERVER_VERSION=""
 LOCAL_IMAGE_PREFIX="localhost"
 IMAGE_NAME="appliance-artifact-server"
 UPSTREAM_LOCAL_NAME="appliance-artifact-server-upstream"
+RUNTIME_LOCAL_NAME="appliance-artifact-server-runtime"
+# glibc runtime base (must match Containerfile default / Makefile).
+RUNTIME_SOURCE_IMAGE="${RUNTIME_SOURCE_IMAGE:-debian:bookworm-slim}"
+RUNTIME_LOCAL_TAG="bookworm-slim"
 PREFETCH_RETRIES=5
 
 retry() {
@@ -92,18 +99,23 @@ mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
+RUNTIME_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${RUNTIME_LOCAL_NAME}:${RUNTIME_LOCAL_TAG}"
 
-# Prefetch linux/amd64 upstream into local storage so the wrapper build can
-# use --pull-never (same pattern as CoreDNS / Argo controller wrappers).
+# Prefetch linux/amd64 upstream + glibc runtime into local storage so the
+# wrapper build can use --pull-never (same pattern as CoreDNS / Argo).
 retry "${PREFETCH_RETRIES}" \
   skopeo copy --override-os linux --override-arch amd64 \
     "docker://${SOURCE_IMAGE}" "containers-storage:${UPSTREAM_LOCAL_REF}"
+retry "${PREFETCH_RETRIES}" \
+  skopeo copy --override-os linux --override-arch amd64 \
+    "docker://${RUNTIME_SOURCE_IMAGE}" "containers-storage:${RUNTIME_LOCAL_REF}"
 
 make -C "${SERVICE_DIR}" image-local \
   BUILD_ENGINE="buildah bud --pull-never" \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
-  BASE_IMAGE="${UPSTREAM_LOCAL_REF}"
+  BASE_IMAGE="${UPSTREAM_LOCAL_REF}" \
+  RUNTIME_BASE_IMAGE="${RUNTIME_LOCAL_REF}"
 
 # Fail closed if the wrapped binary cannot exec in the final image (classic
 # symptom of copying a glibc-linked upstream binary onto a musl base).
@@ -155,5 +167,6 @@ fi
 
 echo "created artifact-server wrapper OCI archive: ${OUT_FILE}"
 echo "wrapped upstream image: ${SOURCE_IMAGE}"
+echo "runtime base image: ${RUNTIME_SOURCE_IMAGE}"
 echo "archive annotation: registry.local/artifact-server:bundled"
 echo "image reference: ${REFERENCE}"
