@@ -118,8 +118,35 @@ func TestSubmitCreatesMakeTargetWorkflow(t *testing.T) {
 			t.Fatalf("make_target command missing %q: %s", want, command)
 		}
 	}
+	if strings.Contains(command, "WORKING_DIRECTORY") {
+		t.Fatalf("root make workflow should not cd into WORKING_DIRECTORY: %s", command)
+	}
 	if strings.Contains(text, "buildah bud") {
 		t.Fatalf("make_target workflow should not use default buildah command: %s", text)
+	}
+}
+
+func TestSubmitCreatesMakeTargetWorkflowWithWorkingDirectory(t *testing.T) {
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
+		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
+		Execution: "make", Args: []string{"image"}, WorkingDirectory: "services/controlplane", ContainerfilePath: "Containerfile",
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", TargetRepository: "registry.local/users/alice/app", TargetTag: "v1",
+		Deadline: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	text := workflowJSON(t, got)
+	command := workflowCommand(t, got)
+	for _, want := range []string{"WORKING_DIRECTORY", "services/controlplane"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("workingDirectory workflow JSON missing %q: %s", want, text)
+		}
+	}
+	for _, want := range []string{`cd "$WORKING_DIRECTORY"`, `make "$MAKE_TARGET"`} {
+		if !strings.Contains(command, want) {
+			t.Fatalf("workingDirectory command missing %q: %s", want, command)
+		}
 	}
 }
 

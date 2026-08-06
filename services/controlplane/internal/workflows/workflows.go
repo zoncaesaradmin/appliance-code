@@ -54,6 +54,7 @@ type Spec struct {
 	SourceCommitSHA   string
 	Execution         string
 	Args              []string
+	WorkingDirectory  string
 	ContainerfilePath string
 	TargetRepository  string
 	TargetTag         string

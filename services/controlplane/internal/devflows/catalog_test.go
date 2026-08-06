@@ -135,6 +135,18 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 			},
 		},
 		{
+			name: "absolute working directory",
+			mutate: func(c *Catalog) {
+				c.BuildTargets[0].WorkingDirectory = "/tmp"
+			},
+		},
+		{
+			name: "traversal working directory",
+			mutate: func(c *Catalog) {
+				c.BuildTargets[0].WorkingDirectory = "services/../etc"
+			},
+		},
+		{
 			name: "unsafe make target",
 			mutate: func(c *Catalog) {
 				c.BuildTargets[0].Execution = ExecutionMake
@@ -167,6 +179,20 @@ func TestCatalogRejectsUnsafeExecutionPaths(t *testing.T) {
 				t.Fatal("Validate should reject unsafe execution input")
 			}
 		})
+	}
+}
+
+func TestCatalogNormalizesWorkingDirectoryRootAliases(t *testing.T) {
+	catalog := testCatalog()
+	catalog.BuildTargets[0].WorkingDirectory = "."
+	catalog.Normalize()
+	if catalog.BuildTargets[0].WorkingDirectory != "" {
+		t.Fatalf("WorkingDirectory = %q, want empty after normalize", catalog.BuildTargets[0].WorkingDirectory)
+	}
+	catalog.BuildTargets[0].WorkingDirectory = "services/controlplane/"
+	catalog.Normalize()
+	if catalog.BuildTargets[0].WorkingDirectory != "services/controlplane" {
+		t.Fatalf("WorkingDirectory = %q, want trimmed services/controlplane", catalog.BuildTargets[0].WorkingDirectory)
 	}
 }
 

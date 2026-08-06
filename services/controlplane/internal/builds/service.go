@@ -53,6 +53,7 @@ type CreateRequest struct {
 	WorkspaceRepo          string
 	Execution              string
 	Args                   []string
+	WorkingDirectory       string
 	ContainerfilePath      string
 	ImageRepository        string
 	ImageTag               string
@@ -231,7 +232,7 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
 		Name: workflowName, Kind: workflows.KindBuild,
 		SourceRepoURL: build.SourceRepoURL, SourceCommitSHA: build.SourceCommitSHA,
-		Execution: req.Execution, Args: req.Args,
+		Execution: req.Execution, Args: req.Args, WorkingDirectory: req.WorkingDirectory,
 		ContainerfilePath: build.ContainerfilePath, BuilderImageDigest: build.BuilderImageDigest,
 		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag,
 		GitCredentialSecret: gitCredentialSecret,

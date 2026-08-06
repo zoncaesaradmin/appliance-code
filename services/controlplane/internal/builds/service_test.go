@@ -387,6 +387,7 @@ func TestCreatePassesStructuredExecutionToWorkflow(t *testing.T) {
 	req := validRequest()
 	req.Execution = "make"
 	req.Args = []string{"image"}
+	req.WorkingDirectory = "services/controlplane"
 	req.ContainerfilePath = "deploy/Containerfile"
 	build, err := h.svc.Create(t.Context(), systemActor(), "user-1", req, "")
 	if err != nil {
@@ -396,7 +397,7 @@ func TestCreatePassesStructuredExecutionToWorkflow(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow spec %q was not submitted", build.WorkflowName)
 	}
-	if spec.Execution != "make" || len(spec.Args) != 1 || spec.Args[0] != "image" || spec.ContainerfilePath != "deploy/Containerfile" {
+	if spec.Execution != "make" || len(spec.Args) != 1 || spec.Args[0] != "image" || spec.WorkingDirectory != "services/controlplane" || spec.ContainerfilePath != "deploy/Containerfile" {
 		t.Fatalf("workflow spec execution fields = %+v", spec)
 	}
 }

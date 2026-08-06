@@ -700,6 +700,18 @@
             "minLength": 1
           }
         },
+        "workingDirectory": {
+          "description": "Repo-relative subdirectory to cd into before make/script. Omit or empty for repo root. Do not use \".\".",
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 0
+            },
+            {
+              "$ref": "#/$defs/repoRelativePath"
+            }
+          ]
+        },
         "scriptPath": {
           "type": "string"
         },
@@ -762,6 +774,18 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "workingDirectory": {
+          "description": "Repo-relative subdirectory to cd into before make/script. Omit or empty for repo root. Do not use \".\".",
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 0
+            },
+            {
+              "$ref": "#/$defs/repoRelativePath"
+            }
+          ]
         },
         "scriptPath": {
           "$ref": "#/$defs/repoRelativePath"

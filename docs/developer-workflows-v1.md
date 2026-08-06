@@ -39,6 +39,11 @@ submission.
   Supported executions are `make` and `script`. Mode input is the `args` list
   (v1: exactly one entry). Legacy `make_target`/`repo_script` plus
   `makeTarget`/`scriptPath` are normalized into this shape at load time.
+  Optional `workingDirectory` is a clean repo-relative subdirectory the
+  workflow cds into before running make/script (for example
+  `services/controlplane` with `args: [image]`). Omit it or leave it empty for
+  repo root; do not set `"."`. When set, script and containerfile paths are
+  relative to that subdirectory.
 - Current-workspace build submission resolves
   `current workspace + build target + tag` and builds the on-disk tree at
   `/data/zon/workspaces/<workspace-name>/<repo-name>/`. Builds do not clone
@@ -68,9 +73,12 @@ submission.
   `args[0]`, defaulting to `build.sh` when legacy catalogs omit args, with build
   context environment variables such as `TARGET_IMAGE` and `CONTAINERFILE_PATH`.
   `make` runs `make <args[0]>` with the same structured variables.
-  `args` entries used as script paths, and `containerfilePath`, must be clean
-  relative paths inside the workspace repo directory; absolute paths,
-  backslashes, and `.` or `..` path segments are rejected.
+  Optional catalog `workingDirectory` cds into a repo-relative subdirectory
+  first (omit/empty = repo root; do not set `"."`). `args` entries used as
+  script paths, and `containerfilePath`, must be clean relative paths inside
+  the workspace repo directory; absolute paths, backslashes, and `.` or `..`
+  path segments are rejected. When `workingDirectory` is set, those paths are
+  relative to that subdirectory after the workflow cds there.
   Prefer `execution: make` with a real Makefile target when the repo has one
   (for example forgeline `build`, not a bare root `build.sh`). Script args must
   name a file that exists in the checkout (for example `scripts/build.sh`).

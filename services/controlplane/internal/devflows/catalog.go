@@ -67,6 +67,7 @@ type BuildTarget struct {
 	Repo              string   `json:"repo,omitempty"`
 	Execution         string   `json:"execution"`
 	Args              []string `json:"args,omitempty"`
+	WorkingDirectory  string   `json:"workingDirectory,omitempty"`
 	ContainerfilePath string   `json:"containerfilePath,omitempty"`
 	ImageRepository   string   `json:"imageRepository"`
 	ImageTagTemplate  string   `json:"imageTagTemplate,omitempty"`
@@ -124,6 +125,7 @@ func (c *Catalog) Normalize() {
 	}
 	for i := range c.BuildTargets {
 		normalizeTargetExecution(&c.BuildTargets[i])
+		normalizeWorkingDirectory(&c.BuildTargets[i])
 		if strings.TrimSpace(c.BuildTargets[i].BuilderImageDigest) == "" {
 			c.BuildTargets[i].BuilderImageDigest = DefaultBuilderImageRef
 		}
@@ -160,6 +162,19 @@ func normalizeTargetExecution(t *BuildTarget) {
 	t.Args = args
 	t.MakeTarget = ""
 	t.ScriptPath = ""
+}
+
+func normalizeWorkingDirectory(t *BuildTarget) {
+	if t == nil {
+		return
+	}
+	wd := strings.TrimSpace(t.WorkingDirectory)
+	// Omit / empty / "." all mean repo root. Keep catalogs free of "./" noise.
+	if wd == "" || wd == "." || wd == "./" {
+		t.WorkingDirectory = ""
+		return
+	}
+	t.WorkingDirectory = strings.TrimSuffix(wd, "/")
 }
 
 func compactArgs(values []string) []string {
@@ -305,6 +320,14 @@ func (c Catalog) validateNormalized() error {
 			}
 		default:
 			errs = append(errs, fmt.Sprintf("build target %q has unsupported execution %q", name, target.Execution))
+		}
+		if wd := strings.TrimSpace(target.WorkingDirectory); wd != "" {
+			if wd == "." || wd == "./" {
+				wd = ""
+			}
+			if wd != "" && !validRepoRelativePath(wd) {
+				errs = append(errs, fmt.Sprintf("build target %q has invalid workingDirectory %q (omit or leave empty for repo root)", name, target.WorkingDirectory))
+			}
 		}
 		if target.ContainerfilePath != "" && !validRepoRelativePath(target.ContainerfilePath) {
 			errs = append(errs, fmt.Sprintf("build target %q has invalid containerfilePath %q", name, target.ContainerfilePath))

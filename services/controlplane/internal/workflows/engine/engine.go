@@ -335,6 +335,9 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 				env = append(env, map[string]any{"name": "SCRIPT_PATH", "value": spec.Args[0]})
 			}
 		}
+		if wd := strings.TrimSpace(spec.WorkingDirectory); wd != "" {
+			env = append(env, map[string]any{"name": "WORKING_DIRECTORY", "value": wd})
+		}
 	}
 
 	container := map[string]any{
@@ -431,6 +434,24 @@ cd "$repo_dir"
 appliance_git_clone "$SOURCE_REPO_URL" /workspace/src
 git -C /workspace/src checkout "$SOURCE_COMMIT_SHA"
 cd /workspace/src
+`
+	}
+	if strings.TrimSpace(spec.WorkingDirectory) != "" {
+		preamble += `if [ -z "${WORKING_DIRECTORY:-}" ]; then
+  echo "WORKING_DIRECTORY is required when catalog workingDirectory is set" >&2
+  exit 1
+fi
+case "$WORKING_DIRECTORY" in
+  ""|"."|"./"|/*|*..*)
+    echo "WORKING_DIRECTORY must be a clean repo-relative subdirectory: $WORKING_DIRECTORY" >&2
+    exit 1
+    ;;
+esac
+if [ ! -d "$WORKING_DIRECTORY" ]; then
+  echo "working directory is missing: $WORKING_DIRECTORY" >&2
+  exit 1
+fi
+cd "$WORKING_DIRECTORY"
 `
 	}
 	switch strings.TrimSpace(spec.Execution) {
