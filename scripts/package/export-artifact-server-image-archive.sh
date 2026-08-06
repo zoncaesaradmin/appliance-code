@@ -9,8 +9,8 @@ Builds the appliance-owned artifact-server wrapper image (upstream registry
 binary + thin entrypoint; native application.log via chart config) and
 exports it as an OCI archive.
 
-The archive annotation is registry.local/zot:bundled and the emitted
-workload reference is registry.local/zot@sha256:<archive index digest>
+The archive annotation is registry.local/artifact-server:bundled and the emitted
+workload reference is registry.local/artifact-server@sha256:<archive index digest>
 (existing install OCI contract; keep until a deliberate rename).
 
 Options:
@@ -19,7 +19,7 @@ Options:
   --source-image REF        Upstream image to wrap. Default:
                             ghcr.io/project-zot/zot-linux-amd64:v<version>
   --version VERSION         Compatibility version. Defaults to chart appVersion.
-  --zot-version VERSION     Deprecated alias for --version.
+  
 EOF
 }
 
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
     --out-file) OUT_FILE="${2:-}"; shift 2 ;;
     --reference-out-file) REFERENCE_OUT_FILE="${2:-}"; shift 2 ;;
     --source-image) SOURCE_IMAGE="${2:-}"; shift 2 ;;
-    --version|--zot-version) ARTIFACT_SERVER_VERSION="${2:-}"; shift 2 ;;
+    --version) ARTIFACT_SERVER_VERSION="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "export-artifact-server-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -111,7 +111,7 @@ LAYOUT="${TMP_DIR}/oci"
 
 # Re-export under the existing install OCI contract annotation.
 skopeo copy --override-os linux --override-arch amd64 \
-  "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/zot:bundled"
+  "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/artifact-server:bundled"
 
 DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'
 import json, sys
@@ -120,15 +120,15 @@ manifests = index.get("manifests", [])
 if len(manifests) != 1:
     raise SystemExit(f"expected one platform manifest in OCI index, found {len(manifests)}")
 descriptor = manifests[0]
-if descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name") != "registry.local/zot:bundled":
-    raise SystemExit("OCI archive is missing registry.local/zot:bundled annotation")
+if descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name") != "registry.local/artifact-server:bundled":
+    raise SystemExit("OCI archive is missing registry.local/artifact-server:bundled annotation")
 digest = descriptor.get("digest", "")
 if not digest.startswith("sha256:") or len(digest) != 71:
     raise SystemExit(f"invalid platform manifest digest: {digest!r}")
 print(digest)
 PY
 )"
-REFERENCE="registry.local/zot@${DIGEST}"
+REFERENCE="registry.local/artifact-server@${DIGEST}"
 
 rm -f "${OUT_FILE}"
 # Pack explicit OCI layout members so the tar has index.json (not ./index.json).
@@ -141,5 +141,5 @@ fi
 
 echo "created artifact-server wrapper OCI archive: ${OUT_FILE}"
 echo "wrapped upstream image: ${SOURCE_IMAGE}"
-echo "archive annotation: registry.local/zot:bundled"
+echo "archive annotation: registry.local/artifact-server:bundled"
 echo "image reference: ${REFERENCE}"

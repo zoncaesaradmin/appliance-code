@@ -48,7 +48,7 @@
       "required": ["realm", "service", "publicKeySecretName", "publicKeySecretKey"],
       "properties": {
         "realm": {"type": "string", "pattern": "^https://[^/]+/api/v1/registry/token$"},
-        "service": {"const": "zot"},
+        "service": {"const": "artifact-server"},
         "publicKeySecretName": {"type": "string", "minLength": 1},
         "publicKeySecretKey": {"type": "string", "minLength": 1}
       }

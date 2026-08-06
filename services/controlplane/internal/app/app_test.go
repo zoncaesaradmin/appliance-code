@@ -212,8 +212,8 @@ func TestStorageProfileReadinessAcceptsRegistryAuthChallenge(t *testing.T) {
 
 	cfg := testConfig(t)
 	cfg.ApplianceProfile = string(appliance.ProfileStorage)
-	cfg.ZotBaseURL = srv.URL
-	cfg.ZotAllowFake = false
+	cfg.ArtifactServerBaseURL = srv.URL
+	cfg.ArtifactServerAllowFake = false
 	logger, err := logging.New("error")
 	if err != nil {
 		t.Fatalf("logging.New: %v", err)
@@ -330,8 +330,8 @@ func TestStorageProfileReadinessLogsDependencyFailures(t *testing.T) {
 
 	cfg := testConfig(t)
 	cfg.ApplianceProfile = string(appliance.ProfileStorage)
-	cfg.ZotBaseURL = srv.URL
-	cfg.ZotAllowFake = false
+	cfg.ArtifactServerBaseURL = srv.URL
+	cfg.ArtifactServerAllowFake = false
 
 	var logBuf lockedBuffer
 	logger, err := logging.NewWithWriter("info", &logBuf)
@@ -368,7 +368,7 @@ func TestStorageProfileReadinessLogsDependencyFailures(t *testing.T) {
 		t.Fatal("Run did not return within 5s of shutdown signal")
 	}
 
-	if !strings.Contains(logBuf.String(), "readiness check failed") || !strings.Contains(logBuf.String(), "zot dependency") {
+	if !strings.Contains(logBuf.String(), "readiness check failed") || !strings.Contains(logBuf.String(), "artifact-server dependency") {
 		t.Fatalf("expected readiness failure to be logged, got:\n%s", logBuf.String())
 	}
 }
@@ -395,8 +395,8 @@ func TestStorageProfileRegistryClientUsesInternalBearerAuth(t *testing.T) {
 
 	cfg := testConfig(t)
 	cfg.ApplianceProfile = string(appliance.ProfileStorage)
-	cfg.ZotBaseURL = srv.URL
-	cfg.ZotAllowFake = false
+	cfg.ArtifactServerBaseURL = srv.URL
+	cfg.ArtifactServerAllowFake = false
 	logger, err := logging.New("error")
 	if err != nil {
 		t.Fatalf("logging.New: %v", err)
@@ -408,14 +408,14 @@ func TestStorageProfileRegistryClientUsesInternalBearerAuth(t *testing.T) {
 	}
 	defer services.DB.Close()
 
-	repos, err := services.Zot.ListRepositories(t.Context())
+	repos, err := services.ArtifactServer.ListRepositories(t.Context())
 	if err != nil {
 		t.Fatalf("ListRepositories: %v", err)
 	}
 	if len(repos) != 1 || repos[0] != "users/alice/app" {
 		t.Fatalf("repositories = %v", repos)
 	}
-	tags, err := services.Zot.ListTags(t.Context(), "users/alice/app")
+	tags, err := services.ArtifactServer.ListTags(t.Context(), "users/alice/app")
 	if err != nil {
 		t.Fatalf("ListTags: %v", err)
 	}

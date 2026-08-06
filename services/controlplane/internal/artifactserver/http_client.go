@@ -1,4 +1,4 @@
-package zotadapter
+package artifactserver
 
 import (
 	"context"
@@ -12,20 +12,21 @@ import (
 	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
 
-// HTTPClient implements Client against a real zot instance's OCI
-// Distribution API (catalog, tags/list, referrers) plus its base health
-// route. It carries no identity of its own; the caller supplies whatever
-// bearer credential zot's deployment requires, if any, via RequestEditor.
+// HTTPClient implements Client against a real artifact-server instance's
+// OCI Distribution API (catalog, tags/list, referrers) plus its base
+// health route. It carries no identity of its own; the caller supplies
+// whatever bearer credential the artifact server's deployment requires,
+// if any, via RequestEditor.
 type HTTPClient struct {
 	baseURL     string
 	httpClient  *http.Client
 	requestEdit func(*http.Request) error
 }
 
-// NewHTTPClient builds an HTTPClient for the zot instance at baseURL (e.g.
-// "http://zot.appliance-registry.svc.cluster.local:5000"). requestEditor,
-// if non-nil, is called on every outgoing request to attach whatever
-// internal credential this zot deployment requires.
+// NewHTTPClient builds an HTTPClient for the artifact-server instance at
+// baseURL (e.g. "http://appliance-registry.artifacts.svc.cluster.local:5000").
+// requestEditor, if non-nil, is called on every outgoing request to attach
+// whatever internal credential this artifact-server deployment requires.
 func NewHTTPClient(baseURL string, hc *http.Client, requestEditor func(*http.Request) error) *HTTPClient {
 	if hc == nil {
 		hc = &http.Client{Timeout: 10 * time.Second}
@@ -36,20 +37,20 @@ func NewHTTPClient(baseURL string, hc *http.Client, requestEditor func(*http.Req
 func (c *HTTPClient) request(ctx context.Context, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
-		return nil, fmt.Errorf("zotadapter: building request for %s: %w", path, err)
+		return nil, fmt.Errorf("artifactserver: building request for %s: %w", path, err)
 	}
 	traceCtx, traceID := ctxutil.EnsureTraceID(req.Context())
 	req = req.WithContext(traceCtx)
 	req.Header.Set(ctxutil.TraceIDHeader, traceID)
 	if c.requestEdit != nil {
 		if err := c.requestEdit(req); err != nil {
-			return nil, fmt.Errorf("zotadapter: authorizing %s: %w", path, err)
+			return nil, fmt.Errorf("artifactserver: authorizing %s: %w", path, err)
 		}
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("zotadapter: calling %s: %w", path, err)
+		return nil, fmt.Errorf("artifactserver: calling %s: %w", path, err)
 	}
 	return resp, nil
 }
@@ -65,13 +66,13 @@ func (c *HTTPClient) get(ctx context.Context, path string, out any) error {
 		return ErrNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("zotadapter: %s returned status %d", path, resp.StatusCode)
+		return fmt.Errorf("artifactserver: %s returned status %d", path, resp.StatusCode)
 	}
 	if out == nil {
 		return nil
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("zotadapter: decoding response from %s: %w", path, err)
+		return fmt.Errorf("artifactserver: decoding response from %s: %w", path, err)
 	}
 	return nil
 }
@@ -92,7 +93,7 @@ func (c *HTTPClient) ListTags(ctx context.Context, repository string) ([]string,
 	}
 	// OCI repository names are multi-segment paths (e.g. "demo/bzbox"). Escape
 	// each segment, but keep "/" as a path separator — PathEscape(whole) turns
-	// slashes into %2F and zot returns 404 for that form.
+	// slashes into %2F and the artifact server returns 404 for that form.
 	path := "/v2/" + repositoryURLPath(repository) + "/tags/list"
 	if err := c.get(ctx, path, &result); err != nil {
 		return nil, err
@@ -134,5 +135,5 @@ func (c *HTTPClient) Health(ctx context.Context) error {
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized {
 		return nil
 	}
-	return fmt.Errorf("zotadapter: /v2/ returned status %d", resp.StatusCode)
+	return fmt.Errorf("artifactserver: /v2/ returned status %d", resp.StatusCode)
 }

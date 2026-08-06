@@ -5,20 +5,20 @@ import (
 	"net/http"
 	"strings"
 
+	"appliance-code/services/controlplane/internal/artifactserver"
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/users"
-	"appliance-code/services/controlplane/internal/zotadapter"
 )
 
 // RegistryCatalogHandlers implements the read-only repository/tag/referrer
-// catalog HTTP surface. zot remains authoritative for this data; these
-// handlers only reconcile it through zotadapter and filter it by the
-// caller's registry grants before returning it, per the plan's "search must
-// filter unauthorized repositories" requirement.
+// catalog HTTP surface. The artifact server remains authoritative for this
+// data; these handlers only reconcile it through internal/artifactserver
+// and filter it by the caller's registry grants before returning it, per
+// the plan's "search must filter unauthorized repositories" requirement.
 type RegistryCatalogHandlers struct {
-	Zot        zotadapter.Client
-	Authorizer *registryauth.Authorizer
-	Users      *users.Service
+	ArtifactServer artifactserver.Client
+	Authorizer     *registryauth.Authorizer
+	Users          *users.Service
 }
 
 func (h *RegistryCatalogHandlers) callerIdentity(r *http.Request) (userID, username string, ok bool) {
@@ -41,7 +41,7 @@ func (h *RegistryCatalogHandlers) ListRepositories(w http.ResponseWriter, r *htt
 		return
 	}
 
-	all, err := h.Zot.ListRepositories(r.Context())
+	all, err := h.ArtifactServer.ListRepositories(r.Context())
 	if err != nil {
 		WriteProblem(w, r, http.StatusBadGateway, "registry_unavailable", "The OCI registry data plane is unavailable", "")
 		return
@@ -106,8 +106,8 @@ func (h *RegistryCatalogHandlers) listTagsFor(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tags, err := h.Zot.ListTags(r.Context(), repository)
-	if errors.Is(err, zotadapter.ErrNotFound) {
+	tags, err := h.ArtifactServer.ListTags(r.Context(), repository)
+	if errors.Is(err, artifactserver.ErrNotFound) {
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "Repository not found", "")
 		return
 	}
@@ -131,30 +131,30 @@ func (h *RegistryCatalogHandlers) listReferrersFor(w http.ResponseWriter, r *htt
 		return
 	}
 
-	referrers, err := h.Zot.ListReferrers(r.Context(), repository, digest)
+	referrers, err := h.ArtifactServer.ListReferrers(r.Context(), repository, digest)
 	if err != nil {
 		WriteProblem(w, r, http.StatusBadGateway, "registry_unavailable", "The OCI registry data plane is unavailable", "")
 		return
 	}
 	writeJSON(w, http.StatusOK, struct {
-		Items []zotadapterDescriptor `json:"items"`
+		Items []artifactServerDescriptor `json:"items"`
 	}{Items: toDescriptorResponses(referrers)})
 }
 
-// zotadapterDescriptor mirrors zotadapter.Descriptor for the JSON response,
-// kept as a distinct type so the wire shape doesn't silently change if the
-// adapter's internal type does.
-type zotadapterDescriptor struct {
+// artifactServerDescriptor mirrors artifactserver.Descriptor for the JSON
+// response, kept as a distinct type so the wire shape doesn't silently
+// change if the adapter's internal type does.
+type artifactServerDescriptor struct {
 	MediaType    string `json:"mediaType"`
 	Digest       string `json:"digest"`
 	Size         int64  `json:"size"`
 	ArtifactType string `json:"artifactType,omitempty"`
 }
 
-func toDescriptorResponses(descriptors []zotadapter.Descriptor) []zotadapterDescriptor {
-	out := make([]zotadapterDescriptor, len(descriptors))
+func toDescriptorResponses(descriptors []artifactserver.Descriptor) []artifactServerDescriptor {
+	out := make([]artifactServerDescriptor, len(descriptors))
 	for i, d := range descriptors {
-		out[i] = zotadapterDescriptor{MediaType: d.MediaType, Digest: d.Digest, Size: d.Size, ArtifactType: d.ArtifactType}
+		out[i] = artifactServerDescriptor{MediaType: d.MediaType, Digest: d.Digest, Size: d.Size, ArtifactType: d.ArtifactType}
 	}
 	return out
 }

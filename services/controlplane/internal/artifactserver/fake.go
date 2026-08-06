@@ -1,4 +1,4 @@
-package zotadapter
+package artifactserver
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 )
 
 // Fake is an in-process Client used by unit and HTTP contract tests so they
-// never require a real zot instance, per the plan's local-first testing
-// rule. Integration lanes exercising the pinned zot release are separate
-// and gated on real infrastructure.
+// never require a real artifact-server instance, per the plan's
+// local-first testing rule. Integration lanes exercising the pinned
+// artifact-server release are separate and gated on real infrastructure.
 type Fake struct {
 	mu sync.Mutex
 

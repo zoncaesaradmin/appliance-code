@@ -76,7 +76,7 @@ This phase is successful when a clean appliance install can prove:
 - the Workflow Controller Deployment is ready
 - the controller pod restarts successfully
 - no Argo UI or Argo Server is exposed
-- existing control-plane, Traefik, and zot flows still work
+- existing control-plane, Traefik, and Artifact Server flows still work
 
 The release verification lane should later check at least:
 

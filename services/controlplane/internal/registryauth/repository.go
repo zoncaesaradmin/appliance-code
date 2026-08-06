@@ -1,7 +1,8 @@
 // Package registryauth owns OCI Distribution token-service concerns: scope
 // parsing, repository-name normalization, repository-prefix grant
 // evaluation, and registry access-token signing. It knows nothing about
-// zot's API or storage format; internal/zotadapter owns that boundary.
+// the artifact server's API or storage format; internal/artifactserver
+// owns that boundary.
 package registryauth
 
 import (

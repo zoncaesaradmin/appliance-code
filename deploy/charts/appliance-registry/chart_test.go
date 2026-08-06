@@ -89,12 +89,12 @@ func TestFileserverNeverRenders(t *testing.T) {
 func TestImageDigestWins(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("a", 64)
 	out := render(t, "--set", "image.digest="+digest)
-	if !strings.Contains(out, "image: registry.local/zot@"+digest) {
+	if !strings.Contains(out, "image: registry.local/artifact-server@"+digest) {
 		t.Fatalf("digest-pinned image not rendered")
 	}
 }
 
-func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
+func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 	root := filepath.Clean(filepath.Join(chartDir(t), "..", "..", ".."))
 	tmp := t.TempDir()
 	for _, name := range []string{"control-plane.tar", "ui.tar"} {
@@ -103,17 +103,17 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 		}
 	}
 	digest := strings.Repeat("a", 64)
-	zotLayout := filepath.Join(tmp, "zot-layout")
-	if err := os.Mkdir(zotLayout, 0o700); err != nil {
+	artifactServerLayout := filepath.Join(tmp, "artifact-server-layout")
+	if err := os.Mkdir(artifactServerLayout, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	index := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + digest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/zot:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(zotLayout, "index.json"), []byte(index), 0o600); err != nil {
+	index := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + digest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/artifact-server:bundled"}}]}`
+	if err := os.WriteFile(filepath.Join(artifactServerLayout, "index.json"), []byte(index), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	zotArchive := filepath.Join(tmp, "zot.tar")
-	if output, err := exec.Command("tar", "-cf", zotArchive, "-C", zotLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create Zot archive: %v\n%s", err, output)
+	artifactServerArchive := filepath.Join(tmp, "artifact-server.tar")
+	if output, err := exec.Command("tar", "-cf", artifactServerArchive, "-C", artifactServerLayout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create Artifact Server archive: %v\n%s", err, output)
 	}
 	hostDigest := strings.Repeat("d", 64)
 	hostLayout := filepath.Join(tmp, "host-layout")
@@ -157,9 +157,9 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 		"--host-agent-binary", hostBinary,
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
-		"--zot-image", zotArchive,
-		"--zot-image-reference", "registry.local/zot@sha256:"+digest,
-		"--zot-version", "2.1.8", "--argo-crds-dir", crds)
+		"--artifact-server-image", artifactServerArchive,
+		"--artifact-server-image-reference", "registry.local/artifact-server@sha256:"+digest,
+		"--artifact-server-version", "2.1.8", "--argo-crds-dir", crds)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("archive release input: %v\n%s", err, output)
 	}
@@ -181,21 +181,21 @@ func TestReleaseInputPublishesFirstClassZotArtifacts(t *testing.T) {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatalf("decode release-input.json: %v\n%s", err, raw)
 	}
-	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "zotImage", "zotChart"} {
+	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "artifactServerImage", "artifactServerChart"} {
 		if len(manifest.Artifacts[key]) == 0 {
 			t.Errorf("missing first-class %s artifact", key)
 		}
 	}
-	if got := manifest.Compatibility["zotVersion"]; got != "2.1.8" {
-		t.Fatalf("zotVersion = %#v", got)
+	if got := manifest.Compatibility["artifactServerVersion"]; got != "2.1.8" {
+		t.Fatalf("artifactServerVersion = %#v", got)
 	}
 }
 
-func TestReleaseInputRejectsUnpairedZotImage(t *testing.T) {
+func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 	root := filepath.Clean(filepath.Join(chartDir(t), "..", "..", ".."))
 	tmp := t.TempDir()
-	zot := filepath.Join(tmp, "zot.tar")
-	if err := os.WriteFile(zot, []byte("zot"), 0o600); err != nil {
+	artifactServer := filepath.Join(tmp, "artifact-server.tar")
+	if err := os.WriteFile(artifactServer, []byte("artifact-server"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	hostDigest := strings.Repeat("d", 64)
@@ -225,14 +225,14 @@ func TestReleaseInputRejectsUnpairedZotImage(t *testing.T) {
 	}
 	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "1.2.3",
-		"--k3s-version", "v1", "--control-plane-image", zot, "--ui-image", zot,
+		"--k3s-version", "v1", "--control-plane-image", artifactServer, "--ui-image", artifactServer,
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
-		"--zot-image", zot).CombinedOutput()
+		"--artifact-server-image", artifactServer).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
-		t.Fatalf("unpaired Zot image was not rejected: err=%v output=%s", err, out)
+		t.Fatalf("unpaired Artifact Server image was not rejected: err=%v output=%s", err, out)
 	}
 }

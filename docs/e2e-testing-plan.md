@@ -94,7 +94,7 @@ This lane belongs primarily in `../appliance-release` because it must prove:
 - K3s bring-up
 - Traefik routing
 - control-plane pod behavior
-- zot pod behavior
+- Artifact Server pod behavior
 - Argo presence and packaging wiring
 - offline install/upgrade/restore behavior
 

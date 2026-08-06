@@ -376,11 +376,11 @@ curl_request GET "${PUBLIC_URL}/api/v1/registry/grants" "Bearer ${admin_access_t
 assert_status 200 "GET /api/v1/registry/grants"
 assert_contains "${CURL_RESPONSE_BODY}" "\"id\":\"${grant_id}\"" "list registry grants response"
 
-curl_basic_request GET "${PUBLIC_URL}/api/v1/registry/token?service=zot&scope=repository:ci/pipeline-a/app:pull" "${ALICE_USERNAME}" "${alice_api_token}"
+curl_basic_request GET "${PUBLIC_URL}/api/v1/registry/token?service=artifact-server&scope=repository:ci/pipeline-a/app:pull" "${ALICE_USERNAME}" "${alice_api_token}"
 assert_status 200 "GET /api/v1/registry/token"
 assert_contains "${CURL_RESPONSE_BODY}" '"token"' "registry token response"
 
-curl_basic_request GET "${PUBLIC_URL}/api/v1/registry/token?service=zot&scope=not-a-valid-scope" "${ALICE_USERNAME}" "${alice_api_token}"
+curl_basic_request GET "${PUBLIC_URL}/api/v1/registry/token?service=artifact-server&scope=not-a-valid-scope" "${ALICE_USERNAME}" "${alice_api_token}"
 assert_status 400 "GET /api/v1/registry/token with malformed scope"
 
 delete_grant_url="${PUBLIC_URL}/api/v1/registry/grants/${grant_id}"

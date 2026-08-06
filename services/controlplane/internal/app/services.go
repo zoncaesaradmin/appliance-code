@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/artifactserver"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
@@ -32,14 +33,13 @@ import (
 	"appliance-code/services/controlplane/internal/users"
 	"appliance-code/services/controlplane/internal/workflows"
 	"appliance-code/services/controlplane/internal/workflows/argo"
-	"appliance-code/services/controlplane/internal/zotadapter"
 )
 
 const (
-	SessionAudience       = "appliance-api"
-	argoWorkflowNamespace = "appliance-builds"
-	zotAudience           = "zot"
-	internalZotSubject    = "appliance-control-plane"
+	SessionAudience               = "appliance-api"
+	argoWorkflowNamespace         = "appliance-builds"
+	artifactServerAudience        = "artifact-server"
+	internalArtifactServerSubject = "appliance-control-plane"
 )
 
 type Services struct {
@@ -64,7 +64,7 @@ type Services struct {
 	Sessions           *authn.SessionService
 	Authz              *authz.Service
 	RegistryAuthorizer *registryauth.Authorizer
-	Zot                zotadapter.Client
+	ArtifactServer     artifactserver.Client
 	WorkflowEngine     workflows.Engine
 	Builds             *builds.Service
 	Devflows           *devflows.Service
@@ -137,17 +137,17 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	profilesSvc := profiles.NewService(db, licensingStore, licensingSvc, metadataSvc, recorder, string(resolved.Name), profiles.CompleteBundleChecker{})
 	notificationsSvc := notifications.NewService(licensingSvc, licensingStore)
 
-	var zotClient zotadapter.Client
+	var artifactServerClient artifactserver.Client
 	var registryAuthorizer *registryauth.Authorizer
 	if artifactEnabled {
 		registryAuthorizer = registryauth.NewAuthorizer(registryGrantStore, roleStore)
-		if cfg.ZotBaseURL != "" {
-			zotClient = zotadapter.NewHTTPClient(cfg.ZotBaseURL, nil, newInternalZotRequestEditor(keyMaterial, cfg.CanonicalOrigin))
-		} else if cfg.ZotAllowFake {
-			zotClient = zotadapter.NewFake()
+		if cfg.ArtifactServerBaseURL != "" {
+			artifactServerClient = artifactserver.NewHTTPClient(cfg.ArtifactServerBaseURL, nil, newInternalArtifactServerRequestEditor(keyMaterial, cfg.CanonicalOrigin))
+		} else if cfg.ArtifactServerAllowFake {
+			artifactServerClient = artifactserver.NewFake()
 		} else {
 			db.Close()
-			return nil, fmt.Errorf("app: artifact capability requires a real Zot base URL")
+			return nil, fmt.Errorf("app: artifact capability requires a real artifact-server base URL")
 		}
 	}
 
@@ -262,7 +262,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Sessions:           authn.NewSessionService(db, userStore, sessionStore, throttleStore, recorder, keyMaterial, cfg.CanonicalOrigin, SessionAudience),
 		Authz:              authz.NewService(roleStore),
 		RegistryAuthorizer: registryAuthorizer,
-		Zot:                zotClient,
+		ArtifactServer:     artifactServerClient,
 		WorkflowEngine:     workflowEngine,
 		Builds:             buildsSvc,
 		Devflows:           devflowsSvc,
@@ -277,9 +277,9 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	}, nil
 }
 
-func newInternalZotRequestEditor(keyMaterial *keys.Material, issuer string) func(*http.Request) error {
+func newInternalArtifactServerRequestEditor(keyMaterial *keys.Material, issuer string) func(*http.Request) error {
 	return func(req *http.Request) error {
-		access, err := internalZotAccess(req.URL.Path)
+		access, err := internalArtifactServerAccess(req.URL.Path)
 		if err != nil {
 			return err
 		}
@@ -290,8 +290,8 @@ func newInternalZotRequestEditor(keyMaterial *keys.Material, issuer string) func
 			keyMaterial.RegistryPrivateKey,
 			keyMaterial.RegistryKeyID,
 			issuer,
-			internalZotSubject,
-			zotAudience,
+			internalArtifactServerSubject,
+			artifactServerAudience,
 			uuid.Must(uuid.NewV7()).String(),
 			access,
 		)
@@ -303,40 +303,40 @@ func newInternalZotRequestEditor(keyMaterial *keys.Material, issuer string) func
 	}
 }
 
-func internalZotAccess(path string) ([]registryauth.AccessEntry, error) {
+func internalArtifactServerAccess(path string) ([]registryauth.AccessEntry, error) {
 	switch {
 	case path == "/v2" || path == "/v2/":
 		return nil, nil
 	case path == "/v2/_catalog":
-		// The in-cluster Zot service challenges catalog reads with the
-		// repository::pull scope shape. A registry-scoped catalog token is
-		// rejected there, even though the public ingress path may allow
-		// anonymous catalog reads.
+		// The in-cluster artifact-server service challenges catalog reads
+		// with the repository::pull scope shape. A registry-scoped
+		// catalog token is rejected there, even though the public ingress
+		// path may allow anonymous catalog reads.
 		return []registryauth.AccessEntry{{
 			Type:    "repository",
 			Name:    "",
 			Actions: []string{"pull"},
 		}}, nil
 	case strings.HasSuffix(path, "/tags/list"):
-		return pullAccessForZotPath(path, "/tags/list")
+		return pullAccessForArtifactServerPath(path, "/tags/list")
 	case strings.Contains(path, "/referrers/"):
-		return pullAccessForZotPath(path, "/referrers/")
+		return pullAccessForArtifactServerPath(path, "/referrers/")
 	default:
-		return nil, fmt.Errorf("unsupported zot path %q", path)
+		return nil, fmt.Errorf("unsupported artifact-server path %q", path)
 	}
 }
 
-func pullAccessForZotPath(path, suffix string) ([]registryauth.AccessEntry, error) {
+func pullAccessForArtifactServerPath(path, suffix string) ([]registryauth.AccessEntry, error) {
 	repoPath := strings.TrimPrefix(path, "/v2/")
 	if repoPath == path {
-		return nil, fmt.Errorf("unsupported zot path %q", path)
+		return nil, fmt.Errorf("unsupported artifact-server path %q", path)
 	}
 	if strings.HasSuffix(path, suffix) {
 		repoPath = strings.TrimSuffix(repoPath, suffix)
 	} else {
 		idx := strings.Index(repoPath, suffix)
 		if idx < 0 {
-			return nil, fmt.Errorf("unsupported zot path %q", path)
+			return nil, fmt.Errorf("unsupported artifact-server path %q", path)
 		}
 		repoPath = repoPath[:idx]
 	}

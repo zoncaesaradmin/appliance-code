@@ -310,7 +310,7 @@ func (r *runner) run(ctx context.Context) error {
 	if !containsGrant(grants, grant.ID) {
 		return fmt.Errorf("registry grant %s not present in list", grant.ID)
 	}
-	registryToken, err := r.client.RegistryToken(ctx, "alice", aliceRegistryToken.Token, "zot", []string{"repository:ci/pipeline-a/app:pull"})
+	registryToken, err := r.client.RegistryToken(ctx, "alice", aliceRegistryToken.Token, "artifact-server", []string{"repository:ci/pipeline-a/app:pull"})
 	if err != nil {
 		return fmt.Errorf("registry token issuance: %w", err)
 	}

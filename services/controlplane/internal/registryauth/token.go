@@ -39,9 +39,10 @@ type registryHeader struct {
 
 // IssueToken signs a short-lived registry access token granting access,
 // scoped to subject (the authenticated user ID) and jti (a fresh, unique
-// token identifier). zot verifies the signature using the corresponding
-// public key; this package never validates its own output back, since
-// verification is zot's responsibility, not the control plane's.
+// token identifier). The artifact server verifies the signature using the
+// corresponding public key; this package never validates its own output
+// back, since verification is the artifact server's responsibility, not
+// the control plane's.
 func IssueToken(priv ed25519.PrivateKey, kid, issuer, subject, audience, jti string, access []AccessEntry) (token string, expiresAt time.Time, err error) {
 	now := time.Now().UTC()
 	expiresAt = now.Add(TokenLifetime)

@@ -23,6 +23,6 @@ RUN chmod 0755 /usr/local/bin/artifact-server /usr/local/bin/entrypoint.sh
 # Matches appliance-registry chart podSecurityContext runAsUser/runAsGroup.
 USER 10003:10003
 
-# Chart args (serve /etc/zot/config.json) are appended after the entrypoint.
-# Config path /etc/zot remains the chart mount for the current implementation.
+# Chart args (serve /etc/artifact-server/config.json) are appended after the entrypoint.
+# Config path /etc/artifact-server remains the chart mount for the current implementation.
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

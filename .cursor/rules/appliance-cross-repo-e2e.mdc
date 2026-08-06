@@ -20,7 +20,7 @@ Install:             ctr import (gets :bundled or import-DATE) → ctr image tag
 Runtime:             config.*ImageDigest == digest pin → Argo pod image (IfNotPresent)
 ```
 
-Names today: `workspace-provisioner` (alpine/git), `dev-build` (builder), and `zot` (registry).
+Names today: `workspace-provisioner` (alpine/git), `dev-build` (builder), and `artifact-server` (registry).
 
 Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manifest).
 
@@ -46,16 +46,16 @@ Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manif
    - `ResolveBuilderImage("dev-build", …)` → dev-build digest pin
 9. **Registry export and release-input** (`appliance-code`)
    - `export-artifact-server-image-archive.sh` builds the appliance wrapper,
-     annotates `registry.local/zot:bundled`, and derives
-     `registry.local/zot@sha256:...` from the archive `index.json`
+     annotates `registry.local/artifact-server:bundled`, and derives
+     `registry.local/artifact-server@sha256:...` from the archive `index.json`
      platform manifest.
-   - `archive-release-input.sh` publishes first-class `zotImage`, `zotChart`,
-     and compatibility `zotVersion` artifacts (existing release-input field
+   - `archive-release-input.sh` publishes first-class `artifactServerImage`, `artifactServerChart`,
+     and compatibility `artifactServerVersion` artifacts (existing release-input field
      names; appliance product name is artifact-server).
 10. **Registry install and runtime**
-   - zonctl preloads/tags the artifact-server digest (`registry.local/zot@…`),
-     installs `appliance-registry`, and injects `config.zotBaseURL` into the
-     control-plane chart (existing config key name).
+   - zonctl preloads/tags the artifact-server digest (`registry.local/artifact-server@…`),
+     installs `appliance-registry`, and injects `config.artifactServerBaseURL` into the
+     control-plane chart.
    - control plane health/catalog calls resolve the in-cluster registry Service;
      Traefik exposes only `/v2`, and the artifact-server has no background
      public egress.
@@ -72,8 +72,8 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 | Digests in Helm values | `PrepareValuesFile` | chart ConfigMap, `config.Load`, chart schema |
 | Catalog `dev-build` alias | catalog / examples | `ResolveBuilderImage`, `builderImageReference` |
 | Offline images present | preload/tag | Argo `IfNotPresent` pods |
-| Artifact-server archive annotation + digest | `export-artifact-server-image-archive.sh` / `zotImage` | release assembly, zonctl preload, appliance-registry image digest |
-| Artifact-server chart + URL | `zotChart` and registry Service | `config.zotBaseURL`, `APPLIANCE_ZOT_BASE_URL`, catalog and readiness |
+| Artifact-server archive annotation + digest | `export-artifact-server-image-archive.sh` / `artifactServerImage` | release assembly, zonctl preload, appliance-registry image digest |
+| Artifact-server chart + URL | `artifactServerChart` and registry Service | `config.artifactServerBaseURL`, `APPLIANCE_ARTIFACT_SERVER_BASE_URL`, catalog and readiness |
 | Registry public verification key | control-plane key material Secret | Artifact-server bearer-token verification mount |
 | Builder Git HTTPS access | UI `PUT /builder/git-access` → CP secret `builder-git-access` | `resolveWorkspaceGitCredential` → Argo mount + `GIT_ASKPASS` clone |
 | Writable tool home for builds | Argo `HOME`/`GOPATH`/`GOCACHE` under `/tmp/appliance-home` | dev-build image ENV (`/home/devcontainer/...`) must be overridden |

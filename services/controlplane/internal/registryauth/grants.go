@@ -144,7 +144,7 @@ func (a *Authorizer) CanPull(ctx context.Context, userID, username string, permi
 
 // FilterPullable narrows repoNames to those userID may pull. Names that
 // fail repository-name normalization are skipped rather than erroring, since
-// callers pass catalog entries zot itself already considers valid.
+// callers pass catalog entries the artifact server itself already considers valid.
 func (a *Authorizer) FilterPullable(ctx context.Context, userID, username string, permissions map[string]bool, repoNames []string) ([]string, error) {
 	if !hasBasePermission(permissions, "pull") {
 		return nil, nil

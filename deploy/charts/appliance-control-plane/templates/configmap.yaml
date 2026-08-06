@@ -19,8 +19,8 @@ data:
   APPLIANCE_CATALOG_JSON: {{ .Values.config.applianceCatalog | default dict | toJson | quote }}
   APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST: {{ .Values.config.workspaceProvisionerImageDigest | quote }}
   APPLIANCE_BUILDER_IMAGE_DIGEST: {{ .Values.config.builderImageDigest | quote }}
-  APPLIANCE_ZOT_BASE_URL: {{ .Values.config.zotBaseURL | quote }}
-  APPLIANCE_ZOT_ALLOW_FAKE: {{ .Values.config.zotAllowFake | quote }}
+  APPLIANCE_ARTIFACT_SERVER_BASE_URL: {{ .Values.config.artifactServerBaseURL | quote }}
+  APPLIANCE_ARTIFACT_SERVER_ALLOW_FAKE: {{ .Values.config.artifactServerAllowFake | quote }}
   APPLIANCE_SERVICE_REGISTRY_JSON: {{ .Values.config.serviceRegistry | default dict | toJson | quote }}
   APPLIANCE_FILES_ROOT_DIR: {{ .Values.files.rootDir | quote }}
   APPLIANCE_FILES_MAX_UPLOAD_BYTES: {{ printf "%s" .Values.files.maxUploadBytes | quote }}

@@ -1,4 +1,4 @@
-package zotadapter_test
+package artifactserver_test
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"appliance-code/services/controlplane/internal/zotadapter"
+	"appliance-code/services/controlplane/internal/artifactserver"
 )
 
 func TestHTTPClientListRepositories(t *testing.T) {
@@ -18,7 +18,7 @@ func TestHTTPClientListRepositories(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	repos, err := client.ListRepositories(t.Context())
 	if err != nil {
 		t.Fatalf("ListRepositories: %v", err)
@@ -36,7 +36,7 @@ func TestHTTPClientListTagsEscapesRepositoryName(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	tags, err := client.ListTags(t.Context(), "users/alice/app")
 	if err != nil {
 		t.Fatalf("ListTags: %v", err)
@@ -58,7 +58,7 @@ func TestHTTPClientListTagsPreservesNestedRepositoryPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	tags, err := client.ListTags(t.Context(), "demo/bzbox")
 	if err != nil {
 		t.Fatalf("ListTags: %v", err)
@@ -82,7 +82,7 @@ func TestHTTPClientListReferrers(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	referrers, err := client.ListReferrers(t.Context(), "library/nginx", "sha256:deadbeef")
 	if err != nil {
 		t.Fatalf("ListReferrers: %v", err)
@@ -100,7 +100,7 @@ func TestHTTPClientRequestEditorIsApplied(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, func(req *http.Request) error {
+	client := artifactserver.NewHTTPClient(srv.URL, nil, func(req *http.Request) error {
 		req.Header.Set("Authorization", "Bearer internal-credential")
 		return nil
 	})
@@ -121,7 +121,7 @@ func TestHTTPClientHealth(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	if err := client.Health(t.Context()); err != nil {
 		t.Errorf("Health: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestHTTPClientHealthAcceptsUnauthorizedChallenge(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	if err := client.Health(t.Context()); err != nil {
 		t.Fatalf("Health: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestHTTPClientHealthFailsOnBadStatus(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := zotadapter.NewHTTPClient(srv.URL, nil, nil)
+	client := artifactserver.NewHTTPClient(srv.URL, nil, nil)
 	if err := client.Health(t.Context()); err == nil {
 		t.Error("Health should fail on a non-200 status")
 	}

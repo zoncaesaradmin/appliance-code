@@ -226,7 +226,7 @@ func TestIssueTokenProducesVerifiableSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	token, expiresAt, err := registryauth.IssueToken(priv, "kid-1", "https://appliance.local", "user-1", "zot", "jti-1", []registryauth.AccessEntry{
+	token, expiresAt, err := registryauth.IssueToken(priv, "kid-1", "https://appliance.local", "user-1", "artifact-server", "jti-1", []registryauth.AccessEntry{
 		{Type: "repository", Name: "users/alice/app", Actions: []string{"pull", "push"}},
 	})
 	if err != nil {

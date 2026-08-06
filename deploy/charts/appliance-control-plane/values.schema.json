@@ -190,13 +190,13 @@
             "required": ["applianceProfile"]
           },
           "then": {
-            "required": ["zotBaseURL"],
+            "required": ["artifactServerBaseURL"],
             "properties": {
-              "zotBaseURL": {
+              "artifactServerBaseURL": {
                 "type": "string",
                 "pattern": "^https?://[^/]+$"
               },
-              "zotAllowFake": {
+              "artifactServerAllowFake": {
                 "const": false
               }
             }
@@ -283,10 +283,10 @@
         "builderImageDigest": {
           "type": "string"
         },
-        "zotBaseURL": {
+        "artifactServerBaseURL": {
           "type": "string"
         },
-        "zotAllowFake": {
+        "artifactServerAllowFake": {
           "type": "boolean"
         },
         "dnsReadyURL": {

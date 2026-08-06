@@ -34,19 +34,19 @@ type App struct {
 // readinessAdapter adapts storage.DB to httpapi.ReadinessChecker without
 // exposing the rest of the storage surface to the HTTP layer.
 type readinessAdapter struct {
-	db     storage.DB
-	zot    interface{ Health(context.Context) error }
-	dnsURL string
-	client *http.Client
+	db             storage.DB
+	artifactServer interface{ Health(context.Context) error }
+	dnsURL         string
+	client         *http.Client
 }
 
 func (r readinessAdapter) Ready(ctx context.Context) error {
 	if err := r.db.Ping(ctx); err != nil {
 		return err
 	}
-	if r.zot != nil {
-		if err := r.zot.Health(ctx); err != nil {
-			return fmt.Errorf("zot dependency: %w", err)
+	if r.artifactServer != nil {
+		if err := r.artifactServer.Health(ctx); err != nil {
+			return fmt.Errorf("artifact-server dependency: %w", err)
 		}
 	}
 	if url := strings.TrimSpace(r.dnsURL); url != "" {
@@ -141,7 +141,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		}
 		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore}
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
-			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
+			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
 		deps.FilesH = &httpapi.ArtifactFileHandlers{
 			RootDir:         cfg.FilesRootDir,
@@ -167,7 +167,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		return nil, fmt.Errorf("building public mux: %w", err)
 	}
 	internalHandler := httpapi.NewInternalMux(logger, readinessAdapter{
-		db: services.DB, zot: services.Zot, dnsURL: cfg.DNSReadyURL,
+		db: services.DB, artifactServer: services.ArtifactServer, dnsURL: cfg.DNSReadyURL,
 		client: &http.Client{Timeout: 3 * time.Second},
 	}, startup)
 

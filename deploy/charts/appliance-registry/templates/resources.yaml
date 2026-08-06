@@ -21,7 +21,7 @@ data:
           "bearer": {
             "realm": {{ .Values.auth.realm | quote }},
             "service": {{ .Values.auth.service | quote }},
-            "cert": "/etc/zot/auth/registry-public.pem"
+            "cert": "/etc/artifact-server/auth/registry-public.pem"
           }
         }
       },
@@ -108,7 +108,7 @@ spec:
         - name: artifact-server
           image: {{ include "appliance-registry.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: ["serve", "/etc/zot/config.json"]
+          args: ["serve", "/etc/artifact-server/config.json"]
           ports:
             - name: registry
               containerPort: {{ .Values.service.port }}
@@ -125,8 +125,8 @@ spec:
             failureThreshold: {{ .Values.probes.startupFailureThreshold }}
             periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
           volumeMounts:
-            - {name: config, mountPath: /etc/zot, readOnly: true}
-            - {name: auth-key, mountPath: /etc/zot/auth, readOnly: true}
+            - {name: config, mountPath: /etc/artifact-server, readOnly: true}
+            - {name: auth-key, mountPath: /etc/artifact-server/auth, readOnly: true}
             - {name: data, mountPath: /var/lib/registry}
             # Same host-visible path as other services (/data/zon/logs/<svc>).
             - {name: logs, mountPath: /data/zon/logs/artifactserver}

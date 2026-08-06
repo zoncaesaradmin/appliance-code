@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"testing"
 
+	"appliance-code/services/controlplane/internal/artifactserver"
 	"appliance-code/services/controlplane/internal/roles"
-	"appliance-code/services/controlplane/internal/zotadapter"
 )
 
-func (ts *testServer) fakeZot(t *testing.T) *zotadapter.Fake {
+func (ts *testServer) fakeArtifactServer(t *testing.T) *artifactserver.Fake {
 	t.Helper()
-	fake, ok := ts.services.Zot.(*zotadapter.Fake)
+	fake, ok := ts.services.ArtifactServer.(*artifactserver.Fake)
 	if !ok {
-		t.Fatalf("services.Zot is %T, want *zotadapter.Fake in tests", ts.services.Zot)
+		t.Fatalf("services.ArtifactServer is %T, want *artifactserver.Fake in tests", ts.services.ArtifactServer)
 	}
 	return fake
 }
@@ -23,7 +23,7 @@ func TestListRepositoriesFiltersByGrant(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 
-	fake := ts.fakeZot(t)
+	fake := ts.fakeArtifactServer(t)
 	fake.Tags["users/alice/app"] = []string{"v1"}
 	fake.Tags["users/bob/app"] = []string{"v1"}
 	fake.Tags["library/nginx"] = []string{"latest"}
@@ -52,7 +52,7 @@ func TestListRepositoriesEmptyForCallerWithoutPullPermission(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "automation-user", testPassword, roles.AutomationRoleID)
 
-	fake := ts.fakeZot(t)
+	fake := ts.fakeArtifactServer(t)
 	fake.Tags["library/nginx"] = []string{"latest"}
 
 	token := ts.login(t, "automation-user", testPassword)
@@ -74,7 +74,7 @@ func TestListTagsForPullableRepository(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	adminToken := ts.login(t, "admin", testPassword)
 
-	fake := ts.fakeZot(t)
+	fake := ts.fakeArtifactServer(t)
 	fake.Tags["library/nginx"] = []string{"1.0", "1.1"}
 
 	resp := ts.doJSON(t, "GET", "/api/v1/registry/repositories/library/nginx/tags", adminToken, "")
@@ -98,7 +98,7 @@ func TestListTagsDeniedForUnpullableRepository(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "automation-user", testPassword, roles.AutomationRoleID)
 
-	fake := ts.fakeZot(t)
+	fake := ts.fakeArtifactServer(t)
 	fake.Tags["ci/pipeline-a"] = []string{"1.0"}
 
 	token := ts.login(t, "automation-user", testPassword)
@@ -114,9 +114,10 @@ func TestListTagsReturns404ForNonexistentRepository(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	adminToken := ts.login(t, "admin", testPassword)
 
-	// The fake zot has no entry for this repository at all, distinct from
-	// "caller not allowed to see it" — administrator can pull anything, so
-	// this must surface as a clean 404, not a 502 registry-unavailable.
+	// The fake artifact server has no entry for this repository at all,
+	// distinct from "caller not allowed to see it" — administrator can
+	// pull anything, so this must surface as a clean 404, not a 502
+	// registry-unavailable.
 	resp := ts.doJSON(t, "GET", "/api/v1/registry/repositories/library/does-not-exist/tags", adminToken, "")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
@@ -129,7 +130,7 @@ func TestListReferrersRequiresDigestQueryParam(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	adminToken := ts.login(t, "admin", testPassword)
 
-	fake := ts.fakeZot(t)
+	fake := ts.fakeArtifactServer(t)
 	fake.Tags["library/nginx"] = []string{"1.0"}
 
 	resp := ts.doJSON(t, "GET", "/api/v1/registry/repositories/library/nginx/referrers", adminToken, "")
@@ -144,9 +145,9 @@ func TestListReferrersReturnsDescriptors(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	adminToken := ts.login(t, "admin", testPassword)
 
-	fake := ts.fakeZot(t)
+	fake := ts.fakeArtifactServer(t)
 	fake.Tags["library/nginx"] = []string{"1.0"}
-	fake.Referrers["library/nginx@sha256:abc"] = []zotadapter.Descriptor{
+	fake.Referrers["library/nginx@sha256:abc"] = []artifactserver.Descriptor{
 		{MediaType: "application/vnd.oci.image.manifest.v1+json", Digest: "sha256:def", Size: 42, ArtifactType: "application/vnd.example.sbom"},
 	}
 

@@ -139,8 +139,8 @@ func TestRegistryTokenUsesBasicAuthAndScopeQuery(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUser, gotPass, _ = r.BasicAuth()
 		gotScopes = r.URL.Query()["scope"]
-		if r.URL.Query().Get("service") != "zot" {
-			t.Errorf("service query = %q, want zot", r.URL.Query().Get("service"))
+		if r.URL.Query().Get("service") != "artifact-server" {
+			t.Errorf("service query = %q, want artifact-server", r.URL.Query().Get("service"))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -150,7 +150,7 @@ func TestRegistryTokenUsesBasicAuthAndScopeQuery(t *testing.T) {
 	defer srv.Close()
 
 	client := applianceclient.New(srv.URL)
-	result, err := client.RegistryToken(t.Context(), "alice", "apt_alice-token", "zot", []string{"repository:users/alice/app:pull,push"})
+	result, err := client.RegistryToken(t.Context(), "alice", "apt_alice-token", "artifact-server", []string{"repository:users/alice/app:pull,push"})
 	if err != nil {
 		t.Fatalf("RegistryToken: %v", err)
 	}

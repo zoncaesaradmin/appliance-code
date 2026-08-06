@@ -37,11 +37,15 @@ Options:
                                    host-packages/ubuntu/<VER>/amd64/.
                                    Defaults to the OS_VERSION environment
                                    variable. Required for the complete product.
-  --zot-image PATH                 Pinned Zot linux/amd64 OCI archive.
-  --zot-image-reference REF        Canonical registry.local/zot@sha256:...
+  --artifact-server-image PATH     Pinned artifact-server linux/amd64 OCI archive.
+  --artifact-server-image-reference REF
+                                   Canonical
+                                   registry.local/artifact-server@sha256:...
                                    platform-manifest reference.
-  --zot-version VERSION            Zot compatibility version. Defaults to the
-                                   appliance-registry chart appVersion.
+  --artifact-server-version VERSION
+                                   artifact-server compatibility version.
+                                   Defaults to the appliance-registry chart
+                                   appVersion.
   --dns-image PATH                 Pinned CoreDNS linux/amd64 OCI archive.
   --dns-image-reference REF        Canonical registry.local/coredns@sha256:...
                                    platform-manifest reference.
@@ -82,7 +86,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
 ARGO_CHART_DIR="${REPO_ROOT}/deploy/charts/argo-workflows"
-ZOT_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
+ARTIFACT_SERVER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
 DNS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-dns"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
@@ -99,9 +103,9 @@ HOST_AGENT_IMAGE_REFERENCE=""
 HOST_AGENT_BINARY=""
 HOST_PACKAGES_DIR=""
 HOST_PACKAGES_OS_VERSION="${OS_VERSION:-}"
-ZOT_IMAGE=""
-ZOT_IMAGE_REFERENCE=""
-ZOT_VERSION=""
+ARTIFACT_SERVER_IMAGE=""
+ARTIFACT_SERVER_IMAGE_REFERENCE=""
+ARTIFACT_SERVER_VERSION=""
 DNS_IMAGE=""
 DNS_IMAGE_REFERENCE=""
 DNS_VERSION=""
@@ -176,16 +180,16 @@ while [[ $# -gt 0 ]]; do
       HOST_PACKAGES_OS_VERSION="${2:-}"
       shift 2
       ;;
-    --zot-image)
-      ZOT_IMAGE="${2:-}"
+    --artifact-server-image)
+      ARTIFACT_SERVER_IMAGE="${2:-}"
       shift 2
       ;;
-    --zot-image-reference)
-      ZOT_IMAGE_REFERENCE="${2:-}"
+    --artifact-server-image-reference)
+      ARTIFACT_SERVER_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
-    --zot-version)
-      ZOT_VERSION="${2:-}"
+    --artifact-server-version)
+      ARTIFACT_SERVER_VERSION="${2:-}"
       shift 2
       ;;
     --dns-image)
@@ -375,24 +379,24 @@ if digest != expected_digest:
         f"does not match archive index.json digest {digest}"
     )
 PY
-if [[ -n "${ZOT_IMAGE}" && ! -f "${ZOT_IMAGE}" ]]; then
-  echo "archive-release-input: Zot image not found: ${ZOT_IMAGE}" >&2
+if [[ -n "${ARTIFACT_SERVER_IMAGE}" && ! -f "${ARTIFACT_SERVER_IMAGE}" ]]; then
+  echo "archive-release-input: artifact-server image not found: ${ARTIFACT_SERVER_IMAGE}" >&2
   exit 1
 fi
-if [[ -n "${ZOT_IMAGE}" || -n "${ZOT_IMAGE_REFERENCE}" ]]; then
-  if [[ -z "${ZOT_IMAGE}" || -z "${ZOT_IMAGE_REFERENCE}" ]]; then
-    echo "archive-release-input: --zot-image and --zot-image-reference must be provided together" >&2
+if [[ -n "${ARTIFACT_SERVER_IMAGE}" || -n "${ARTIFACT_SERVER_IMAGE_REFERENCE}" ]]; then
+  if [[ -z "${ARTIFACT_SERVER_IMAGE}" || -z "${ARTIFACT_SERVER_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: --artifact-server-image and --artifact-server-image-reference must be provided together" >&2
     exit 2
   fi
-  if [[ ! "${ZOT_IMAGE_REFERENCE}" =~ ^registry\.local/zot@sha256:[0-9a-f]{64}$ ]]; then
-    echo "archive-release-input: --zot-image-reference must be registry.local/zot@sha256:<64 lowercase hex>" >&2
+  if [[ ! "${ARTIFACT_SERVER_IMAGE_REFERENCE}" =~ ^registry\.local/artifact-server@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --artifact-server-image-reference must be registry.local/artifact-server@sha256:<64 lowercase hex>" >&2
     exit 2
   fi
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "archive-release-input: python3 is required to validate the Zot OCI archive contract" >&2
+    echo "archive-release-input: python3 is required to validate the artifact-server OCI archive contract" >&2
     exit 1
   fi
-  python3 - "${ZOT_IMAGE}" "${ZOT_IMAGE_REFERENCE}" <<'PY'
+  python3 - "${ARTIFACT_SERVER_IMAGE}" "${ARTIFACT_SERVER_IMAGE_REFERENCE}" <<'PY'
 import json
 import sys
 import tarfile
@@ -401,25 +405,25 @@ archive, reference = sys.argv[1:]
 with tarfile.open(archive, "r:*") as tf:
     member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
     if member is None:
-        raise SystemExit("archive-release-input: Zot OCI archive has no index.json")
+        raise SystemExit("archive-release-input: artifact-server OCI archive has no index.json")
     stream = tf.extractfile(member)
     if stream is None:
-        raise SystemExit("archive-release-input: Zot OCI index.json is not a regular file")
+        raise SystemExit("archive-release-input: artifact-server OCI index.json is not a regular file")
     index = json.load(stream)
 manifests = index.get("manifests", [])
 if len(manifests) != 1:
-    raise SystemExit(f"archive-release-input: Zot OCI index must contain one platform manifest, found {len(manifests)}")
+    raise SystemExit(f"archive-release-input: artifact-server OCI index must contain one platform manifest, found {len(manifests)}")
 descriptor = manifests[0]
 annotation = descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name")
-if annotation != "registry.local/zot:bundled":
-    raise SystemExit(f"archive-release-input: Zot OCI annotation is {annotation!r}, want 'registry.local/zot:bundled'")
+if annotation != "registry.local/artifact-server:bundled":
+    raise SystemExit(f"archive-release-input: artifact-server OCI annotation is {annotation!r}, want 'registry.local/artifact-server:bundled'")
 digest = descriptor.get("digest", "")
-if reference != "registry.local/zot@" + digest:
-    raise SystemExit(f"archive-release-input: Zot image reference {reference!r} does not match index digest {digest!r}")
+if reference != "registry.local/artifact-server@" + digest:
+    raise SystemExit(f"archive-release-input: artifact-server image reference {reference!r} does not match index digest {digest!r}")
 PY
 fi
-if [[ ! -d "${ZOT_CHART_DIR}" ]]; then
-  echo "archive-release-input: missing appliance-registry chart: ${ZOT_CHART_DIR}" >&2
+if [[ ! -d "${ARTIFACT_SERVER_CHART_DIR}" ]]; then
+  echo "archive-release-input: missing appliance-registry chart: ${ARTIFACT_SERVER_CHART_DIR}" >&2
   exit 1
 fi
 if [[ -n "${DNS_IMAGE}" && ! -f "${DNS_IMAGE}" ]]; then
@@ -520,13 +524,13 @@ fi
 if [[ -z "${CHART_VERSION}" ]]; then
   CHART_VERSION="${CODE_VERSION}"
 fi
-if [[ -z "${ZOT_VERSION}" ]]; then
-  ZOT_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${ZOT_CHART_DIR}/Chart.yaml")"
+if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
+  ARTIFACT_SERVER_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${ARTIFACT_SERVER_CHART_DIR}/Chart.yaml")"
 fi
-# compatibility.zotVersion is unprefixed; Chart.yaml appVersion may be v2.1.8.
-ZOT_VERSION="${ZOT_VERSION#v}"
-if [[ -z "${ZOT_VERSION}" ]]; then
-  echo "archive-release-input: unable to derive zotVersion from ${ZOT_CHART_DIR}/Chart.yaml" >&2
+# compatibility.artifactServerVersion is unprefixed; Chart.yaml appVersion may be v2.1.8.
+ARTIFACT_SERVER_VERSION="${ARTIFACT_SERVER_VERSION#v}"
+if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
+  echo "archive-release-input: unable to derive artifactServerVersion from ${ARTIFACT_SERVER_CHART_DIR}/Chart.yaml" >&2
   exit 1
 fi
 if [[ -z "${DNS_VERSION}" ]]; then
@@ -608,11 +612,11 @@ CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 UI_BASENAME="$(basename "${UI_IMAGE}")"
 HOST_AGENT_IMAGE_BASENAME="$(basename "${HOST_AGENT_IMAGE}")"
 HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
-ZOT_BASENAME=""
+ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 ARGO_CHART_ARCHIVE="argo-workflows-chart-${CODE_VERSION}.tgz"
-ZOT_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
+ARTIFACT_SERVER_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
 DNS_CHART_ARCHIVE="appliance-dns-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
@@ -637,9 +641,9 @@ cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
 cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
 copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
-if [[ -n "${ZOT_IMAGE}" ]]; then
-  ZOT_BASENAME="$(basename "${ZOT_IMAGE}")"
-  cp "${ZOT_IMAGE}" "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}"
+if [[ -n "${ARTIFACT_SERVER_IMAGE}" ]]; then
+  ARTIFACT_SERVER_BASENAME="$(basename "${ARTIFACT_SERVER_IMAGE}")"
+  cp "${ARTIFACT_SERVER_IMAGE}" "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_BASENAME}"
 fi
 if [[ -n "${DNS_IMAGE}" ]]; then
   DNS_BASENAME="$(basename "${DNS_IMAGE}")"
@@ -671,8 +675,8 @@ cp -R "${CHART_DIR}/." "${TMP_DIR}/appliance-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" appliance-chart
 
 mkdir -p "${TMP_DIR}/appliance-registry-chart"
-cp -R "${ZOT_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
-tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" appliance-registry-chart
+cp -R "${ARTIFACT_SERVER_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
+tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" appliance-registry-chart
 
 mkdir -p "${TMP_DIR}/appliance-dns-chart"
 cp -R "${DNS_CHART_DIR}/." "${TMP_DIR}/appliance-dns-chart/"
@@ -692,7 +696,7 @@ fi
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
-  printf ',\n  "zotVersion": "%s"' "${ZOT_VERSION}"
+  printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
   printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
   if [[ -n "${ARGO_VERSION}" ]]; then
     printf ',\n  "argoVersion": "%s"' "${ARGO_VERSION}"
@@ -724,7 +728,7 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
     "${HOST_AGENT_IMAGE_BASENAME}" \
     "${HOST_AGENT_BINARY_BASENAME}" \
     "${CHART_ARCHIVE}" \
-    "${ZOT_CHART_ARCHIVE}" \
+    "${ARTIFACT_SERVER_CHART_ARCHIVE}" \
     "${DNS_CHART_ARCHIVE}" \
     "${METADATA_BUNDLE_BASENAME}" \
     "${CONFIG_SCHEMA_BASENAME}" \
@@ -735,8 +739,8 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -f "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARGO_CHART_ARCHIVE}" | sed 's/^sha256://')" "${ARGO_CHART_ARCHIVE}"
   fi
-  if [[ -n "${ZOT_BASENAME}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}" | sed 's/^sha256://')" "${ZOT_BASENAME}"
+  if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_BASENAME}" | sed 's/^sha256://')" "${ARTIFACT_SERVER_BASENAME}"
   fi
   if [[ -n "${DNS_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" | sed 's/^sha256://')" "${DNS_BASENAME}"
@@ -792,13 +796,13 @@ ARGO_COMPATIBILITY_JSON=""
 if [[ -n "${ARGO_VERSION}" ]]; then
   ARGO_COMPATIBILITY_JSON=', "argoVersion": "'"${ARGO_VERSION}"'"'
 fi
-ZOT_COMPATIBILITY_JSON=', "zotVersion": "'"${ZOT_VERSION}"'"'
+ARTIFACT_SERVER_COMPATIBILITY_JSON=', "artifactServerVersion": "'"${ARTIFACT_SERVER_VERSION}"'"'
 DNS_COMPATIBILITY_JSON=', "dnsVersion": "'"${DNS_VERSION}"'"'
 
-OPTIONAL_ZOT_IMAGE_JSON=""
-if [[ -n "${ZOT_BASENAME}" ]]; then
-  OPTIONAL_ZOT_IMAGE_JSON=',
-    "zotImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_BASENAME}" "${ZOT_BASENAME}" "${ZOT_IMAGE_REFERENCE}")"
+OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=""
+if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
+  OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=',
+    "artifactServerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_BASENAME}" "${ARTIFACT_SERVER_BASENAME}" "${ARTIFACT_SERVER_IMAGE_REFERENCE}")"
 fi
 
 OPTIONAL_DNS_IMAGE_JSON=""
@@ -855,7 +859,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "hostAgentImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}"),
     "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${HOST_PACKAGES_JSON},
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
-    "zotChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ZOT_CHART_ARCHIVE}" "${ZOT_CHART_ARCHIVE}")${OPTIONAL_ZOT_IMAGE_JSON},
+    "artifactServerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" "${ARTIFACT_SERVER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON},
     "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
@@ -868,7 +872,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${ZOT_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${ARGO_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

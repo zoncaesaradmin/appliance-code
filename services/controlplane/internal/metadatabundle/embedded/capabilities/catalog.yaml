@@ -38,7 +38,7 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.artifact
     artifacts:
-      required: [zot-image, appliance-registry-chart]
+      required: [artifact-server-image, appliance-registry-chart]
   dns:
     displayName: LAN DNS
     requires: [base, host]

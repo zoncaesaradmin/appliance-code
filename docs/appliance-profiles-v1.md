@@ -58,7 +58,7 @@ The initial v1 appliance capabilities are:
 | `base` | Mandatory control-plane baseline: server startup, health/version surface, authentication/session shell, user/role/token administration, internal forward-auth checks, and the minimum API contract required for any appliance profile |
 | `workflows` | Workflow substrate awareness and workflow-dependent module activation for v1 and future expansion |
 | `build` | Build APIs and build service/module behavior |
-| `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by zot |
+| `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by Artifact Server |
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
 
 Notes:
@@ -195,14 +195,14 @@ In the current v1 implementation this includes:
 - `/api/v1/registry/repositories/{rest...}`
 
 It also owns the control-plane integrations that support those APIs,
-including registry authorization policy and zot-backed repository/tag/
-referrer access.
+including registry authorization policy and artifact-server-backed
+repository/tag/referrer access.
 
 Production `storage` and `builder` deployments must provide an absolute
-`config.zotBaseURL`, rendered as `APPLIANCE_ZOT_BASE_URL`. The control plane
-includes Zot in readiness when `artifact` is enabled and reports not-ready if
+`config.artifactServerBaseURL`, rendered as `APPLIANCE_ARTIFACT_SERVER_BASE_URL`. The control plane
+includes Artifact Server in readiness when `artifact` is enabled and reports not-ready if
 the data plane cannot answer `/v2/`. The in-memory fake remains available only
-through the explicit local/test `APPLIANCE_ZOT_ALLOW_FAKE=true` setting; the
+through the explicit local/test `APPLIANCE_ARTIFACT_SERVER_ALLOW_FAKE=true` setting; the
 production chart sets it to false.
 
 Production `storage-landns` deployments follow the same artifact contract,
@@ -259,7 +259,7 @@ into the control plane, and the control plane resolves that into appliance
 capabilities locally.
 
 The complete v1 bundle still ships the full topology, including Argo and
-zot. Appliance profiles change control-plane activation and exposure rules,
+Artifact Server. Appliance profiles change control-plane activation and exposure rules,
 not the release-bundle shape. In this phase, DNS-bearing profiles only change
 profile/capability resolution and downstream install-time decisions; they do
 not yet add a separate DNS runtime workload.

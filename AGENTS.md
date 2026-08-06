@@ -15,7 +15,7 @@ These rules apply to all implementation and documentation in this repository.
 
 - Clients may access the appliance over its configured local or enterprise network.
 - User-directed workflows may access explicitly allowlisted operator-provided services such as an internal Git server, backup target, DNS/NTP service, or future enterprise identity provider. These are deployment inputs, not hidden product dependencies.
-- Build definitions must not assume public package repositories or public base-image registries. Required build inputs must be available from zot, the submitted context, or explicitly configured internal allowlists.
+- Build definitions must not assume public package repositories or public base-image registries. Required build inputs must be available from the Artifact Server, the submitted context, or explicitly configured internal allowlists.
 - Controlled release assembly and development dependency acquisition may use the internet outside the installed appliance, but those actions must produce pinned, verified bundle inputs and must never occur during installation or runtime.
 
 ## Packaging Boundary

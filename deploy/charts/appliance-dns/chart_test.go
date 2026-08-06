@@ -126,18 +126,18 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 	if output, err := exec.Command("tar", "-cf", dnsArchive, "-C", dnsLayout, ".").CombinedOutput(); err != nil {
 		t.Fatalf("create CoreDNS archive: %v\n%s", err, output)
 	}
-	zotDigest := strings.Repeat("a", 64)
-	zotLayout := filepath.Join(tmp, "zot-layout")
-	if err := os.Mkdir(zotLayout, 0o700); err != nil {
+	artifactServerDigest := strings.Repeat("a", 64)
+	artifactServerLayout := filepath.Join(tmp, "artifact-server-layout")
+	if err := os.Mkdir(artifactServerLayout, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	zotIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + zotDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/zot:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(zotLayout, "index.json"), []byte(zotIndex), 0o600); err != nil {
+	artifactServerIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + artifactServerDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/artifact-server:bundled"}}]}`
+	if err := os.WriteFile(filepath.Join(artifactServerLayout, "index.json"), []byte(artifactServerIndex), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	zotArchive := filepath.Join(tmp, "zot.tar")
-	if output, err := exec.Command("tar", "-cf", zotArchive, "-C", zotLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create Zot archive: %v\n%s", err, output)
+	artifactServerArchive := filepath.Join(tmp, "artifact-server.tar")
+	if output, err := exec.Command("tar", "-cf", artifactServerArchive, "-C", artifactServerLayout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create Artifact Server archive: %v\n%s", err, output)
 	}
 	hostDigest := strings.Repeat("d", 64)
 	hostLayout := filepath.Join(tmp, "host-layout")
@@ -181,9 +181,9 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 		"--host-agent-binary", hostBinary,
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
-		"--zot-image", zotArchive,
-		"--zot-image-reference", "registry.local/zot@sha256:"+zotDigest,
-		"--zot-version", "2.1.8",
+		"--artifact-server-image", artifactServerArchive,
+		"--artifact-server-image-reference", "registry.local/artifact-server@sha256:"+artifactServerDigest,
+		"--artifact-server-version", "2.1.8",
 		"--dns-image", dnsArchive,
 		"--dns-image-reference", "registry.local/coredns@sha256:"+digest,
 		"--dns-version", "1.14.4",
@@ -209,7 +209,7 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatalf("decode release-input.json: %v\n%s", err, raw)
 	}
-	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "dnsImage", "dnsChart", "zotImage", "zotChart"} {
+	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "dnsImage", "dnsChart", "artifactServerImage", "artifactServerChart"} {
 		if len(manifest.Artifacts[key]) == 0 {
 			t.Errorf("missing first-class %s artifact", key)
 		}

@@ -97,8 +97,8 @@ func (s *Service) Get(ctx context.Context, id string) (storage.APIToken, error) 
 }
 
 // Revoke immediately invalidates an API token. Revocation is effective at
-// the control plane immediately; any already-issued zot registry token
-// still expires within its own five-minute lifetime.
+// the control plane immediately; any already-issued artifact-server
+// registry token still expires within its own five-minute lifetime.
 func (s *Service) Revoke(ctx context.Context, actor audit.Actor, id string) error {
 	return s.db.WithTx(ctx, func(ctx context.Context) error {
 		if err := s.tokens.Revoke(ctx, id); err != nil {

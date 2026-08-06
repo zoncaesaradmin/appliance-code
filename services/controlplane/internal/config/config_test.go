@@ -107,12 +107,12 @@ func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
 	}
 }
 
-func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
+func TestArtifactProfilesRequireRealArtifactServerInProduction(t *testing.T) {
 	for _, profile := range []string{"storage", "builder", "storage-landns", "builder-landns", "builder-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
-			cfg.ZotAllowFake = false
+			cfg.ArtifactServerAllowFake = false
 			switch profile {
 			case "builder", "builder-landns", "builder-storage-landns":
 				cfg.BuildCatalog = testBuildCatalog()
@@ -123,12 +123,12 @@ func TestArtifactProfilesRequireRealZotInProduction(t *testing.T) {
 			case "storage-landns", "builder-landns", "builder-storage-landns":
 				cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 			}
-			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "zotBaseURL") {
-				t.Fatalf("Validate without Zot URL = %v, want zotBaseURL error", err)
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "artifactServerBaseURL") {
+				t.Fatalf("Validate without artifact server URL = %v, want artifactServerBaseURL error", err)
 			}
-			cfg.ZotBaseURL = "http://appliance-registry.artifacts.svc.cluster.local:5000"
+			cfg.ArtifactServerBaseURL = "http://appliance-registry.artifacts.svc.cluster.local:5000"
 			if err := cfg.Validate(); err != nil {
-				t.Fatalf("Validate with real Zot URL: %v", err)
+				t.Fatalf("Validate with real artifact server URL: %v", err)
 			}
 		})
 	}
@@ -142,9 +142,9 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 			cfg.DNSReadyURL = ""
 			switch profile {
 			case "storage-landns":
-				cfg.ZotAllowFake = true
+				cfg.ArtifactServerAllowFake = true
 			case "builder-landns", "builder-storage-landns":
-				cfg.ZotAllowFake = true
+				cfg.ArtifactServerAllowFake = true
 				cfg.BuildCatalog = testBuildCatalog()
 				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -160,13 +160,13 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 	}
 }
 
-func TestArtifactProfileAllowsExplicitFakeZotForLocalTests(t *testing.T) {
+func TestArtifactProfileAllowsExplicitFakeArtifactServerForLocalTests(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "storage"
-	cfg.ZotAllowFake = true
-	cfg.ZotBaseURL = ""
+	cfg.ArtifactServerAllowFake = true
+	cfg.ArtifactServerBaseURL = ""
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("explicit local fake Zot should remain valid: %v", err)
+		t.Fatalf("explicit local fake artifact server should remain valid: %v", err)
 	}
 }
 
@@ -250,11 +250,11 @@ func TestValidateRejectsServiceRegistryCapabilityMismatch(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "core"
 	cfg.ServiceRegistry.Services = []serviceregistry.Service{{
-		Name:       "zot-proxy",
+		Name:       "artifact-server-proxy",
 		Capability: appliance.CapabilityArtifact,
 		BaseURL:    "http://appliance-registry.artifacts.svc.cluster.local:5000",
 		Routes: []serviceregistry.Route{
-			{Method: "GET", ExternalPath: "/api/v1/zot/health", UpstreamPath: "/healthz", Permission: "registry.read"},
+			{Method: "GET", ExternalPath: "/api/v1/artifact-server/health", UpstreamPath: "/healthz", Permission: "registry.read"},
 		},
 	}}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "not enabled") {

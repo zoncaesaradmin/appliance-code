@@ -16,7 +16,7 @@ import (
 
 // RegistryTokenHandlers implements GET /api/v1/registry/token, the OCI
 // Distribution token-service endpoint Podman, Skopeo, Buildah, Helm, and
-// ORAS call automatically after zot's registry challenge.
+// ORAS call automatically after the artifact server's registry challenge.
 type RegistryTokenHandlers struct {
 	Auth       reqauth.Deps
 	Users      *users.Service
@@ -81,7 +81,7 @@ func (h *RegistryTokenHandlers) Token(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jti := uuid.Must(uuid.NewV7()).String()
-	token, expiresAt, err := registryauth.IssueToken(h.Keys.RegistryPrivateKey, h.Keys.RegistryKeyID, h.Issuer, principal.UserID, "zot", jti, access)
+	token, expiresAt, err := registryauth.IssueToken(h.Keys.RegistryPrivateKey, h.Keys.RegistryKeyID, h.Issuer, principal.UserID, "artifact-server", jti, access)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return

@@ -29,23 +29,23 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath    string                    `json:"applicationLogPath"`
-	LogLevel              string                    `json:"logLevel"`
-	TrustedProxyCount     int                       `json:"trustedProxyCount"`
-	ApplianceCatalog      appliance.CatalogDocument `json:"applianceCatalog"`
-	ZotBaseURL            string                    `json:"zotBaseURL"`
-	ZotAllowFake          bool                      `json:"zotAllowFake"`
-	ServiceRegistry       serviceregistry.Registry  `json:"serviceRegistry"`
-	FilesRootDir          string                    `json:"filesRootDir"`
-	FilesTransferTimeout  time.Duration             `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes   int64                     `json:"filesMaxUploadBytes"`
-	DNSReadyURL           string                    `json:"dnsReadyURL"`
-	DNSZoneName           string                    `json:"dnsZoneName"`
-	DNSConfigMapNamespace string                    `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName      string                    `json:"dnsConfigMapName"`
-	DNSBootstrapHostname  string                    `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4      string                    `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync  bool                      `json:"dnsAllowFakeZoneSync"`
+	ApplicationLogPath      string                    `json:"applicationLogPath"`
+	LogLevel                string                    `json:"logLevel"`
+	TrustedProxyCount       int                       `json:"trustedProxyCount"`
+	ApplianceCatalog        appliance.CatalogDocument `json:"applianceCatalog"`
+	ArtifactServerBaseURL   string                    `json:"artifactServerBaseURL"`
+	ArtifactServerAllowFake bool                      `json:"artifactServerAllowFake"`
+	ServiceRegistry         serviceregistry.Registry  `json:"serviceRegistry"`
+	FilesRootDir            string                    `json:"filesRootDir"`
+	FilesTransferTimeout    time.Duration             `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes     int64                     `json:"filesMaxUploadBytes"`
+	DNSReadyURL             string                    `json:"dnsReadyURL"`
+	DNSZoneName             string                    `json:"dnsZoneName"`
+	DNSConfigMapNamespace   string                    `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName        string                    `json:"dnsConfigMapName"`
+	DNSBootstrapHostname    string                    `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4        string                    `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync    bool                      `json:"dnsAllowFakeZoneSync"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -69,24 +69,24 @@ type Config struct {
 // Default returns the local-development default configuration.
 func Default() Config {
 	return Config{
-		ApplianceProfile:      string(appliance.ProfileCore),
-		CanonicalOrigin:       "http://localhost:8080",
-		PublicAddr:            "127.0.0.1:8080",
-		InternalAddr:          "127.0.0.1:8081",
-		DataDir:               "./data",
-		ApplicationLogPath:    "/data/zon/logs/api-server/application.log",
-		LogLevel:              "info",
-		TrustedProxyCount:     0,
-		ZotAllowFake:          true,
-		FilesRootDir:          "/data/zon/files",
-		FilesTransferTimeout:  30 * time.Minute,
-		FilesMaxUploadBytes:   20 * 1024 * 1024 * 1024,
-		DNSZoneName:           "appliance.internal",
-		DNSConfigMapNamespace: "dns",
-		DNSConfigMapName:      "dns-server-config",
-		DNSAllowFakeZoneSync:  true,
-		ReadHeaderTimeout:     5 * time.Second,
-		ReadTimeout:           30 * time.Second,
+		ApplianceProfile:        string(appliance.ProfileCore),
+		CanonicalOrigin:         "http://localhost:8080",
+		PublicAddr:              "127.0.0.1:8080",
+		InternalAddr:            "127.0.0.1:8081",
+		DataDir:                 "./data",
+		ApplicationLogPath:      "/data/zon/logs/api-server/application.log",
+		LogLevel:                "info",
+		TrustedProxyCount:       0,
+		ArtifactServerAllowFake: true,
+		FilesRootDir:            "/data/zon/files",
+		FilesTransferTimeout:    30 * time.Minute,
+		FilesMaxUploadBytes:     20 * 1024 * 1024 * 1024,
+		DNSZoneName:             "appliance.internal",
+		DNSConfigMapNamespace:   "dns",
+		DNSConfigMapName:        "dns-server-config",
+		DNSAllowFakeZoneSync:    true,
+		ReadHeaderTimeout:       5 * time.Second,
+		ReadTimeout:             30 * time.Second,
 		// Login verifies Argon2id (64 MiB) before writing a response; under
 		// memory pressure that can exceed a short write deadline and the
 		// browser surfaces a generic NetworkError. Keep headroom for auth.
@@ -166,7 +166,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DATA_DIR", &cfg.DataDir)
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
-	str("ZOT_BASE_URL", &cfg.ZotBaseURL)
+	str("ARTIFACT_SERVER_BASE_URL", &cfg.ArtifactServerBaseURL)
 	str("FILES_ROOT_DIR", &cfg.FilesRootDir)
 	str("DNS_READY_URL", &cfg.DNSReadyURL)
 	str("DNS_ZONE_NAME", &cfg.DNSZoneName)
@@ -184,12 +184,12 @@ func applyEnv(cfg *Config, env map[string]string) error {
 
 	var errs []string
 
-	if v, ok := env[envPrefix+"ZOT_ALLOW_FAKE"]; ok {
+	if v, ok := env[envPrefix+"ARTIFACT_SERVER_ALLOW_FAKE"]; ok {
 		parsed, err := strconv.ParseBool(v)
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("ZOT_ALLOW_FAKE: %v", err))
+			errs = append(errs, fmt.Sprintf("ARTIFACT_SERVER_ALLOW_FAKE: %v", err))
 		} else {
-			cfg.ZotAllowFake = parsed
+			cfg.ArtifactServerAllowFake = parsed
 		}
 	}
 	if v, ok := env[envPrefix+"DNS_ALLOW_FAKE_ZONE_SYNC"]; ok {
@@ -332,12 +332,12 @@ func (c Config) Validate() error {
 		}
 	}
 	if profileErr == nil && artifactEnabled {
-		if strings.TrimSpace(c.ZotBaseURL) == "" {
-			if !c.ZotAllowFake {
-				errs = append(errs, "zotBaseURL must not be empty when the artifact capability is enabled in production")
+		if strings.TrimSpace(c.ArtifactServerBaseURL) == "" {
+			if !c.ArtifactServerAllowFake {
+				errs = append(errs, "artifactServerBaseURL must not be empty when the artifact capability is enabled in production")
 			}
-		} else if u, err := url.Parse(c.ZotBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
-			errs = append(errs, "zotBaseURL must be an absolute http(s) URL with no path")
+		} else if u, err := url.Parse(c.ArtifactServerBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "artifactServerBaseURL must be an absolute http(s) URL with no path")
 		}
 		if strings.TrimSpace(c.FilesRootDir) == "" {
 			errs = append(errs, "filesRootDir must not be empty when the artifact capability is enabled")

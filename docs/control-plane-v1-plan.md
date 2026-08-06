@@ -12,7 +12,7 @@ The goal for v1 is a single control plane server that exposes:
 
 The server must support the basic appliance flows for local users, builds, artifacts, and automation, while remaining easy to extend later for external identity providers such as LDAP/AD, SAML, and OIDC.
 
-V1 is an offline-first product with one production package: a complete signed air-gap appliance bundle. Installation and runtime must work with public network egress denied. The bundle contains every product dependency, including supported-host package prerequisites, K3s and its images, the control plane, zot, Argo, OCI task images, scanner data, charts, CRDs, and verification material.
+V1 is an offline-first product with one production package: a complete signed air-gap appliance bundle. Installation and runtime must work with public network egress denied. The bundle contains every product dependency, including supported-host package prerequisites, K3s and its images, the control plane, Artifact Server, Argo, OCI task images, scanner data, charts, CRDs, and verification material.
 
 Local development and source-repo validation still remain mandatory. The
 control plane must build, run, and pass end-to-end tests on a normal
@@ -30,7 +30,7 @@ The discussion converged on a simple v1 identity model:
 3. Interactive login returns a short-lived session token.
 4. Long-lived API tokens are created only after interactive login.
 5. REST APIs, MCP, CLI, CI/CD, and Podman all converge on the same API token model.
-6. OCI image and artifact push/pull uses the standard challenge flow: the control plane validates the API token and issues a short-lived, repository-scoped token that zot verifies.
+6. OCI image and artifact push/pull uses the standard challenge flow: the control plane validates the API token and issues a short-lived, repository-scoped token that Artifact Server verifies.
 7. RBAC must apply consistently across REST APIs, MCP, and registry-authenticated operations.
 8. Future external auth integration should swap only the login provider, not the token, RBAC, or automation model.
 
@@ -55,7 +55,7 @@ The discussion converged on a simple v1 identity model:
 - Full MCP tool implementation
 - External AAA integrations such as OIDC, SAML, LDAP, or AD
 - Full artifact registry implementation in this repo if a separate OCI registry is used as the data plane
-- Historical note: the first planning pass kept a SPA-style frontend out of scope. That direction is superseded by the dedicated `services/controlplane-ui` React + TypeScript SPA, while zot's embedded browse/search UI remains an ADR 0008 gated candidate.
+- Historical note: the first planning pass kept a SPA-style frontend out of scope. That direction is superseded by the dedicated `services/controlplane-ui` React + TypeScript SPA, while Artifact Server's embedded browse/search UI remains an ADR 0008 gated candidate.
 - Multi-node control-plane HA and multi-site replication
 
 Single-appliance durability, backup, restore, safe upgrade, and disaster recovery are explicitly in scope. A non-HA appliance still needs predictable recovery from process, node, disk, certificate, and upgrade failures.
@@ -72,8 +72,8 @@ These decisions are now considered the default implementation direction unless w
 - Local development must keep working by building and running the Go server directly on the host machine.
 - We may use local-versus-production implementation patterns later where helpful, but not in the first cut for persistence.
 - Token revocation and session handling should follow standard server-side security practices.
-- zot will be the OCI image and generic OCI/ORAS artifact data plane; v1 does not claim native non-OCI package-manager protocol support.
-- V1 security, MCP compatibility, RBAC, HTTP, audit, telemetry, supply-chain, support, and zot-profile defaults are fixed by ADR 0010.
+- Artifact Server will be the OCI image and generic OCI/ORAS artifact data plane; v1 does not claim native non-OCI package-manager protocol support.
+- V1 security, MCP compatibility, RBAC, HTTP, audit, telemetry, supply-chain, support, and artifact-server-profile defaults are fixed by ADR 0010.
 - MCP should exist in v1, but placeholder or unimplemented tool behavior is acceptable.
 - API conventions should follow standard patterns rather than inventing custom appliance-only styles.
 - The public `appliance-release` repo owns user-facing installation, lifecycle, and bundle distribution; this private repo owns product behavior and signed release inputs.
@@ -107,7 +107,7 @@ Expected front-door routing:
 - `/api/v1/registry/*` -> control plane service
 - `/v2/*` -> OCI registry service
 
-This repo implements API-token lifecycle, OCI scope authorization, and the OCI registry token-service endpoint. zot implements the OCI data plane and verifies control-plane-signed registry tokens.
+This repo implements API-token lifecycle, OCI scope authorization, and the OCI registry token-service endpoint. Artifact Server implements the OCI data plane and verifies control-plane-signed registry tokens.
 
 ### 3. Local Users First, Pluggable Identity Later
 
@@ -145,7 +145,7 @@ Use one named tool for each responsibility:
 - Podman runs images for local use and disposable runtime smoke tests and acts as a supported registry client.
 - Skopeo inspects remote manifests, verifies digests, copies/promotes images, and synchronizes image content for air-gapped workflows.
 - ORAS pushes, pulls, attaches, discovers, and copies generic non-image OCI artifacts.
-- zot stores and serves OCI images and artifacts.
+- Artifact Server stores and serves OCI images and artifacts.
 - Helm consumes and publishes OCI-hosted charts where chart workflows are required.
 
 K3s uses its embedded container runtime internally. That is a K3s implementation detail, not an application-facing toolchain choice, and the control plane must not mount or call its runtime socket.
@@ -205,7 +205,7 @@ The release must be recoverable by an operator who has node access but does not 
 - Five-minute JWT minted by the control plane during the OCI registry challenge flow
 - Scoped to allowed repository actions after intersecting requested scope with appliance RBAC
 - Never used as a general appliance API credential
-- Signed with a registry-specific Ed25519 key and verified by zot after the pinned-release compatibility gate passes
+- Signed with a registry-specific Ed25519 key and verified by Artifact Server after the pinned-release compatibility gate passes
 
 ### Authorization Model
 
@@ -335,7 +335,7 @@ POST /api/v1/registry/grants
 DELETE /api/v1/registry/grants/{id}
 ```
 
-The token endpoint follows the OCI Distribution token-service contract and is called automatically by Podman, Skopeo, Buildah, Helm, and ORAS after the registry challenge. Login uses the appliance username plus an appliance API token, never an interactive password; the endpoint verifies token ownership, parses and intersects scope with current RBAC, and returns no registry refresh token in v1. Repository, tag, and referrer endpoints are appliance APIs backed by the zot adapter and appliance metadata; payload transfer remains on `/v2/*`.
+The token endpoint follows the OCI Distribution token-service contract and is called automatically by Podman, Skopeo, Buildah, Helm, and ORAS after the registry challenge. Login uses the appliance username plus an appliance API token, never an interactive password; the endpoint verifies token ownership, parses and intersects scope with current RBAC, and returns no registry refresh token in v1. Repository, tag, and referrer endpoints are appliance APIs backed by the Artifact Server adapter and appliance metadata; payload transfer remains on `/v2/*`.
 
 ### Build APIs
 
@@ -431,10 +431,10 @@ The system creates:
 ### Registry Push/Pull Flow
 
 1. Developer or build system runs `podman login`.
-2. zot challenges the client with the control-plane token-service realm, service, and requested repository scope.
+2. Artifact Server challenges the client with the control-plane token-service realm, service, and requested repository scope.
 3. The client presents the appliance API token to the control-plane token endpoint.
 4. The control plane authenticates the token, evaluates current RBAC, and signs only the allowed repository actions.
-5. zot validates the short-lived token and accepts or rejects the operation.
+5. Artifact Server validates the short-lived token and accepts or rejects the operation.
 6. User disable or API-token revocation prevents new registry tokens immediately; existing access expires within five minutes.
 
 ### Build Flow
@@ -466,7 +466,7 @@ services/
       roles/
       tokens/
       registryauth/
-      zotadapter/
+      artifactserver/
       workflows/
         argo/
       builds/
@@ -523,7 +523,7 @@ Recommended layering within `services/controlplane/internal`:
 - `artifacts/oras/` owns generic OCI artifact media-type/referrer operations and result translation
 - `scanning/grype/` owns vulnerability scan Job contracts, database-bundle identity, and normalized finding translation
 - `sbom/syft/` owns SBOM generation and CycloneDX/SPDX result translation
-- `zotadapter/` owns zot API, health, event, and reconciliation details but not identity or RBAC
+- `artifactserver/` owns Artifact Server API, health, event, and reconciliation details but not identity or RBAC
 - `maintenance/` owns durable scheduling/checkpoints and invokes feature reconciliation interfaces without importing transport handlers
 - `storage/` owns repository interfaces and concrete persistence
 
@@ -535,7 +535,7 @@ Interface ownership rules:
 - `artifacts` defines typed artifact/referrer contracts; `artifacts/oras` implements them.
 - `scanning` defines scanner inputs, normalized findings, and database-version evidence; `scanning/grype` implements them.
 - `sbom` defines source identity and normalized SBOM outputs; `sbom/syft` implements them.
-- `zotadapter` implements catalog/data-plane reconciliation contracts defined by `artifacts`, not the reverse.
+- `artifactserver` implements catalog/data-plane reconciliation contracts defined by `artifacts`, not the reverse.
 - A shared hardened process/Job command layer handles bounded output, cancellation, exit classification, credential-file mounting, redaction, and cleanup. Feature handlers never construct arbitrary shell strings.
 - Domain interfaces accept structured values such as repository, digest, media type, and policy. They do not accept free-form command arguments.
 
@@ -591,22 +591,22 @@ Implementation must enforce:
 
 The installer must inventory and label everything it owns and must never delete pre-existing host or cluster state during uninstall or rollback.
 
-### P0 Decision: zot With Control-Plane Token Auth
+### P0 Decision: Artifact Server With Control-Plane Token Auth
 
-Use a pinned zot release under Apache-2.0. zot is an unprivileged OCI image and artifact data plane with filesystem storage; the control plane owns the token realm, authentication, authorization, signing keys, policy, and artifact lifecycle intent. See [ADR 0008](adr/0008-zot-oci-artifact-registry.md). ADR 0007 and ADR 0002 are superseded.
+Use a pinned Artifact Server release under Apache-2.0. Artifact Server is an unprivileged OCI image and artifact data plane with filesystem storage; the control plane owns the token realm, authentication, authorization, signing keys, policy, and artifact lifecycle intent. See [ADR 0008](adr/0008-zot-oci-artifact-registry.md). ADR 0007 and ADR 0002 are superseded.
 
 The product and licensing comparison is captured in [Registry Options Review](registry-options.md).
 
 Required conformance spike:
 
-- Pin the full zot image by digest, prove the exact ADR 0010 enabled/disabled extension set, and verify license notices, SBOM, provenance, and supported upgrade path.
+- Pin the full Artifact Server image by digest, prove the exact ADR 0010 enabled/disabled extension set, and verify license notices, SBOM, provenance, and supported upgrade path.
 - Prove Podman, Skopeo, Buildah, Helm, and ORAS login/pull/push/inspect/copy/attach/discover, denied scope, malformed scope, token expiry, user disable, and API-token revocation.
 - Verify EdDSA compatibility and algorithm allowlisting, issuer, service/audience, `kid`, subject, time claims, repository/action enforcement, and a local-only key-rotation procedure.
 - Prove filesystem storage restart, interrupted and concurrent operations, disk/inode exhaustion, scrub, dedupe, garbage collection, metadata rebuild, air-gap behavior, and clean-node restore.
 - Prove UI/search authorization filtering and prevent public access to management, metrics, profiling, and debug endpoints for every enabled extension.
 - Run the applicable OCI Distribution conformance suite.
 
-Exit criterion: zot scores at least 4.0/5 under the evidence-based rating and all ADR 0008 conformance gates pass against the pinned image, extension set, ingress, and storage configuration.
+Exit criterion: Artifact Server scores at least 4.0/5 under the evidence-based rating and all ADR 0008 conformance gates pass against the pinned image, extension set, ingress, and storage configuration.
 
 ### P0 Decision: Argo Workflows Behind The Control Plane
 
@@ -628,14 +628,14 @@ Accepted v1 boundary:
 
 - Builds are available only to trusted developers and automation identities; v1 does not claim hostile tenant isolation.
 - Use one appliance-generated Argo Workflow per build with ephemeral, rootless Buildah task pods and never mount a host runtime socket.
-- Accept `Containerfile` builds from allowlisted internal HTTPS Git sources at immutable commit SHAs and publish OCI output to zot. A file literally named `Dockerfile` is accepted only as a Buildah-compatible filename alias.
+- Accept `Containerfile` builds from allowlisted internal HTTPS Git sources at immutable commit SHAs and publish OCI output to the artifact server. A file literally named `Dockerfile` is accepted only as a Buildah-compatible filename alias.
 - Isolate any required builder security-profile exception to the build namespace. See [ADR 0003](adr/0003-trusted-build-boundary.md).
 
 Minimum controls:
 
 - Dedicated workflow-controller and build namespaces with narrowly scoped service accounts; never mount the control-plane service-account token into build pods.
 - Pod Security Admission policy, non-root execution, dropped capabilities, and no host namespaces or host paths. Use `RuntimeDefault` seccomp except for the narrow builder exception proven and documented by ADR 0003's validation gate.
-- Default-deny ingress and egress policy with explicit internal DNS, source, and zot allowances. Public egress is denied.
+- Default-deny ingress and egress policy with explicit internal DNS, source, and Artifact Server allowances. Public egress is denied.
 - ResourceQuota, LimitRange, per-user concurrency limits, deadlines, pod/job TTL, cancellation, and orphan cleanup.
 - Per-build short-lived credentials, never appliance-wide or long-lived secrets; redact them from specs, events, logs, and support bundles.
 - Immutable base and builder image digests, approved Buildah images, Skopeo output verification, provenance, and an auditable link between requester, source revision, build definition, and produced artifact.
@@ -683,10 +683,10 @@ Use daily coordinated, encrypted, off-appliance recovery sets with initial RPO 2
 
 Required release contract:
 
-- State inventory: control-plane SQLite and keys, K3s state/token, zot storage root and extension state, chart values, certificates, and appliance configuration.
+- State inventory: control-plane SQLite and keys, K3s state/token, Artifact Server storage root and extension state, chart values, certificates, and appliance configuration.
 - K3s recovery and release inputs must preserve Argo CRDs/configuration, pinned workflow templates, controller settings, and enough operation identity to reconcile or safely fail any workflow that was in flight at backup time.
 - Stated RPO and RTO targets, backup schedule, retention, destination, encryption, integrity checks, and free-space thresholds.
-- Coordinated zot storage snapshot procedure with tested GC/dedupe/scrub quiescence and documented consistency assumptions.
+- Coordinated Artifact Server storage snapshot procedure with tested GC/dedupe/scrub quiescence and documented consistency assumptions.
 - Restore onto a clean replacement node, not only in-place restore.
 - Pre-upgrade compatibility check, automatic pre-upgrade backup, pinned component versions, migration dry-run where possible, and post-upgrade smoke checks.
 - Explicit rollback window. Destructive or backward-incompatible migrations require an expand/migrate/contract sequence or a declared restore-based rollback.
@@ -698,7 +698,7 @@ The chart and manifests must provide secure defaults rather than relying on inst
 
 - Dedicated namespaces and service accounts with least-privilege Role/RoleBinding objects; no `cluster-admin` for the server or workflow engine. The server may mutate appliance-owned Workflow CRs and read their task-pod status/logs, but cannot create arbitrary pods.
 - Pod Security Admission labels and restricted security contexts for control-plane and supporting workloads.
-- Default-deny NetworkPolicies with explicit flows among Traefik, control plane, DNS, Kubernetes API, Argo Workflow Controller, zot, and workflow task pods. Confirm that the selected K3s CNI/network-policy controller enforces them.
+- Default-deny NetworkPolicies with explicit flows among Traefik, control plane, DNS, Kubernetes API, Argo Workflow Controller, Artifact Server, and workflow task pods. Confirm that the selected K3s CNI/network-policy controller enforces them.
 - Resource requests/limits, priority where justified, disruption behavior, topology assumptions, and ephemeral-storage limits.
 - `readOnlyRootFilesystem`, non-root UID/GID, dropped capabilities, `allowPrivilegeEscalation: false`, and `automountServiceAccountToken: false` unless a pod genuinely needs Kubernetes API access.
 - Pin every image by digest in the air-gap bundle. Define offline image preload, internal DNS/NTP, IPv4/IPv6 stance, and behavior with all public egress denied.
@@ -743,11 +743,11 @@ Also validate `Origin` where present, reject untrusted hosts, bind local-develop
 
 Provide separate internal endpoints:
 
-- Liveness proves only that the process event loop is healthy; it must not restart the process because zot or another dependency is unavailable.
+- Liveness proves only that the process event loop is healthy; it must not restart the process because Artifact Server or another dependency is unavailable.
 - Readiness proves the server can safely accept its owned traffic, including writable storage and completed migrations.
 - Startup allows migrations and recovery without premature restart loops.
 
-Expose dependency status to authenticated operators, not the public health endpoint. Define degraded behavior independently for SQLite, Kubernetes API, zot, DNS, disk pressure, and clock/certificate problems. Use bounded retries with jitter and circuit breaking; never retry non-idempotent operations blindly.
+Expose dependency status to authenticated operators, not the public health endpoint. Define degraded behavior independently for SQLite, Kubernetes API, Artifact Server, DNS, disk pressure, and clock/certificate problems. Use bounded retries with jitter and circuit breaking; never retry non-idempotent operations blindly.
 
 ### P1: Make Audit Logs Durable And Useful
 
@@ -761,7 +761,7 @@ The product needs:
 
 - Structured logs, bounded log rotation, Prometheus-format metrics on an internal listener, documented alerts, and a redacted support-bundle command.
 - Capacity checks and alerts for disk, inode, memory, database size, registry storage growth, certificate expiry, backup age/failure, queue depth, and stuck builds.
-- Reproducible version metadata covering server, schema, chart, K3s, zot image/extension configuration, and builder compatibility.
+- Reproducible version metadata covering server, schema, chart, K3s, Artifact Server image/extension configuration, and builder compatibility.
 - SBOMs, dependency and image vulnerability scanning, license inventory, signed images/release manifests, checksums, immutable version pins, and provenance for release artifacts.
 - Outbound telemetry disabled by default, internal-only metrics, and explicit operator-controlled support-bundle export as required by ADR 0010.
 - Documented repair, reconfigure, power-loss recovery, uninstall-preserving-data, factory-reset, and decommission workflows with explicit confirmation and backup checks.
@@ -770,7 +770,7 @@ The product needs:
 
 - Identity providers should return a canonical subject plus attributes; external group mapping belongs in a separate mapper, not the provider or RBAC evaluator.
 - Feature modules need explicit enablement, dependency declarations, health, permissions, migrations, routes, and reconciliation hooks.
-- Avoid a second artifact metadata source of truth. zot is authoritative for manifests, tags, digests, referrers, and blobs; the control plane owns appliance-specific metadata and reconciles events and indexes.
+- Avoid a second artifact metadata source of truth. Artifact Server is authoritative for manifests, tags, digests, referrers, and blobs; the control plane owns appliance-specific metadata and reconciles events and indexes.
 - Use the accepted durable asynchronous operation model for long-running deletes, audit exports, repository maintenance, and recovery preparation; builds retain their richer domain state machine.
 
 ## Resolved Defaults And Validation Gates
@@ -848,19 +848,19 @@ The installer invokes a node-local `bootstrap init` command with username and pa
 
 ### 4. Registry Boundary
 
-The accepted registry architecture is defined in [ADR 0008](adr/0008-zot-oci-artifact-registry.md): zot is the OCI image and generic OCI/ORAS artifact data plane, while the control plane owns the OCI registry token service, API-token authentication, scope authorization, signing, revocation, repository policy, and audit.
+The accepted registry architecture is defined in [ADR 0008](adr/0008-zot-oci-artifact-registry.md): Artifact Server is the OCI image and generic OCI/ORAS artifact data plane, while the control plane owns the OCI registry token service, API-token authentication, scope authorization, signing, revocation, repository policy, and audit.
 
 Implications for v1:
 
-- zot runs as an unprivileged, single-replica pod with a filesystem PVC and no separate database or identity store.
+- Artifact Server runs as an unprivileged, single-replica pod with a filesystem PVC and no separate database or identity store.
 - V1 supports OCI images, Helm charts, and generic OCI/ORAS artifacts only.
 - Repository path prefixes map into the appliance authorization model; anonymous access is disabled.
 - This repo owns the appliance control plane, identity, RBAC, and registry-facing access policy.
-- zot verifies five-minute tokens signed with a registry-specific Ed25519 key after pinned-release compatibility is proven.
+- Artifact Server verifies five-minute tokens signed with a registry-specific Ed25519 key after pinned-release compatibility is proven.
 - `/v2/*` is the data path; `/api/v1/registry/token` is the token realm.
-- zot is authoritative for OCI manifests, tags, digests, referrers, and blobs; the control plane stores appliance-specific metadata and reconciles events and extension indexes.
+- Artifact Server is authoritative for OCI manifests, tags, digests, referrers, and blobs; the control plane stores appliance-specific metadata and reconciles events and extension indexes.
 - Podman, Skopeo, Buildah, Helm, ORAS, and `zonctl artifact` use `/v2/*`; the control plane never proxies payload bytes.
-- ADR 0010 selects full zot with enhanced search, scrub, internal metrics, and internal events. UI and management routes are disabled; search must filter unauthorized repositories and all internal extension routes remain off public ingress.
+- ADR 0010 selects full Artifact Server with enhanced search, scrub, internal metrics, and internal events. UI and management routes are disabled; search must filter unauthorized repositories and all internal extension routes remain off public ingress.
 
 Design direction from the shared `Lightweight Artifactory Setup` discussion:
 
@@ -1030,7 +1030,7 @@ Implementation will go more smoothly if we treat the work as parallel tracks wit
 - ORAS generic artifact adapter
 - Syft SBOM and Grype vulnerability adapters with verified tool/database evidence
 - Artifact metadata model
-- OCI token issuer, scope translator, ORAS workflow boundary, and zot adapter
+- OCI token issuer, scope translator, ORAS workflow boundary, and Artifact Server adapter
 
 ### Workstream G: MCP Surface
 
@@ -1056,12 +1056,12 @@ Execute tasks in ID order unless their dependency column allows parallel work. A
 
 | ID | Executable outcome | Depends on | Completion evidence |
 | --- | --- | --- | --- |
-| E0-01 | Validate and pin Go, K3s, Traefik, Argo Workflows, zot, Buildah, Podman, Skopeo, ORAS, Helm, Syft, Grype, release-only Cosign, SQLite driver, and MCP revisions/digests starting from [compatibility candidates](compatibility-candidates.md) | None | Machine-readable compatibility manifest and license/provenance inventory |
+| E0-01 | Validate and pin Go, K3s, Traefik, Argo Workflows, Artifact Server, Buildah, Podman, Skopeo, ORAS, Helm, Syft, Grype, release-only Cosign, SQLite driver, and MCP revisions/digests starting from [compatibility candidates](compatibility-candidates.md) | None | Machine-readable compatibility manifest and license/provenance inventory |
 | E0-02 | Record data classification, trust boundaries, abuse cases, and accepted v1 security claims | E0-01 | Reviewed threat model covering auth, builds, registry, K3s, backup, and supply chain |
-| E0-03 | Prove zot external-token flow and selected full/minimal extension set | E0-01 | ADR 0008 test report and rating at or above its acceptance threshold |
+| E0-03 | Prove Artifact Server external-token flow and selected full/minimal extension set | E0-01 | ADR 0008 test report and rating at or above its acceptance threshold |
 | E0-04 | Prove namespace-scoped Argo plus rootless non-privileged Buildah in the supported K3s/host configuration | E0-01, E0-02 | ADR 0003/0011 report including CRD/RBAC scope, workflow lifecycle, storage driver, isolation, cleanup, cancellation, restart, and OCI output |
 | E0-05 | Prove SQLite migration, disk-full, online backup, corruption detection, and clean restore | E0-01 | ADR 0004 test report and fixture scripts |
-| E0-06 | Validate ADR 0010 canonical origin, listeners, TLS/network/configuration, auth/RBAC, audit, telemetry, supply-chain, support, and zot defaults | E0-02, E0-03, E0-04, E0-05 | Versioned validation evidence with no failed P0 gate |
+| E0-06 | Validate ADR 0010 canonical origin, listeners, TLS/network/configuration, auth/RBAC, audit, telemetry, supply-chain, support, and Artifact Server defaults | E0-02, E0-03, E0-04, E0-05 | Versioned validation evidence with no failed P0 gate |
 | E1-01 | Create Go module, command entrypoint, package boundaries, dependency policy, Makefile, and CI/local verification lane | E0-01 | `make verify` passes on the supported local development host |
 | E1-02 | Implement typed configuration, redacted logging, public/internal servers, middleware, probes, version, and shutdown | E1-01, E0-06 | Unit, race, fuzz-smoke, timeout, proxy, host-header, and shutdown tests |
 | E1-03 | Implement storage interfaces, SQLite adapter, migration runner, transaction helper, and backup hook | E1-01, E0-05 | Repository contract, migration, concurrency, and restore tests |
@@ -1070,7 +1070,7 @@ Execute tasks in ID order unless their dependency column allows parallel work. A
 | E2-03 | Publish and implement OpenAPI auth/user/role/token contracts and generated or conformance-tested client fixtures | E2-01, E2-02 | OpenAPI lint, compatibility, positive, and negative HTTP suites |
 | E3-01 | Implement the pinned MCP Streamable HTTP shell with empty tools and shared auth/RBAC | E2-02 | MCP conformance/interoperability and REST-equivalence tests |
 | E4-01 | Create Helm chart, K3s values, Traefik routes, Argo CRDs/controller, security policies, storage, secret wiring, and complete air-gap inputs | E1-02, E0-06 | Render/schema/policy tests plus egress-denied clean-host install and restart smoke tests for the one complete topology |
-| E5-01 | Implement registry token issuer, scope intersection, signing/rotation, and `zotadapter` | E2-02, E0-03, E4-01 | Podman/Buildah/Skopeo/Helm/ORAS auth, deny, expiry, revoke, and rotation suite |
+| E5-01 | Implement registry token issuer, scope intersection, signing/rotation, and `artifactserver` | E2-02, E0-03, E4-01 | Podman/Buildah/Skopeo/Helm/ORAS auth, deny, expiry, revoke, and rotation suite |
 | E5-02 | Implement artifact catalog/referrers, Skopeo image operations, ORAS artifact operations, quotas, retention, and reconciliation | E5-01 | OCI conformance, media-type, referrer, extension-RBAC, GC/scrub/dedupe, and restore suite |
 | E6-01 | Implement build API/state machine, Argo workflow adapter/templates, Buildah tasks, credential files, logs, cancellation, deadlines, TTL, and cleanup | E2-02, E0-04, E5-01 | Success/failure/security/resource/controller-restart/control-plane-restart matrix with immutable output attribution |
 | E6-02 | Add Skopeo post-build verification, Podman runtime smoke test, Syft SBOM, Grype vulnerability evidence, provenance attachment, and artifact linkage | E6-01, E5-02 | Digest, policy, provenance, SBOM, scan-database, redaction, and cleanup evidence |
@@ -1081,7 +1081,7 @@ Parallelization guidance:
 
 - E0-03, E0-04, and E0-05 can run in parallel after E0-01; all feed E0-06.
 - E1-02 and E1-03 can run in parallel after E1-01.
-- MCP work starts after shared authorization is stable; registry work starts after zot and K3s gates pass.
+- MCP work starts after shared authorization is stable; registry work starts after Artifact Server and K3s gates pass.
 - Build implementation starts only after the Buildah isolation gate and registry publication path are proven.
 - Release packaging automation may be scaffolded early, but release acceptance cannot bypass E7-01 recovery evidence.
 
@@ -1092,7 +1092,7 @@ These concerns must be assigned to the relevant phase rather than deferred to fi
 - Time handling: use UTC in storage and APIs, with RFC 3339 timestamps everywhere.
 - Secret handling: define one place for signing keys, bootstrap credentials, and registry integration secrets.
 - Observability: logs, metrics, health, and trace hooks should be part of the app skeleton.
-- Background jobs: ADR 0010 selects one in-process maintenance manager with durable checkpoints for token/session cleanup, audit checkpoints/export scheduling, build reconciliation, and zot reconciliation; coordinated backup remains an external CronJob or installer operation.
+- Background jobs: ADR 0010 selects one in-process maintenance manager with durable checkpoints for token/session cleanup, audit checkpoints/export scheduling, build reconciliation, and Artifact Server reconciliation; coordinated backup remains an external CronJob or installer operation.
 - Concurrency control: define how duplicate token names, duplicate usernames, and repeated build submissions behave.
 - API limits: define request size limits and timeout defaults.
 - Input validation: centralize validation rules and username/password policy.
@@ -1111,7 +1111,7 @@ Required properties:
 - Containerization and K3s packaging must be deployment layers, not prerequisites for normal development.
 - The same application code paths should be used locally and in-container, with configuration selecting environment-specific behavior.
 - Buildah/K3s security acceptance, and the control-plane's own container image build, run only on the Linux build server/CI — never on macOS, and never on a developer laptop regardless of platform. No container tooling (Podman, Buildah, etc.) is installed or used on macOS for this repo; see docs/dev-container.md.
-- Unit and HTTP contract tests use in-process fakes at the Buildah, Skopeo, ORAS, zot, and Kubernetes interfaces. Separate integration lanes exercise the real pinned tools; fakes must not replace those release gates.
+- Unit and HTTP contract tests use in-process fakes at the Buildah, Skopeo, ORAS, Artifact Server, and Kubernetes interfaces. Separate integration lanes exercise the real pinned tools; fakes must not replace those release gates.
 
 Recommended local workflow:
 
@@ -1159,17 +1159,17 @@ Each phase is a releasable vertical slice with its security, operations, documen
 
 ### Phase 0: Decisions, Threat Model, And Spikes
 
-Phase 0 in this repo's normal development environment is documentation and decision-capture only. A plain developer machine has no K3s cluster, no zot instance, no rootless Buildah/appliance filesystem, and no appliance storage class to test against, so none of the P0 validation gates below can be executed or claimed as passed from local development. Coding work starts at Phase 1 (local Go service foundation) in parallel with Phase 0 documentation; the actual spikes run later against a real target host or cluster, coordinated with `appliance-release`, before the phase that depends on their gate.
+Phase 0 in this repo's normal development environment is documentation and decision-capture only. A plain developer machine has no K3s cluster, no Artifact Server instance, no rootless Buildah/appliance filesystem, and no appliance storage class to test against, so none of the P0 validation gates below can be executed or claimed as passed from local development. Coding work starts at Phase 1 (local Go service foundation) in parallel with Phase 0 documentation; the actual spikes run later against a real target host or cluster, coordinated with `appliance-release`, before the phase that depends on their gate.
 
 Deliverables achievable now, from documentation and decisions alone:
 
 - Maintain the accepted P0 ADRs and decision register; add data classification, trust-boundary diagram, and initial threat model.
-- Record candidate Go, K3s/Kubernetes, Traefik, zot full-image/extension set, Buildah, Podman, Skopeo, ORAS, Helm, Syft, Grype, release-only Cosign, SQLite driver, and MCP protocol versions in the compatibility manifest (see [compatibility candidates](compatibility-candidates.md)); this captures intended versions, not verified release pins.
+- Record candidate Go, K3s/Kubernetes, Traefik, Artifact Server full-image/extension set, Buildah, Podman, Skopeo, ORAS, Helm, Syft, Grype, release-only Cosign, SQLite driver, and MCP protocol versions in the compatibility manifest (see [compatibility candidates](compatibility-candidates.md)); this captures intended versions, not verified release pins.
 - Define token/session semantics, canonical external URL, and the initial permission matrix as design artifacts (already captured above in this plan and in ADR 0010).
 
 Deliverables that require a real host or cluster and cannot be produced here:
 
-- zot token-auth, ORAS, extension-isolation, storage, air-gap, and OCI conformance spike with Podman/Skopeo/Buildah/Helm/ORAS black-box tests (ADR 0008).
+- Artifact Server token-auth, ORAS, extension-isolation, storage, air-gap, and OCI conformance spike with Podman/Skopeo/Buildah/Helm/ORAS black-box tests (ADR 0008).
 - Build-engine and isolation spike proving the selected rootless Buildah path does not require privileged mode, a host runtime socket, or an unaccepted security-profile exception (ADR 0003).
 - SQLite volume, backup, disk-full, and restore spike on the intended appliance filesystem/storage class (ADR 0004).
 - Validation of the accepted RPO/RTO, TLS, and storage ownership assumptions against real infrastructure (ADR 0006, ADR 0010).
@@ -1177,15 +1177,15 @@ Deliverables that require a real host or cluster and cannot be produced here:
 Sequence to run later on a real target host/cluster, before the phase that gates on it:
 
 1. Provision the supported Ubuntu 24.04 LTS/amd64/ext4 host (or equivalent CI runner) with the pinned K3s release installed air-gapped, per ADR 0001. This host is the only place E0-03 through E0-06 evidence may be produced.
-2. E0-03 (before Phase 5): deploy the pinned zot image; run login/pull/push, ORAS/referrers, denied/malformed-scope, token-expiry, user-disable/token-revocation, extension-authorization, storage restart/disk-exhaustion/scrub/dedupe/GC, air-gap, and OCI Distribution conformance tests from real Podman/Skopeo/Buildah/Helm/ORAS clients. Record the ADR 0008 rating and test report.
+2. E0-03 (before Phase 5): deploy the pinned Artifact Server image; run login/pull/push, ORAS/referrers, denied/malformed-scope, token-expiry, user-disable/token-revocation, extension-authorization, storage restart/disk-exhaustion/scrub/dedupe/GC, air-gap, and OCI Distribution conformance tests from real Podman/Skopeo/Buildah/Helm/ORAS clients. Record the ADR 0008 rating and test report.
 3. E0-04 (before Phase 6): deploy the namespace-scoped Argo Workflow Controller and a rootless Buildah task pod under the pinned Pod Security Admission policy; prove no privileged mode, no host runtime socket, and no unaccepted security-profile exception is required. Record the ADR 0003/0011 report.
 4. E0-05 (before Phase 1's storage work is trusted for production, and again before Phase 7): run the SQLite volume/backup/disk-full/restore spike on the real appliance filesystem or storage class. Record the ADR 0004 test report and fixture scripts.
-5. E0-06 (before Phase 4): with E0-03 through E0-05 evidence in hand, validate the full ADR 0010 default set (canonical origin, listeners, TLS/network/configuration, auth/RBAC, audit, telemetry, supply-chain, support, zot defaults) on the same host. Record versioned validation evidence; a failed gate reopens the relevant ADR rather than being silently waived.
+5. E0-06 (before Phase 4): with E0-03 through E0-05 evidence in hand, validate the full ADR 0010 default set (canonical origin, listeners, TLS/network/configuration, auth/RBAC, audit, telemetry, supply-chain, support, Artifact Server defaults) on the same host. Record versioned validation evidence; a failed gate reopens the relevant ADR rather than being silently waived.
 
 Exit gate (only claimable once the real-host sequence above has run):
 
 - All P0 ADR validation gates pass on the pinned dependency versions.
-- zot login/pull/push, ORAS/referrers, deny/revoke, extension filtering, storage/scrub/dedupe/GC, restore/upgrade, air-gap, and OCI conformance tests pass against the pinned image.
+- Artifact Server login/pull/push, ORAS/referrers, deny/revoke, extension filtering, storage/scrub/dedupe/GC, restore/upgrade, air-gap, and OCI conformance tests pass against the pinned image.
 - The build threat model supports an honest v1 product claim.
 - SQLite backup restores onto a clean test instance and passes integrity/application smoke checks.
 
@@ -1254,7 +1254,7 @@ Exit gate:
 
 Deliverables:
 
-- zot adapter, pinned full/minimal image and extension configuration, storage, health, and reconciliation.
+- Artifact Server adapter, pinned full/minimal image and extension configuration, storage, health, and reconciliation.
 - Standard OCI registry token endpoint, scope parser/intersection, registry-specific signing keys, rotation, and audit events.
 - Explicit ownership of OCI metadata/referrers, repository namespaces, media types, quotas, retention/delete policy, and event/index reconciliation.
 - ORAS-backed generic artifact workflows, extension ingress policy, scrub/dedupe/garbage collection, storage backup, metadata rebuild, and clean-node restore procedure.
@@ -1299,10 +1299,10 @@ Already accepted:
 
 - One Go server for REST and MCP, with shared authn/authz.
 - Dedicated, product-managed single-node K3s with Traefik; Helm under an installer wrapper for release packaging ([ADR 0001](adr/0001-dedicated-k3s-appliance.md)).
-- zot with control-plane-issued OCI access tokens and generic OCI/ORAS artifact support ([ADR 0008](adr/0008-zot-oci-artifact-registry.md)); the Distribution and Nexus decisions in ADRs 0007 and 0002 are superseded.
+- Artifact Server with control-plane-issued OCI access tokens and generic OCI/ORAS artifact support ([ADR 0008](adr/0008-zot-oci-artifact-registry.md)); the Distribution and Nexus decisions in ADRs 0007 and 0002 are superseded.
 - Namespace-scoped Argo Workflows behind the control plane in the complete v1 appliance ([ADR 0011](adr/0011-argo-workflows-engine.md)).
 - Trusted-only rootless Buildah workflow tasks for the first build implementation ([ADR 0003](adr/0003-trusted-build-boundary.md)).
-- Buildah, Podman, Skopeo, ORAS, zot, and Helm responsibilities are fixed by the explicit OCI toolchain contract ([ADR 0009](adr/0009-oci-toolchain.md)).
+- Buildah, Podman, Skopeo, ORAS, Artifact Server, and Helm responsibilities are fixed by the explicit OCI toolchain contract ([ADR 0009](adr/0009-oci-toolchain.md)).
 - SQLite behind storage interfaces for the control plane; one replica while SQLite is active ([ADR 0004](adr/0004-control-plane-sqlite.md)).
 - Purpose-separated keys and explicit production TLS modes ([ADR 0005](adr/0005-secrets-keys-and-tls.md)).
 - Daily off-appliance recovery sets, embedded-etcd K3s snapshots, N-1 upgrades, and restore-based rollback ([ADR 0006](adr/0006-backup-upgrade-and-recovery.md)).
@@ -1321,7 +1321,7 @@ Must be pinned or completed before Phase 1:
 Must be pinned or validated before the affected vertical slice:
 
 - MCP protocol revision and API-token compatibility-mode client interoperability evidence.
-- zot version/image digest, accepted full-image extension profile, rating evidence, and the complete ADR 0008 auth/OCI/ORAS/storage/recovery conformance gate.
+- Artifact Server version/image digest, accepted full-image extension profile, rating evidence, and the complete ADR 0008 auth/OCI/ORAS/storage/recovery conformance gate.
 - Buildah/Podman/Skopeo versions and the complete ADR 0003 K3s security-context, storage-driver, and OCI-output validation gate.
 - ADR 0009 shared auth-file contract, registry/certificate trust policy, base-image/source allowlists, Syft/Grype SBOM/scanning, Sigstore-compatible signing, and air-gap import behavior.
 - Clean-node recovery and N-1 upgrade evidence required by ADR 0006.
@@ -1422,25 +1422,25 @@ So my preferred sequence is:
 
 ## OCI Registry Integration Direction
 
-ADR 0008 makes zot the OCI image and generic artifact data plane behind the appliance control plane.
+ADR 0008 makes Artifact Server the OCI image and generic artifact data plane behind the appliance control plane.
 
 Accepted direction:
 
 - The appliance control plane owns user lifecycle, API-token validation, RBAC, repository scope translation, registry-token signing, audit, and artifact lifecycle intent.
-- zot owns upload/download protocol handling and OCI manifest, tag, digest, referrer, and blob storage.
+- Artifact Server owns upload/download protocol handling and OCI manifest, tag, digest, referrer, and blob storage.
 - Podman, Skopeo, Buildah, Helm, and ORAS receive a standard `WWW-Authenticate` challenge pointing to `/api/v1/registry/token`.
 - Registry access tokens have a five-minute maximum lifetime and carry only the repository actions currently allowed by appliance RBAC.
-- Backup and restore cover control-plane state/keys and the zot storage PVC plus required extension state; no separate registry database exists in v1.
+- Backup and restore cover control-plane state/keys and the Artifact Server storage PVC plus required extension state; no separate registry database exists in v1.
 
 Recommended adapter boundary (all paths below are relative to `services/controlplane/`):
 
 - `internal/artifacts/` owns appliance artifact-domain use cases and metadata.
 - `internal/registryauth/` owns OCI challenge parameters, scope parsing/intersection, registry JWT claims, signing, and key rotation.
-- `internal/zotadapter/` owns zot API calls, health, events, extension/index status, storage reconciliation, and error translation.
+- `internal/artifactserver/` owns Artifact Server API calls, health, events, extension/index status, storage reconciliation, and error translation.
 - `internal/authz/` remains transport- and registry-product-neutral.
-- `internal/users/` and `internal/tokens/` do not import zot concerns.
+- `internal/users/` and `internal/tokens/` do not import Artifact Server concerns.
 
-The zot adapter must not own users, API tokens, RBAC policy, audit policy, REST/MCP handlers, or raw signing keys. It receives already-authorized domain operations or verifies only the data-plane state needed for reconciliation.
+The Artifact Server adapter must not own users, API tokens, RBAC policy, audit policy, REST/MCP handlers, or raw signing keys. It receives already-authorized domain operations or verifies only the data-plane state needed for reconciliation.
 
 The adapter interface preserves CNCF Distribution as a fallback and allows future non-OCI package modules without changing appliance identity or authorization.
 
@@ -1558,9 +1558,9 @@ Security acceptance:
 
 Reliability and operations acceptance:
 
-11. The appliance survives process, pod, Argo Workflow Controller, zot, and node restart without state loss or duplicate artifact publication and reports dependency degradation accurately.
-12. Automated backup and clean-node restore cover control-plane state, keys, K3s recovery material, Argo CRDs/configuration/templates and in-flight reconciliation policy, zot storage and required extension state, certificates, and configuration within stated RPO/RTO.
-13. Disk/inode exhaustion, corrupt/incompatible schema or artifact content, expired certificate, unavailable Kubernetes API, unavailable zot, and interrupted migration/upgrade fail safely and produce actionable diagnostics.
+11. The appliance survives process, pod, Argo Workflow Controller, Artifact Server, and node restart without state loss or duplicate artifact publication and reports dependency degradation accurately.
+12. Automated backup and clean-node restore cover control-plane state, keys, K3s recovery material, Argo CRDs/configuration/templates and in-flight reconciliation policy, Artifact Server storage and required extension state, certificates, and configuration within stated RPO/RTO.
+13. Disk/inode exhaustion, corrupt/incompatible schema or artifact content, expired certificate, unavailable Kubernetes API, unavailable Artifact Server, and interrupted migration/upgrade fail safely and produce actionable diagnostics.
 14. Upgrade from every supported source version and the declared rollback or restore path pass automated tests.
 15. Capacity metrics, alerts, bounded logs, and a secret-redacted support bundle are documented and tested.
 
@@ -1575,7 +1575,7 @@ Delivery acceptance:
 
 Follow the gated phases above in order:
 
-1. Resolve P0 decisions and prove zot auth/OCI/ORAS/extension/storage/recovery conformance, build isolation, and SQLite recovery.
+1. Resolve P0 decisions and prove Artifact Server auth/OCI/ORAS/extension/storage/recovery conformance, build isolation, and SQLite recovery.
 2. Build the local service/storage foundation.
 3. Deliver identity, RBAC, and audit as one secured vertical slice.
 4. Deliver the MCP protocol shell and its chosen authorization mode.
@@ -1591,7 +1591,7 @@ Pin exact revisions in ADRs and the release compatibility manifest. Initial base
 - [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) for HTTP problem details, [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) HTTP semantics, [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamps, and the [OpenAPI 3.1 specification](https://spec.openapis.org/oas/v3.1.1.html).
 - [OAuth Protected Resource Metadata (RFC 9728)](https://www.rfc-editor.org/rfc/rfc9728), [Resource Indicators (RFC 8707)](https://www.rfc-editor.org/rfc/rfc8707), [Bearer Token Usage (RFC 6750)](https://www.rfc-editor.org/rfc/rfc6750), and current OAuth security best practices when MCP standards auth is enabled.
 - [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec) for registry behavior.
-- zot [configuration](https://zotregistry.dev/v2.1.18/admin-guide/admin-configuration/), [authentication](https://zotregistry.dev/v2.1.15/articles/authn-authz/), [storage](https://zotregistry.dev/articles/storage/), and [ORAS workflows](https://zotregistry.dev/v2.1.15/user-guides/user-guide-datapath/) for the pinned release.
+- Artifact Server [configuration](https://zotregistry.dev/v2.1.18/admin-guide/admin-configuration/), [authentication](https://zotregistry.dev/v2.1.15/articles/authn-authz/), [storage](https://zotregistry.dev/articles/storage/), and [ORAS workflows](https://zotregistry.dev/v2.1.15/user-guides/user-guide-datapath/) for the pinned release.
 - Buildah [project](https://github.com/containers/buildah) and [build/isolation contract](https://github.com/containers/buildah/blob/main/docs/buildah-build.1.md) for image construction.
 - Skopeo [project and image-operation contract](https://github.com/containers/skopeo) for inspect, copy, verification, and air-gap synchronization.
 - [Podman documentation](https://docs.podman.io/) for supported runtime smoke tests and registry-client behavior.

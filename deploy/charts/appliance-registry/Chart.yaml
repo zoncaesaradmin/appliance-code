@@ -6,6 +6,6 @@ version: 0.1.0
 appVersion: "v2.1.8"
 keywords:
   - appliance
-  - zot
+  - artifact-server
   - registry
 home: https://github.com/zoncaesaradmin/appliance-code

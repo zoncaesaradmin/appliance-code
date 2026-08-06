@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: registry.local/zot
+  repository: registry.local/artifact-server
   tag: ""
   digest: ""
   pullPolicy: IfNotPresent
@@ -34,7 +34,7 @@ auth:
   # zonctl replaces this portable placeholder with the installed appliance
   # origin. OCI clients require an absolute bearer-token realm.
   realm: https://appliance.example.internal/api/v1/registry/token
-  service: zot
+  service: artifact-server
   # Public-only verification Secret published by zonctl; never mount appliance-keys.
   publicKeySecretName: appliance-registry-verification-key
   publicKeySecretKey: registry_ed25519_public.pem

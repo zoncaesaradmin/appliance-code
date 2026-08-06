@@ -16,7 +16,7 @@ The boundary is an artifact handoff, not a source-code dependency. `appliance-re
 | Go control-plane source and tests | Owns | Never contains |
 | REST, MCP, authn/authz, and audit behavior | Owns | Documents released behavior |
 | SQLite schema and migrations | Owns and embeds/packages | Invokes through supported application lifecycle only |
-| zot and registry integration behavior | Owns | Packages pinned validated image/config inputs |
+| Artifact Server and registry integration behavior | Owns | Packages pinned validated image/config inputs |
 | Argo workflow templates and adapter | Owns | Packages approved product inputs when enabled |
 | Canonical Helm chart and schema | Owns | Installs the exact packaged chart; never forks it |
 | Development manifests and local Go lane | Owns | Out of scope |
@@ -66,7 +66,7 @@ Each candidate from `appliance-code` publishes one immutable input set identifie
 - chart version, application version, and required values-schema version
 - Argo version, CRD bundle identity, and workflow-controller chart identity
 - database migration compatibility and minimum/maximum source version
-- required K3s/Kubernetes, Traefik, zot, Buildah, Podman, Skopeo, ORAS, Syft, Grype, and Helm compatibility identities
+- required K3s/Kubernetes, Traefik, Artifact Server, Buildah, Podman, Skopeo, ORAS, Syft, Grype, and Helm compatibility identities
 - configuration and bootstrap contract versions
 - release-signing and verification identities
 - conformance-test entrypoints and expected evidence schema

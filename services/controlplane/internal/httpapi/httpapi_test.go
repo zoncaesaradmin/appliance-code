@@ -171,7 +171,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		}
 		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore}
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
-			Zot: services.Zot, Authorizer: services.RegistryAuthorizer, Users: services.Users,
+			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
 		deps.FilesH = &httpapi.ArtifactFileHandlers{
 			RootDir:         cfg.FilesRootDir,

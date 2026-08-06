@@ -524,7 +524,7 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	}
 }
 
-func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
+func TestArtifactProfilesRenderRealArtifactServerDependency(t *testing.T) {
 	for _, profile := range []string{"storage", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			args := append(defaultRenderArgs(), "--set", "config.applianceProfile="+profile)
@@ -534,11 +534,11 @@ func TestArtifactProfilesRenderRealZotDependency(t *testing.T) {
 			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 			data, _ := at(cm, "data").(map[string]any)
-			if got, _ := data["APPLIANCE_ZOT_BASE_URL"].(string); got != "http://appliance-registry.artifacts.svc.cluster.local:5000" {
-				t.Fatalf("APPLIANCE_ZOT_BASE_URL = %q", got)
+			if got, _ := data["APPLIANCE_ARTIFACT_SERVER_BASE_URL"].(string); got != "http://appliance-registry.artifacts.svc.cluster.local:5000" {
+				t.Fatalf("APPLIANCE_ARTIFACT_SERVER_BASE_URL = %q", got)
 			}
-			if got, _ := data["APPLIANCE_ZOT_ALLOW_FAKE"].(string); got != "false" {
-				t.Fatalf("APPLIANCE_ZOT_ALLOW_FAKE = %q, want false", got)
+			if got, _ := data["APPLIANCE_ARTIFACT_SERVER_ALLOW_FAKE"].(string); got != "false" {
+				t.Fatalf("APPLIANCE_ARTIFACT_SERVER_ALLOW_FAKE = %q, want false", got)
 			}
 			policy := findByKindAndName(docs, "NetworkPolicy", controlPlaneDeploymentName+"-allow")
 			rendered, _ := yaml.Marshal(policy)
@@ -602,12 +602,12 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 	}
 }
 
-func TestValuesSchemaRejectsArtifactProfilesWithoutZotURL(t *testing.T) {
+func TestValuesSchemaRejectsArtifactProfilesWithoutArtifactServerURL(t *testing.T) {
 	requireHelm(t)
 	for _, profile := range []string{"storage", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
-			valuesPath := filepath.Join(t.TempDir(), profile+"-without-zot.yaml")
-			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  zotBaseURL: \"\"\n", profile)
+			valuesPath := filepath.Join(t.TempDir(), profile+"-without-artifact-server.yaml")
+			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  artifactServerBaseURL: \"\"\n", profile)
 			if profile == "storage-landns" {
 				values += "  dnsReadyURL: \"http://dns-server.dns.svc.cluster.local:8181/ready\"\n"
 			}
@@ -616,9 +616,9 @@ func TestValuesSchemaRejectsArtifactProfilesWithoutZotURL(t *testing.T) {
 			}
 			out, err := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath).CombinedOutput()
 			if err == nil {
-				t.Fatalf("helm lint accepted %s without Zot URL\n%s", profile, out)
+				t.Fatalf("helm lint accepted %s without Artifact Server URL\n%s", profile, out)
 			}
-			if !bytes.Contains(out, []byte("zotBaseURL")) {
+			if !bytes.Contains(out, []byte("artifactServerBaseURL")) {
 				t.Fatalf("lint failed for wrong reason:\n%s", out)
 			}
 		})
@@ -633,10 +633,10 @@ func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
 			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  dnsReadyURL: \"\"\n", profile)
 			switch profile {
 			case "storage-landns":
-				values += "  zotBaseURL: \"http://appliance-registry.artifacts.svc.cluster.local:5000\"\n  zotAllowFake: false\n"
+				values += "  artifactServerBaseURL: \"http://appliance-registry.artifacts.svc.cluster.local:5000\"\n  artifactServerAllowFake: false\n"
 			case "builder-landns", "builder-storage-landns":
-				values += `  zotBaseURL: "http://appliance-registry.artifacts.svc.cluster.local:5000"
-  zotAllowFake: false
+				values += `  artifactServerBaseURL: "http://appliance-registry.artifacts.svc.cluster.local:5000"
+  artifactServerAllowFake: false
   workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   buildCatalog:

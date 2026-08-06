@@ -32,7 +32,7 @@ func (ts *testServer) registryToken(t *testing.T, username, apiToken string, sco
 		t.Fatal(err)
 	}
 	q := req.URL.Query()
-	q.Set("service", "zot")
+	q.Set("service", "artifact-server")
 	for _, s := range scopes {
 		q.Add("scope", s)
 	}
