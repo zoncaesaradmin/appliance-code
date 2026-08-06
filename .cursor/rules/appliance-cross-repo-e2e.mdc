@@ -26,7 +26,7 @@ Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manif
 
 ## Operator path (ordered)
 
-1. **Export** (`appliance-release` `scripts/ci/build-full-bundle.sh`)
+1. **Export** (`appliance-release` `scripts/build-full-bundle.sh`)
    - `finalize_bundled_oci_archive` / `export_bundled_extra_oci_image_archive`
    - Derives digest from archive `index.json`; annotates `:bundled`
 2. **Release-input** (`appliance-code` `scripts/package/archive-release-input.sh`)
@@ -102,7 +102,7 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 
 ## Key files
 
-**release:** `scripts/ci/build-full-bundle.sh`, `scripts/ci/bootstrap-build-host.sh`, `scripts/publish/publish-release.sh`, `scripts/package/init-simple-workspace.sh`, `.agents/skills/release/scripts/build-and-publish.sh`, `.agents/skills/release/scripts/validate-release-artifacts.py`, `.agents/skills/release/references/config.example.yaml`
+**release:** `scripts/build-full-bundle.sh`, `scripts/bootstrap-build-host.sh`, `scripts/publish-release.sh`, `scripts/init-bundle-workspace.sh`, `.agents/skills/release/scripts/build-and-publish.sh`, `.agents/skills/release/scripts/validate-release-artifacts.py`, `.agents/skills/release/references/config.example.yaml`
 
 **ctl:** `internal/images/archive.go`, `internal/images/preload.go`, `internal/install/source.go`, `internal/install/install.go`, `internal/productconfig/productconfig.go`, `internal/releasebundle/assemble.go`
 

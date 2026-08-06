@@ -298,9 +298,9 @@ Required changes:
 - Extend `release-input.v1` schema with `artifacts.uiImage`.
 - Extend `appliance-ctl/internal/releaseinput` to parse and verify
   `uiImage`.
-- Extend `appliance-release/scripts/package/init-simple-workspace.sh` to add
+- Extend `appliance-release/scripts/init-bundle-workspace.sh` to add
   the UI image archive to bundle entries.
-- Extend `appliance-release/scripts/ci/build-full-bundle.sh` to export the UI
+- Extend `appliance-release/scripts/build-full-bundle.sh` to export the UI
   image archive from `appliance-code` and pass it into release-input creation.
 - Ensure final release manifests contain both images as `oci-images`:
   - control-plane image

@@ -127,8 +127,8 @@ retry "${PREFETCH_RETRIES}" \
 
 make -C "${SERVICE_DIR}" image-local \
   BUILD_ENGINE="buildah bud --pull-never" \
-  IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
-  IMAGE_TAG="${IMAGE_TAG}" \
+  SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
+  SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BASE_IMAGE="${UPSTREAM_LOCAL_REF}"
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
