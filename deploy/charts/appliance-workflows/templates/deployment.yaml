@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "appliance-workflows.fullname" . }}
+  name: {{ include "appliance-workflows.deploymentName" . }}
   namespace: {{ include "appliance-workflows.workflowsNamespace" . }}
   labels:
     {{- include "appliance-workflows.labels" . | nindent 4 }}

@@ -15,6 +15,10 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "appliance-workflows.deploymentName" -}}
+{{- default "workflow-controller" .Values.deploymentNameOverride | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "appliance-workflows.labels" -}}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
 app.kubernetes.io/name: {{ include "appliance-workflows.name" . }}

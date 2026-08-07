@@ -94,7 +94,7 @@ func TestHelmLint(t *testing.T) {
 
 func TestWorkflowControllerDoesNotUseExternalHelperImages(t *testing.T) {
 	docs := renderChart(t)
-	dep := findByKindAndName(docs, "Deployment", "appliance-workflows")
+	dep := findByKindAndName(docs, "Deployment", "workflow-controller")
 	if dep == nil {
 		t.Fatal("expected workflow-controller Deployment")
 	}

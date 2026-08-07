@@ -180,7 +180,8 @@
       },
       "required": ["enabled"]
     },
-    "fullnameOverride": { "type": "string" }
+    "fullnameOverride": { "type": "string" },
+    "deploymentNameOverride": { "type": "string" }
   },
   "required": [
     "namespace",

@@ -1,12 +1,15 @@
-# Pinned so every name this chart derives (pod names, ServiceAccount
-# names, the ConfigMap, etc.) is a clean "appliance-workflows-*" instead of
-# the doubled "appliance-workflows-appliance-workflows-*" that falls out of the
-# default "<release-name>-<chart-name>" formula whenever the release is
-# installed as "appliance-workflows" (which zonctl always does). Several
-# derived names — notably the executor ServiceAccount — are referenced
-# by exact string match from appliance-code's control plane
-# (WorkflowExecutorServiceAccount), so this is not just cosmetic.
+# Pinned so every name this chart derives (ServiceAccounts, ConfigMap, RBAC,
+# etc.) is a clean "appliance-workflows-*" instead of the doubled
+# "appliance-workflows-appliance-workflows-*" that falls out of the default
+# "<release-name>-<chart-name>" formula whenever the release is installed as
+# "appliance-workflows" (which zonctl always does). Several derived names —
+# notably the executor ServiceAccount — are referenced by exact string match
+# from appliance-code's control plane (WorkflowExecutorServiceAccount), so this
+# is not just cosmetic.
 fullnameOverride: "appliance-workflows"
+# Deployment / pod name only (ReplicaSet pods → workflow-controller-*).
+# Kept separate from fullnameOverride so SA/RBAC names stay stable.
+deploymentNameOverride: "workflow-controller"
 
 namespace:
   create: true
