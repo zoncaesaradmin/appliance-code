@@ -190,7 +190,7 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 			return
 		}
 		if errors.Is(err, devflows.ErrCatalogRequired) {
-			WriteProblem(w, r, http.StatusPreconditionFailed, "builder_catalog_required", "Builder catalog is not configured", "Upload a build catalog in Builder Base Settings before creating the first workspace.")
+			WriteProblem(w, r, http.StatusPreconditionFailed, "builder_catalog_required", "Builder catalog is not configured", "Upload a build catalog in Builder Settings before creating the first workspace.")
 			return
 		}
 		if errors.Is(err, devflows.ErrWorkspaceNameConflict) || errors.Is(err, devflows.ErrWorkspaceProfileConflict) || errors.Is(err, storage.ErrConflict) {

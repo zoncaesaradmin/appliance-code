@@ -60,7 +60,7 @@ export const MODES: Mode[] = [
       {
         label: "Builder",
         path: "/manage/builder",
-        description: "Workspaces, base settings, and build submission",
+        description: "Build submission, workspaces, and settings",
         icon: "builder"
       },
       {

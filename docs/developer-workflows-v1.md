@@ -22,7 +22,7 @@ submission.
   not require output image repositories or per-target builder images.
 - Install-time catalogs are optional lab seeds only. The product path is a
   blank catalog after builder install; operators upload the full document
-  through `PUT /api/v1/builder/catalog` (Builder Base Settings). Prefer nesting
+  through `PUT /api/v1/builder/catalog` (Builder Settings). Prefer nesting
   build targets under `repos[].buildTargets`. The control plane flattens nested
   targets into the runtime `buildTargets` list (filling each target's `repo`
   from its parent). Top-level `buildTargets` with an explicit `repo` field
@@ -109,7 +109,7 @@ bundle.
 
 - After builder install the catalog starts blank. Administrators upload the
   full YAML/JSON document through `PUT /api/v1/builder/catalog` (or the
-  Builder **Base Settings** download/upload controls). `GET` returns
+  Builder **Settings** download/upload controls). `GET` returns
   `configured: false` until a valid document is stored. Workspace create
   fails closed with `412 Precondition Failed` / `builder_catalog_required`
   until then.

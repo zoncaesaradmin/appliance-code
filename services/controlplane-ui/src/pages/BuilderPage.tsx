@@ -12,8 +12,22 @@ import type {
   Workspace
 } from "../types";
 
-function isBaseSettingsPath(pathname: string): boolean {
+function isSettingsPath(pathname: string): boolean {
   return pathname === "/manage/builder/settings" || pathname === "/manage/builder/git-access";
+}
+
+function isWorkspacesPath(pathname: string): boolean {
+  return pathname === "/manage/builder/workspaces";
+}
+
+function builderTabPathname(pathname: string): string {
+  if (pathname === "/manage/builder/builds") {
+    return "/manage/builder";
+  }
+  if (pathname === "/manage/builder/git-access") {
+    return "/manage/builder/settings";
+  }
+  return pathname;
 }
 
 export function BuilderPage(props: { pathname: string }): React.JSX.Element {
@@ -27,13 +41,13 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [message, setMessage] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceProfile, setWorkspaceProfile] = useState("");
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [gitName, setGitName] = useState("");
   const [gitHost, setGitHost] = useState("");
   const [gitUsername, setGitUsername] = useState("");
   const [gitToken, setGitToken] = useState("");
   const [buildTarget, setBuildTarget] = useState("");
   const [imageTag, setImageTag] = useState("");
+  const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const catalogFileRef = useRef<HTMLInputElement>(null);
 
   async function refreshBuilder() {
@@ -55,7 +69,6 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     setTargets(nextTargets);
     setLatestJob(nextJob);
     setWorkspaceProfile(nextProfiles[0]?.name || "");
-    setSelectedWorkspaceId(nextCurrent?.id || nextWorkspaces[0]?.id || "");
   }
 
   useEffect(() => {
@@ -78,6 +91,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     try {
       await client.createWorkspace({ name: workspaceName, workProfile: workspaceProfile });
       setWorkspaceName("");
+      setShowCreateWorkspace(false);
       setMessage("Workspace created and selected.");
       await refreshBuilder();
     } catch (error) {
@@ -85,17 +99,20 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     }
   }
 
-  async function selectWorkspace() {
-    await client.setCurrentWorkspace(selectedWorkspaceId);
+  async function selectWorkspace(workspaceId: string) {
+    if (!workspaceId) {
+      return;
+    }
+    await client.setCurrentWorkspace(workspaceId);
     setMessage("Current workspace updated.");
     await refreshBuilder();
   }
 
-  async function deleteWorkspace() {
-    if (!selectedWorkspaceId) {
+  async function deleteWorkspace(workspaceId: string) {
+    if (!workspaceId) {
       return;
     }
-    await client.deleteWorkspace(selectedWorkspaceId);
+    await client.deleteWorkspace(workspaceId);
     setMessage("Workspace deleted.");
     await refreshBuilder();
   }
@@ -144,7 +161,10 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   }
 
   function downloadCatalog() {
-    const text = catalog?.document || "{}\n";
+    if (!catalog?.configured) {
+      return;
+    }
+    const text = catalog.document || "{}\n";
     const blob = new Blob([text], { type: "application/yaml" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -185,17 +205,17 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     <PageFrame
       title="Builder"
       eyebrow=""
-      description="Workspace creation, base settings (Git access and build catalog), and build submission."
-      pathname={props.pathname}
+      description="Build submission, workspaces, and settings (Git access and build catalog)."
+      pathname={builderTabPathname(props.pathname)}
       onNavigate={navigate}
       tabs={[
-        { label: "Workspaces", path: "/manage/builder" },
-        { label: "Base Settings", path: "/manage/builder/settings" },
-        { label: "Builds", path: "/manage/builder/builds" }
+        { label: "Build", path: "/manage/builder" },
+        { label: "Workspaces", path: "/manage/builder/workspaces" },
+        { label: "Settings", path: "/manage/builder/settings" }
       ]}
     >
       {message ? <div className="message">{message}</div> : null}
-      {isBaseSettingsPath(props.pathname) ? (
+      {isSettingsPath(props.pathname) ? (
         <div className="stack-form">
           <div className="grid-two">
             <Card title="Build catalog" subtitle="Single appliance catalog document">
@@ -215,12 +235,22 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                 <EmptyState message="Upload an appliance-native build-catalog.yaml before creating a workspace. See build-catalog.example.yaml for the schema." />
               ) : null}
               <div className="button-row">
-                <button className="button" type="button" onClick={downloadCatalog}>
+                <button
+                  className={catalog?.configured ? "button button--primary" : "button"}
+                  type="button"
+                  disabled={!catalog?.configured}
+                  onClick={downloadCatalog}
+                >
                   Download YAML
                 </button>
                 <button
-                  className="button button--primary"
+                  className={
+                    catalog?.canConfigure && !catalog?.configured
+                      ? "button button--primary"
+                      : "button"
+                  }
                   type="button"
+                  disabled={!catalog?.canConfigure}
                   onClick={() => catalogFileRef.current?.click()}
                 >
                   Upload YAML
@@ -234,18 +264,36 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                 />
               </div>
             </Card>
-            <Card title="Save credential" subtitle="Name + host + username + token">
+            <Card title="Git credentials" subtitle="Name + server + username + token">
+              <div className="detail-list">
+                <div>
+                  <span>Coverage</span>
+                  <strong>{gitAccess?.configured ? "Complete" : "Incomplete"}</strong>
+                </div>
+                <div>
+                  <span>Required servers</span>
+                  <strong>{gitAccess?.requiredHosts?.join(", ") || "None advertised"}</strong>
+                </div>
+                <div>
+                  <span>Covered servers</span>
+                  <strong>{gitAccess?.coveredHosts?.join(", ") || "None"}</strong>
+                </div>
+                <div>
+                  <span>Missing servers</span>
+                  <strong>{gitAccess?.missingHosts?.join(", ") || "None"}</strong>
+                </div>
+              </div>
               <form className="stack-form" onSubmit={saveGitAccess}>
                 <label className="field">
                   <span>Credential name</span>
                   <input
                     value={gitName}
-                    placeholder="github-com"
+                    placeholder="MyGitCredential"
                     onChange={(event) => setGitName(event.target.value)}
                   />
                 </label>
                 <label className="field">
-                  <span>Git host</span>
+                  <span>Git Server</span>
                   <input
                     value={gitHost}
                     placeholder="github.com"
@@ -268,68 +316,142 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                   Save Git access
                 </button>
               </form>
+              {(gitAccess?.credentials || []).length === 0 ? (
+                <EmptyState message="No credentials yet. Save a named credential for each catalog Git server." />
+              ) : (
+                <div className="stack-form">
+                  {(gitAccess?.credentials || []).map((credential) => (
+                    <div className="detail-list" key={credential.name}>
+                      <div>
+                        <span>Name</span>
+                        <strong>{credential.name}</strong>
+                      </div>
+                      <div>
+                        <span>Server</span>
+                        <strong>{credential.host}</strong>
+                      </div>
+                      <div>
+                        <span>Username</span>
+                        <strong>{credential.username}</strong>
+                      </div>
+                      <div className="button-row">
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={() => void editGitCredential(credential.name, credential.host, credential.username)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="button"
+                          type="button"
+                          onClick={() => void deleteGitCredential(credential.name)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           </div>
-          <Card title="Named Git HTTPS credentials" subtitle="One credential per Git host">
-            <div className="detail-list">
-              <div>
-                <span>Coverage</span>
-                <strong>{gitAccess?.configured ? "Complete" : "Incomplete"}</strong>
-              </div>
-              <div>
-                <span>Required hosts</span>
-                <strong>{gitAccess?.requiredHosts?.join(", ") || "None advertised"}</strong>
-              </div>
-              <div>
-                <span>Covered hosts</span>
-                <strong>{gitAccess?.coveredHosts?.join(", ") || "None"}</strong>
-              </div>
-              <div>
-                <span>Missing hosts</span>
-                <strong>{gitAccess?.missingHosts?.join(", ") || "None"}</strong>
-              </div>
+        </div>
+      ) : isWorkspacesPath(props.pathname) ? (
+        <Card title="Workspaces" subtitle="Current workspace, create, and managed workspace list">
+          <div className="stack-form">
+            <div className="status-box">
+              <strong>Current workspace</strong>
+              <span>
+                {currentWorkspace
+                  ? `${currentWorkspace.name} · ${currentWorkspace.workProfile} · ${currentWorkspace.status}`
+                  : "None selected"}
+              </span>
             </div>
-            {(gitAccess?.credentials || []).length === 0 ? (
-              <EmptyState message="No credentials yet. Save a named credential for each catalog Git host." />
+            <div className="button-row">
+              <button
+                className={showCreateWorkspace ? "button" : "button button--primary"}
+                type="button"
+                onClick={() => setShowCreateWorkspace((open) => !open)}
+              >
+                {showCreateWorkspace ? "Cancel" : "+ Create workspace"}
+              </button>
+            </div>
+            {showCreateWorkspace ? (
+              <form className="stack-form" onSubmit={createWorkspace}>
+                <label className="field">
+                  <span>Workspace name</span>
+                  <input
+                    value={workspaceName}
+                    onChange={(event) => setWorkspaceName(event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Workspace profile</span>
+                  <select
+                    value={workspaceProfile}
+                    onChange={(event) => setWorkspaceProfile(event.target.value)}
+                  >
+                    {profiles.map((profile) => (
+                      <option key={profile.name} value={profile.name}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="button button--primary" type="submit">
+                  Create workspace
+                </button>
+              </form>
+            ) : null}
+            {workspaces.length === 0 ? (
+              <EmptyState message="No workspaces yet. Create one to start builds." />
             ) : (
               <div className="stack-form">
-                {(gitAccess?.credentials || []).map((credential) => (
-                  <div className="detail-list" key={credential.name}>
-                    <div>
-                      <span>Name</span>
-                      <strong>{credential.name}</strong>
+                {workspaces.map((workspace) => {
+                  const isCurrent = currentWorkspace?.id === workspace.id;
+                  return (
+                    <div className="detail-list" key={workspace.id}>
+                      <div>
+                        <span>Name</span>
+                        <strong>
+                          {workspace.name}
+                          {isCurrent ? " (current)" : ""}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Profile</span>
+                        <strong>{workspace.workProfile}</strong>
+                      </div>
+                      <div>
+                        <span>Status</span>
+                        <strong>{workspace.status}</strong>
+                      </div>
+                      <div className="button-row">
+                        <button
+                          className="button"
+                          type="button"
+                          disabled={isCurrent}
+                          onClick={() => void selectWorkspace(workspace.id)}
+                        >
+                          Set current
+                        </button>
+                        <button
+                          className="button button--ghost"
+                          type="button"
+                          onClick={() => void deleteWorkspace(workspace.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <span>Host</span>
-                      <strong>{credential.host}</strong>
-                    </div>
-                    <div>
-                      <span>Username</span>
-                      <strong>{credential.username}</strong>
-                    </div>
-                    <div className="button-row">
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => void editGitCredential(credential.name, credential.host, credential.username)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="button"
-                        type="button"
-                        onClick={() => void deleteGitCredential(credential.name)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
-          </Card>
-        </div>
-      ) : props.pathname === "/manage/builder/builds" ? (
+          </div>
+        </Card>
+      ) : (
         <div className="grid-two">
           <Card title="Submit build" subtitle="Current workspace target selection">
             <form className="stack-form" onSubmit={submitBuild}>
@@ -380,68 +502,6 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
             ) : (
               <EmptyState message="No build has been submitted for the current workspace yet." />
             )}
-          </Card>
-        </div>
-      ) : (
-        <div className="grid-two">
-          <Card title="Workspace selection" subtitle="Switch or delete an existing workspace">
-            <label className="field">
-              <span>Existing workspaces</span>
-              <select
-                value={selectedWorkspaceId}
-                onChange={(event) => setSelectedWorkspaceId(event.target.value)}
-              >
-                <option value="">Select a workspace</option>
-                {workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.id}>
-                    {workspace.name} ({workspace.workProfile})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="button-row">
-              <button className="button button--primary" onClick={() => void selectWorkspace()}>
-                Set current
-              </button>
-              <button className="button button--ghost" onClick={() => void deleteWorkspace()}>
-                Delete
-              </button>
-            </div>
-            {currentWorkspace ? (
-              <div className="status-box">
-                <strong>Current workspace</strong>
-                <span>
-                  {currentWorkspace.name} · {currentWorkspace.status}
-                </span>
-              </div>
-            ) : null}
-          </Card>
-          <Card title="Create workspace" subtitle="Provision a workspace from a selected profile">
-            <form className="stack-form" onSubmit={createWorkspace}>
-              <label className="field">
-                <span>Workspace name</span>
-                <input
-                  value={workspaceName}
-                  onChange={(event) => setWorkspaceName(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>Workspace profile</span>
-                <select
-                  value={workspaceProfile}
-                  onChange={(event) => setWorkspaceProfile(event.target.value)}
-                >
-                  {profiles.map((profile) => (
-                    <option key={profile.name} value={profile.name}>
-                      {profile.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="button button--primary" type="submit">
-                Create workspace
-              </button>
-            </form>
           </Card>
         </div>
       )}

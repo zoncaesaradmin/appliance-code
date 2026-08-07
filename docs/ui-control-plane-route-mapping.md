@@ -70,9 +70,9 @@ Useful event names:
 | `GET /artifacts` | `artifactPageData` | Session refresh as needed; `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional `GET /api/v1/registry/repositories/{repository}/referrers?digest=...`; `GET /api/v1/registry/grants` when authorized | `200` full HTML registry browser and grant administration page |
 | `POST /artifacts/grants` | `createRegistryGrant` | Session refresh as needed; `POST /api/v1/registry/grants` | `303` redirect to `/artifacts` |
 | `POST /artifacts/grants/delete` | `deleteRegistryGrant` | Session refresh as needed; `DELETE /api/v1/registry/grants/{id}` | `303` redirect to `/artifacts` |
-| `GET /manage/builder` | React `BuilderPage` | Browser → control plane: `GET /api/v1/work-profiles`; `GET /api/v1/builder/catalog`; `GET /api/v1/builder/git-access`; `GET /api/v1/workspaces`; `GET /api/v1/current-workspace`; when ready also build-targets / build-status | SPA page |
-| `GET /manage/builder/settings` (legacy alias `/manage/builder/git-access`) | React `BuilderPage` Base Settings | Same catalog + Git access GETs; upload uses `PUT /api/v1/builder/catalog`; credential save uses `PUT /api/v1/builder/git-access/{name}`; delete uses `DELETE /api/v1/builder/git-access/{name}` | SPA page |
-| `GET /manage/builder/builds` | React `BuilderPage` | Current-workspace build submit/status via `/api/v1/current-workspace/*` | SPA page |
+| `GET /manage/builder` (legacy alias `/manage/builder/builds`) | React `BuilderPage` Build | Current-workspace build submit/status via `/api/v1/current-workspace/*`; also loads work-profiles, catalog, git-access, workspaces for shared shell state | SPA page |
+| `GET /manage/builder/workspaces` | React `BuilderPage` Workspaces | Single Workspaces card: current workspace, optional create form, workspace list with set-current/delete; APIs: `GET /api/v1/work-profiles`, `GET /api/v1/workspaces`, `GET /api/v1/current-workspace`, create/select/delete workspace | SPA page |
+| `GET /manage/builder/settings` (legacy alias `/manage/builder/git-access`) | React `BuilderPage` Settings | Same catalog + Git access GETs; upload uses `PUT /api/v1/builder/catalog`; credential save uses `PUT /api/v1/builder/git-access/{name}`; delete uses `DELETE /api/v1/builder/git-access/{name}` | SPA page |
 | `POST /builder/git-access` | `configureBuilderGitAccess` (legacy UI service) | Session check/refresh as needed; `PUT /api/v1/builder/git-access/{name}` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/builds` | `submitBuilderBuild` | Session check/refresh as needed; `POST /api/v1/current-workspace/builds` with `targetName` and optional `imageTag` | `303` redirect to `/builder/workspaces` on success; re-renders the builder page with an error for missing catalog/Git access (`412`), workspace not ready (`409`), unknown target / no workspace (`404`), or other validation failures |
 | `POST /builder/workspaces` with `selected_workspace_id=<existing>` | `createBuilderWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
@@ -108,12 +108,12 @@ to `/data/zon/logs/api-server/application.log`:
 - `workspace provisioning workflow submission failed`
 - `workspace provisioning workflow missing`
 
-## Builder Base Settings Flow
+## Builder Settings Flow
 
 Builder workspace and build flows depend on a single runtime build catalog plus
 named appliance-side HTTPS Git credentials (one per Git host).
 
-- Browser users configure both through the Builder **Base Settings** tab
+- Browser users configure both through the Builder **Settings** tab
   (`/manage/builder/settings`).
 - Catalog upload replaces the whole document via `PUT /api/v1/builder/catalog`
   (YAML or JSON). Download uses the `document` field from
@@ -130,10 +130,10 @@ For operators, the practical sequence is:
 1. Install the builder profile (catalog starts blank).
 2. Create a Git provider personal access token outside the appliance.
 3. Sign in to the appliance UI as an administrator.
-4. Open Builder **Base Settings**.
+4. Open Builder **Settings**.
 5. Upload an appliance-native `build-catalog.yaml` (see the in-repo example).
-6. Save `credential name + git host + git username + personal access token`
-   for each required host.
+6. Save `credential name + git server + git username + personal access token`
+   for each required server.
 7. Create the first workspace only after catalog status is configured and Git
    coverage is complete.
 
