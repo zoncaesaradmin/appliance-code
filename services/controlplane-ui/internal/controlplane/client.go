@@ -598,15 +598,15 @@ func (c *Client) ListWorkspaces(ctx context.Context, accessToken string) ([]Work
 	return result.Items, nil
 }
 
-func (c *Client) CurrentWorkspace(ctx context.Context, accessToken string) (Workspace, error) {
-	var out Workspace
+func (c *Client) CurrentWorkspace(ctx context.Context, accessToken string) (*Workspace, error) {
+	var out *Workspace
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace", nil)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
+		return nil, err
 	}
 	return out, nil
 }
@@ -752,15 +752,15 @@ func (c *Client) SubmitCurrentBuild(ctx context.Context, accessToken string, in 
 	return out, nil
 }
 
-func (c *Client) CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (Job, error) {
-	var out Job
+func (c *Client) CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (*Job, error) {
+	var out *Job
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace/build-status", nil)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
+		return nil, err
 	}
 	return out, nil
 }

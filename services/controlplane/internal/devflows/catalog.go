@@ -40,50 +40,50 @@ var (
 
 // Catalog is product configuration for developer workflows.
 type Catalog struct {
-	WorkProfiles []WorkProfile `json:"workProfiles"`
-	Repos        []Repo        `json:"repos"`
-	BuildTargets []BuildTarget `json:"buildTargets"`
+	WorkProfiles []WorkProfile `json:"workProfiles" yaml:"workProfiles"`
+	Repos        []Repo        `json:"repos" yaml:"repos"`
+	BuildTargets []BuildTarget `json:"buildTargets" yaml:"buildTargets"`
 }
 
 type WorkProfile struct {
-	Name        string        `json:"name"`
-	Description string        `json:"description,omitempty"`
-	Repos       []ProfileRepo `json:"repos,omitempty"`
+	Name        string        `json:"name" yaml:"name"`
+	Description string        `json:"description,omitempty" yaml:"description,omitempty"`
+	Repos       []ProfileRepo `json:"repos,omitempty" yaml:"repos,omitempty"`
 }
 
 type ProfileRepo struct {
-	Name             string `json:"name"`
-	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
+	Name             string `json:"name" yaml:"name"`
+	EnabledByDefault bool   `json:"enabledByDefault,omitempty" yaml:"enabledByDefault,omitempty"`
 }
 
 type Repo struct {
-	Name         string        `json:"name"`
-	URL          string        `json:"url"`
-	DefaultRef   string        `json:"defaultRef,omitempty"`
-	BuildTargets []BuildTarget `json:"buildTargets,omitempty"`
+	Name         string        `json:"name" yaml:"name"`
+	URL          string        `json:"url" yaml:"url"`
+	DefaultRef   string        `json:"defaultRef,omitempty" yaml:"defaultRef,omitempty"`
+	BuildTargets []BuildTarget `json:"buildTargets,omitempty" yaml:"buildTargets,omitempty"`
 }
 
 type BuildTarget struct {
-	Name              string   `json:"name"`
-	Aliases           []string `json:"aliases,omitempty"`
-	Description       string   `json:"description,omitempty"`
-	Repo              string   `json:"repo,omitempty"`
-	Execution         string   `json:"execution"`
-	Args              []string `json:"args,omitempty"`
-	WorkingDirectory  string   `json:"workingDirectory,omitempty"`
-	ContainerfilePath string   `json:"containerfilePath,omitempty"`
-	ImageRepository   string   `json:"imageRepository"`
-	ImageTagTemplate  string   `json:"imageTagTemplate,omitempty"`
+	Name              string   `json:"name" yaml:"name"`
+	Aliases           []string `json:"aliases,omitempty" yaml:"aliases,omitempty"`
+	Description       string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Repo              string   `json:"repo,omitempty" yaml:"repo,omitempty"`
+	Execution         string   `json:"execution" yaml:"execution"`
+	Args              []string `json:"args,omitempty" yaml:"args,omitempty"`
+	WorkingDirectory  string   `json:"workingDirectory,omitempty" yaml:"workingDirectory,omitempty"`
+	ContainerfilePath string   `json:"containerfilePath,omitempty" yaml:"containerfilePath,omitempty"`
+	ImageRepository   string   `json:"imageRepository" yaml:"imageRepository"`
+	ImageTagTemplate  string   `json:"imageTagTemplate,omitempty" yaml:"imageTagTemplate,omitempty"`
 	// BuilderImageDigest selects the build pod image. Prefer the short bundle
 	// name "dev-build" (default when omitted). A digest-pinned override is
 	// also accepted; symbolic names resolve at submit time to the appliance
 	// bundled builder image.
-	BuilderImageDigest string `json:"builderImageDigest,omitempty"`
+	BuilderImageDigest string `json:"builderImageDigest,omitempty" yaml:"builderImageDigest,omitempty"`
 
 	// Legacy input-only fields. Accepted on unmarshal for older catalogs and
 	// cleared by Normalize into Args.
-	ScriptPath string `json:"scriptPath,omitempty"`
-	MakeTarget string `json:"makeTarget,omitempty"`
+	ScriptPath string `json:"scriptPath,omitempty" yaml:"scriptPath,omitempty"`
+	MakeTarget string `json:"makeTarget,omitempty" yaml:"makeTarget,omitempty"`
 }
 
 type ResolvedTarget struct {

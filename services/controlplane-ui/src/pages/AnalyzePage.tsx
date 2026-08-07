@@ -12,7 +12,7 @@ export function AnalyzePage(): React.JSX.Element {
   useEffect(() => {
     void (async () => {
       setWorkspaces(await client.listWorkspaces().catch(() => []));
-      setLatestJob(await client.getCurrentBuildStatus().catch(() => null));
+      setLatestJob(await client.getCurrentBuildStatus());
     })();
   }, []);
 

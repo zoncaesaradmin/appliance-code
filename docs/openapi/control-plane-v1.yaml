@@ -862,17 +862,17 @@ paths:
       operationId: getCurrentWorkspace
       responses:
         "200":
-          description: Current workspace.
+          description: Current workspace, or null when none is selected.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Workspace"
+                nullable: true
+                allOf:
+                  - $ref: "#/components/schemas/Workspace"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
     post:
       summary: Set current workspace
       operationId: setCurrentWorkspace
@@ -907,7 +907,7 @@ paths:
       operationId: listCurrentWorkspaceBuildTargets
       responses:
         "200":
-          description: Build targets.
+          description: Build targets (empty when no current workspace is selected).
           content:
             application/json:
               schema:
@@ -922,8 +922,6 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /api/v1/current-workspace/builds:
     post:
       summary: Submit build for current workspace
@@ -963,17 +961,17 @@ paths:
       operationId: getCurrentWorkspaceBuildStatus
       responses:
         "200":
-          description: Latest current-workspace build job.
+          description: Latest current-workspace build job, or null when none exists.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Job"
+                nullable: true
+                allOf:
+                  - $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
-        "404":
-          $ref: "#/components/responses/NotFound"
   /api/v1/tokens:
     get:
       summary: List the caller's API tokens

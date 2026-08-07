@@ -639,12 +639,13 @@ func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID s
 }
 
 // CurrentWorkspace returns the caller's current developer workflow workspace.
+// When none is selected, it returns (nil, nil).
 func (c *Client) CurrentWorkspace(ctx context.Context, accessToken string) (*Workspace, error) {
-	var result Workspace
+	var result *Workspace
 	if err := c.do(ctx, http.MethodGet, "/api/v1/current-workspace", bearerCredential(accessToken), nil, &result); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
 }
 
 // SetCurrentWorkspace makes workspaceID the caller's current workspace.
@@ -693,12 +694,13 @@ func (c *Client) SubmitCurrentBuildWithIdempotencyKey(ctx context.Context, acces
 }
 
 // CurrentWorkspaceBuildStatus returns the latest build job for the caller's current workspace.
+// When no workspace is selected or no build exists yet, it returns (nil, nil).
 func (c *Client) CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (*Job, error) {
-	var result Job
+	var result *Job
 	if err := c.do(ctx, http.MethodGet, "/api/v1/current-workspace/build-status", bearerCredential(accessToken), nil, &result); err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
 }
 
 // ListJobs lists developer workflow jobs visible to the caller.

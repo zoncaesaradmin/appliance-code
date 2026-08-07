@@ -405,8 +405,8 @@ func (r *runner) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("current workspace: %w", err)
 	}
-	if currentWorkspace.ID != workspace.ID {
-		return fmt.Errorf("current workspace id = %q, want %q", currentWorkspace.ID, workspace.ID)
+	if currentWorkspace == nil || currentWorkspace.ID != workspace.ID {
+		return fmt.Errorf("current workspace = %#v, want id %q", currentWorkspace, workspace.ID)
 	}
 	if _, err := r.client.SetCurrentWorkspace(ctx, aliceAccess, workspace.ID); err != nil {
 		return fmt.Errorf("set current workspace: %w", err)
@@ -432,8 +432,8 @@ func (r *runner) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("current workspace build status: %w", err)
 	}
-	if currentJob.ID != job.ID {
-		return fmt.Errorf("current workspace build status id = %q, want %q", currentJob.ID, job.ID)
+	if currentJob == nil || currentJob.ID != job.ID {
+		return fmt.Errorf("current workspace build status = %#v, want id %q", currentJob, job.ID)
 	}
 	jobs, err := r.client.ListJobs(ctx, aliceAccess)
 	if err != nil {

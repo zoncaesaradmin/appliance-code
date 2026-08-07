@@ -238,3 +238,40 @@ func testCatalog() Catalog {
 		BuildTargets: []BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: ExecutionScript, Args: []string{"build.sh"}, ImageRepository: "users/alice/app", ImageTagTemplate: "{workspace}-{target}"}},
 	}
 }
+
+func TestParseCatalogDocumentYAMLCamelCaseWorkProfiles(t *testing.T) {
+	raw := []byte(`
+workProfiles:
+  - name: appliance-dev
+    repos:
+      - name: appliance-code
+        enabledByDefault: true
+repos:
+  - name: appliance-code
+    url: https://git.internal.example.com/appliance-code.git
+    defaultRef: main
+    buildTargets:
+      - name: controlplane
+        execution: make
+        args: [image]
+        workingDirectory: services/controlplane
+        imageRepository: appliance-images/appliance-control-plane
+        builderImageDigest: dev-build
+`)
+	catalog, contentType, err := ParseCatalogDocument(raw)
+	if err != nil {
+		t.Fatalf("ParseCatalogDocument: %v", err)
+	}
+	if contentType != "application/yaml" {
+		t.Fatalf("contentType = %q, want application/yaml", contentType)
+	}
+	if len(catalog.WorkProfiles) != 1 || catalog.WorkProfiles[0].Name != "appliance-dev" {
+		t.Fatalf("workProfiles = %#v", catalog.WorkProfiles)
+	}
+	if len(catalog.Repos) != 1 || catalog.Repos[0].Name != "appliance-code" {
+		t.Fatalf("repos = %#v", catalog.Repos)
+	}
+	if len(catalog.BuildTargets) != 1 || catalog.BuildTargets[0].Name != "controlplane" {
+		t.Fatalf("buildTargets = %#v", catalog.BuildTargets)
+	}
+}

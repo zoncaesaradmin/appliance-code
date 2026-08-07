@@ -39,6 +39,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [targets, setTargets] = useState<BuildTarget[]>([]);
   const [latestJob, setLatestJob] = useState<Job | null>(null);
   const [message, setMessage] = useState("");
+  const [messageIsError, setMessageIsError] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceProfile, setWorkspaceProfile] = useState("");
   const [gitName, setGitName] = useState("");
@@ -50,30 +51,53 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const catalogFileRef = useRef<HTMLInputElement>(null);
 
-  async function refreshBuilder() {
-    const [nextProfiles, nextWorkspaces, nextCurrent, nextCatalog, nextGitAccess, nextTargets, nextJob] =
-      await Promise.all([
-        client.listWorkProfiles(),
-        client.listWorkspaces(),
-        client.getCurrentWorkspace(),
-        client.getBuilderCatalog(),
-        client.getBuilderGitAccess(),
-        client.listBuildTargets().catch(() => []),
-        client.getCurrentBuildStatus().catch(() => null)
-      ]);
+  async function refreshSettings() {
+    const [nextCatalog, nextGitAccess] = await Promise.all([
+      client.getBuilderCatalog(),
+      client.getBuilderGitAccess()
+    ]);
+    setCatalog(nextCatalog);
+    setGitAccess(nextGitAccess);
+  }
+
+  async function refreshWorkspaces() {
+    const [nextProfiles, nextWorkspaces, nextCurrent] = await Promise.all([
+      client.listWorkProfiles(),
+      client.listWorkspaces(),
+      client.getCurrentWorkspace()
+    ]);
     setProfiles(nextProfiles);
     setWorkspaces(nextWorkspaces);
     setCurrentWorkspace(nextCurrent);
-    setCatalog(nextCatalog);
-    setGitAccess(nextGitAccess);
-    setTargets(nextTargets);
-    setLatestJob(nextJob);
     setWorkspaceProfile(nextProfiles[0]?.name || "");
   }
 
+  async function refreshBuild() {
+    const [nextCurrent, nextTargets, nextJob] = await Promise.all([
+      client.getCurrentWorkspace(),
+      client.listBuildTargets(),
+      client.getCurrentBuildStatus()
+    ]);
+    setCurrentWorkspace(nextCurrent);
+    setTargets(nextTargets);
+    setLatestJob(nextJob);
+  }
+
+  async function refreshForPath(pathname: string) {
+    if (isSettingsPath(pathname)) {
+      await refreshSettings();
+      return;
+    }
+    if (isWorkspacesPath(pathname)) {
+      await refreshWorkspaces();
+      return;
+    }
+    await refreshBuild();
+  }
+
   useEffect(() => {
-    void refreshBuilder();
-  }, []);
+    void refreshForPath(props.pathname);
+  }, [props.pathname]);
 
   useEffect(() => {
     if (latestJob?.status !== "running") {
@@ -85,17 +109,22 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     return () => window.clearTimeout(timer);
   }, [latestJob]);
 
+  function showMessage(text: string, isError = false) {
+    setMessageIsError(isError);
+    setMessage(text);
+  }
+
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    showMessage("");
     try {
       await client.createWorkspace({ name: workspaceName, workProfile: workspaceProfile });
       setWorkspaceName("");
       setShowCreateWorkspace(false);
-      setMessage("Workspace created and selected.");
-      await refreshBuilder();
+      showMessage("Workspace created and selected.");
+      await refreshWorkspaces();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not create workspace.");
+      showMessage(error instanceof Error ? error.message : "Could not create workspace.", true);
     }
   }
 
@@ -104,8 +133,8 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
       return;
     }
     await client.setCurrentWorkspace(workspaceId);
-    setMessage("Current workspace updated.");
-    await refreshBuilder();
+    showMessage("Current workspace updated.");
+    await refreshWorkspaces();
   }
 
   async function deleteWorkspace(workspaceId: string) {
@@ -113,15 +142,15 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
       return;
     }
     await client.deleteWorkspace(workspaceId);
-    setMessage("Workspace deleted.");
-    await refreshBuilder();
+    showMessage("Workspace deleted.");
+    await refreshWorkspaces();
   }
 
   async function saveGitAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    showMessage("");
     if (!gitName.trim()) {
-      setMessage("Credential name is required.");
+      showMessage("Credential name is required.", true);
       return;
     }
     try {
@@ -135,10 +164,10 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
       setGitHost("");
       setGitUsername("");
       setGitToken("");
-      setMessage("Builder Git access credential saved.");
-      await refreshBuilder();
+      showMessage("Builder Git access credential saved.");
+      await refreshSettings();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save Git access.");
+      showMessage(error instanceof Error ? error.message : "Could not save Git access.", true);
     }
   }
 
@@ -150,13 +179,13 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   }
 
   async function deleteGitCredential(name: string) {
-    setMessage("");
+    showMessage("");
     try {
       await client.deleteBuilderGitAccess(name);
-      setMessage(`Deleted Git access credential ${name}.`);
-      await refreshBuilder();
+      showMessage(`Deleted Git access credential ${name}.`);
+      await refreshSettings();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not delete Git access.");
+      showMessage(error instanceof Error ? error.message : "Could not delete Git access.", true);
     }
   }
 
@@ -180,25 +209,31 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     if (!file) {
       return;
     }
-    setMessage("");
+    showMessage("");
     try {
       const text = await file.text();
       const contentType = file.name.toLowerCase().endsWith(".json")
         ? "application/json"
         : "application/yaml";
       await client.putBuilderCatalog(text, contentType);
-      setMessage("Build catalog uploaded.");
-      await refreshBuilder();
+      showMessage("Build catalog uploaded.");
+      await refreshSettings();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not upload build catalog.");
+      showMessage(error instanceof Error ? error.message : "Could not upload build catalog.", true);
     }
   }
 
   async function submitBuild(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const job = await client.submitBuild({ targetName: buildTarget, imageTag });
-    setLatestJob(job);
-    setMessage("Build submitted.");
+    showMessage("");
+    try {
+      const job = await client.submitBuild({ targetName: buildTarget, imageTag });
+      setLatestJob(job);
+      showMessage("Build submitted.");
+      await refreshBuild();
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Could not submit build.", true);
+    }
   }
 
   return (
@@ -214,7 +249,9 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
         { label: "Settings", path: "/manage/builder/settings" }
       ]}
     >
-      {message ? <div className="message">{message}</div> : null}
+      {message ? (
+        <div className={messageIsError ? "message message--error" : "message"}>{message}</div>
+      ) : null}
       {isSettingsPath(props.pathname) ? (
         <div className="stack-form">
           <div className="grid-two">

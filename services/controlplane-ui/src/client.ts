@@ -260,14 +260,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
   }
 
   async getCurrentWorkspace(): Promise<Workspace | null> {
-    try {
-      return await this.request("/api/v1/current-workspace");
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        return null;
-      }
-      throw error;
-    }
+    return this.request("/api/v1/current-workspace");
   }
 
   async createWorkspace(request: CreateWorkspaceRequest): Promise<Workspace> {
@@ -338,14 +331,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
   }
 
   async getCurrentBuildStatus(): Promise<Job | null> {
-    try {
-      return await this.request("/api/v1/current-workspace/build-status");
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 404) {
-        return null;
-      }
-      throw error;
-    }
+    return this.request("/api/v1/current-workspace/build-status");
   }
 
   async listRepositories(): Promise<string[]> {

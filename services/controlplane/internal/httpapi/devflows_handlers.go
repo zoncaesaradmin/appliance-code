@@ -398,7 +398,8 @@ func (h *DeveloperWorkflowHandlers) GetCurrentWorkspace(w http.ResponseWriter, r
 	principal, _ := PrincipalFromContext(r.Context())
 	ws, err := h.Devflows.CurrentWorkspace(r.Context(), principal.UserID)
 	if errors.Is(err, devflows.ErrNoCurrentWorkspace) {
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "Current workspace not found", "")
+		// No selection is a normal empty state, not a missing resource.
+		writeJSON(w, http.StatusOK, nil)
 		return
 	}
 	if err != nil {
@@ -451,7 +452,9 @@ func (h *DeveloperWorkflowHandlers) ListCurrentBuildTargets(w http.ResponseWrite
 	principal, _ := PrincipalFromContext(r.Context())
 	targets, err := h.Devflows.ListBuildTargetsForCurrent(r.Context(), principal.UserID)
 	if errors.Is(err, devflows.ErrNoCurrentWorkspace) {
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "Current workspace not found", "")
+		writeJSON(w, http.StatusOK, struct {
+			Items []buildTargetResponse `json:"items"`
+		}{Items: []buildTargetResponse{}})
 		return
 	}
 	if err != nil {
@@ -500,10 +503,9 @@ func (h *DeveloperWorkflowHandlers) CurrentWorkspaceBuildStatus(w http.ResponseW
 	principal, _ := PrincipalFromContext(r.Context())
 	job, err := h.Devflows.CurrentWorkspaceBuildStatus(r.Context(), principal.UserID)
 	switch {
-	case errors.Is(err, devflows.ErrNoCurrentWorkspace):
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "Current workspace not found", "")
-	case errors.Is(err, storage.ErrNotFound):
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "Current workspace build status not found", "")
+	case errors.Is(err, devflows.ErrNoCurrentWorkspace), errors.Is(err, storage.ErrNotFound):
+		// No current workspace or no build yet is an empty state.
+		writeJSON(w, http.StatusOK, nil)
 	case err != nil:
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 	default:

@@ -798,7 +798,7 @@ func TestDeveloperWorkflowRoutesAbsentWhenBuildCapabilityDisabled(t *testing.T) 
 	}
 }
 
-func TestCurrentWorkspaceBuildStatusNotFoundBeforeBuild(t *testing.T) {
+func TestCurrentWorkspaceBuildStatusEmptyBeforeBuild(t *testing.T) {
 	ts := newTestServer(t)
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
@@ -812,7 +812,40 @@ func TestCurrentWorkspaceBuildStatusNotFoundBeforeBuild(t *testing.T) {
 
 	resp := ts.doJSON(t, "GET", "/api/v1/current-workspace/build-status", token, "")
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("current workspace build status before build = %d, want 404", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("current workspace build status before build = %d, want 200", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(body)); got != "null" {
+		t.Fatalf("build status body = %q, want null", got)
+	}
+}
+
+func TestCurrentWorkspaceEmptyWhenUnset(t *testing.T) {
+	ts := newTestServer(t)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
+	token := ts.login(t, "alice", testPassword)
+
+	resp := ts.doJSON(t, "GET", "/api/v1/current-workspace", token, "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("current workspace status = %d, want 200", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(body)); got != "null" {
+		t.Fatalf("current workspace body = %q, want null", got)
+	}
+
+	targets := ts.doJSON(t, "GET", "/api/v1/current-workspace/build-targets", token, "")
+	defer targets.Body.Close()
+	if targets.StatusCode != http.StatusOK {
+		t.Fatalf("build targets status = %d, want 200", targets.StatusCode)
 	}
 }
