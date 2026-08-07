@@ -85,6 +85,20 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.dnsReadyPort }}
     {{- end }}
+    {{- $inferenceNS := index .Values.networkPolicy.inferenceNamespaceLabel "kubernetes.io/metadata.name" | default "" }}
+    {{- if $inferenceNS }}
+    # Inference gateway proxy for inference-capable profiles.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.inferenceNamespaceLabel | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.inferencePodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.inferencePort }}
+    {{- end }}
     {{- if .Values.hostAgent.enabled }}
     - to:
         - podSelector:

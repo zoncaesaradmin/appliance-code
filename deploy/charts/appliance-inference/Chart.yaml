@@ -1,0 +1,11 @@
+apiVersion: v2
+name: appliance-inference
+description: Hardened local inference runtime (Ollama-compatible) for the Zon appliance.
+type: application
+version: 0.1.0
+appVersion: "0.6.5"
+keywords:
+  - appliance
+  - inference
+  - ollama
+home: https://github.com/zoncaesaradmin/appliance-code

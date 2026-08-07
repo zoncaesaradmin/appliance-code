@@ -1,0 +1,73 @@
+replicaCount: 1
+
+image:
+  repository: registry.local/inference-runtime
+  # Prefer digest pins at install; tag is a schema fallback when digest is empty.
+  tag: "0.6.5"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+namespace:
+  # Default false: zonctl creates and PSA-labels the inference namespace before
+  # Helm runs. Setting create=true is only for standalone helm installs
+  # where the Namespace object should be release-owned.
+  create: false
+  name: inference
+
+service:
+  # ClusterIP for in-cluster control-plane proxy; container listens on 11434.
+  port: 8080
+  targetPort: 11434
+
+persistence:
+  # Prefer hostPath so zonctl models-import can stage verified weights on
+  # the appliance host without PVC surgery. PVC remains available for
+  # advanced installs that set hostPath.enabled=false.
+  hostPath:
+    enabled: true
+    path: /data/zon/inference/models
+  claimName: models
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 50Gi
+
+networkPolicy:
+  enabled: true
+  controlPlaneNamespaceLabel:
+    kubernetes.io/metadata.name: control
+  controlPlanePodLabels:
+    # Matches appliance-control-plane chart selectorLabels:
+    # app.kubernetes.io/name=api-server.
+    app.kubernetes.io/name: api-server
+  # Offline-friendly: allow DNS to kube-system only; no other egress.
+  allowDNSToKubeSystem: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10006
+  runAsGroup: 10006
+  fsGroup: 20000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "4"
+    memory: 8Gi
+
+probes:
+  # Ollama serves HTTP on the runtime port; GET / is used for health.
+  port: 11434
+  path: /
+  startupFailureThreshold: 30
+  startupPeriodSeconds: 2

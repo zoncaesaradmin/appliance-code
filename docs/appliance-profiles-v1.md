@@ -60,6 +60,7 @@ The initial v1 appliance capabilities are:
 | `build` | Build APIs and build service/module behavior |
 | `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by Artifact Server |
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
+| `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`inference`, `builder-inference`) |
 
 Notes:
 
@@ -83,6 +84,8 @@ The initial v1 appliance profiles are:
 | `storage-landns` | No | `base`, `host`, `artifact`, `dns` |
 | `builder-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
 | `builder-storage-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
+| `inference` | No | `base`, `host`, `inference` |
+| `builder-inference` | No | `base`, `host`, `workflows`, `build`, `artifact`, `inference` |
 
 Notes:
 
@@ -123,6 +126,7 @@ The v1 dependency set is:
 | `build` | `base`, `workflows`, `artifact` |
 | `artifact` | `base` |
 | `dns` | `base` |
+| `inference` | `base` |
 
 Rules:
 

@@ -17,6 +17,8 @@ const (
 	ProfileStorageLANDNS        Profile = "storage-landns"
 	ProfileBuilderLANDNS        Profile = "builder-landns"
 	ProfileBuilderStorageLANDNS Profile = "builder-storage-landns"
+	ProfileInference            Profile = "inference"
+	ProfileBuilderInference     Profile = "builder-inference"
 )
 
 // Capability is the implementation-facing appliance capability name resolved
@@ -30,6 +32,7 @@ const (
 	CapabilityBuild     Capability = "build"
 	CapabilityArtifact  Capability = "artifact"
 	CapabilityDNS       Capability = "dns"
+	CapabilityInference Capability = "inference"
 )
 
 type capabilityDefinition struct {
@@ -43,6 +46,7 @@ var capabilityCatalog = map[Capability]capabilityDefinition{
 	CapabilityBuild:     {Dependencies: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityArtifact}},
 	CapabilityArtifact:  {Dependencies: []Capability{CapabilityBase}},
 	CapabilityDNS:       {Dependencies: []Capability{CapabilityBase}},
+	CapabilityInference: {Dependencies: []Capability{CapabilityBase}},
 }
 
 type ProfileDefinition struct {
@@ -77,6 +81,8 @@ var builtInProfileCatalog = ProfileCatalog{
 	// builder ∪ storage ∪ registry ∪ dns — same capability union as
 	// builder-landns (storage/registry add no capabilities beyond builder).
 	ProfileBuilderStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS}},
+	ProfileInference:            {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityInference}},
+	ProfileBuilderInference:     {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference}},
 }
 
 func BuiltInProfileCatalog() ProfileCatalog {

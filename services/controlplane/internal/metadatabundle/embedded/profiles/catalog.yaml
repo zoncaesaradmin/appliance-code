@@ -27,3 +27,11 @@ profiles:
     displayName: builder-storage-landns
     description: "Built-in appliance profile."
     capabilities: [base, host, workflows, build, artifact, dns]
+  inference:
+    displayName: inference
+    description: "Local LLM inference API without builder."
+    capabilities: [base, host, inference]
+  builder-inference:
+    displayName: builder-inference
+    description: "Builder plus local LLM inference API."
+    capabilities: [base, host, workflows, build, artifact, inference]

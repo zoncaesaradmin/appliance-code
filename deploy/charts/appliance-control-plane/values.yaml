@@ -97,6 +97,9 @@ config:
   # startup when this is empty so the appliance never reports dns-capable
   # while the LAN DNS release is missing.
   dnsReadyURL: ""
+  # OpenAI-compatible inference gateway base URL (no path). Inference
+  # profiles (inference, builder-inference) fail closed when empty.
+  inferenceGatewayBaseURL: ""
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.
@@ -260,6 +263,11 @@ networkPolicy:
   dnsNamespaceLabel: {}
   dnsPodLabels: {}
   dnsReadyPort: 8181
+  # Populated by zonctl for inference-capable profiles so CP can proxy
+  # OpenAI-compatible traffic to the inference gateway. Left empty when off.
+  inferenceNamespaceLabel: {}
+  inferencePodLabels: {}
+  inferencePort: 8080
   hostAgentPort: 8080
 
 probes:

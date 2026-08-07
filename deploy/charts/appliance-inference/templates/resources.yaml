@@ -1,0 +1,155 @@
+{{- if not .Values.persistence.hostPath.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.persistence.claimName }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  {{- if .Values.persistence.storageClassName }}
+  storageClassName: {{ .Values.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "appliance-inference.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: openai
+      port: {{ .Values.service.port }}
+      targetPort: runtime
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "appliance-inference.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-inference.selectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: inference-runtime
+          image: {{ include "appliance-inference.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: runtime
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+            - name: OLLAMA_MODELS
+              value: "/models"
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: runtime
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: runtime
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.path }}
+              port: runtime
+            failureThreshold: {{ .Values.probes.startupFailureThreshold }}
+            periodSeconds: {{ .Values.probes.startupPeriodSeconds }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+            - name: ollama-home
+              mountPath: /home/ollama
+      volumes:
+        - name: models
+          {{- if .Values.persistence.hostPath.enabled }}
+          hostPath:
+            path: {{ .Values.persistence.hostPath.path | quote }}
+            type: DirectoryOrCreate
+          {{- else }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.claimName }}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        - name: ollama-home
+          emptyDir: {}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}-default-deny
+  namespace: {{ include "appliance-inference.namespace" . }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}-allow
+  namespace: {{ include "appliance-inference.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "appliance-inference.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.controlPlaneNamespaceLabel | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.controlPlanePodLabels | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.service.targetPort }}}
+        - {protocol: TCP, port: {{ .Values.service.port }}}
+  egress:
+    {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    {{- else }}
+    []
+    {{- end }}
+{{- end }}

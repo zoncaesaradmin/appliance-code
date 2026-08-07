@@ -88,6 +88,10 @@ const (
 	// name/IP to a remote DNS appliance via POST /api/v1/dns/publish.
 	PermDNSPublish = "dns.publish"
 
+	PermInferenceUse        = "inference.use"
+	PermInferenceModelsRead = "inference.models.read"
+	PermInferenceAdmin      = "inference.admin"
+
 	PermMCPInvoke = "mcp.invoke"
 
 	PermSystemRead    = "system.read"
@@ -161,6 +165,10 @@ var AllPermissions = []storage.Permission{
 	{Name: PermDNSRecordsRegister, Description: "Register or renew owned LAN DNS A records"},
 	{Name: PermDNSPublish, Description: "Publish this appliance's DNS name and IP to a remote DNS appliance"},
 
+	{Name: PermInferenceUse, Description: "Call inference chat and completion APIs"},
+	{Name: PermInferenceModelsRead, Description: "List available inference models"},
+	{Name: PermInferenceAdmin, Description: "Manage inference runtime and model packs"},
+
 	{Name: PermMCPInvoke, Description: "Invoke MCP tools"},
 
 	{Name: PermSystemRead, Description: "Read system status and version"},
@@ -211,6 +219,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermJobsReadSelf, PermJobsCancelSelf,
 			PermArtifactsRead, PermArtifactsWrite, PermArtifactsDeleteSelf,
 			PermHostRead, PermOperationsReadSelf,
+			PermInferenceUse, PermInferenceModelsRead,
 			PermMCPInvoke,
 		},
 	},
@@ -223,6 +232,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRead,
+			PermInferenceModelsRead,
 			PermNotificationsRead,
 			PermLicensingRead,
 		},
@@ -238,6 +248,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermOperationsReadSelf,
 			PermDNSRecordsRegister,
 			PermDNSPublish,
+			PermInferenceUse, PermInferenceModelsRead,
 		},
 	},
 }

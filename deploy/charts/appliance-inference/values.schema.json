@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["replicaCount", "image", "service", "persistence"],
+  "properties": {
+    "replicaCount": {"type": "integer", "const": 1},
+    "image": {
+      "type": "object",
+      "required": ["repository", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^$|^sha256:[0-9a-f]{64}$"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          },
+          "required": ["digest"]
+        },
+        {
+          "properties": {
+            "tag": {"type": "string", "minLength": 1}
+          },
+          "required": ["tag"]
+        }
+      ]
+    },
+    "service": {
+      "type": "object",
+      "required": ["port", "targetPort"],
+      "properties": {
+        "port": {"type": "integer", "const": 8080},
+        "targetPort": {"type": "integer", "const": 11434}
+      }
+    },
+    "persistence": {
+      "type": "object",
+      "required": ["claimName", "accessMode", "size"],
+      "properties": {
+        "hostPath": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "path": {"type": "string", "minLength": 1}
+          }
+        },
+        "claimName": {"type": "string", "const": "models"},
+        "storageClassName": {"type": "string"},
+        "accessMode": {"const": "ReadWriteOnce"},
+        "size": {"type": "string", "minLength": 1}
+      }
+    },
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "create": {"type": "boolean"},
+        "name": {"type": "string", "const": "inference"}
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "runAsUser": {"type": "integer", "const": 10006},
+        "runAsGroup": {"type": "integer", "const": 10006},
+        "fsGroup": {"type": "integer", "const": 20000}
+      }
+    }
+  }
+}

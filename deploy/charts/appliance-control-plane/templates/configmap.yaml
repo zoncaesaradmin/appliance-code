@@ -32,6 +32,7 @@ data:
   APPLIANCE_DNS_BOOTSTRAP_HOSTNAME: {{ .Values.config.dnsBootstrapHostname | default "" | quote }}
   APPLIANCE_DNS_BOOTSTRAP_IPV4: {{ .Values.config.dnsBootstrapIPv4 | default "" | quote }}
   APPLIANCE_DNS_ALLOW_FAKE_ZONE_SYNC: {{ .Values.config.dnsAllowFakeZoneSync | default false | quote }}
+  APPLIANCE_INFERENCE_GATEWAY_BASE_URL: {{ .Values.config.inferenceGatewayBaseURL | quote }}
   APPLIANCE_WORKSPACE_ROOT_DIR: {{ .Values.workspaceStorage.rootDir | quote }}
   APPLIANCE_WORKSPACE_CLAIM_NAME: {{ include "appliance-control-plane.workspaceClaimName" . | quote }}
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}

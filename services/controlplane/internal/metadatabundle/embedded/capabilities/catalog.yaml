@@ -47,3 +47,11 @@ capabilities:
       requiredEntitlement: zon.capabilities.dns
     artifacts:
       required: [coredns-image, appliance-dns-chart]
+  inference:
+    displayName: Inference
+    requires: [base, host]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.inference
+    artifacts:
+      required: [inference-runtime-image, appliance-inference-chart]

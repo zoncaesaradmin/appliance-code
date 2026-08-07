@@ -112,6 +112,43 @@ func TestResolveProfile(t *testing.T) {
 		})
 	}
 
+	t.Run("inference", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("inference")
+		if err != nil {
+			t.Fatalf("ResolveProfile(inference): %v", err)
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
+			t.Fatal("inference should enable base")
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityInference) {
+			t.Fatal("inference should enable inference")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+			t.Fatal("inference should not enable build")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+			t.Fatal("inference should not enable artifact")
+		}
+	})
+
+	t.Run("builder-inference", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("builder-inference")
+		if err != nil {
+			t.Fatalf("ResolveProfile(builder-inference): %v", err)
+		}
+		for _, capability := range []appliance.Capability{
+			appliance.CapabilityBase,
+			appliance.CapabilityWorkflows,
+			appliance.CapabilityBuild,
+			appliance.CapabilityArtifact,
+			appliance.CapabilityInference,
+		} {
+			if !resolved.Capabilities.Enabled(capability) {
+				t.Fatalf("builder-inference should enable %q", capability)
+			}
+		}
+	})
+
 	t.Run("unknown", func(t *testing.T) {
 		if _, err := appliance.ResolveProfile("does-not-exist"); err == nil {
 			t.Fatal("ResolveProfile should reject an unknown profile")

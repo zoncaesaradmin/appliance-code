@@ -169,6 +169,29 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 	}
 }
 
+func TestInferenceProfilesRequireInferenceGatewayBaseURL(t *testing.T) {
+	for _, profile := range []string{"inference", "builder-inference"} {
+		t.Run(profile, func(t *testing.T) {
+			cfg := config.Default()
+			cfg.ApplianceProfile = profile
+			cfg.InferenceGatewayBaseURL = ""
+			if profile == "builder-inference" {
+				cfg.ArtifactServerAllowFake = true
+				cfg.BuildCatalog = testBuildCatalog()
+				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			}
+			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "inferenceGatewayBaseURL") {
+				t.Fatalf("Validate without inference gateway URL = %v, want inferenceGatewayBaseURL error", err)
+			}
+			cfg.InferenceGatewayBaseURL = "http://inference-gateway.inference.svc.cluster.local:8080"
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("Validate with inference gateway URL: %v", err)
+			}
+		})
+	}
+}
+
 func TestArtifactProfileAllowsExplicitFakeArtifactServerForLocalTests(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "storage"

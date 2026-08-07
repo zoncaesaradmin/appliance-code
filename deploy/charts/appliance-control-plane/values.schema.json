@@ -154,7 +154,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["builder", "builder-landns", "builder-storage-landns"]
+                "enum": ["builder", "builder-landns", "builder-storage-landns", "builder-inference"]
               }
             },
             "required": [
@@ -183,7 +183,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["builder", "storage", "storage-landns", "builder-landns", "builder-storage-landns"]
+                "enum": ["builder", "storage", "storage-landns", "builder-landns", "builder-storage-landns", "builder-inference"]
               }
             },
             "required": ["applianceProfile"]
@@ -219,6 +219,25 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "applianceProfile": {
+                "enum": ["inference", "builder-inference"]
+              }
+            },
+            "required": ["applianceProfile"]
+          },
+          "then": {
+            "required": ["inferenceGatewayBaseURL"],
+            "properties": {
+              "inferenceGatewayBaseURL": {
+                "type": "string",
+                "pattern": "^https?://[^/]+$"
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -231,7 +250,9 @@
             "landns",
             "storage-landns",
             "builder-landns",
-            "builder-storage-landns"
+            "builder-storage-landns",
+            "inference",
+            "builder-inference"
           ]
         },
         "applianceName": {
@@ -281,6 +302,9 @@
           "type": "boolean"
         },
         "dnsReadyURL": {
+          "type": "string"
+        },
+        "inferenceGatewayBaseURL": {
           "type": "string"
         },
         "dnsZoneName": {

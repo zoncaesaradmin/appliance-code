@@ -1,0 +1,12 @@
+{{- if .Values.namespace.create }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+    # Restricted PSA: no hostNetwork; application containers remain non-root.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+{{- end }}
