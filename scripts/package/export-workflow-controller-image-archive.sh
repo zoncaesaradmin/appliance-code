@@ -22,6 +22,8 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/oci-pull.sh"
 SERVICE_DIR="${REPO_ROOT}/services/workflow-controller"
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-workflows/Chart.yaml"
 
@@ -122,8 +124,7 @@ UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
 # the wrapper build can run with --pull-never instead of depending on a live
 # remote fetch during `buildah bud`.
 retry "${PREFETCH_RETRIES}" \
-  skopeo copy --override-os linux --override-arch amd64 \
-    "docker://${BASE_IMAGE}" "containers-storage:${UPSTREAM_LOCAL_REF}"
+  oci_skopeo_prefetch_docker "${BASE_IMAGE}" "${UPSTREAM_LOCAL_REF}"
 
 make -C "${SERVICE_DIR}" image-local \
   BUILD_ENGINE="buildah bud --pull-never" \

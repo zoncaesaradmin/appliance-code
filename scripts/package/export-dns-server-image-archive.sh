@@ -24,6 +24,8 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/oci-pull.sh"
 SERVICE_DIR="${REPO_ROOT}/services/dns-server"
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-dns/Chart.yaml"
 OUT_FILE=""
@@ -95,8 +97,7 @@ UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
 # Prefetch linux/amd64 upstream into local storage so the wrapper build can
 # use --pull-never (same pattern as the workflow controller wrapper).
 retry "${PREFETCH_RETRIES}" \
-  skopeo copy --override-os linux --override-arch amd64 \
-    "docker://${SOURCE_IMAGE}" "containers-storage:${UPSTREAM_LOCAL_REF}"
+  oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${UPSTREAM_LOCAL_REF}"
 
 make -C "${SERVICE_DIR}" image-local \
   BUILD_ENGINE="buildah bud --pull-never" \
