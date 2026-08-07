@@ -154,7 +154,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["builder", "builder-landns", "builder-storage-landns", "builder-inference"]
+                "enum": ["builder", "builder-landns", "builder-storage-landns", "builder-lanllm", "builder-lanllm-storage-landns"]
               }
             },
             "required": [
@@ -183,7 +183,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["builder", "storage", "storage-landns", "builder-landns", "builder-storage-landns", "builder-inference"]
+                "enum": ["builder", "storage", "storage-landns", "builder-landns", "builder-storage-landns", "builder-lanllm", "builder-lanllm-storage-landns"]
               }
             },
             "required": ["applianceProfile"]
@@ -205,7 +205,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["landns", "storage-landns", "builder-landns", "builder-storage-landns"]
+                "enum": ["landns", "storage-landns", "builder-landns", "builder-storage-landns", "builder-lanllm-storage-landns"]
               }
             },
             "required": ["applianceProfile"]
@@ -224,7 +224,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["inference", "builder-inference"]
+                "enum": ["lanllm", "builder-lanllm", "builder-lanllm-storage-landns"]
               }
             },
             "required": ["applianceProfile"]
@@ -251,8 +251,9 @@
             "storage-landns",
             "builder-landns",
             "builder-storage-landns",
-            "inference",
-            "builder-inference"
+            "lanllm",
+            "builder-lanllm",
+            "builder-lanllm-storage-landns"
           ]
         },
         "applianceName": {

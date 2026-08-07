@@ -98,7 +98,7 @@ config:
   # while the LAN DNS release is missing.
   dnsReadyURL: ""
   # OpenAI-compatible inference gateway base URL (no path). Inference
-  # profiles (inference, builder-inference) fail closed when empty.
+  # profiles (lanllm, builder-lanllm, builder-lanllm-storage-landns) fail closed when empty.
   inferenceGatewayBaseURL: ""
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;

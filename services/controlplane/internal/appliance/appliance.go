@@ -10,15 +10,16 @@ import (
 type Profile string
 
 const (
-	ProfileCore                 Profile = "core"
-	ProfileBuilder              Profile = "builder"
-	ProfileStorage              Profile = "storage"
-	ProfileLANDNS               Profile = "landns"
-	ProfileStorageLANDNS        Profile = "storage-landns"
-	ProfileBuilderLANDNS        Profile = "builder-landns"
-	ProfileBuilderStorageLANDNS Profile = "builder-storage-landns"
-	ProfileInference            Profile = "inference"
-	ProfileBuilderInference     Profile = "builder-inference"
+	ProfileCore                       Profile = "core"
+	ProfileBuilder                    Profile = "builder"
+	ProfileStorage                    Profile = "storage"
+	ProfileLANDNS                     Profile = "landns"
+	ProfileStorageLANDNS              Profile = "storage-landns"
+	ProfileBuilderLANDNS              Profile = "builder-landns"
+	ProfileBuilderStorageLANDNS       Profile = "builder-storage-landns"
+	ProfileLANLLM                     Profile = "lanllm"
+	ProfileBuilderLANLLM              Profile = "builder-lanllm"
+	ProfileBuilderLANLLMStorageLANDNS Profile = "builder-lanllm-storage-landns"
 )
 
 // Capability is the implementation-facing appliance capability name resolved
@@ -81,8 +82,10 @@ var builtInProfileCatalog = ProfileCatalog{
 	// builder ∪ storage ∪ registry ∪ dns — same capability union as
 	// builder-landns (storage/registry add no capabilities beyond builder).
 	ProfileBuilderStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS}},
-	ProfileInference:            {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityInference}},
-	ProfileBuilderInference:     {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference}},
+	ProfileLANLLM:               {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityInference}},
+	ProfileBuilderLANLLM:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference}},
+	// builder ∪ lanllm ∪ storage/registry ∪ landns — full capability union.
+	ProfileBuilderLANLLMStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityInference}},
 }
 
 func BuiltInProfileCatalog() ProfileCatalog {

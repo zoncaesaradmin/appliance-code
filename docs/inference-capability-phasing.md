@@ -1,8 +1,9 @@
 # Inference Capability Phasing
 
 This note captures the rollout split for the optional local LLM inference
-capability. Product naming uses `inference` (not `ai`) for capability,
-profiles, module, API paths, and permissions.
+capability. Implementation naming uses `inference` for capability, module,
+API paths, and permissions. Product-facing profiles use `lanllm` (parallel to
+`landns` for DNS).
 
 ## Decisions (Phase 1)
 
@@ -21,20 +22,23 @@ profiles, module, API paths, and permissions.
 |---|---|---|
 | Capability | `inference` | Local LLM inference APIs exist on this appliance |
 | Module | `inference-runtime` | Cluster service: gateway + inference runtime |
-| Profiles | `inference`, `builder-inference` | Inference-only vs builder ∪ inference |
+| Profiles | `lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns` | Inference-only; builder ∪ inference; full union |
 | Stable in-cluster URL | `http://inference-gateway.inference.svc.cluster.local:8080` | Swap Ollama/vLLM/LiteLLM without changing the control plane |
 | Public API | `/inference/v1/*` (OpenAI-compatible) | External clients; appliance Bearer / `apt_` token |
 | Permissions | `inference.use`, `inference.models.read`, `inference.admin` | Completions; list models; manage packs/runtime |
 
-`builder-inference` = existing `builder` capabilities + `inference`. No new
-landns inference profile variants in Phase 1.
+`lanllm` is the product face for capability `inference` (like `landns` for
+`dns`). `builder-lanllm` = builder ∪ lanllm.
+`builder-lanllm-storage-landns` = builder ∪ storage/registry ∪ landns ∪ lanllm
+(full capability set).
 
 ## Slice A — Capability / profile wiring (no workload yet)
 
 Mirror LAN DNS Phase 1 wiring:
 
-- Add `CapabilityInference = "inference"` and profiles `inference` /
-  `builder-inference` in control-plane and `zonctl` productconfig catalogs
+- Add `CapabilityInference = "inference"` and profiles `lanllm` /
+  `builder-lanllm` / `builder-lanllm-storage-landns` in control-plane and
+  `zonctl` productconfig catalogs
 - Capability deps: `inference` → `base` (and `host` in metadata YAML for
   consistency with dns)
 - Module `inference-runtime`: `ExecutionModeClusterService`, stable `BaseURL`,
@@ -98,12 +102,10 @@ deliver signed model packs outside the main air-gap bundle (Slice C).
 - Cloud model providers / LiteLLM multi-backend (Stable Service URL leaves
   room for later)
 - GPU scheduling policy beyond documenting host requirements
-- New `*-landns` inference profile variants
 
 ## Follow-on (out of Phase 1)
 
 - Module `coding-agent` for workspace coding-agent behavior
-- Optional `builder-inference-landns`
 - LiteLLM or vLLM swap behind `inference-gateway`
 - Minimal appliance UI chat page
 - RAG service + vector store

@@ -112,29 +112,29 @@ func TestResolveProfile(t *testing.T) {
 		})
 	}
 
-	t.Run("inference", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("inference")
+	t.Run("lanllm", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("lanllm")
 		if err != nil {
-			t.Fatalf("ResolveProfile(inference): %v", err)
+			t.Fatalf("ResolveProfile(lanllm): %v", err)
 		}
 		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
-			t.Fatal("inference should enable base")
+			t.Fatal("lanllm should enable base")
 		}
 		if !resolved.Capabilities.Enabled(appliance.CapabilityInference) {
-			t.Fatal("inference should enable inference")
+			t.Fatal("lanllm should enable inference")
 		}
 		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
-			t.Fatal("inference should not enable build")
+			t.Fatal("lanllm should not enable build")
 		}
 		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
-			t.Fatal("inference should not enable artifact")
+			t.Fatal("lanllm should not enable artifact")
 		}
 	})
 
-	t.Run("builder-inference", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("builder-inference")
+	t.Run("builder-lanllm", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("builder-lanllm")
 		if err != nil {
-			t.Fatalf("ResolveProfile(builder-inference): %v", err)
+			t.Fatalf("ResolveProfile(builder-lanllm): %v", err)
 		}
 		for _, capability := range []appliance.Capability{
 			appliance.CapabilityBase,
@@ -144,7 +144,27 @@ func TestResolveProfile(t *testing.T) {
 			appliance.CapabilityInference,
 		} {
 			if !resolved.Capabilities.Enabled(capability) {
-				t.Fatalf("builder-inference should enable %q", capability)
+				t.Fatalf("builder-lanllm should enable %q", capability)
+			}
+		}
+	})
+
+	t.Run("builder-lanllm-storage-landns", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("builder-lanllm-storage-landns")
+		if err != nil {
+			t.Fatalf("ResolveProfile(builder-lanllm-storage-landns): %v", err)
+		}
+		for _, capability := range []appliance.Capability{
+			appliance.CapabilityBase,
+			appliance.CapabilityHost,
+			appliance.CapabilityWorkflows,
+			appliance.CapabilityBuild,
+			appliance.CapabilityArtifact,
+			appliance.CapabilityDNS,
+			appliance.CapabilityInference,
+		} {
+			if !resolved.Capabilities.Enabled(capability) {
+				t.Fatalf("builder-lanllm-storage-landns should enable %q", capability)
 			}
 		}
 	})

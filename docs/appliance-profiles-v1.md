@@ -60,7 +60,7 @@ The initial v1 appliance capabilities are:
 | `build` | Build APIs and build service/module behavior |
 | `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by Artifact Server |
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
-| `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`inference`, `builder-inference`) |
+| `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns`) readiness |
 
 Notes:
 
@@ -84,8 +84,9 @@ The initial v1 appliance profiles are:
 | `storage-landns` | No | `base`, `host`, `artifact`, `dns` |
 | `builder-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
 | `builder-storage-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
-| `inference` | No | `base`, `host`, `inference` |
-| `builder-inference` | No | `base`, `host`, `workflows`, `build`, `artifact`, `inference` |
+| `lanllm` | No | `base`, `host`, `inference` |
+| `builder-lanllm` | No | `base`, `host`, `workflows`, `build`, `artifact`, `inference` |
+| `builder-lanllm-storage-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns`, `inference` |
 
 Notes:
 
@@ -104,6 +105,10 @@ Notes:
   product name for builder ∪ storage/registry ∪ dns; both resolve to the
   same capability set because storage/registry are already covered by
   builder's `artifact` capability.
+- `lanllm` is the product-facing profile for the `inference` capability
+  (same naming pattern as `landns` for `dns`). `builder-lanllm` is builder ∪
+  lanllm. `builder-lanllm-storage-landns` is the full union: builder ∪
+  storage/registry ∪ landns ∪ lanllm.
 - The mapping from appliance profiles to appliance capabilities is not a
   permanent public truth table. It is the v1 mapping and may evolve in later
   versions.

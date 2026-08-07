@@ -170,13 +170,20 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 }
 
 func TestInferenceProfilesRequireInferenceGatewayBaseURL(t *testing.T) {
-	for _, profile := range []string{"inference", "builder-inference"} {
+	for _, profile := range []string{"lanllm", "builder-lanllm", "builder-lanllm-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
 			cfg.InferenceGatewayBaseURL = ""
-			if profile == "builder-inference" {
+			switch profile {
+			case "builder-lanllm":
 				cfg.ArtifactServerAllowFake = true
+				cfg.BuildCatalog = testBuildCatalog()
+				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			case "builder-lanllm-storage-landns":
+				cfg.ArtifactServerAllowFake = true
+				cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 				cfg.BuildCatalog = testBuildCatalog()
 				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
