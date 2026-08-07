@@ -106,6 +106,7 @@ export interface ControlPlaneClient {
   listJobs(): Promise<Job[]>;
   getJob(jobId: string): Promise<Job>;
   listJobSteps(jobId: string): Promise<JobStep[]>;
+  cancelJob(jobId: string): Promise<Job>;
   listRepositories(): Promise<string[]>;
   listRepositoryTags(repository: string): Promise<string[]>;
   listRepositoryReferrers(repository: string, digest: string): Promise<RegistryDescriptor[]>;
@@ -352,6 +353,12 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
       `/api/v1/jobs/${encodeURIComponent(jobId)}/steps`
     );
     return response.items || [];
+  }
+
+  async cancelJob(jobId: string): Promise<Job> {
+    return this.request(`/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: "POST"
+    });
   }
 
   async listRepositories(): Promise<string[]> {

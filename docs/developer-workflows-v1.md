@@ -72,7 +72,8 @@ submission.
 - Supported execution modes are `script` and `make`. `script` runs the path in
   `args[0]`, defaulting to `build.sh` when legacy catalogs omit args, with build
   context environment variables such as `TARGET_IMAGE` and `CONTAINERFILE_PATH`.
-  `make` runs `make <args[0]>` with the same structured variables.
+  `make` runs `make <args[0]>` with the same structured variables plus registry
+  push variables when the build targets an image repository.
   Optional catalog `workingDirectory` cds into a repo-relative subdirectory
   first (omit/empty = repo root; do not set `"."`). `args` entries used as
   script paths, and `containerfilePath`, must be clean relative paths inside
@@ -89,6 +90,30 @@ Build workflow pods override builder-image home/cache paths (`HOME`, `GOPATH`,
 `GOCACHE`, `GOMODCACHE`, and related vars) to writable directories under
 `/tmp/appliance-home` so non-root workflow UIDs are not blocked by image ENV
 values such as `/home/devcontainer/go`.
+
+## Registry Push Credentials
+
+Image-producing builds push to the appliance artifact server. The control plane
+injects registry push settings into every build workflow:
+
+- `DEV_REGISTRY` / `SERVICE_IMAGE_REGISTRY` — host from `canonicalOrigin`
+  (for example `test-device-1.appliance.internal`)
+- `SERVICE_IMAGE_REPO` / `SERVICE_IMAGE_NAME` / `SERVICE_IMAGE_TAG` — derived
+  from the catalog `imageRepository` and submitted tag so `make image` and
+  similar targets do not depend on an operator shell environment
+- `DEV_REGISTRY_USER` / `DEV_REGISTRY_TOKEN` — a build-scoped API token minted
+  for the build owner (not the caller's interactive session token), stored in a
+  short-lived Kubernetes Secret in `appliance-builds` and mounted into the
+  workflow via `secretKeyRef`
+- `DEV_REGISTRY_TLS_VERIFY=false` — appliance LAN TLS is not in the builder
+  image trust store; buildah/make need this for push and token fetch
+- `TARGET_IMAGE` — `host/imageRepository:tag` for buildah/script consumers
+
+The temporary API token is revoked and the Secret is deleted when the build
+reaches a terminal state. Registry RBAC still applies: administrators can push
+appliance-wide prefixes; developers are limited to their
+`users/<username>/` and `builds/<username>/` prefixes unless an administrator
+adds an explicit grant.
 
 The build-catalog and API field names keep ForgeLine-compatible keys such as
 `workProfiles`, `workProfile`, and `work_profile`. In user-facing wording, these

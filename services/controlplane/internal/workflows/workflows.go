@@ -66,6 +66,16 @@ type Spec struct {
 	TargetRepository  string
 	TargetTag         string
 
+	// RegistryHost is the public artifact-server registry host (no scheme),
+	// used as DEV_REGISTRY / SERVICE_IMAGE_REGISTRY and as the TARGET_IMAGE
+	// registry prefix. Empty means the workflow does not push to a registry.
+	RegistryHost string
+	// RegistryTLSVerify is "true" or "false" for buildah/make DEV_REGISTRY_TLS_VERIFY.
+	RegistryTLSVerify string
+	// RegistryCredentialSecret is the Kubernetes Secret in the workflow
+	// namespace that holds username and token keys for registry login.
+	RegistryCredentialSecret string
+
 	WorkspaceRootDir   string
 	WorkspaceClaimName string
 	WorkspaceName      string

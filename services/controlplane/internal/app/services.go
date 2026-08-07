@@ -156,6 +156,8 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	workspaceStore := sqlite.NewWorkspaceStore(db)
 	jobStore := sqlite.NewJobStore(db)
 	builderCatalogStore := sqlite.NewBuilderCatalogStore(db)
+	usersSvc := users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial)
+	tokensSvc := tokens.NewService(db, tokenStore, recorder, keyMaterial)
 	var workflowEngine workflows.Engine
 	if buildEnabled {
 		switch cfg.WorkflowEngine {
@@ -204,6 +206,22 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
 			allowedGitHosts, allowedBuilderImages, cfg.BuildDefaultDeadline,
 			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, seedCatalog.SensitiveLogValues()...)
+		registryHost, err := builds.RegistryHostFromOrigin(cfg.CanonicalOrigin)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: deriving registry push host: %w", err)
+		}
+		if err := buildsSvc.ConfigureRegistryPush(builds.RegistryPushConfig{
+			Host:      registryHost,
+			TLSVerify: "false",
+			Namespace: workflowNamespace,
+			Secrets:   secretManager,
+			Tokens:    tokensSvc,
+			Users:     usersSvc,
+		}); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: configuring build registry push: %w", err)
+		}
 		devflowsSvc, err = devflows.NewService(seedCatalog, builderCatalogStore, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceProvisionerImageDigest, cfg.BuilderImageDigest, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
 		if err != nil {
 			db.Close()
@@ -265,9 +283,9 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		IdempotencyStore:   idempotencyStore,
 		WorkspaceStore:     workspaceStore,
 		JobStore:           jobStore,
-		Users:              users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial),
+		Users:              usersSvc,
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
-		Tokens:             tokens.NewService(db, tokenStore, recorder, keyMaterial),
+		Tokens:             tokensSvc,
 		Sessions:           authn.NewSessionService(db, userStore, sessionStore, throttleStore, recorder, keyMaterial, cfg.CanonicalOrigin, SessionAudience),
 		Authz:              authz.NewService(roleStore),
 		RegistryAuthorizer: registryAuthorizer,

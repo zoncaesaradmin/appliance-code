@@ -2391,18 +2391,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current workspace. */
+            /** @description Current workspace, or null when none is selected. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Workspace"];
+                    "application/json": components["schemas"]["Workspace"] | null;
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     setCurrentWorkspace: {
@@ -2444,7 +2443,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Build targets. */
+            /** @description Build targets (empty when no current workspace is selected). */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2457,7 +2456,6 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     submitCurrentWorkspaceBuild: {
@@ -2500,18 +2498,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Latest current-workspace build job. */
+            /** @description Latest current-workspace build job, or null when none exists. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Job"];
+                    "application/json": components["schemas"]["Job"] | null;
                 };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
         };
     };
     listSelfTokens: {

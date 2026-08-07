@@ -305,11 +305,16 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 		if containerfile == "" {
 			containerfile = "Containerfile"
 		}
-		targetImage := spec.TargetRepository + ":" + spec.TargetTag
+		targetImage := targetImageRef(spec)
 		env = append(env,
 			map[string]any{"name": "CONTAINERFILE_PATH", "value": containerfile},
 			map[string]any{"name": "TARGET_IMAGE", "value": targetImage},
 		)
+		registryEnv, err := registryPushEnv(spec)
+		if err != nil {
+			return nil, nil, err
+		}
+		env = append(env, registryEnv...)
 		if strings.TrimSpace(spec.WorkspaceName) != "" && strings.TrimSpace(spec.WorkspaceRepo) != "" {
 			if strings.TrimSpace(spec.WorkspaceRootDir) == "" || strings.TrimSpace(spec.WorkspaceClaimName) == "" {
 				return nil, nil, fmt.Errorf("workflow engine: workspace build requires workspace storage")
@@ -416,6 +421,81 @@ func ensureToolHomeScript() string {
 	return "mkdir -p \"$HOME\" \"$GOPATH\" \"$GOCACHE\" \"$GOMODCACHE\" \"$GOTMPDIR\" \"$XDG_CACHE_HOME\"\n"
 }
 
+func targetImageRef(spec workflows.Spec) string {
+	ref := strings.TrimSpace(spec.TargetRepository) + ":" + strings.TrimSpace(spec.TargetTag)
+	if host := strings.TrimSpace(spec.RegistryHost); host != "" {
+		return host + "/" + ref
+	}
+	return ref
+}
+
+func splitImageRepository(repo string) (imageRepo, imageName string) {
+	repo = strings.Trim(strings.TrimSpace(repo), "/")
+	if repo == "" {
+		return "appliance-images", ""
+	}
+	i := strings.LastIndex(repo, "/")
+	if i < 0 {
+		return "appliance-images", repo
+	}
+	return repo[:i], repo[i+1:]
+}
+
+func envFromSecret(name, secretName, key string) map[string]any {
+	return map[string]any{
+		"name": name,
+		"valueFrom": map[string]any{
+			"secretKeyRef": map[string]any{"name": secretName, "key": key},
+		},
+	}
+}
+
+func registryPushEnv(spec workflows.Spec) ([]map[string]any, error) {
+	secretName := strings.TrimSpace(spec.RegistryCredentialSecret)
+	host := strings.TrimSpace(spec.RegistryHost)
+	if secretName == "" && host == "" {
+		return nil, nil
+	}
+	if secretName == "" || host == "" {
+		return nil, fmt.Errorf("workflow engine: registry push requires both RegistryHost and RegistryCredentialSecret")
+	}
+	tlsVerify := strings.TrimSpace(spec.RegistryTLSVerify)
+	if tlsVerify == "" {
+		tlsVerify = "false"
+	}
+	imageRepo, imageName := splitImageRepository(spec.TargetRepository)
+	if imageName == "" {
+		return nil, fmt.Errorf("workflow engine: target repository is missing an image name")
+	}
+	env := []map[string]any{
+		{"name": "DEV_REGISTRY", "value": host},
+		{"name": "SERVICE_IMAGE_REGISTRY", "value": host},
+		{"name": "DEV_REGISTRY_TLS_VERIFY", "value": tlsVerify},
+		{"name": "SERVICE_IMAGE_REPO", "value": imageRepo},
+		{"name": "SERVICE_IMAGE_NAME", "value": imageName},
+		{"name": "SERVICE_IMAGE_TAG", "value": strings.TrimSpace(spec.TargetTag)},
+		envFromSecret("DEV_REGISTRY_USER", secretName, "username"),
+		envFromSecret("DEV_REGISTRY_TOKEN", secretName, "token"),
+	}
+	return env, nil
+}
+
+func registryLoginScript(spec workflows.Spec) string {
+	if strings.TrimSpace(spec.RegistryCredentialSecret) == "" {
+		return ""
+	}
+	return `if [ -z "${DEV_REGISTRY:-}" ] || [ -z "${DEV_REGISTRY_USER:-}" ] || [ -z "${DEV_REGISTRY_TOKEN:-}" ]; then
+  echo "registry push credentials are incomplete" >&2
+  exit 1
+fi
+tls_flag=""
+case "${DEV_REGISTRY_TLS_VERIFY:-true}" in
+  false|0|no|FALSE|NO) tls_flag="--tls-verify=false" ;;
+esac
+echo "$DEV_REGISTRY_TOKEN" | buildah login $tls_flag --username "$DEV_REGISTRY_USER" --password-stdin "$DEV_REGISTRY"
+`
+}
+
 func buildCommandScript(spec workflows.Spec) (string, error) {
 	if spec.TargetRepository == "" || spec.TargetTag == "" {
 		return "", fmt.Errorf("workflow engine: workflow spec is missing required build fields")
@@ -463,6 +543,17 @@ cd "$WORKING_DIRECTORY"
 	}
 	switch strings.TrimSpace(spec.Execution) {
 	case "", "containerfile":
+		login := registryLoginScript(spec)
+		pushTLS := ""
+		if strings.TrimSpace(spec.RegistryCredentialSecret) != "" {
+			pushTLS = `tls_flag=""
+case "${DEV_REGISTRY_TLS_VERIFY:-true}" in
+  false|0|no|FALSE|NO) tls_flag="--tls-verify=false" ;;
+esac
+`
+			return preamble + login + pushTLS + `buildah bud -f "$CONTAINERFILE_PATH" -t "$TARGET_IMAGE" .
+buildah push $tls_flag "$TARGET_IMAGE"`, nil
+		}
 		return preamble + `buildah bud -f "$CONTAINERFILE_PATH" -t "$TARGET_IMAGE" .
 buildah push "$TARGET_IMAGE"`, nil
 	case "script", "repo_script":
@@ -475,6 +566,8 @@ buildah push "$TARGET_IMAGE"`, nil
 		if firstExecutionArg(spec) == "" {
 			return "", fmt.Errorf("workflow engine: make execution requires one args entry")
 		}
+		// make image (and similar) read DEV_REGISTRY* / SERVICE_IMAGE_* from the
+		// environment; TARGET_IMAGE remains for scripts that prefer it.
 		return preamble + `make "$MAKE_TARGET" TARGET_IMAGE="$TARGET_IMAGE" CONTAINERFILE_PATH="$CONTAINERFILE_PATH"`, nil
 	default:
 		return "", fmt.Errorf("workflow engine: unsupported execution mode %q", spec.Execution)

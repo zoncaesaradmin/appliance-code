@@ -920,6 +920,21 @@ button {
   width: 100%;
 }
 
+.catalog-document-preview {
+  margin: 1rem 0 0;
+  max-height: 28rem;
+  overflow: auto;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1rem 1.1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .secret-panel {
   display: grid;
   gap: 8px;

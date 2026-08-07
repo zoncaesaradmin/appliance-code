@@ -6,6 +6,7 @@ import { navigate } from "../lib/navigate";
 import type {
   BuilderCatalogStatus,
   BuilderGitAccessStatus,
+  BuilderGitCredential,
   BuildTarget,
   Job,
   JobStep,
@@ -50,6 +51,9 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [selectedBuildDetail, setSelectedBuildDetail] = useState<Job | null>(null);
   const [selectedBuildSteps, setSelectedBuildSteps] = useState<JobStep[]>([]);
   const [buildDetailLoading, setBuildDetailLoading] = useState(false);
+  const [selectedWorkspaceDetail, setSelectedWorkspaceDetail] = useState<Workspace | null>(null);
+  const [selectedGitCredentialDetail, setSelectedGitCredentialDetail] =
+    useState<BuilderGitCredential | null>(null);
   const [message, setMessage] = useState("");
   const [messageIsError, setMessageIsError] = useState(false);
   const messageTimerRef = useRef<number | null>(null);
@@ -65,7 +69,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [showSubmitBuildDialog, setShowSubmitBuildDialog] = useState(false);
   const [showGitCredentialDialog, setShowGitCredentialDialog] = useState(false);
   const [gitCredentialDialogMode, setGitCredentialDialogMode] = useState<"add" | "edit">("add");
-  const [catalogDialogMode, setCatalogDialogMode] = useState<"manage" | "upload" | null>(null);
+  const [catalogDialogMode, setCatalogDialogMode] = useState<"view" | "upload" | null>(null);
   const catalogFileRef = useRef<HTMLInputElement>(null);
 
   async function refreshSettings() {
@@ -132,6 +136,8 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
       !showSubmitBuildDialog &&
       !selectedBuildDetail &&
       !buildDetailLoading &&
+      !selectedWorkspaceDetail &&
+      !selectedGitCredentialDetail &&
       catalogDialogMode === null
     ) {
       return;
@@ -142,6 +148,8 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
         closeWorkspaceDialog();
         closeSubmitBuildDialog();
         closeBuildDetailDialog();
+        setSelectedWorkspaceDetail(null);
+        setSelectedGitCredentialDetail(null);
         setCatalogDialogMode(null);
       }
     };
@@ -153,6 +161,8 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     showSubmitBuildDialog,
     selectedBuildDetail,
     buildDetailLoading,
+    selectedWorkspaceDetail,
+    selectedGitCredentialDetail,
     catalogDialogMode
   ]);
 
@@ -380,6 +390,20 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     setBuildDetailLoading(false);
   }
 
+  async function cancelBuildJob(jobId: string) {
+    showMessage("");
+    try {
+      await client.cancelJob(jobId);
+      showMessage("Build cancellation requested.");
+      await refreshBuild();
+      if (selectedBuildDetail?.id === jobId) {
+        await openBuildDetailDialog(jobId);
+      }
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Could not cancel build.", true);
+    }
+  }
+
   return (
     <PageFrame
       title="Builder"
@@ -400,31 +424,43 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
         <div className="stack-form">
           <div className="grid-two">
             <Card title="Build catalog" subtitle="Single appliance catalog document">
-              {catalog?.configured ? (
-                <button
-                  type="button"
-                  className="catalog-status-tile catalog-status-tile--ready"
-                  onClick={() => setCatalogDialogMode("manage")}
-                >
-                  <span className="catalog-status-tile__badge">Added</span>
-                  <span className="catalog-status-tile__title">Catalog is configured</span>
-                  <span className="catalog-status-tile__meta">
-                    Updated {catalog.updatedAt ? formatTimestamp(catalog.updatedAt) : "unknown"}
-                  </span>
-                  <span className="catalog-status-tile__action">Manage</span>
-                </button>
-              ) : (
-                <div className="catalog-status-tile catalog-status-tile--missing">
-                  <span className="catalog-status-tile__badge">Needed</span>
-                  <span className="catalog-status-tile__title">No catalog yet</span>
-                  <span className="catalog-status-tile__meta">
-                    Add a catalog before creating workspaces.
-                  </span>
-                </div>
-              )}
               {!catalog?.configured ? (
-                <EmptyState message="Upload an appliance-native build-catalog.yaml to get started." />
-              ) : null}
+                <EmptyState message="Nothing configured yet. Upload an appliance-native build-catalog.yaml to get started." />
+              ) : (
+                <ResourceList>
+                  <ResourceListRow
+                    ariaLabel="Open catalog details"
+                    onClick={() => setCatalogDialogMode("view")}
+                    columns={[
+                      { key: "name", label: "Catalog", value: "Runtime build catalog" },
+                      {
+                        key: "updated",
+                        label: "Updated",
+                        value: catalog.updatedAt ? formatTimestamp(catalog.updatedAt) : "—"
+                      }
+                    ]}
+                    actionsLabel="Catalog actions"
+                    actions={[
+                      {
+                        id: "view",
+                        label: "View details",
+                        onSelect: () => setCatalogDialogMode("view")
+                      },
+                      {
+                        id: "download",
+                        label: "Download YAML",
+                        onSelect: () => downloadCatalog()
+                      },
+                      {
+                        id: "replace",
+                        label: "Replace catalog",
+                        disabled: catalog.canConfigure === false,
+                        onSelect: () => setCatalogDialogMode("upload")
+                      }
+                    ]}
+                  />
+                </ResourceList>
+              )}
               <div className="button-row">
                 <button
                   className="button button--primary"
@@ -444,23 +480,26 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
               />
             </Card>
             <Card title="Git credentials" subtitle="Named HTTPS credentials for catalog Git servers">
-              <div className="status-box">
-                <strong>Configured credentials</strong>
-                <span>{(gitAccess?.credentials || []).length}</span>
-              </div>
               {(gitAccess?.credentials || []).length === 0 ? (
-                <EmptyState message="No credentials yet. Add one for each catalog Git server." />
+                <EmptyState message="Nothing configured yet. Add a credential for each catalog Git server." />
               ) : (
                 <ResourceList>
                   {(gitAccess?.credentials || []).map((credential) => (
                     <ResourceListRow
                       key={credential.name}
+                      ariaLabel={`Open details for credential ${credential.name}`}
+                      onClick={() => setSelectedGitCredentialDetail(credential)}
                       actionsLabel={`Actions for ${credential.username} on ${credential.host}`}
                       columns={[
                         { key: "username", label: "Username", value: credential.username },
                         { key: "server", label: "Server", value: credential.host }
                       ]}
                       actions={[
+                        {
+                          id: "view",
+                          label: "View details",
+                          onSelect: () => setSelectedGitCredentialDetail(credential)
+                        },
                         {
                           id: "edit",
                           label: "Edit",
@@ -556,31 +595,113 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
               </div>
             </div>
           ) : null}
-          {catalogDialogMode === "manage" ? (
+          {selectedGitCredentialDetail ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={() => setSelectedGitCredentialDetail(null)}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="git-credential-detail-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="git-credential-detail-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Git credential details
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Named HTTPS credential used for catalog Git clones.
+                </p>
+                <div className="detail-list">
+                  <div>
+                    <span>Name</span>
+                    <strong>{selectedGitCredentialDetail.name}</strong>
+                  </div>
+                  <div>
+                    <span>Username</span>
+                    <strong>{selectedGitCredentialDetail.username}</strong>
+                  </div>
+                  <div>
+                    <span>Server</span>
+                    <strong>{selectedGitCredentialDetail.host}</strong>
+                  </div>
+                  <div>
+                    <span>Token</span>
+                    <strong>Stored (not shown)</strong>
+                  </div>
+                </div>
+                <div className="button-row" style={{ marginTop: "1.25rem" }}>
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => setSelectedGitCredentialDetail(null)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => {
+                      const credential = selectedGitCredentialDetail;
+                      setSelectedGitCredentialDetail(null);
+                      editGitCredential(credential.name, credential.host, credential.username);
+                    }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {catalogDialogMode === "view" && catalog?.configured ? (
             <div
               className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
               role="presentation"
               onClick={() => setCatalogDialogMode(null)}
             >
               <div
-                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                className="w-full max-w-3xl rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
                 role="dialog"
                 aria-modal="true"
-                aria-labelledby="catalog-manage-dialog-title"
+                aria-labelledby="catalog-view-dialog-title"
                 onClick={(event) => event.stopPropagation()}
               >
                 <h2
-                  id="catalog-manage-dialog-title"
+                  id="catalog-view-dialog-title"
                   className="m-0 text-xl font-bold tracking-tight text-slate-950"
                 >
-                  Build catalog
+                  Catalog configuration
                 </h2>
-                <p className="mt-2 mb-5 text-sm text-slate-500">
-                  Download the current document, or add a new file to replace it.
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Full runtime build catalog document
+                  {catalog.updatedAt ? ` · updated ${formatTimestamp(catalog.updatedAt)}` : ""}.
                 </p>
-                <div className="catalog-manage-actions">
+                <div className="detail-list">
+                  <div>
+                    <span>Status</span>
+                    <strong>Configured</strong>
+                  </div>
+                  <div>
+                    <span>Content type</span>
+                    <strong>{catalog.contentType || "application/yaml"}</strong>
+                  </div>
+                </div>
+                <pre className="catalog-document-preview">{catalog.document || "—"}</pre>
+                <div className="button-row" style={{ marginTop: "1.25rem" }}>
                   <button
-                    className="button button--primary"
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => setCatalogDialogMode(null)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    className="button"
                     type="button"
                     onClick={() => {
                       downloadCatalog();
@@ -590,19 +711,12 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                     Download YAML
                   </button>
                   <button
-                    className="button"
+                    className="button button--primary"
                     type="button"
-                    disabled={catalog?.canConfigure === false}
+                    disabled={catalog.canConfigure === false}
                     onClick={() => setCatalogDialogMode("upload")}
                   >
-                    Add catalog
-                  </button>
-                  <button
-                    className="button button--ghost"
-                    type="button"
-                    onClick={() => setCatalogDialogMode(null)}
-                  >
-                    Close
+                    Replace catalog
                   </button>
                 </div>
               </div>
@@ -655,12 +769,8 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
       ) : isWorkspacesPath(props.pathname) ? (
         <>
           <Card title="Workspaces" subtitle="Named workspaces for catalog builds">
-            <div className="status-box">
-              <strong>Configured workspaces</strong>
-              <span>{workspaces.length}</span>
-            </div>
             {workspaces.length === 0 ? (
-              <EmptyState message="No workspaces yet. Create one to start builds." />
+              <EmptyState message="Nothing configured yet. Create a workspace to start builds." />
             ) : (
               <ResourceList>
                 {workspaces.map((workspace) => {
@@ -668,6 +778,8 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                   return (
                     <ResourceListRow
                       key={workspace.id}
+                      ariaLabel={`Open details for workspace ${workspace.name}`}
+                      onClick={() => setSelectedWorkspaceDetail(workspace)}
                       actionsLabel={`Actions for workspace ${workspace.name}`}
                       columns={[
                         {
@@ -675,9 +787,15 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                           label: "Workspace",
                           value: isCurrent ? `${workspace.name} (current)` : workspace.name
                         },
-                        { key: "profile", label: "Profile", value: workspace.workProfile }
+                        { key: "profile", label: "Profile", value: workspace.workProfile },
+                        { key: "status", label: "Status", value: workspace.status || "—" }
                       ]}
                       actions={[
+                        {
+                          id: "view",
+                          label: "View details",
+                          onSelect: () => setSelectedWorkspaceDetail(workspace)
+                        },
                         {
                           id: "set-current",
                           label: "Set current",
@@ -702,6 +820,106 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
               </button>
             </div>
           </Card>
+          {selectedWorkspaceDetail ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={() => setSelectedWorkspaceDetail(null)}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="workspace-detail-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="workspace-detail-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Workspace details
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Full workspace record and provisioning state.
+                </p>
+                <div className="detail-list">
+                  <div>
+                    <span>Name</span>
+                    <strong>{selectedWorkspaceDetail.name}</strong>
+                  </div>
+                  <div>
+                    <span>Profile</span>
+                    <strong>{selectedWorkspaceDetail.workProfile}</strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong>{selectedWorkspaceDetail.status}</strong>
+                  </div>
+                  <div>
+                    <span>Current</span>
+                    <strong>
+                      {currentWorkspace?.id === selectedWorkspaceDetail.id ? "Yes" : "No"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Workspace ID</span>
+                    <strong className="break-all">{selectedWorkspaceDetail.id}</strong>
+                  </div>
+                  <div>
+                    <span>Source repo</span>
+                    <strong className="break-all">
+                      {selectedWorkspaceDetail.sourceRepoUrl || "—"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Source ref</span>
+                    <strong>{selectedWorkspaceDetail.sourceRef || "—"}</strong>
+                  </div>
+                  <div>
+                    <span>Created</span>
+                    <strong>{formatTimestamp(selectedWorkspaceDetail.createdAt)}</strong>
+                  </div>
+                  <div>
+                    <span>Updated</span>
+                    <strong>{formatTimestamp(selectedWorkspaceDetail.updatedAt)}</strong>
+                  </div>
+                  {selectedWorkspaceDetail.reasonCode ? (
+                    <div>
+                      <span>Reason</span>
+                      <strong>{selectedWorkspaceDetail.reasonCode}</strong>
+                    </div>
+                  ) : null}
+                  {selectedWorkspaceDetail.errorMessage ? (
+                    <div>
+                      <span>Error</span>
+                      <strong>{selectedWorkspaceDetail.errorMessage}</strong>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="button-row" style={{ marginTop: "1.25rem" }}>
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => setSelectedWorkspaceDetail(null)}
+                  >
+                    Close
+                  </button>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    disabled={currentWorkspace?.id === selectedWorkspaceDetail.id}
+                    onClick={() => {
+                      const workspaceId = selectedWorkspaceDetail.id;
+                      setSelectedWorkspaceDetail(null);
+                      void selectWorkspace(workspaceId);
+                    }}
+                  >
+                    Set current
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {showCreateWorkspace ? (
             <div
               className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
@@ -763,10 +981,6 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
       ) : (
         <>
           <Card title="Builds" subtitle="Submitted builds for this appliance">
-            <div className="status-box">
-              <strong>Submitted builds</strong>
-              <span>{buildJobs.length}</span>
-            </div>
             {buildJobs.length === 0 ? (
               <EmptyState message="No builds yet. Submit one for the current workspace." />
             ) : (
@@ -776,6 +990,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                     key={job.id}
                     ariaLabel={`Open details for submission ${job.id}`}
                     onClick={() => void openBuildDetailDialog(job.id)}
+                    actionsLabel={`Actions for submission ${formatSubmissionId(job.id)}`}
                     columns={[
                       {
                         key: "submission",
@@ -793,6 +1008,20 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                         key: "completed",
                         label: "Completed",
                         value: job.completedAt ? formatTimestamp(job.completedAt) : "—"
+                      }
+                    ]}
+                    actions={[
+                      {
+                        id: "view",
+                        label: "View details",
+                        onSelect: () => void openBuildDetailDialog(job.id)
+                      },
+                      {
+                        id: "cancel",
+                        label: "Cancel",
+                        danger: true,
+                        disabled: job.status !== "running",
+                        onSelect: () => void cancelBuildJob(job.id)
                       }
                     ]}
                   />

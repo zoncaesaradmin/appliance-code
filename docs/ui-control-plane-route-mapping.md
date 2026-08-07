@@ -86,9 +86,11 @@ Useful event names:
 The Builder **Workspaces** tab (`/manage/builder/workspaces`) mirrors the
 Settings Git-credentials card:
 
-- Status tile: configured workspace count
-- One row per workspace (name + profile), with a trailing ⋮ menu for
-  Set current / Delete
+- Card heading, then the workspace list (or an empty-state message when none
+  exist). Current workspace is marked on the matching row as `(current)`.
+- One row per workspace (name + profile + status from the API); row click opens
+  a details dialog
+- Trailing ⋮ menu: View details / Set current / Delete
 - `+ Create workspace` opens a dialog (not an inline form); success closes the
   dialog and refreshes the list
 
@@ -96,12 +98,24 @@ Settings Git-credentials card:
 
 The Builder **Build** tab (`/manage/builder`) uses the same card pattern:
 
-- Status tile: submitted build count
+- Card heading, then the build list (or an empty-state message when none exist)
 - One row per build job (submission ID, target, status, submitted time,
   completed time); clicking a row opens a details dialog that loads
   `GET /api/v1/jobs/{jobId}` and `GET /api/v1/jobs/{jobId}/steps`
+- Trailing ⋮ menu: View details / Cancel (when running)
 - `+ Submit build` opens a dialog for target + image tag against the current
   workspace; success closes the dialog and refreshes `GET /api/v1/jobs`
+
+## Settings list UX
+
+Builder **Settings** (`/manage/builder/settings`) uses the same list pattern:
+
+- Catalog: empty-state when unset; one row when configured; click opens the
+  full document; ⋮ has View details / Download YAML / Replace catalog;
+  `+ Add catalog` opens upload
+- Git credentials: empty-state when none; one row per credential; click opens
+  details; ⋮ has View details / Edit / Delete; `+ Add credential` opens the
+  create dialog
 
 ## Workspace Provisioning Flow
 
@@ -138,14 +152,13 @@ named appliance-side HTTPS Git credentials (one per Git host).
 - Browser users configure both through the Builder **Settings** tab
   (`/manage/builder/settings`).
 - Catalog upload opens an upload dialog that calls `PUT /api/v1/builder/catalog`
-  (YAML or JSON). Download opens a download dialog that uses the `document`
-  field from `GET /api/v1/builder/catalog`. The Settings card is status-only
-  (configured / not configured); download and upload are dialog actions.
-- Credential saves open an add/edit dialog that calls
-  `PUT /api/v1/builder/git-access/{name}`; deletes use
-  `DELETE /api/v1/builder/git-access/{name}`. The Settings card lists one
-  credential per row (username + server columns) with a trailing ⋮ menu for
-  Edit / Delete; the form itself stays dialog-only.
+  (YAML or JSON). Clicking the configured catalog row opens a details dialog
+  with the full document; download uses the `document` field from
+  `GET /api/v1/builder/catalog`.
+- Credential rows are clickable for details; saves open an add/edit dialog that
+  calls `PUT /api/v1/builder/git-access/{name}`; deletes use
+  `DELETE /api/v1/builder/git-access/{name}` from the row ⋮ menu. The form
+  itself stays dialog-only.
 - The control plane stores the catalog in SQLite and each credential as a
   Kubernetes Secret named `git-access-<name>` in `appliance-builds`.
 - Workspace creation returns `412 Precondition Failed` until a catalog is

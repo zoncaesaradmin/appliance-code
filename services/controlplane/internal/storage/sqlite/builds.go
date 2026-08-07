@@ -32,11 +32,13 @@ func (s *BuildStore) Create(ctx context.Context, b storage.Build) error {
 		INSERT INTO builds (
 			id, owner_id, status, source_repo_url, source_commit_sha, containerfile_path,
 			image_repository, image_tag, builder_image_digest, workflow_name, cancel_requested,
-			reason_code, error_message, created_at, updated_at, started_at, completed_at, deadline_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			reason_code, error_message, push_token_id, registry_secret_name,
+			created_at, updated_at, started_at, completed_at, deadline_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		b.ID, b.OwnerID, string(b.Status), b.SourceRepoURL, b.SourceCommitSHA, b.ContainerfilePath,
 		b.ImageRepository, b.ImageTag, b.BuilderImageDigest, nullableString(b.WorkflowName), boolToInt(b.CancelRequested),
 		nullableString(b.ReasonCode), nullableString(b.ErrorMessage),
+		nullableString(b.PushTokenID), nullableString(b.RegistrySecretName),
 		b.CreatedAt.Format(time.RFC3339Nano), b.UpdatedAt.Format(time.RFC3339Nano),
 		formatTimePtr(b.StartedAt), formatTimePtr(b.CompletedAt), b.DeadlineAt.Format(time.RFC3339Nano),
 	)
@@ -59,13 +61,15 @@ func formatTimePtr(t *time.Time) any {
 const selectBuildColumns = `
 	id, owner_id, status, source_repo_url, source_commit_sha, containerfile_path,
 	image_repository, image_tag, builder_image_digest, workflow_name, cancel_requested,
-	reason_code, error_message, created_at, updated_at, started_at, completed_at, deadline_at`
+	reason_code, error_message, push_token_id, registry_secret_name,
+	created_at, updated_at, started_at, completed_at, deadline_at`
 
 func scanBuild(row interface{ Scan(dest ...any) error }) (storage.Build, error) {
 	var (
 		b                                      storage.Build
 		status                                 string
 		workflowName, reasonCode, errorMessage sql.NullString
+		pushTokenID, registrySecretName        sql.NullString
 		cancelRequested                        int
 		createdAt, updatedAt, deadlineAt       string
 		startedAt, completedAt                 sql.NullString
@@ -73,7 +77,8 @@ func scanBuild(row interface{ Scan(dest ...any) error }) (storage.Build, error) 
 	if err := row.Scan(
 		&b.ID, &b.OwnerID, &status, &b.SourceRepoURL, &b.SourceCommitSHA, &b.ContainerfilePath,
 		&b.ImageRepository, &b.ImageTag, &b.BuilderImageDigest, &workflowName, &cancelRequested,
-		&reasonCode, &errorMessage, &createdAt, &updatedAt, &startedAt, &completedAt, &deadlineAt,
+		&reasonCode, &errorMessage, &pushTokenID, &registrySecretName,
+		&createdAt, &updatedAt, &startedAt, &completedAt, &deadlineAt,
 	); err != nil {
 		return storage.Build{}, err
 	}
@@ -83,6 +88,8 @@ func scanBuild(row interface{ Scan(dest ...any) error }) (storage.Build, error) 
 	b.CancelRequested = cancelRequested != 0
 	b.ReasonCode = reasonCode.String
 	b.ErrorMessage = errorMessage.String
+	b.PushTokenID = pushTokenID.String
+	b.RegistrySecretName = registrySecretName.String
 
 	var err error
 	if b.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt); err != nil {

@@ -78,6 +78,7 @@ type Service struct {
 	workspaceRootDir     string
 	workspaceClaimName   string
 	builderGit           *buildergit.Service
+	registryPush         *RegistryPushConfig
 }
 
 func (s *Service) SetAllowedGitHosts(hosts []string) {
@@ -235,6 +236,10 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		}}
 	}
 
+	if err := s.provisionRegistryPush(ctx, actor, &build); err != nil {
+		return storage.Build{}, err
+	}
+
 	err = s.db.WithTx(ctx, func(ctx context.Context) error {
 		if err := s.builds.Create(ctx, build); err != nil {
 			return err
@@ -251,11 +256,12 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		})
 	})
 	if err != nil {
+		s.cleanupRegistryPush(ctx, build)
 		return storage.Build{}, err
 	}
 
 	workflowName := "build-" + build.ID
-	submitErr := s.engine.Submit(ctx, workflows.Spec{
+	spec := workflows.Spec{
 		Name: workflowName, Kind: workflows.KindBuild,
 		SourceRepoURL: build.SourceRepoURL, SourceCommitSHA: build.SourceCommitSHA,
 		Execution: req.Execution, Args: req.Args, WorkingDirectory: req.WorkingDirectory,
@@ -266,9 +272,12 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		KnownHostsSecret: req.KnownHostsSecret, Deadline: build.DeadlineAt,
 		WorkspaceRootDir: s.workspaceRootDir, WorkspaceClaimName: s.workspaceClaimName,
 		WorkspaceName: req.WorkspaceName, WorkspaceRepo: req.WorkspaceRepo,
-	})
+	}
+	s.applyRegistryPushSpec(&spec, build)
+	submitErr := s.engine.Submit(ctx, spec)
 	completedAt := time.Now().UTC()
 	if submitErr != nil {
+		s.cleanupRegistryPush(ctx, build)
 		redactedErr := s.redact(submitErr.Error())
 		_ = s.builds.UpdateStatus(ctx, build.ID, storage.BuildStatusFailed, "workflow_submit_failed", redactedErr, nil, &completedAt)
 		build.Status = storage.BuildStatusFailed
@@ -388,6 +397,7 @@ func (s *Service) reconcile(ctx context.Context, b storage.Build) (storage.Build
 			return storage.Build{}, err
 		}
 		b.Status, b.ReasonCode, b.ErrorMessage, b.CompletedAt = storage.BuildStatusTimedOut, "deadline_exceeded", "build exceeded its deadline", &now
+		s.cleanupRegistryPush(ctx, b)
 		return b, nil
 	}
 
@@ -405,6 +415,7 @@ func (s *Service) reconcile(ctx context.Context, b storage.Build) (storage.Build
 			return storage.Build{}, err
 		}
 		b.Status, b.ReasonCode, b.ErrorMessage, b.CompletedAt = storage.BuildStatusFailed, "workflow_not_found", "workflow was not found", &now
+		s.cleanupRegistryPush(ctx, b)
 		return b, nil
 	}
 	if err != nil {
@@ -417,6 +428,7 @@ func (s *Service) reconcile(ctx context.Context, b storage.Build) (storage.Build
 			return storage.Build{}, err
 		}
 		b.Status, b.CompletedAt = storage.BuildStatusSucceeded, &now
+		s.cleanupRegistryPush(ctx, b)
 	case workflows.PhaseFailed:
 		final, reason := storage.BuildStatusFailed, "build_failed"
 		if b.CancelRequested {
@@ -427,6 +439,7 @@ func (s *Service) reconcile(ctx context.Context, b storage.Build) (storage.Build
 			return storage.Build{}, err
 		}
 		b.Status, b.ReasonCode, b.ErrorMessage, b.CompletedAt = final, reason, redactedMessage, &now
+		s.cleanupRegistryPush(ctx, b)
 	case workflows.PhaseRunning:
 		if b.Status != storage.BuildStatusRunning {
 			if err := s.builds.UpdateStatus(ctx, b.ID, storage.BuildStatusRunning, "", "", &now, nil); err != nil {

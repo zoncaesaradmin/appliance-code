@@ -46,6 +46,8 @@ type Build struct {
 	CancelRequested    bool
 	ReasonCode         string
 	ErrorMessage       string
+	PushTokenID        string
+	RegistrySecretName string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	StartedAt          *time.Time

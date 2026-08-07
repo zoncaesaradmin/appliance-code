@@ -553,6 +553,21 @@ export class MockControlPlaneClient {
     ];
   }
 
+  async cancelJob(jobId: string): Promise<Job> {
+    const job = await this.getJob(jobId);
+    const cancelled = {
+      ...job,
+      status: "cancelled",
+      updatedAt: now(),
+      completedAt: now()
+    };
+    if (mockState.latestJob?.id === jobId) {
+      mockState.latestJob = cancelled;
+    }
+    mockState.jobs = mockState.jobs.map((item) => (item.id === jobId ? cancelled : item));
+    return cancelled;
+  }
+
   async listRepositories(): Promise<string[]> {
     return mockState.repositories;
   }

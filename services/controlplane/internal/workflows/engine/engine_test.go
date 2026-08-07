@@ -284,6 +284,54 @@ func TestSubmitCreatesWorkspacePrepareWorkflowMultiHost(t *testing.T) {
 	}
 }
 
+func TestSubmitCreatesMakeTargetWorkflowWithRegistryPush(t *testing.T) {
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
+		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
+		Execution: "make", Args: []string{"image"}, WorkingDirectory: "services/controlplane", ContainerfilePath: "Containerfile",
+		BuilderImageDigest:       "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		TargetRepository:         "appliance-images/appliance-control-plane",
+		TargetTag:                "v1",
+		RegistryHost:             "test-device-1.appliance.internal",
+		RegistryTLSVerify:        "false",
+		RegistryCredentialSecret: "build-registry-1",
+		Deadline:                 time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	text := workflowJSON(t, got)
+	for _, want := range []string{
+		"DEV_REGISTRY", "SERVICE_IMAGE_REGISTRY", "SERVICE_IMAGE_REPO", "SERVICE_IMAGE_NAME", "SERVICE_IMAGE_TAG",
+		"DEV_REGISTRY_USER", "DEV_REGISTRY_TOKEN", "DEV_REGISTRY_TLS_VERIFY",
+		"test-device-1.appliance.internal", "appliance-images", "appliance-control-plane",
+		"build-registry-1", "secretKeyRef",
+		"test-device-1.appliance.internal/appliance-images/appliance-control-plane:v1",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("registry push workflow JSON missing %q: %s", want, text)
+		}
+	}
+}
+
+func TestSubmitCreatesContainerfileWorkflowWithRegistryLogin(t *testing.T) {
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
+		Name: "build-1", SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
+		ContainerfilePath: "Containerfile", BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		TargetRepository: "users/alice/app", TargetTag: "v1",
+		RegistryHost: "registry.example.internal", RegistryTLSVerify: "false", RegistryCredentialSecret: "build-registry-1",
+		Deadline: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	command := workflowCommand(t, got)
+	for _, want := range []string{"buildah login", "buildah push $tls_flag", "--tls-verify=false"} {
+		if !strings.Contains(command, want) {
+			t.Fatalf("containerfile registry command missing %q: %s", want, command)
+		}
+	}
+}
+
 func TestSubmitWorkspacePrepareRequiresGitCredential(t *testing.T) {
 	_, err := workflowObject("appliance-builds", "", "", workflows.Spec{
 		Name:               "workspace-prepare-missing-git",
