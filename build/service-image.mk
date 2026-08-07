@@ -14,6 +14,8 @@
 #
 # Auth/TLS (same as make dev-shell):
 #   DEV_REGISTRY_USER / DEV_REGISTRY_TOKEN / DEV_REGISTRY_TLS_VERIFY
+#   When TLS verify is false, --tls-verify=false is passed to buildah bud
+#   (LAN FROM pulls), login, and push.
 #
 # Do not reuse DEV_IMAGE_NAME/REPO — those name development-container/dev-build.
 
@@ -65,7 +67,7 @@ SERVICE_IMAGE_EXTRA_BUILD_ARGS ?=
 
 ## image-local: build this service image into local storage (no push)
 image-local:
-	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
+	$(BUILD_ENGINE) $(SERVICE_IMAGE_TLS_FLAG) $(BUILD_CACHE_FLAGS) \
 		$(SERVICE_IMAGE_BUILD_ARGS) \
 		$(SERVICE_IMAGE_EXTRA_BUILD_ARGS) \
 		-f $(SERVICE_IMAGE_CONTAINERFILE) \
@@ -84,7 +86,7 @@ image:
 		echo "  export DEV_REGISTRY_TOKEN=<registry-token>" >&2; \
 		exit 1; \
 	fi
-	$(BUILD_ENGINE) $(BUILD_CACHE_FLAGS) \
+	$(BUILD_ENGINE) $(SERVICE_IMAGE_TLS_FLAG) $(BUILD_CACHE_FLAGS) \
 		$(SERVICE_IMAGE_BUILD_ARGS) \
 		$(SERVICE_IMAGE_EXTRA_BUILD_ARGS) \
 		-f $(SERVICE_IMAGE_CONTAINERFILE) \
