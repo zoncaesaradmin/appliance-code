@@ -115,11 +115,14 @@ named appliance-side HTTPS Git credentials (one per Git host).
 
 - Browser users configure both through the Builder **Settings** tab
   (`/manage/builder/settings`).
-- Catalog upload replaces the whole document via `PUT /api/v1/builder/catalog`
-  (YAML or JSON). Download uses the `document` field from
-  `GET /api/v1/builder/catalog`.
-- Credential saves translate into `PUT /api/v1/builder/git-access/{name}`
-  and deletes into `DELETE /api/v1/builder/git-access/{name}`.
+- Catalog upload opens an upload dialog that calls `PUT /api/v1/builder/catalog`
+  (YAML or JSON). Download opens a download dialog that uses the `document`
+  field from `GET /api/v1/builder/catalog`. The Settings card is status-only
+  (configured / not configured); download and upload are dialog actions.
+- Credential saves open an add/edit dialog that calls
+  `PUT /api/v1/builder/git-access/{name}`; deletes use
+  `DELETE /api/v1/builder/git-access/{name}`. The Settings card is a credential
+  list view (count + rows); the form is dialog-only.
 - The control plane stores the catalog in SQLite and each credential as a
   Kubernetes Secret named `git-access-<name>` in `appliance-builds`.
 - Workspace creation returns `412 Precondition Failed` until a catalog is

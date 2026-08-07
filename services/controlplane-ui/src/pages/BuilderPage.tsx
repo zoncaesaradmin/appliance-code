@@ -49,6 +49,9 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [buildTarget, setBuildTarget] = useState("");
   const [imageTag, setImageTag] = useState("");
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
+  const [showGitCredentialDialog, setShowGitCredentialDialog] = useState(false);
+  const [gitCredentialDialogMode, setGitCredentialDialogMode] = useState<"add" | "edit">("add");
+  const [catalogDialogMode, setCatalogDialogMode] = useState<"manage" | "upload" | null>(null);
   const catalogFileRef = useRef<HTMLInputElement>(null);
 
   async function refreshSettings() {
@@ -100,6 +103,20 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   }, [props.pathname]);
 
   useEffect(() => {
+    if (!showGitCredentialDialog && catalogDialogMode === null) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeGitCredentialDialog();
+        setCatalogDialogMode(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showGitCredentialDialog, catalogDialogMode]);
+
+  useEffect(() => {
     if (latestJob?.status !== "running") {
       return;
     }
@@ -146,6 +163,24 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     await refreshWorkspaces();
   }
 
+  function openAddGitCredential() {
+    setGitCredentialDialogMode("add");
+    setGitName("");
+    setGitHost("");
+    setGitUsername("");
+    setGitToken("");
+    setShowGitCredentialDialog(true);
+  }
+
+  function closeGitCredentialDialog() {
+    setShowGitCredentialDialog(false);
+    setGitCredentialDialogMode("add");
+    setGitName("");
+    setGitHost("");
+    setGitUsername("");
+    setGitToken("");
+  }
+
   async function saveGitAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     showMessage("");
@@ -160,10 +195,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
         username: gitUsername,
         token: gitToken
       });
-      setGitName("");
-      setGitHost("");
-      setGitUsername("");
-      setGitToken("");
+      closeGitCredentialDialog();
       showMessage("Builder Git access credential saved.");
       await refreshSettings();
     } catch (error) {
@@ -171,11 +203,13 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     }
   }
 
-  async function editGitCredential(name: string, host: string, username: string) {
+  function editGitCredential(name: string, host: string, username: string) {
+    setGitCredentialDialogMode("edit");
     setGitName(name);
     setGitHost(host);
     setGitUsername(username);
     setGitToken("");
+    setShowGitCredentialDialog(true);
   }
 
   async function deleteGitCredential(name: string) {
@@ -216,6 +250,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
         ? "application/json"
         : "application/yaml";
       await client.putBuilderCatalog(text, contentType);
+      setCatalogDialogMode(null);
       showMessage("Build catalog uploaded.");
       await refreshSettings();
     } catch (error) {
@@ -256,105 +291,56 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
         <div className="stack-form">
           <div className="grid-two">
             <Card title="Build catalog" subtitle="Single appliance catalog document">
-              <div className="detail-list">
-                <div>
-                  <span>Status</span>
-                  <strong>{catalog?.configured ? "Configured" : "Not configured"}</strong>
+              {catalog?.configured ? (
+                <button
+                  type="button"
+                  className="catalog-status-tile catalog-status-tile--ready"
+                  onClick={() => setCatalogDialogMode("manage")}
+                >
+                  <span className="catalog-status-tile__badge">Added</span>
+                  <span className="catalog-status-tile__title">Catalog is configured</span>
+                  <span className="catalog-status-tile__meta">
+                    Updated {catalog.updatedAt ? formatTimestamp(catalog.updatedAt) : "unknown"}
+                  </span>
+                  <span className="catalog-status-tile__action">Manage</span>
+                </button>
+              ) : (
+                <div className="catalog-status-tile catalog-status-tile--missing">
+                  <span className="catalog-status-tile__badge">Needed</span>
+                  <span className="catalog-status-tile__title">No catalog yet</span>
+                  <span className="catalog-status-tile__meta">
+                    Add a catalog before creating workspaces.
+                  </span>
                 </div>
-                <div>
-                  <span>Updated</span>
-                  <strong>
-                    {catalog?.updatedAt ? formatTimestamp(catalog.updatedAt) : "Never"}
-                  </strong>
-                </div>
-              </div>
+              )}
               {!catalog?.configured ? (
-                <EmptyState message="Upload an appliance-native build-catalog.yaml before creating a workspace. See build-catalog.example.yaml for the schema." />
+                <EmptyState message="Upload an appliance-native build-catalog.yaml to get started." />
               ) : null}
               <div className="button-row">
                 <button
-                  className={catalog?.configured ? "button button--primary" : "button"}
+                  className="button button--primary"
                   type="button"
-                  disabled={!catalog?.configured}
-                  onClick={downloadCatalog}
+                  disabled={catalog?.canConfigure === false}
+                  onClick={() => setCatalogDialogMode("upload")}
                 >
-                  Download YAML
+                  + Add catalog
                 </button>
-                <button
-                  className={
-                    catalog?.canConfigure && !catalog?.configured
-                      ? "button button--primary"
-                      : "button"
-                  }
-                  type="button"
-                  disabled={!catalog?.canConfigure}
-                  onClick={() => catalogFileRef.current?.click()}
-                >
-                  Upload YAML
-                </button>
-                <input
-                  ref={catalogFileRef}
-                  type="file"
-                  accept=".yaml,.yml,.json,application/yaml,text/yaml,application/json"
-                  hidden
-                  onChange={(event) => void uploadCatalog(event)}
-                />
               </div>
+              <input
+                ref={catalogFileRef}
+                type="file"
+                accept=".yaml,.yml,.json,application/yaml,text/yaml,application/json"
+                hidden
+                onChange={(event) => void uploadCatalog(event)}
+              />
             </Card>
-            <Card title="Git credentials" subtitle="Name + server + username + token">
-              <div className="detail-list">
-                <div>
-                  <span>Coverage</span>
-                  <strong>{gitAccess?.configured ? "Complete" : "Incomplete"}</strong>
-                </div>
-                <div>
-                  <span>Required servers</span>
-                  <strong>{gitAccess?.requiredHosts?.join(", ") || "None advertised"}</strong>
-                </div>
-                <div>
-                  <span>Covered servers</span>
-                  <strong>{gitAccess?.coveredHosts?.join(", ") || "None"}</strong>
-                </div>
-                <div>
-                  <span>Missing servers</span>
-                  <strong>{gitAccess?.missingHosts?.join(", ") || "None"}</strong>
-                </div>
+            <Card title="Git credentials" subtitle="Named HTTPS credentials for catalog Git servers">
+              <div className="status-box">
+                <strong>Configured credentials</strong>
+                <span>{(gitAccess?.credentials || []).length}</span>
               </div>
-              <form className="stack-form" onSubmit={saveGitAccess}>
-                <label className="field">
-                  <span>Credential name</span>
-                  <input
-                    value={gitName}
-                    placeholder="MyGitCredential"
-                    onChange={(event) => setGitName(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Git Server</span>
-                  <input
-                    value={gitHost}
-                    placeholder="github.com"
-                    onChange={(event) => setGitHost(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Git username</span>
-                  <input value={gitUsername} onChange={(event) => setGitUsername(event.target.value)} />
-                </label>
-                <label className="field">
-                  <span>Git token</span>
-                  <input
-                    type="password"
-                    value={gitToken}
-                    onChange={(event) => setGitToken(event.target.value)}
-                  />
-                </label>
-                <button className="button button--primary" type="submit">
-                  Save Git access
-                </button>
-              </form>
               {(gitAccess?.credentials || []).length === 0 ? (
-                <EmptyState message="No credentials yet. Save a named credential for each catalog Git server." />
+                <EmptyState message="No credentials yet. Add one for each catalog Git server." />
               ) : (
                 <div className="stack-form">
                   {(gitAccess?.credentials || []).map((credential) => (
@@ -375,12 +361,12 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                         <button
                           className="button"
                           type="button"
-                          onClick={() => void editGitCredential(credential.name, credential.host, credential.username)}
+                          onClick={() => editGitCredential(credential.name, credential.host, credential.username)}
                         >
                           Edit
                         </button>
                         <button
-                          className="button"
+                          className="button button--ghost"
                           type="button"
                           onClick={() => void deleteGitCredential(credential.name)}
                         >
@@ -391,8 +377,179 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
                   ))}
                 </div>
               )}
+              <div className="button-row">
+                <button
+                  className="button button--primary"
+                  type="button"
+                  disabled={gitAccess?.canConfigure === false}
+                  onClick={openAddGitCredential}
+                >
+                  + Add credential
+                </button>
+              </div>
             </Card>
           </div>
+          {showGitCredentialDialog ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={closeGitCredentialDialog}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="git-credential-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="git-credential-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  {gitCredentialDialogMode === "edit" ? "Edit Git credential" : "Add Git credential"}
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Name + server + username + token
+                </p>
+                <form className="stack-form" onSubmit={saveGitAccess}>
+                  <label className="field">
+                    <span>Credential name</span>
+                    <input
+                      value={gitName}
+                      placeholder="MyGitCredential"
+                      onChange={(event) => setGitName(event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Git Server</span>
+                    <input
+                      value={gitHost}
+                      placeholder="github.com"
+                      onChange={(event) => setGitHost(event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Git username</span>
+                    <input
+                      value={gitUsername}
+                      onChange={(event) => setGitUsername(event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Git token</span>
+                    <input
+                      type="password"
+                      value={gitToken}
+                      onChange={(event) => setGitToken(event.target.value)}
+                    />
+                  </label>
+                  <div className="button-row">
+                    <button className="button button--ghost" type="button" onClick={closeGitCredentialDialog}>
+                      Cancel
+                    </button>
+                    <button className="button button--primary" type="submit">
+                      Save credential
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : null}
+          {catalogDialogMode === "manage" ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={() => setCatalogDialogMode(null)}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="catalog-manage-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="catalog-manage-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Build catalog
+                </h2>
+                <p className="mt-2 mb-5 text-sm text-slate-500">
+                  Download the current document, or add a new file to replace it.
+                </p>
+                <div className="catalog-manage-actions">
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => {
+                      downloadCatalog();
+                      setCatalogDialogMode(null);
+                    }}
+                  >
+                    Download YAML
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={catalog?.canConfigure === false}
+                    onClick={() => setCatalogDialogMode("upload")}
+                  >
+                    Add catalog
+                  </button>
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => setCatalogDialogMode(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {catalogDialogMode === "upload" ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={() => setCatalogDialogMode(null)}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="catalog-upload-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="catalog-upload-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Add catalog
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  {catalog?.configured
+                    ? "Uploading a file replaces the current catalog."
+                    : "Choose an appliance-native build-catalog.yaml or JSON file."}
+                </p>
+                <div className="button-row">
+                  <button
+                    className="button button--ghost"
+                    type="button"
+                    onClick={() => setCatalogDialogMode(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => catalogFileRef.current?.click()}
+                  >
+                    Choose file
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : isWorkspacesPath(props.pathname) ? (
         <Card title="Workspaces" subtitle="Current workspace, create, and managed workspace list">
