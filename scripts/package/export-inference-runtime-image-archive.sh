@@ -16,7 +16,7 @@ Options:
   --out-file PATH           Output OCI archive tar. Required.
   --reference-out-file PATH Write the canonical digest reference to PATH.
   --source-image REF        Upstream image to re-export. Default:
-                            ollama/ollama:<chart appVersion>
+                            docker.io/ollama/ollama:<chart appVersion>
   --inference-version VER   Compatibility version. Defaults to chart appVersion.
 EOF
 }
@@ -82,7 +82,7 @@ if [[ -z "${INFERENCE_VERSION}" ]]; then
 fi
 IMAGE_TAG="${INFERENCE_VERSION}"
 if [[ -z "${SOURCE_IMAGE}" ]]; then
-  SOURCE_IMAGE="ollama/ollama:${INFERENCE_VERSION}"
+  SOURCE_IMAGE="docker.io/ollama/ollama:${INFERENCE_VERSION}"
 fi
 
 mkdir -p "$(dirname "${OUT_FILE}")"
