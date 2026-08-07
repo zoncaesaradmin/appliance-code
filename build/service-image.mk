@@ -66,7 +66,20 @@ SERVICE_IMAGE_EXTRA_BUILD_ARGS ?=
 .PHONY: image-local image
 
 ## image-local: build this service image into local storage (no push)
+## Login first when DEV_* credentials are present so LAN FROM bases
+## (offline build-cache) authenticate inside the packaging container.
 image-local:
+	@offline="$(OFFLINE_BUILD)"; \
+	case "$$offline" in 1|true|TRUE|yes|YES|on|ON) offline=1 ;; *) offline=0 ;; esac; \
+	if [ "$$offline" = "1" ]; then \
+		if [ -z "$(SERVICE_IMAGE_REGISTRY)" ] || [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
+			echo "image-local: OFFLINE_BUILD=1 requires DEV_REGISTRY (+ host), DEV_REGISTRY_USER, and DEV_REGISTRY_TOKEN for LAN base pulls" >&2; \
+			exit 1; \
+		fi; \
+	fi; \
+	if [ -n "$(SERVICE_IMAGE_REGISTRY)" ] && [ -n "$(DEV_REGISTRY_USER)" ] && [ -n "$(DEV_REGISTRY_TOKEN)" ]; then \
+		echo "$(DEV_REGISTRY_TOKEN)" | $(ENGINE_BIN) login $(SERVICE_IMAGE_TLS_FLAG) --username "$(DEV_REGISTRY_USER)" --password-stdin $(SERVICE_IMAGE_REGISTRY); \
+	fi
 	$(BUILD_ENGINE) $(SERVICE_IMAGE_TLS_FLAG) $(BUILD_CACHE_FLAGS) \
 		$(SERVICE_IMAGE_BUILD_ARGS) \
 		$(SERVICE_IMAGE_EXTRA_BUILD_ARGS) \
