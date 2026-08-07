@@ -3,11 +3,13 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"appliance-code/services/controlplane/internal/logging"
 	"github.com/zoncaesaradmin/platformkit/ctxutil"
@@ -140,6 +142,41 @@ func TestAPIExchangeLogDoesNotBufferLargeUploadBodies(t *testing.T) {
 	if truncated, _ := request["truncated"].(bool); !truncated {
 		t.Fatalf("request.truncated = %#v, want true", request["truncated"])
 	}
+}
+
+func TestStatusRecorderUnwrapExposesUnderlyingWriter(t *testing.T) {
+	inner := httptest.NewRecorder()
+	wrapped := &statusRecorder{ResponseWriter: inner, status: http.StatusOK}
+	if got := wrapped.Unwrap(); got != inner {
+		t.Fatalf("Unwrap() = %T, want underlying ResponseRecorder", got)
+	}
+
+	logger := mustLogger(t)
+	handler := Chain(APIExchangeLog(logger), AccessLog(logger))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctrl := http.NewResponseController(w)
+		// httptest recorder does not support deadlines; ErrNotSupported proves
+		// ResponseController walked past statusRecorder via Unwrap.
+		err := ctrl.SetReadDeadline(time.Time{})
+		if err == nil {
+			t.Fatal("expected ErrNotSupported from httptest recorder")
+		}
+		if !errors.Is(err, http.ErrNotSupported) {
+			t.Fatalf("SetReadDeadline error = %v, want ErrNotSupported (Unwrap broken?)", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files/probe.bin", nil)
+	handler.ServeHTTP(inner, req)
+}
+
+func mustLogger(t *testing.T) logging.Logger {
+	t.Helper()
+	var buf bytes.Buffer
+	logger, err := logging.NewWithWriter("info", &buf)
+	if err != nil {
+		t.Fatalf("NewWithWriter: %v", err)
+	}
+	return logger
 }
 
 func TestAccessLogSuppressesPublicAPIRequests(t *testing.T) {

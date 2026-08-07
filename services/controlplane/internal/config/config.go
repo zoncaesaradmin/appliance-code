@@ -87,10 +87,14 @@ func Default() Config {
 		DNSConfigMapName:        "dns-server-config",
 		DNSAllowFakeZoneSync:    true,
 		ReadHeaderTimeout:       5 * time.Second,
-		ReadTimeout:             30 * time.Second,
+		// Must cover multi-GB /api/v1/files uploads. Keep this aligned with
+		// FilesTransferTimeout; handlers also extend the connection deadline
+		// via ResponseController (requires middleware Unwrap).
+		ReadTimeout: 30 * time.Minute,
 		// Login verifies Argon2id (64 MiB) before writing a response; under
 		// memory pressure that can exceed a short write deadline and the
 		// browser surfaces a generic NetworkError. Keep headroom for auth.
+		// Large file downloads extend write deadline via ResponseController.
 		WriteTimeout:                   2 * time.Minute,
 		IdleTimeout:                    60 * time.Second,
 		ShutdownTimeout:                30 * time.Second,

@@ -141,6 +141,12 @@ func (s *statusRecorder) Push(target string, opts *http.PushOptions) error {
 	return pusher.Push(target, opts)
 }
 
+// Unwrap lets http.ResponseController see the real connection writer so
+// handlers can extend read/write deadlines (large /api/v1/files uploads).
+func (s *statusRecorder) Unwrap() http.ResponseWriter {
+	return s.ResponseWriter
+}
+
 // AccessLog logs one line per request with method, path, status, duration,
 // and request ID at info level so operators can confirm that the control
 // plane received and answered a request without needing a debug-only build or

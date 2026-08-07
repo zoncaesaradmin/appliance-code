@@ -53,7 +53,10 @@ func (h *ArtifactFileHandlers) Download(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.extendTransferDeadlines(w)
+	if err := h.extendTransferDeadlines(w); err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", path.Base(fullPath)))
 	if contentType := mime.TypeByExtension(filepath.Ext(fullPath)); contentType != "" {
@@ -83,7 +86,10 @@ func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		overwritten = true
 	}
 
-	h.extendTransferDeadlines(w)
+	if err := h.extendTransferDeadlines(w); err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
 	tmpFile, err := os.CreateTemp(filepath.Dir(fullPath), ".upload-*")
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
@@ -135,14 +141,19 @@ func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *ArtifactFileHandlers) extendTransferDeadlines(w http.ResponseWriter) {
+func (h *ArtifactFileHandlers) extendTransferDeadlines(w http.ResponseWriter) error {
 	if h.TransferTimeout <= 0 {
-		return
+		return nil
 	}
 	controller := http.NewResponseController(w)
 	deadline := time.Now().Add(h.TransferTimeout)
-	_ = controller.SetReadDeadline(deadline)
-	_ = controller.SetWriteDeadline(deadline)
+	if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return fmt.Errorf("set read deadline: %w", err)
+	}
+	if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return fmt.Errorf("set write deadline: %w", err)
+	}
+	return nil
 }
 
 func (h *ArtifactFileHandlers) resolvePath(raw string) (string, string, error) {
