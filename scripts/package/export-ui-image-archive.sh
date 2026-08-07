@@ -111,17 +111,6 @@ mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-build_args=()
-if [[ -n "${UI_NODE_IMAGE}" ]]; then
-  build_args+=(--build-arg "UI_NODE_IMAGE=${UI_NODE_IMAGE}")
-fi
-if [[ -n "${UI_GO_IMAGE}" ]]; then
-  build_args+=(--build-arg "UI_GO_IMAGE=${UI_GO_IMAGE}")
-fi
-if [[ -n "${UI_RUNTIME_IMAGE}" ]]; then
-  build_args+=(--build-arg "UI_RUNTIME_IMAGE=${UI_RUNTIME_IMAGE}")
-fi
-
 make -C "${UI_DIR}" image-local \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
@@ -129,7 +118,12 @@ make -C "${UI_DIR}" image-local \
   COMMIT="${COMMIT}" \
   BUILD_TIME="${BUILD_TIME}" \
   BUILD_NO_CACHE=1 \
-  SERVICE_IMAGE_EXTRA_BUILD_ARGS="${build_args[*]}"
+  UI_NODE_IMAGE="${UI_NODE_IMAGE:-}" \
+  UI_GO_IMAGE="${UI_GO_IMAGE:-}" \
+  UI_RUNTIME_IMAGE="${UI_RUNTIME_IMAGE:-}" \
+  UI_WEB_DEPS_IMAGE="${UI_WEB_DEPS_IMAGE:-}" \
+  USE_PREBAKED_NPM="${USE_PREBAKED_NPM:-0}" \
+  RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 python3 "${VERIFY_SCRIPT}" \

@@ -115,7 +115,8 @@ make -C "${SERVICE_DIR}" image-local \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BASE_IMAGE="${UPSTREAM_LOCAL_REF}" \
-  RUNTIME_BASE_IMAGE="${RUNTIME_LOCAL_REF}"
+  RUNTIME_BASE_IMAGE="${RUNTIME_LOCAL_REF}" \
+  RUNTIME_PACKAGES_INSTALLED="${RUNTIME_PACKAGES_INSTALLED:-0}"
 
 # Fail closed if the wrapped binary cannot exec in the final image (classic
 # symptom of copying a glibc-linked upstream binary onto a musl base).

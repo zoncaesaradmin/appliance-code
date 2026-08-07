@@ -129,7 +129,9 @@ make -C "${SERVICE_DIR}" image-local \
   BUILD_ENGINE="buildah bud --pull-never" \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
-  BASE_IMAGE="${UPSTREAM_LOCAL_REF}"
+  BASE_IMAGE="${UPSTREAM_LOCAL_REF}" \
+  RUNTIME_IMAGE="${RUNTIME_IMAGE:-}" \
+  RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 

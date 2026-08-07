@@ -1,20 +1,27 @@
 # syntax=docker/dockerfile:1
 
-FROM docker.io/library/golang:1.26 AS build
+ARG GO_IMAGE=docker.io/library/golang:1.26
+ARG RUNTIME_IMAGE=alpine:3.24.1
+ARG RUNTIME_PREBAKED=0
+
+FROM ${GO_IMAGE} AS build
 WORKDIR /src
 COPY . .
 RUN GOWORK=off CGO_ENABLED=0 go build -o /out/appliance-host-agent ./cmd/appliance-host-agent
 
 ARG RUNTIME_PROFILE=runtime
-FROM alpine:3.24.1
+FROM ${RUNTIME_IMAGE}
 ARG RUNTIME_PROFILE
+ARG RUNTIME_PREBAKED
 RUN set -eux; \
-    apk add --no-cache bash ca-certificates tzdata; \
-    if [ "${RUNTIME_PROFILE}" = "debug" ]; then \
-      apk add --no-cache curl procps; \
-    elif [ "${RUNTIME_PROFILE}" != "runtime" ]; then \
-      echo "unsupported RUNTIME_PROFILE=${RUNTIME_PROFILE}" >&2; \
-      exit 1; \
+    if [ "${RUNTIME_PREBAKED}" != "1" ]; then \
+      apk add --no-cache bash ca-certificates tzdata; \
+      if [ "${RUNTIME_PROFILE}" = "debug" ]; then \
+        apk add --no-cache curl procps; \
+      elif [ "${RUNTIME_PROFILE}" != "runtime" ]; then \
+        echo "unsupported RUNTIME_PROFILE=${RUNTIME_PROFILE}" >&2; \
+        exit 1; \
+      fi; \
     fi; \
     addgroup -S -g 10005 appliance-host-agent; \
     adduser -S -D -H -u 10005 -G appliance-host-agent appliance-host-agent

@@ -52,6 +52,15 @@ SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg COMMIT=$(COMMIT) \
 	--build-arg BUILD_TIME=$(BUILD_TIME) \
 	--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE)
+ifneq ($(strip $(GO_IMAGE)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg GO_IMAGE=$(GO_IMAGE)
+endif
+ifneq ($(strip $(RUNTIME_IMAGE)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_IMAGE=$(RUNTIME_IMAGE)
+endif
+ifneq ($(strip $(RUNTIME_PREBAKED)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_PREBAKED=$(RUNTIME_PREBAKED)
+endif
 
 include $(CURDIR)/../../build/service-image.mk
 

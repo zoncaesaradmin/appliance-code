@@ -34,6 +34,15 @@ endif
 ifneq ($(strip $(UI_RUNTIME_IMAGE)),)
 SERVICE_IMAGE_BUILD_ARGS += --build-arg UI_RUNTIME_IMAGE=$(UI_RUNTIME_IMAGE)
 endif
+ifneq ($(strip $(UI_WEB_DEPS_IMAGE)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg UI_WEB_DEPS_IMAGE=$(UI_WEB_DEPS_IMAGE)
+endif
+ifneq ($(strip $(USE_PREBAKED_NPM)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg USE_PREBAKED_NPM=$(USE_PREBAKED_NPM)
+endif
+ifneq ($(strip $(RUNTIME_PREBAKED)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_PREBAKED=$(RUNTIME_PREBAKED)
+endif
 
 include $(CURDIR)/../../build/service-image.mk
 

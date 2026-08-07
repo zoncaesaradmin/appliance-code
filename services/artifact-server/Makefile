@@ -18,5 +18,8 @@ RUNTIME_BASE_IMAGE ?= debian:bookworm-slim
 SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg BASE_IMAGE=$(BASE_IMAGE) \
 	--build-arg RUNTIME_BASE_IMAGE=$(RUNTIME_BASE_IMAGE)
+ifneq ($(strip $(RUNTIME_PACKAGES_INSTALLED)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_PACKAGES_INSTALLED=$(RUNTIME_PACKAGES_INSTALLED)
+endif
 
 include $(CURDIR)/../../build/service-image.mk

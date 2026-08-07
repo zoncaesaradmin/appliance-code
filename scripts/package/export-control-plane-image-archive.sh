@@ -100,7 +100,10 @@ make -C "${CONTROLPLANE_DIR}" image-local \
   VERSION="${IMAGE_TAG}" \
   COMMIT="${COMMIT}" \
   BUILD_TIME="${BUILD_TIME}" \
-  BUILD_NO_CACHE=1
+  BUILD_NO_CACHE=1 \
+  GO_IMAGE="${GO_IMAGE:-}" \
+  RUNTIME_IMAGE="${RUNTIME_IMAGE:-}" \
+  RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
 rm -f "${OUT_FILE}"
 skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 python3 "${VERIFY_SCRIPT}" \

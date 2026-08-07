@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=ghcr.io/project-zot/zot-linux-amd64:v2.1.8
 # glibc runtime for the dynamically linked upstream binary (see FROM below).
 ARG RUNTIME_BASE_IMAGE=debian:bookworm-slim
+ARG RUNTIME_PACKAGES_INSTALLED=0
 
 FROM ${BASE_IMAGE} AS upstream
 
@@ -20,11 +21,17 @@ FROM ${BASE_IMAGE} AS upstream
 #
 # Bundle export prefetches RUNTIME_BASE_IMAGE into local storage and rebuilds
 # with --pull-never (same as the upstream BASE_IMAGE prefetch).
+# When RUNTIME_PACKAGES_INSTALLED=1 the base already has bash + ca-certificates
+# (appliance-dependencies artifact-server-bases).
 FROM ${RUNTIME_BASE_IMAGE}
+ARG RUNTIME_PACKAGES_INSTALLED
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    if [ "${RUNTIME_PACKAGES_INSTALLED}" != "1" ]; then \
+      apt-get update \
+        && apt-get install -y --no-install-recommends bash ca-certificates \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
 
 # Published upstream image (stacker) places the binary here.
 COPY --from=upstream /usr/local/bin/zot-linux-amd64 /usr/local/bin/artifact-server

@@ -14,5 +14,11 @@ SERVICE_IMAGE_TAG ?= v$(DNS_VERSION)
 BASE_IMAGE ?= registry.k8s.io/coredns/coredns:v$(DNS_VERSION)
 SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg BASE_IMAGE=$(BASE_IMAGE)
+ifneq ($(strip $(RUNTIME_IMAGE)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_IMAGE=$(RUNTIME_IMAGE)
+endif
+ifneq ($(strip $(RUNTIME_PREBAKED)),)
+SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_PREBAKED=$(RUNTIME_PREBAKED)
+endif
 
 include $(CURDIR)/../../build/service-image.mk

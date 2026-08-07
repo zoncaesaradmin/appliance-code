@@ -32,30 +32,29 @@ CONTROL_PLANE_CODE_VERSION := $(shell \
 -include dev-container/env
 
 CONTAINER_ENGINE ?= podman
-# Registry host (or legacy host/repo path). Prefer host-only + DEV_IMAGE_REPO.
-DEV_REGISTRY     ?= ghcr.io/zoncaesaradmin/development-container
-DEV_IMAGE_REPO   ?=
+# Tooling registry: one DEV_* set after mode selection (skill maps ONLINE_* → DEV_*
+# when online). Defaults preserve local `make dev-shell` without a skill config.
+OFFLINE_BUILD ?= 0
+
+DEV_REGISTRY     ?= ghcr.io
+DEV_IMAGE_REPO   ?= zoncaesaradmin/development-container
 DEV_IMAGE_NAME   ?= dev-build
 DEV_IMAGE_TAG    ?= latest
+DEV_REGISTRY_USER ?=
+DEV_REGISTRY_TOKEN ?=
+DEV_REGISTRY_TLS_VERIFY ?= true
+DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
+
+# Explicit DEV_IMAGE= override wins; otherwise build from DEV_* parts.
 ifeq ($(strip $(DEV_IMAGE_REPO)),)
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
 else
 DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
 endif
-# Login host for podman login. Override from the release skill
-# (build_flow.dev_image_pull; host derived from registry/image_repo/image_name/image_tag)
-# so GHCR and LAN registries both work.
-DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
-# TLS verify for outer podman login/pull of the shared dev-container image
-# and for control-plane `make image` push (forwarded into the container).
-# Set false for LAN registries with self-signed / host-mismatch certs.
-DEV_REGISTRY_TLS_VERIFY ?= true
+
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
-# Explicit credentials for dev container registry login/pulls.
-DEV_REGISTRY_USER ?=
-DEV_REGISTRY_TOKEN ?=
 # Rootful Podman is required for `make -C services/controlplane image` to work
 # from inside dev-shell: a rootless outer container has only one, fully
 # consumed user-namespace mapping, so a nested Buildah build inside it
@@ -83,7 +82,7 @@ DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
 # digest; without this, make dev-shell reuses a stale local image forever.
 DEV_ENGINE_PULL_FLAGS += --pull=newer
 endif
-DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG
+DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG OFFLINE_BUILD
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
@@ -528,11 +527,13 @@ dev-registry-login:
 		echo "dev-registry-login: CONTAINER_ENGINE=$(CONTAINER_ENGINE); this helper is for Podman auth files only" >&2; \
 		exit 2; \
 	fi; \
-	if [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
-		echo "dev-registry-login: DEV_REGISTRY_USER and DEV_REGISTRY_TOKEN must both be set (never interactive):" >&2; \
-		echo "  export DEV_REGISTRY_USER=<registry-username>" >&2; \
-		echo "  export DEV_REGISTRY_TOKEN=<registry-token-or-PAT>" >&2; \
-		echo "  # login host: DEV_REGISTRY_HOST=$(DEV_REGISTRY_HOST) (override for LAN registries)" >&2; \
+	if [ -z "$(DEV_REGISTRY)" ] || [ -z "$(DEV_REGISTRY_USER)" ] || [ -z "$(DEV_REGISTRY_TOKEN)" ]; then \
+		echo "dev-registry-login: unified DEV_* tooling credentials are required:" >&2; \
+		echo "  export DEV_REGISTRY=<tooling-registry-host>" >&2; \
+		echo "  export DEV_IMAGE_REPO=<tooling-image-repo>" >&2; \
+		echo "  export DEV_REGISTRY_USER=<username>" >&2; \
+		echo "  export DEV_REGISTRY_TOKEN=<token>" >&2; \
+		echo "  export DEV_REGISTRY_TLS_VERIFY=true|false" >&2; \
 		exit 1; \
 	fi; \
 	login_tls_flag="--tls-verify=true"; \
@@ -548,8 +549,7 @@ dev-registry-auth-check:
 	if [ -f "$(DEV_REGISTRY_AUTH_FILE)" ]; then exit 0; fi; \
 	echo "dev-registry-auth-check: missing Podman auth file: $(DEV_REGISTRY_AUTH_FILE)" >&2; \
 	echo "dev-registry-auth-check: create it once non-interactively with:" >&2; \
-	echo "  export DEV_REGISTRY_USER=<github-username>" >&2; \
-	echo "  export DEV_REGISTRY_TOKEN=<PAT with read:packages>" >&2; \
+	echo "  # export unified DEV_REGISTRY / DEV_REGISTRY_USER / DEV_REGISTRY_TOKEN" >&2; \
 	echo "  make dev-registry-login" >&2; \
 	echo "dev-registry-auth-check: if you already keep credentials elsewhere, set DEV_REGISTRY_AUTH_FILE to that path." >&2; \
 	exit 1
@@ -571,7 +571,7 @@ dev-sudo-setup: dev-registry-auth-check
 		echo "dev-sudo-setup: one-time setup — configuring passwordless sudo + env passthrough for $$podman_path (you may be prompted for your password once)"; \
 		{ \
 			echo "$$(whoami) ALL=(root) NOPASSWD: $$podman_path"; \
-			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG\""; \
+			echo "Defaults:$$(whoami) env_keep += \"DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG OFFLINE_BUILD\""; \
 		} | sudo tee "$(SUDOERS_FILE)" >/dev/null; \
 		sudo chmod 0440 "$(SUDOERS_FILE)"; \
 		if ! sudo visudo -c -f "$(SUDOERS_FILE)" >/dev/null 2>&1; then \
