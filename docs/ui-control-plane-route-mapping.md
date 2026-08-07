@@ -70,7 +70,7 @@ Useful event names:
 | `GET /artifacts` | `artifactPageData` | Session refresh as needed; `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional `GET /api/v1/registry/repositories/{repository}/referrers?digest=...`; `GET /api/v1/registry/grants` when authorized | `200` full HTML registry browser and grant administration page |
 | `POST /artifacts/grants` | `createRegistryGrant` | Session refresh as needed; `POST /api/v1/registry/grants` | `303` redirect to `/artifacts` |
 | `POST /artifacts/grants/delete` | `deleteRegistryGrant` | Session refresh as needed; `DELETE /api/v1/registry/grants/{id}` | `303` redirect to `/artifacts` |
-| `GET /manage/builder` (legacy alias `/manage/builder/builds`) | React `BuilderPage` Build | Loads only build-tab APIs: current workspace, build-targets, build-status | SPA page |
+| `GET /manage/builder` (legacy alias `/manage/builder/builds`) | React `BuilderPage` Build | Loads current workspace, build-targets, and `GET /api/v1/jobs` (build-type rows); row click opens details via `GET /api/v1/jobs/{jobId}` + steps; submit opens a dialog that `POST`s `/api/v1/current-workspace/builds` | SPA page |
 | `GET /manage/builder/workspaces` | React `BuilderPage` Workspaces | Loads work-profiles, workspaces, current-workspace | SPA page |
 | `GET /manage/builder/settings` (legacy alias `/manage/builder/git-access`) | React `BuilderPage` Settings | Loads catalog + git-access only; mutations refresh those two APIs | SPA page |
 | `POST /builder/git-access` | `configureBuilderGitAccess` (legacy UI service) | Session check/refresh as needed; `PUT /api/v1/builder/git-access/{name}` | `303` redirect to `/builder/workspaces` |
@@ -80,6 +80,28 @@ Useful event names:
 | `POST /builder/current-workspace` | `setBuilderCurrentWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/workspaces/delete` | `deleteBuilderWorkspace` | Session check/refresh as needed; `DELETE /api/v1/workspaces/{workspaceId}` | `303` redirect to `/builder/workspaces?workspace_id=new` |
 | `GET /partials/builder/work-profile` | `builderWorkProfilePartial` | Session check/refresh as needed; `GET /api/v1/work-profiles` | `200` HTML partial |
+
+## Workspace list UX
+
+The Builder **Workspaces** tab (`/manage/builder/workspaces`) mirrors the
+Settings Git-credentials card:
+
+- Status tile: configured workspace count
+- One row per workspace (name + profile), with a trailing ⋮ menu for
+  Set current / Delete
+- `+ Create workspace` opens a dialog (not an inline form); success closes the
+  dialog and refreshes the list
+
+## Build list UX
+
+The Builder **Build** tab (`/manage/builder`) uses the same card pattern:
+
+- Status tile: submitted build count
+- One row per build job (submission ID, target, status, submitted time,
+  completed time); clicking a row opens a details dialog that loads
+  `GET /api/v1/jobs/{jobId}` and `GET /api/v1/jobs/{jobId}/steps`
+- `+ Submit build` opens a dialog for target + image tag against the current
+  workspace; success closes the dialog and refreshes `GET /api/v1/jobs`
 
 ## Workspace Provisioning Flow
 
@@ -121,8 +143,9 @@ named appliance-side HTTPS Git credentials (one per Git host).
   (configured / not configured); download and upload are dialog actions.
 - Credential saves open an add/edit dialog that calls
   `PUT /api/v1/builder/git-access/{name}`; deletes use
-  `DELETE /api/v1/builder/git-access/{name}`. The Settings card is a credential
-  list view (count + rows); the form is dialog-only.
+  `DELETE /api/v1/builder/git-access/{name}`. The Settings card lists one
+  credential per row (username + server columns) with a trailing ⋮ menu for
+  Edit / Delete; the form itself stays dialog-only.
 - The control plane stores the catalog in SQLite and each credential as a
   Kubernetes Secret named `git-access-<name>` in `appliance-builds`.
 - Workspace creation returns `412 Precondition Failed` until a catalog is

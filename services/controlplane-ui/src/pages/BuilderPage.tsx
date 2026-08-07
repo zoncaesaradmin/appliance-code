@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
-import { Card, EmptyState, PageFrame } from "../components";
+import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow } from "../components";
 import { client } from "../lib/api";
 import { formatTimestamp } from "../lib/format";
 import { navigate } from "../lib/navigate";
@@ -8,6 +8,7 @@ import type {
   BuilderGitAccessStatus,
   BuildTarget,
   Job,
+  JobStep,
   WorkProfile,
   Workspace
 } from "../types";
@@ -30,6 +31,14 @@ function builderTabPathname(pathname: string): string {
   return pathname;
 }
 
+function formatSubmissionId(jobId: string): string {
+  const trimmed = jobId.trim();
+  if (trimmed.length <= 12) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, 8)}…${trimmed.slice(-4)}`;
+}
+
 export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [profiles, setProfiles] = useState<WorkProfile[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -37,9 +46,13 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [catalog, setCatalog] = useState<BuilderCatalogStatus | null>(null);
   const [gitAccess, setGitAccess] = useState<BuilderGitAccessStatus | null>(null);
   const [targets, setTargets] = useState<BuildTarget[]>([]);
-  const [latestJob, setLatestJob] = useState<Job | null>(null);
+  const [buildJobs, setBuildJobs] = useState<Job[]>([]);
+  const [selectedBuildDetail, setSelectedBuildDetail] = useState<Job | null>(null);
+  const [selectedBuildSteps, setSelectedBuildSteps] = useState<JobStep[]>([]);
+  const [buildDetailLoading, setBuildDetailLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageIsError, setMessageIsError] = useState(false);
+  const messageTimerRef = useRef<number | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceProfile, setWorkspaceProfile] = useState("");
   const [gitName, setGitName] = useState("");
@@ -49,6 +62,7 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   const [buildTarget, setBuildTarget] = useState("");
   const [imageTag, setImageTag] = useState("");
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
+  const [showSubmitBuildDialog, setShowSubmitBuildDialog] = useState(false);
   const [showGitCredentialDialog, setShowGitCredentialDialog] = useState(false);
   const [gitCredentialDialogMode, setGitCredentialDialogMode] = useState<"add" | "edit">("add");
   const [catalogDialogMode, setCatalogDialogMode] = useState<"manage" | "upload" | null>(null);
@@ -76,14 +90,14 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   }
 
   async function refreshBuild() {
-    const [nextCurrent, nextTargets, nextJob] = await Promise.all([
+    const [nextCurrent, nextTargets, nextJobs] = await Promise.all([
       client.getCurrentWorkspace(),
-      client.listBuildTargets(),
-      client.getCurrentBuildStatus()
+      client.listBuildTargets().catch(() => [] as BuildTarget[]),
+      client.listJobs()
     ]);
     setCurrentWorkspace(nextCurrent);
     setTargets(nextTargets);
-    setLatestJob(nextJob);
+    setBuildJobs(nextJobs.filter((job) => job.type === "build"));
   }
 
   async function refreshForPath(pathname: string) {
@@ -99,36 +113,85 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
   }
 
   useEffect(() => {
+    clearMessage();
     void refreshForPath(props.pathname);
   }, [props.pathname]);
 
   useEffect(() => {
-    if (!showGitCredentialDialog && catalogDialogMode === null) {
+    return () => {
+      if (messageTimerRef.current !== null) {
+        window.clearTimeout(messageTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !showGitCredentialDialog &&
+      !showCreateWorkspace &&
+      !showSubmitBuildDialog &&
+      !selectedBuildDetail &&
+      !buildDetailLoading &&
+      catalogDialogMode === null
+    ) {
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeGitCredentialDialog();
+        closeWorkspaceDialog();
+        closeSubmitBuildDialog();
+        closeBuildDetailDialog();
         setCatalogDialogMode(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showGitCredentialDialog, catalogDialogMode]);
+  }, [
+    showGitCredentialDialog,
+    showCreateWorkspace,
+    showSubmitBuildDialog,
+    selectedBuildDetail,
+    buildDetailLoading,
+    catalogDialogMode
+  ]);
 
   useEffect(() => {
-    if (latestJob?.status !== "running") {
+    if (!buildJobs.some((job) => job.status === "running")) {
       return;
     }
     const timer = window.setTimeout(() => {
-      void client.getCurrentBuildStatus().then(setLatestJob);
+      void client.listJobs().then((jobs) => setBuildJobs(jobs.filter((job) => job.type === "build")));
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [latestJob]);
+  }, [buildJobs]);
+
+  function clearMessage() {
+    if (messageTimerRef.current !== null) {
+      window.clearTimeout(messageTimerRef.current);
+      messageTimerRef.current = null;
+    }
+    setMessage("");
+    setMessageIsError(false);
+  }
 
   function showMessage(text: string, isError = false) {
+    if (messageTimerRef.current !== null) {
+      window.clearTimeout(messageTimerRef.current);
+      messageTimerRef.current = null;
+    }
     setMessageIsError(isError);
     setMessage(text);
+    if (!text) {
+      return;
+    }
+    // Success banners dismiss sooner; errors stay a bit longer but still expire.
+    const dismissMs = isError ? 8000 : 4000;
+    messageTimerRef.current = window.setTimeout(() => {
+      messageTimerRef.current = null;
+      setMessage("");
+      setMessageIsError(false);
+    }, dismissMs);
   }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -136,13 +199,23 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     showMessage("");
     try {
       await client.createWorkspace({ name: workspaceName, workProfile: workspaceProfile });
-      setWorkspaceName("");
-      setShowCreateWorkspace(false);
+      closeWorkspaceDialog();
       showMessage("Workspace created and selected.");
       await refreshWorkspaces();
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Could not create workspace.", true);
     }
+  }
+
+  function openCreateWorkspace() {
+    setWorkspaceName("");
+    setWorkspaceProfile(profiles[0]?.name || workspaceProfile);
+    setShowCreateWorkspace(true);
+  }
+
+  function closeWorkspaceDialog() {
+    setShowCreateWorkspace(false);
+    setWorkspaceName("");
   }
 
   async function selectWorkspace(workspaceId: string) {
@@ -262,13 +335,49 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
     event.preventDefault();
     showMessage("");
     try {
-      const job = await client.submitBuild({ targetName: buildTarget, imageTag });
-      setLatestJob(job);
+      await client.submitBuild({ targetName: buildTarget, imageTag });
+      closeSubmitBuildDialog();
       showMessage("Build submitted.");
       await refreshBuild();
     } catch (error) {
       showMessage(error instanceof Error ? error.message : "Could not submit build.", true);
     }
+  }
+
+  function openSubmitBuildDialog() {
+    setBuildTarget(targets[0]?.name || "");
+    setImageTag("");
+    setShowSubmitBuildDialog(true);
+  }
+
+  function closeSubmitBuildDialog() {
+    setShowSubmitBuildDialog(false);
+    setBuildTarget("");
+    setImageTag("");
+  }
+
+  async function openBuildDetailDialog(jobId: string) {
+    showMessage("");
+    setBuildDetailLoading(true);
+    setSelectedBuildDetail(buildJobs.find((job) => job.id === jobId) || null);
+    setSelectedBuildSteps([]);
+    try {
+      const [job, steps] = await Promise.all([client.getJob(jobId), client.listJobSteps(jobId)]);
+      setSelectedBuildDetail(job);
+      setSelectedBuildSteps(steps);
+    } catch (error) {
+      showMessage(error instanceof Error ? error.message : "Could not load build details.", true);
+      setSelectedBuildDetail(null);
+      setSelectedBuildSteps([]);
+    } finally {
+      setBuildDetailLoading(false);
+    }
+  }
+
+  function closeBuildDetailDialog() {
+    setSelectedBuildDetail(null);
+    setSelectedBuildSteps([]);
+    setBuildDetailLoading(false);
   }
 
   return (
@@ -342,40 +451,32 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
               {(gitAccess?.credentials || []).length === 0 ? (
                 <EmptyState message="No credentials yet. Add one for each catalog Git server." />
               ) : (
-                <div className="stack-form">
+                <ResourceList>
                   {(gitAccess?.credentials || []).map((credential) => (
-                    <div className="detail-list" key={credential.name}>
-                      <div>
-                        <span>Name</span>
-                        <strong>{credential.name}</strong>
-                      </div>
-                      <div>
-                        <span>Server</span>
-                        <strong>{credential.host}</strong>
-                      </div>
-                      <div>
-                        <span>Username</span>
-                        <strong>{credential.username}</strong>
-                      </div>
-                      <div className="button-row">
-                        <button
-                          className="button"
-                          type="button"
-                          onClick={() => editGitCredential(credential.name, credential.host, credential.username)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="button button--ghost"
-                          type="button"
-                          onClick={() => void deleteGitCredential(credential.name)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
+                    <ResourceListRow
+                      key={credential.name}
+                      actionsLabel={`Actions for ${credential.username} on ${credential.host}`}
+                      columns={[
+                        { key: "username", label: "Username", value: credential.username },
+                        { key: "server", label: "Server", value: credential.host }
+                      ]}
+                      actions={[
+                        {
+                          id: "edit",
+                          label: "Edit",
+                          onSelect: () =>
+                            editGitCredential(credential.name, credential.host, credential.username)
+                        },
+                        {
+                          id: "delete",
+                          label: "Delete",
+                          danger: true,
+                          onSelect: () => void deleteGitCredential(credential.name)
+                        }
+                      ]}
+                    />
                   ))}
-                </div>
+                </ResourceList>
               )}
               <div className="button-row">
                 <button
@@ -552,152 +653,345 @@ export function BuilderPage(props: { pathname: string }): React.JSX.Element {
           ) : null}
         </div>
       ) : isWorkspacesPath(props.pathname) ? (
-        <Card title="Workspaces" subtitle="Current workspace, create, and managed workspace list">
-          <div className="stack-form">
+        <>
+          <Card title="Workspaces" subtitle="Named workspaces for catalog builds">
             <div className="status-box">
-              <strong>Current workspace</strong>
-              <span>
-                {currentWorkspace
-                  ? `${currentWorkspace.name} · ${currentWorkspace.workProfile} · ${currentWorkspace.status}`
-                  : "None selected"}
-              </span>
+              <strong>Configured workspaces</strong>
+              <span>{workspaces.length}</span>
             </div>
-            <div className="button-row">
-              <button
-                className={showCreateWorkspace ? "button" : "button button--primary"}
-                type="button"
-                onClick={() => setShowCreateWorkspace((open) => !open)}
-              >
-                {showCreateWorkspace ? "Cancel" : "+ Create workspace"}
-              </button>
-            </div>
-            {showCreateWorkspace ? (
-              <form className="stack-form" onSubmit={createWorkspace}>
-                <label className="field">
-                  <span>Workspace name</span>
-                  <input
-                    value={workspaceName}
-                    onChange={(event) => setWorkspaceName(event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Workspace profile</span>
-                  <select
-                    value={workspaceProfile}
-                    onChange={(event) => setWorkspaceProfile(event.target.value)}
-                  >
-                    {profiles.map((profile) => (
-                      <option key={profile.name} value={profile.name}>
-                        {profile.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button className="button button--primary" type="submit">
-                  Create workspace
-                </button>
-              </form>
-            ) : null}
             {workspaces.length === 0 ? (
               <EmptyState message="No workspaces yet. Create one to start builds." />
             ) : (
-              <div className="stack-form">
+              <ResourceList>
                 {workspaces.map((workspace) => {
                   const isCurrent = currentWorkspace?.id === workspace.id;
                   return (
-                    <div className="detail-list" key={workspace.id}>
-                      <div>
-                        <span>Name</span>
-                        <strong>
-                          {workspace.name}
-                          {isCurrent ? " (current)" : ""}
-                        </strong>
-                      </div>
-                      <div>
-                        <span>Profile</span>
-                        <strong>{workspace.workProfile}</strong>
-                      </div>
-                      <div>
-                        <span>Status</span>
-                        <strong>{workspace.status}</strong>
-                      </div>
-                      <div className="button-row">
-                        <button
-                          className="button"
-                          type="button"
-                          disabled={isCurrent}
-                          onClick={() => void selectWorkspace(workspace.id)}
-                        >
-                          Set current
-                        </button>
-                        <button
-                          className="button button--ghost"
-                          type="button"
-                          onClick={() => void deleteWorkspace(workspace.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
+                    <ResourceListRow
+                      key={workspace.id}
+                      actionsLabel={`Actions for workspace ${workspace.name}`}
+                      columns={[
+                        {
+                          key: "name",
+                          label: "Workspace",
+                          value: isCurrent ? `${workspace.name} (current)` : workspace.name
+                        },
+                        { key: "profile", label: "Profile", value: workspace.workProfile }
+                      ]}
+                      actions={[
+                        {
+                          id: "set-current",
+                          label: "Set current",
+                          disabled: isCurrent,
+                          onSelect: () => void selectWorkspace(workspace.id)
+                        },
+                        {
+                          id: "delete",
+                          label: "Delete",
+                          danger: true,
+                          onSelect: () => void deleteWorkspace(workspace.id)
+                        }
+                      ]}
+                    />
                   );
                 })}
-              </div>
+              </ResourceList>
             )}
-          </div>
-        </Card>
-      ) : (
-        <div className="grid-two">
-          <Card title="Submit build" subtitle="Current workspace target selection">
-            <form className="stack-form" onSubmit={submitBuild}>
-              <label className="field">
-                <span>Current workspace</span>
-                <input value={currentWorkspace?.name || "No current workspace"} disabled />
-              </label>
-              <label className="field">
-                <span>Target</span>
-                <select value={buildTarget} onChange={(event) => setBuildTarget(event.target.value)}>
-                  <option value="">Select a build target</option>
-                  {targets.map((target) => (
-                    <option key={target.name} value={target.name}>
-                      {target.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Image tag</span>
-                <input value={imageTag} onChange={(event) => setImageTag(event.target.value)} />
-              </label>
-              <button className="button button--primary" type="submit">
-                Submit build
+            <div className="button-row">
+              <button className="button button--primary" type="button" onClick={openCreateWorkspace}>
+                + Create workspace
               </button>
-            </form>
+            </div>
           </Card>
-          <Card title="Latest build" subtitle="Most recent current-workspace build status">
-            {latestJob ? (
-              <div className="detail-list">
-                <div>
-                  <span>Status</span>
-                  <strong>{latestJob.status}</strong>
+          {showCreateWorkspace ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={closeWorkspaceDialog}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="workspace-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="workspace-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Create workspace
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Name + work profile. The new workspace becomes current.
+                </p>
+                <form className="stack-form" onSubmit={createWorkspace}>
+                  <label className="field">
+                    <span>Workspace name</span>
+                    <input
+                      value={workspaceName}
+                      onChange={(event) => setWorkspaceName(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Workspace profile</span>
+                    <select
+                      value={workspaceProfile}
+                      onChange={(event) => setWorkspaceProfile(event.target.value)}
+                      required
+                    >
+                      {profiles.map((profile) => (
+                        <option key={profile.name} value={profile.name}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="button-row">
+                    <button className="button button--ghost" type="button" onClick={closeWorkspaceDialog}>
+                      Cancel
+                    </button>
+                    <button className="button button--primary" type="submit">
+                      Create workspace
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <Card title="Builds" subtitle="Submitted builds for this appliance">
+            <div className="status-box">
+              <strong>Submitted builds</strong>
+              <span>{buildJobs.length}</span>
+            </div>
+            {buildJobs.length === 0 ? (
+              <EmptyState message="No builds yet. Submit one for the current workspace." />
+            ) : (
+              <ResourceList>
+                {buildJobs.map((job) => (
+                  <ResourceListRow
+                    key={job.id}
+                    ariaLabel={`Open details for submission ${job.id}`}
+                    onClick={() => void openBuildDetailDialog(job.id)}
+                    columns={[
+                      {
+                        key: "submission",
+                        label: "Submission ID",
+                        value: formatSubmissionId(job.id)
+                      },
+                      { key: "target", label: "Target", value: job.targetName || "Unknown" },
+                      { key: "status", label: "Status", value: job.status },
+                      {
+                        key: "submitted",
+                        label: "Submitted",
+                        value: formatTimestamp(job.createdAt)
+                      },
+                      {
+                        key: "completed",
+                        label: "Completed",
+                        value: job.completedAt ? formatTimestamp(job.completedAt) : "—"
+                      }
+                    ]}
+                  />
+                ))}
+              </ResourceList>
+            )}
+            <div className="button-row">
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={!currentWorkspace}
+                onClick={openSubmitBuildDialog}
+              >
+                + Submit build
+              </button>
+            </div>
+            {!currentWorkspace ? (
+              <p className="message" style={{ marginTop: "0.75rem" }}>
+                Select or create a current workspace before submitting a build.
+              </p>
+            ) : null}
+          </Card>
+          {showSubmitBuildDialog ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={closeSubmitBuildDialog}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="submit-build-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="submit-build-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Submit build
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Target + optional image tag for the current workspace.
+                </p>
+                <form className="stack-form" onSubmit={submitBuild}>
+                  <label className="field">
+                    <span>Current workspace</span>
+                    <input value={currentWorkspace?.name || "No current workspace"} disabled />
+                  </label>
+                  <label className="field">
+                    <span>Target</span>
+                    <select
+                      value={buildTarget}
+                      onChange={(event) => setBuildTarget(event.target.value)}
+                      required
+                    >
+                      <option value="">Select a build target</option>
+                      {targets.map((target) => (
+                        <option key={target.name} value={target.name}>
+                          {target.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Image tag</span>
+                    <input value={imageTag} onChange={(event) => setImageTag(event.target.value)} />
+                  </label>
+                  <div className="button-row">
+                    <button className="button button--ghost" type="button" onClick={closeSubmitBuildDialog}>
+                      Cancel
+                    </button>
+                    <button className="button button--primary" type="submit" disabled={!buildTarget}>
+                      Submit build
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : null}
+          {selectedBuildDetail || buildDetailLoading ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={closeBuildDetailDialog}
+            >
+              <div
+                className="w-full max-w-2xl rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="build-detail-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="build-detail-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Build submission details
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Full job record for this submission.
+                </p>
+                {selectedBuildDetail ? (
+                  <div className="detail-list">
+                    <div>
+                      <span>Submission ID</span>
+                      <strong className="break-all">{selectedBuildDetail.id}</strong>
+                    </div>
+                    <div>
+                      <span>Status</span>
+                      <strong>{selectedBuildDetail.status}</strong>
+                    </div>
+                    <div>
+                      <span>Target</span>
+                      <strong>{selectedBuildDetail.targetName || "Unknown"}</strong>
+                    </div>
+                    <div>
+                      <span>Artifact</span>
+                      <strong>{selectedBuildDetail.artifactRef || "Not available"}</strong>
+                    </div>
+                    <div>
+                      <span>Workspace ID</span>
+                      <strong className="break-all">{selectedBuildDetail.workspaceId || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Build ID</span>
+                      <strong className="break-all">{selectedBuildDetail.buildId || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Submitted</span>
+                      <strong>{formatTimestamp(selectedBuildDetail.createdAt)}</strong>
+                    </div>
+                    <div>
+                      <span>Started</span>
+                      <strong>{formatTimestamp(selectedBuildDetail.startedAt)}</strong>
+                    </div>
+                    <div>
+                      <span>Completed</span>
+                      <strong>{formatTimestamp(selectedBuildDetail.completedAt)}</strong>
+                    </div>
+                    <div>
+                      <span>Updated</span>
+                      <strong>{formatTimestamp(selectedBuildDetail.updatedAt)}</strong>
+                    </div>
+                    {selectedBuildDetail.reasonCode ? (
+                      <div>
+                        <span>Reason</span>
+                        <strong>{selectedBuildDetail.reasonCode}</strong>
+                      </div>
+                    ) : null}
+                    {selectedBuildDetail.errorMessage ? (
+                      <div>
+                        <span>Error</span>
+                        <strong>{selectedBuildDetail.errorMessage}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <EmptyState message="Loading build details..." />
+                )}
+                <div className="mt-5">
+                  <h3 className="m-0 mb-2 text-base font-bold text-slate-950">Steps</h3>
+                  {buildDetailLoading && selectedBuildSteps.length === 0 ? (
+                    <p className="m-0 text-sm text-slate-500">Loading steps...</p>
+                  ) : selectedBuildSteps.length === 0 ? (
+                    <EmptyState message="No steps recorded for this submission." />
+                  ) : (
+                    <ResourceList>
+                      {selectedBuildSteps.map((step) => (
+                        <ResourceListRow
+                          key={step.id}
+                          columns={[
+                            { key: "name", label: "Step", value: step.name },
+                            { key: "status", label: "Status", value: step.status },
+                            {
+                              key: "started",
+                              label: "Started",
+                              value: formatTimestamp(step.startedAt)
+                            },
+                            {
+                              key: "completed",
+                              label: "Completed",
+                              value: formatTimestamp(step.completedAt)
+                            }
+                          ]}
+                        />
+                      ))}
+                    </ResourceList>
+                  )}
                 </div>
-                <div>
-                  <span>Target</span>
-                  <strong>{latestJob.targetName || "Unknown"}</strong>
-                </div>
-                <div>
-                  <span>Artifact</span>
-                  <strong>{latestJob.artifactRef || "Not available"}</strong>
-                </div>
-                <div>
-                  <span>Updated</span>
-                  <strong>{formatTimestamp(latestJob.updatedAt)}</strong>
+                <div className="button-row" style={{ marginTop: "1.25rem" }}>
+                  <button className="button button--primary" type="button" onClick={closeBuildDetailDialog}>
+                    Close
+                  </button>
                 </div>
               </div>
-            ) : (
-              <EmptyState message="No build has been submitted for the current workspace yet." />
-            )}
-          </Card>
-        </div>
+            </div>
+          ) : null}
+        </>
       )}
     </PageFrame>
   );

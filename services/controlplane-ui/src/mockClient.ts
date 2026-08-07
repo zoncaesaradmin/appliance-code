@@ -13,6 +13,7 @@ import type {
   DNSRecordsResult,
   Health,
   Job,
+  JobStep,
   LicensingStatus,
   LoginResponse,
   NotificationItem,
@@ -63,6 +64,7 @@ type MockState = {
   builderGitAccess: BuilderGitAccessStatus;
   buildTargets: BuildTarget[];
   latestJob: Job | null;
+  jobs: Job[];
   repositories: string[];
   grants: RegistryGrant[];
   licensingState: "unresolved" | "base_free" | "licensed";
@@ -189,6 +191,7 @@ const mockState: MockState = {
     }
   ],
   latestJob: null,
+  jobs: [],
   repositories: ["appliance/controlplane", "appliance/ui"],
   grants: [
     {
@@ -493,22 +496,61 @@ export class MockControlPlaneClient {
       startedAt: now()
     };
     mockState.latestJob = job;
+    mockState.jobs = [job, ...mockState.jobs];
     window.setTimeout(() => {
-      if (!mockState.latestJob || mockState.latestJob.id !== job.id) {
-        return;
-      }
-      mockState.latestJob = {
-        ...mockState.latestJob,
+      const completed = {
+        ...job,
         status: "succeeded",
         updatedAt: now(),
         completedAt: now()
       };
+      if (mockState.latestJob?.id === job.id) {
+        mockState.latestJob = completed;
+      }
+      mockState.jobs = mockState.jobs.map((item) => (item.id === job.id ? completed : item));
     }, 3500);
     return job;
   }
 
   async getCurrentBuildStatus(): Promise<Job | null> {
     return mockState.latestJob;
+  }
+
+  async listJobs(): Promise<Job[]> {
+    return mockState.jobs;
+  }
+
+  async getJob(jobId: string): Promise<Job> {
+    const job = mockState.jobs.find((item) => item.id === jobId) || mockState.latestJob;
+    if (!job || job.id !== jobId) {
+      throw new Error("Job not found");
+    }
+    return job;
+  }
+
+  async listJobSteps(jobId: string): Promise<JobStep[]> {
+    const job = await this.getJob(jobId);
+    return [
+      {
+        id: `${job.id}-prepare`,
+        jobId: job.id,
+        name: "prepare",
+        status: job.status === "running" ? "running" : "succeeded",
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        completedAt: job.status === "running" ? undefined : job.completedAt
+      },
+      {
+        id: `${job.id}-build`,
+        jobId: job.id,
+        name: "build",
+        status: job.status,
+        message: job.errorMessage,
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt
+      }
+    ];
   }
 
   async listRepositories(): Promise<string[]> {

@@ -713,6 +713,95 @@ button {
   color: var(--muted);
 }
 
+.resource-list {
+  display: grid;
+  gap: 0;
+}
+
+.resource-list__row {
+  display: grid;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.resource-list__row:last-child {
+  border-bottom: 0;
+}
+
+.resource-list__row--clickable {
+  cursor: pointer;
+  border-radius: 14px;
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.resource-list__row--clickable:hover,
+.resource-list__row--clickable:focus-visible {
+  background: rgba(18, 51, 91, 0.06);
+  outline: none;
+}
+
+.resource-list__cell {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.resource-list__label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.resource-list__value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.resource-list__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.row-actions {
+  position: relative;
+}
+
+.row-actions__trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.row-actions__trigger:hover,
+.row-actions__trigger[aria-expanded="true"] {
+  background: var(--panel-strong);
+  color: var(--navy);
+}
+
+.row-actions__menu {
+  min-width: 160px;
+}
+
+.row-actions__item--danger {
+  color: #b42318;
+}
+
 .message,
 .status-box,
 .secret-panel,

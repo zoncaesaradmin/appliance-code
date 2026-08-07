@@ -15,6 +15,7 @@ export type IconName =
   | "key"
   | "license"
   | "manage"
+  | "more"
   | "profiles"
   | "search"
   | "session"
@@ -51,6 +52,14 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
           <path d="M7 4v6" />
           <path d="M4 17h16" />
           <path d="M17 14v6" />
+        </svg>
+      );
+    case "more":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none" />
         </svg>
       );
     case "analyze":

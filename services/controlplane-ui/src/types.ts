@@ -207,6 +207,17 @@ export interface Job {
   completedAt?: string;
 }
 
+export interface JobStep {
+  id: string;
+  jobId: string;
+  name: string;
+  status: string;
+  message?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 export interface ListResponse<T> {
   items: T[];
 }

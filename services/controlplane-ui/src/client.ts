@@ -15,6 +15,7 @@ import type {
   DNSRecordsResult,
   Health,
   Job,
+  JobStep,
   LicensingStatus,
   LoginResponse,
   NotificationItem,
@@ -102,6 +103,9 @@ export interface ControlPlaneClient {
   listBuildTargets(): Promise<BuildTarget[]>;
   submitBuild(request: SubmitBuildRequest): Promise<Job>;
   getCurrentBuildStatus(): Promise<Job | null>;
+  listJobs(): Promise<Job[]>;
+  getJob(jobId: string): Promise<Job>;
+  listJobSteps(jobId: string): Promise<JobStep[]>;
   listRepositories(): Promise<string[]>;
   listRepositoryTags(repository: string): Promise<string[]>;
   listRepositoryReferrers(repository: string, digest: string): Promise<RegistryDescriptor[]>;
@@ -332,6 +336,22 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async getCurrentBuildStatus(): Promise<Job | null> {
     return this.request("/api/v1/current-workspace/build-status");
+  }
+
+  async listJobs(): Promise<Job[]> {
+    const response = await this.request<{ items: Job[] }>("/api/v1/jobs");
+    return response.items || [];
+  }
+
+  async getJob(jobId: string): Promise<Job> {
+    return this.request(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
+  }
+
+  async listJobSteps(jobId: string): Promise<JobStep[]> {
+    const response = await this.request<{ items: JobStep[] }>(
+      `/api/v1/jobs/${encodeURIComponent(jobId)}/steps`
+    );
+    return response.items || [];
   }
 
   async listRepositories(): Promise<string[]> {
