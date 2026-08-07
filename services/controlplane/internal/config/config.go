@@ -94,8 +94,9 @@ func Default() Config {
 		// Login verifies Argon2id (64 MiB) before writing a response; under
 		// memory pressure that can exceed a short write deadline and the
 		// browser surfaces a generic NetworkError. Keep headroom for auth.
-		// Large file downloads extend write deadline via ResponseController.
-		WriteTimeout:                   2 * time.Minute,
+		// Large /api/v1/files downloads also need this aligned with
+		// FilesTransferTimeout (ResponseController extends further when Unwrap works).
+		WriteTimeout:                   30 * time.Minute,
 		IdleTimeout:                    60 * time.Second,
 		ShutdownTimeout:                30 * time.Second,
 		MaxHeaderBytes:                 16 * 1024,
