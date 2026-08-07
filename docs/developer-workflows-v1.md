@@ -20,18 +20,18 @@ submission.
 - Build target modeling is intentionally separate from workspace creation. A
   repo can have zero, one, or many build targets, so workspace creation must
   not require output image repositories or per-target builder images.
-- Install-time catalogs may include optional build targets. Prefer nesting
-  them under `repos[].buildTargets`. `zonctl install` / `zonctl upgrade` and
-  the control plane flatten nested targets into the runtime `buildTargets`
-  list (filling each target's `repo` from its parent) and inject the catalog
-  into `config.buildCatalog`. Top-level `buildTargets` with an explicit
-  `repo` field remain accepted. Optional per-target `builderImageDigest`
-  defaults to the short bundle name `dev-build` (also accepted when
-  omitted). The control plane resolves that name to
-  `config.builderImageDigest`, which zonctl injects from the signed bundle's
-  packaged dev-build OCI image. Advanced catalogs may override with a
-  digest-pinned reference that is present in the bundle; users should not
-  paste floating GHCR tags.
+- Install-time catalogs are optional lab seeds only. The product path is a
+  blank catalog after builder install; operators upload the full document
+  through `PUT /api/v1/builder/catalog` (Builder Base Settings). Prefer nesting
+  build targets under `repos[].buildTargets`. The control plane flattens nested
+  targets into the runtime `buildTargets` list (filling each target's `repo`
+  from its parent). Top-level `buildTargets` with an explicit `repo` field
+  remain accepted. Optional per-target `builderImageDigest` defaults to the
+  short bundle name `dev-build` (also accepted when omitted). The control plane
+  resolves that name to `config.builderImageDigest`, which zonctl injects from
+  the signed bundle's packaged dev-build OCI image. Advanced catalogs may
+  override with a digest-pinned reference that is present in the bundle; users
+  should not paste floating GHCR tags.
 - Target mapping is name/alias → one catalog entry → one execution policy.
   One repo may expose many targets. A target whose `name` equals the repo
   name is still an explicit mapping (typically `execution: make` with
@@ -102,24 +102,37 @@ configured Git host allowlist. Private keys, SSH-only credential metadata,
 tokens, and passwords do not belong in product config,
 release bundles, API responses, MCP responses, logs, or command arguments.
 
-The appliance now keeps one shared builder Git HTTPS credential as runtime
-state in the `appliance-builds` namespace rather than in the build catalog.
+The appliance keeps the single build catalog and named builder Git HTTPS
+credentials as runtime state (SQLite for the catalog; Kubernetes Secrets in
+`appliance-builds` for Git access). Neither belongs in the signed release
+bundle.
 
+- After builder install the catalog starts blank. Administrators upload the
+  full YAML/JSON document through `PUT /api/v1/builder/catalog` (or the
+  Builder **Base Settings** download/upload controls). `GET` returns
+  `configured: false` until a valid document is stored. Workspace create
+  fails closed with `412 Precondition Failed` / `builder_catalog_required`
+  until then.
 - The control plane exposes `GET /api/v1/builder/git-access` so the UI can
-  discover whether that shared credential exists and which catalog host it is
-  expected to cover.
-- Administrators configure or rotate it through
-  `PUT /api/v1/builder/git-access`.
+  list named credentials and see coverage against catalog Git hosts.
+- Administrators create, rotate, or delete credentials through
+  `PUT /api/v1/builder/git-access/{name}` and
+  `DELETE /api/v1/builder/git-access/{name}`.
+- Each credential has a unique name and covers exactly one Git host in v1.
+  Workspace prepare resolves each repo URL host to the matching credential.
 - Workspace creation and workspace prepare fail closed with
-  `412 Precondition Failed` until that shared credential exists.
-- Workspace-prepare workflow pods mount the resulting Kubernetes Secret and
-  use `GIT_ASKPASS` (not interactive prompts or brittle `http.extraHeader`
-  config) for HTTPS `git clone` calls. Current-workspace build workflows do
-  not clone and do not require that credential.
+  `412 Precondition Failed` until the catalog is configured and every
+  required catalog host has a credential.
+- Workspace-prepare workflow pods mount the resulting Kubernetes Secrets under
+  `/var/run/appliance/git-access/<name>/` and use `GIT_ASKPASS` (not interactive
+  prompts or brittle `http.extraHeader` config) for HTTPS `git clone` calls.
+  Current-workspace build workflows do not clone and do not require that
+  credential.
 - The Git host must match the catalog (for example `github.com`). Username is
   typically the Git forge username or `x-access-token`; the token must be a
-  forge personal access token that can read every repo in the workspace
-  profile. Appliance login usernames/passwords are not Git credentials.
+  forge personal access token that can read every repo on that host used by
+  the workspace profile. Appliance login usernames/passwords are not Git
+  credentials.
 
 ## RBAC
 

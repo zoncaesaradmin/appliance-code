@@ -3,6 +3,7 @@ import { MockControlPlaneClient } from "./mockClient";
 import type {
   APIToken,
   ApplianceIdentity,
+  BuilderCatalogStatus,
   BuilderGitAccessStatus,
   BuildTarget,
   CapabilitiesResponse,
@@ -93,8 +94,11 @@ export interface ControlPlaneClient {
   createWorkspace(request: CreateWorkspaceRequest): Promise<Workspace>;
   setCurrentWorkspace(workspaceId: string): Promise<void>;
   deleteWorkspace(workspaceId: string): Promise<void>;
+  getBuilderCatalog(): Promise<BuilderCatalogStatus>;
+  putBuilderCatalog(document: string, contentType?: string): Promise<BuilderCatalogStatus>;
   getBuilderGitAccess(): Promise<BuilderGitAccessStatus>;
   updateBuilderGitAccess(request: UpdateBuilderGitAccessRequest): Promise<BuilderGitAccessStatus>;
+  deleteBuilderGitAccess(name: string): Promise<BuilderGitAccessStatus>;
   listBuildTargets(): Promise<BuildTarget[]>;
   submitBuild(request: SubmitBuildRequest): Promise<Job>;
   getCurrentBuildStatus(): Promise<Job | null>;
@@ -130,6 +134,8 @@ export interface ControlPlaneClient {
 type RequestOptions = {
   method?: string;
   body?: unknown;
+  rawBody?: string;
+  contentType?: string;
   auth?: boolean;
   retryAuth?: boolean;
 };
@@ -281,6 +287,18 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     });
   }
 
+  async getBuilderCatalog(): Promise<BuilderCatalogStatus> {
+    return this.request("/api/v1/builder/catalog");
+  }
+
+  async putBuilderCatalog(document: string, contentType = "application/yaml"): Promise<BuilderCatalogStatus> {
+    return this.request("/api/v1/builder/catalog", {
+      method: "PUT",
+      rawBody: document,
+      contentType
+    });
+  }
+
   async getBuilderGitAccess(): Promise<BuilderGitAccessStatus> {
     return this.request("/api/v1/builder/git-access");
   }
@@ -288,9 +306,20 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
   async updateBuilderGitAccess(
     request: UpdateBuilderGitAccessRequest
   ): Promise<BuilderGitAccessStatus> {
-    return this.request("/api/v1/builder/git-access", {
+    const name = request.name.trim();
+    return this.request(`/api/v1/builder/git-access/${encodeURIComponent(name)}`, {
       method: "PUT",
-      body: request
+      body: {
+        host: request.host,
+        username: request.username,
+        token: request.token
+      }
+    });
+  }
+
+  async deleteBuilderGitAccess(name: string): Promise<BuilderGitAccessStatus> {
+    return this.request(`/api/v1/builder/git-access/${encodeURIComponent(name)}`, {
+      method: "DELETE"
     });
   }
 
@@ -487,13 +516,17 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     const {
       method = "GET",
       body,
+      rawBody,
+      contentType,
       auth = true,
       retryAuth = true
     } = options;
     const headers = new Headers();
     headers.set("Accept", "application/json");
 
-    if (body !== undefined) {
+    if (rawBody !== undefined) {
+      headers.set("Content-Type", contentType || "application/yaml");
+    } else if (body !== undefined) {
       headers.set("Content-Type", "application/json");
     }
     if (auth) {
@@ -508,7 +541,12 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
       const init: RequestInit = {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body:
+          rawBody !== undefined
+            ? rawBody
+            : body === undefined
+              ? undefined
+              : JSON.stringify(body)
       };
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
         init.signal = AbortSignal.timeout(120_000);

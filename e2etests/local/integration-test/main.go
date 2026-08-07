@@ -324,7 +324,7 @@ func (r *runner) run(ctx context.Context) error {
 	if repositories == nil {
 		return fmt.Errorf("list registry repositories returned nil slice")
 	}
-	if _, err := r.client.ConfigureBuilderGitAccess(ctx, adminAccess, applianceclient.ConfigureBuilderGitAccessRequest{
+	if _, err := r.client.UpsertBuilderGitAccess(ctx, adminAccess, "git-internal", applianceclient.UpsertBuilderGitAccessRequest{
 		Host:     "git.internal.example.com",
 		Username: "builder-user",
 		Token:    "builder-token",

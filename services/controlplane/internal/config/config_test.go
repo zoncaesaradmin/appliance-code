@@ -93,17 +93,26 @@ func TestLoadRejectsUnknownApplianceProfile(t *testing.T) {
 	}
 }
 
-func TestBuilderProfileRequiresBuildCatalog(t *testing.T) {
+func TestBuilderProfileAllowsEmptyBuildCatalogAtStartup(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "builder"
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "buildCatalog") {
-		t.Fatalf("builder profile without catalog error = %v, want buildCatalog", err)
-	}
-	cfg.BuildCatalog = testBuildCatalog()
+	cfg.ArtifactServerBaseURL = "http://appliance-registry.artifacts.svc.cluster.local:5000"
 	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("builder profile with catalog Validate: %v", err)
+		t.Fatalf("builder profile with empty catalog Validate: %v", err)
+	}
+}
+
+func TestBuilderProfileRejectsInvalidSeedBuildCatalog(t *testing.T) {
+	cfg := config.Default()
+	cfg.ApplianceProfile = "builder"
+	cfg.ArtifactServerBaseURL = "http://appliance-registry.artifacts.svc.cluster.local:5000"
+	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	cfg.BuildCatalog = devflows.Catalog{Repos: []devflows.Repo{{Name: "app"}}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected invalid seeded catalog to fail validation")
 	}
 }
 

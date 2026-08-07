@@ -157,14 +157,32 @@ type BuildTarget struct {
 	ImageRepository   string   `json:"imageRepository"`
 }
 
-// BuilderGitAccessStatus mirrors the shared appliance-side HTTPS Git access
+// BuilderGitCredential is one named appliance-side HTTPS Git credential.
+type BuilderGitCredential struct {
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Username string `json:"username"`
+}
+
+// BuilderCatalogStatus mirrors the singleton runtime build catalog document.
+type BuilderCatalogStatus struct {
+	Configured   bool           `json:"configured"`
+	UpdatedAt    *time.Time     `json:"updatedAt,omitempty"`
+	ContentType  string         `json:"contentType,omitempty"`
+	Catalog      map[string]any `json:"catalog"`
+	Document     string         `json:"document"`
+	CanConfigure bool           `json:"canConfigure"`
+}
+
+// BuilderGitAccessStatus mirrors the named appliance-side HTTPS Git access
 // configuration used by builder workflows.
 type BuilderGitAccessStatus struct {
-	Configured    bool     `json:"configured"`
-	Host          string   `json:"host,omitempty"`
-	Username      string   `json:"username,omitempty"`
-	RequiredHosts []string `json:"requiredHosts,omitempty"`
-	CanConfigure  bool     `json:"canConfigure"`
+	Configured    bool                   `json:"configured"`
+	RequiredHosts []string               `json:"requiredHosts,omitempty"`
+	CoveredHosts  []string               `json:"coveredHosts,omitempty"`
+	MissingHosts  []string               `json:"missingHosts,omitempty"`
+	Credentials   []BuilderGitCredential `json:"credentials,omitempty"`
+	CanConfigure  bool                   `json:"canConfigure"`
 }
 
 // Job mirrors one durable developer workflow job.

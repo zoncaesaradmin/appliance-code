@@ -70,11 +70,13 @@ Useful event names:
 | `GET /artifacts` | `artifactPageData` | Session refresh as needed; `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional `GET /api/v1/registry/repositories/{repository}/referrers?digest=...`; `GET /api/v1/registry/grants` when authorized | `200` full HTML registry browser and grant administration page |
 | `POST /artifacts/grants` | `createRegistryGrant` | Session refresh as needed; `POST /api/v1/registry/grants` | `303` redirect to `/artifacts` |
 | `POST /artifacts/grants/delete` | `deleteRegistryGrant` | Session refresh as needed; `DELETE /api/v1/registry/grants/{id}` | `303` redirect to `/artifacts` |
-| `GET /builder/workspaces` | `builderPageData` | Session check/refresh as needed; `GET /api/v1/work-profiles`; `GET /api/v1/builder/git-access`; `GET /api/v1/workspaces`; `GET /api/v1/current-workspace`; when the current workspace status is `ready`, also `GET /api/v1/current-workspace/build-targets` and `GET /api/v1/current-workspace/build-status` (404 on build-status is treated as no latest build) | `200` full HTML page |
-| `POST /builder/git-access` | `configureBuilderGitAccess` | Session check/refresh as needed; `PUT /api/v1/builder/git-access` | `303` redirect to `/builder/workspaces` |
-| `POST /builder/builds` | `submitBuilderBuild` | Session check/refresh as needed; `POST /api/v1/current-workspace/builds` with `targetName` and optional `imageTag` | `303` redirect to `/builder/workspaces` on success; re-renders the builder page with an error for missing Git access (`412`), workspace not ready (`409`), unknown target / no workspace (`404`), or other validation failures |
+| `GET /manage/builder` | React `BuilderPage` | Browser → control plane: `GET /api/v1/work-profiles`; `GET /api/v1/builder/catalog`; `GET /api/v1/builder/git-access`; `GET /api/v1/workspaces`; `GET /api/v1/current-workspace`; when ready also build-targets / build-status | SPA page |
+| `GET /manage/builder/settings` (legacy alias `/manage/builder/git-access`) | React `BuilderPage` Base Settings | Same catalog + Git access GETs; upload uses `PUT /api/v1/builder/catalog`; credential save uses `PUT /api/v1/builder/git-access/{name}`; delete uses `DELETE /api/v1/builder/git-access/{name}` | SPA page |
+| `GET /manage/builder/builds` | React `BuilderPage` | Current-workspace build submit/status via `/api/v1/current-workspace/*` | SPA page |
+| `POST /builder/git-access` | `configureBuilderGitAccess` (legacy UI service) | Session check/refresh as needed; `PUT /api/v1/builder/git-access/{name}` | `303` redirect to `/builder/workspaces` |
+| `POST /builder/builds` | `submitBuilderBuild` | Session check/refresh as needed; `POST /api/v1/current-workspace/builds` with `targetName` and optional `imageTag` | `303` redirect to `/builder/workspaces` on success; re-renders the builder page with an error for missing catalog/Git access (`412`), workspace not ready (`409`), unknown target / no workspace (`404`), or other validation failures |
 | `POST /builder/workspaces` with `selected_workspace_id=<existing>` | `createBuilderWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
-| `POST /builder/workspaces` with `selected_workspace_id=new` or no selection | `createBuilderWorkspace` | Session check/refresh as needed; `GET /api/v1/workspaces`; then either `POST /api/v1/current-workspace` for an existing same-name/same-profile workspace, or `POST /api/v1/workspaces` to create a new one; if the shared Git credential is still missing, the control plane returns `412` and the UI re-renders the page with an error instead of redirecting | `303` redirect to `/builder/workspaces` on success |
+| `POST /builder/workspaces` with `selected_workspace_id=new` or no selection | `createBuilderWorkspace` | Session check/refresh as needed; `GET /api/v1/workspaces`; then either `POST /api/v1/current-workspace` for an existing same-name/same-profile workspace, or `POST /api/v1/workspaces` to create a new one; if the catalog or required Git credentials are missing, the control plane returns `412` and the UI re-renders the page with an error instead of redirecting | `303` redirect to `/builder/workspaces` on success |
 | `POST /builder/current-workspace` | `setBuilderCurrentWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/workspaces/delete` | `deleteBuilderWorkspace` | Session check/refresh as needed; `DELETE /api/v1/workspaces/{workspaceId}` | `303` redirect to `/builder/workspaces?workspace_id=new` |
 | `GET /partials/builder/work-profile` | `builderWorkProfilePartial` | Session check/refresh as needed; `GET /api/v1/work-profiles` | `200` HTML partial |
@@ -106,24 +108,34 @@ to `/data/zon/logs/api-server/application.log`:
 - `workspace provisioning workflow submission failed`
 - `workspace provisioning workflow missing`
 
-## Builder Git Access Flow
+## Builder Base Settings Flow
 
-Builder workspace and build flows now depend on one shared appliance-side HTTPS
-Git credential.
+Builder workspace and build flows depend on a single runtime build catalog plus
+named appliance-side HTTPS Git credentials (one per Git host).
 
-- Browser users configure it through `POST /builder/git-access`.
-- The UI service translates that into `PUT /api/v1/builder/git-access`.
-- The control plane stores it in a Kubernetes Secret in `appliance-builds`.
-- Workspace creation and direct build submission return `412 Precondition Failed`
-  until that credential exists.
+- Browser users configure both through the Builder **Base Settings** tab
+  (`/manage/builder/settings`).
+- Catalog upload replaces the whole document via `PUT /api/v1/builder/catalog`
+  (YAML or JSON). Download uses the `document` field from
+  `GET /api/v1/builder/catalog`.
+- Credential saves translate into `PUT /api/v1/builder/git-access/{name}`
+  and deletes into `DELETE /api/v1/builder/git-access/{name}`.
+- The control plane stores the catalog in SQLite and each credential as a
+  Kubernetes Secret named `git-access-<name>` in `appliance-builds`.
+- Workspace creation returns `412 Precondition Failed` until a catalog is
+  configured and every catalog Git host has a matching credential.
 
 For operators, the practical sequence is:
 
-1. Create a Git provider personal access token outside the appliance.
-2. Sign in to the appliance UI as an administrator.
-3. Open the Builder workspace page.
-4. Save `git host + git username + personal access token` once.
-5. Create the first workspace only after the builder page reports Git access as configured.
+1. Install the builder profile (catalog starts blank).
+2. Create a Git provider personal access token outside the appliance.
+3. Sign in to the appliance UI as an administrator.
+4. Open Builder **Base Settings**.
+5. Upload an appliance-native `build-catalog.yaml` (see the in-repo example).
+6. Save `credential name + git host + git username + personal access token`
+   for each required host.
+7. Create the first workspace only after catalog status is configured and Git
+   coverage is complete.
 
 ## Operator Debugging Notes
 

@@ -663,12 +663,64 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/builder/catalog:
+    get:
+      summary: Get the runtime builder catalog
+      description: >
+        Returns the single appliance build catalog document and whether it is
+        configured. An empty catalog returns HTTP 200 with configured=false
+        and an empty document (not 404).
+      operationId: getBuilderCatalog
+      responses:
+        "200":
+          description: Builder catalog status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuilderCatalogStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    put:
+      summary: Replace the runtime builder catalog
+      description: >
+        Accepts a full appliance-native catalog document as JSON or YAML,
+        validates it, persists it, and hot-reloads in-memory catalog state.
+        Invalid documents return HTTP 400.
+      operationId: putBuilderCatalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/yaml:
+            schema:
+              type: string
+          text/yaml:
+            schema:
+              type: string
+      responses:
+        "200":
+          description: Stored builder catalog status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuilderCatalogStatus"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
   /api/v1/builder/git-access:
     get:
-      summary: Get shared builder Git access status
+      summary: List named builder Git access credentials
       description: >
-        Returns whether the appliance-wide HTTPS Git credential required for
-        builder workspace provisioning and build flows has been configured.
+        Returns named HTTPS Git credentials configured for builder workspace
+        provisioning, plus coverage against catalog Git hosts.
       operationId: getBuilderGitAccess
       responses:
         "200":
@@ -681,12 +733,17 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /api/v1/builder/git-access/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-z0-9][a-z0-9-]{0,62}$"
     put:
-      summary: Configure shared builder Git access
-      description: >
-        Stores the appliance-wide HTTPS Git credential used by builder
-        workflows when cloning configured repositories.
-      operationId: updateBuilderGitAccess
+      summary: Configure a named builder Git access credential
+      operationId: upsertBuilderGitAccess
       requestBody:
         required: true
         content:
@@ -702,6 +759,22 @@ paths:
                 $ref: "#/components/schemas/BuilderGitAccessStatus"
         "400":
           $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      summary: Delete a named builder Git access credential
+      operationId: deleteBuilderGitAccess
+      responses:
+        "200":
+          description: Updated builder Git access status after deletion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuilderGitAccessStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -1728,20 +1801,61 @@ components:
           type: string
         imageRepository:
           type: string
+    BuilderGitCredential:
+      type: object
+      required: [name, host, username]
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        username:
+          type: string
+    BuilderCatalogStatus:
+      type: object
+      required: [configured, catalog, document, canConfigure]
+      properties:
+        configured:
+          type: boolean
+          description: True when a non-empty validated catalog is stored.
+        updatedAt:
+          type: string
+          format: date-time
+        contentType:
+          type: string
+          description: Stored document content type (application/json or application/yaml).
+        catalog:
+          type: object
+          additionalProperties: true
+          description: Parsed appliance-native catalog object.
+        document:
+          type: string
+          description: Canonical catalog document text suitable for download.
+        canConfigure:
+          type: boolean
     BuilderGitAccessStatus:
       type: object
       required: [configured, canConfigure]
       properties:
         configured:
           type: boolean
-        host:
-          type: string
-        username:
-          type: string
+          description: True when every required catalog Git host has a credential.
         requiredHosts:
           type: array
           items:
             type: string
+        coveredHosts:
+          type: array
+          items:
+            type: string
+        missingHosts:
+          type: array
+          items:
+            type: string
+        credentials:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuilderGitCredential"
         canConfigure:
           type: boolean
     UpdateBuilderGitAccessRequest:

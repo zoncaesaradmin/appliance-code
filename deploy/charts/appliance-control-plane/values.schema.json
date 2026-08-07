@@ -163,7 +163,6 @@
           },
           "then": {
             "required": [
-              "buildCatalog",
               "workspaceProvisionerImageDigest",
               "builderImageDigest"
             ],
@@ -267,15 +266,7 @@
           "minLength": 1
         },
         "buildCatalog": {
-          "oneOf": [
-            {
-              "type": "object",
-              "maxProperties": 0
-            },
-            {
-              "$ref": "#/$defs/buildCatalog"
-            }
-          ]
+          "$ref": "#/$defs/buildCatalog"
         },
         "workspaceProvisionerImageDigest": {
           "type": "string"
@@ -568,11 +559,6 @@
     "buildCatalog": {
       "type": "object",
       "additionalProperties": false,
-      "minProperties": 1,
-      "required": [
-        "workProfiles",
-        "repos"
-      ],
       "properties": {
         "workProfiles": {
           "type": "array",

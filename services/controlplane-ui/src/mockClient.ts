@@ -1,6 +1,7 @@
 import type {
   APIToken,
   ApplianceIdentity,
+  BuilderCatalogStatus,
   BuilderGitAccessStatus,
   BuildTarget,
   CapabilitiesResponse,
@@ -58,6 +59,7 @@ type MockState = {
   workProfiles: WorkProfile[];
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
+  builderCatalog: BuilderCatalogStatus;
   builderGitAccess: BuilderGitAccessStatus;
   buildTargets: BuildTarget[];
   latestJob: Job | null;
@@ -145,11 +147,35 @@ const mockState: MockState = {
     }
   ],
   currentWorkspaceId: null,
+  builderCatalog: {
+    configured: true,
+    contentType: "application/yaml",
+    catalog: {
+      workProfiles: [{ name: "builder-default", repos: [{ name: "controlplane", enabledByDefault: true }] }],
+      repos: [
+        {
+          name: "controlplane",
+          url: "https://git.example.internal/appliance-code.git",
+          defaultRef: "main"
+        }
+      ]
+    },
+    document:
+      "workProfiles:\n  - name: builder-default\n    repos:\n      - name: controlplane\n        enabledByDefault: true\nrepos:\n  - name: controlplane\n    url: https://git.example.internal/appliance-code.git\n    defaultRef: main\n",
+    canConfigure: true
+  },
   builderGitAccess: {
     configured: true,
-    host: "git.example.internal",
-    username: "builder-bot",
     requiredHosts: ["git.example.internal"],
+    coveredHosts: ["git.example.internal"],
+    missingHosts: [],
+    credentials: [
+      {
+        name: "git-example-internal",
+        host: "git.example.internal",
+        username: "builder-bot"
+      }
+    ],
     canConfigure: true
   },
   buildTargets: [
@@ -377,6 +403,26 @@ export class MockControlPlaneClient {
     }
   }
 
+  async getBuilderCatalog(): Promise<BuilderCatalogStatus> {
+    return mockState.builderCatalog;
+  }
+
+  async putBuilderCatalog(document: string, contentType = "application/yaml"): Promise<BuilderCatalogStatus> {
+    const trimmed = document.trim();
+    if (!trimmed || trimmed === "{}") {
+      throw new Error("catalog document must declare workProfiles and repos");
+    }
+    mockState.builderCatalog = {
+      configured: true,
+      updatedAt: now(),
+      contentType,
+      catalog: { uploaded: true },
+      document: document.endsWith("\n") ? document : `${document}\n`,
+      canConfigure: true
+    };
+    return mockState.builderCatalog;
+  }
+
   async getBuilderGitAccess(): Promise<BuilderGitAccessStatus> {
     return mockState.builderGitAccess;
   }
@@ -384,11 +430,45 @@ export class MockControlPlaneClient {
   async updateBuilderGitAccess(
     request: UpdateBuilderGitAccessRequest
   ): Promise<BuilderGitAccessStatus> {
-    mockState.builderGitAccess = {
-      configured: true,
+    const name = request.name.trim();
+    if (!name) {
+      throw new Error("credential name is required");
+    }
+    const credentials = [...(mockState.builderGitAccess.credentials || [])].filter(
+      (credential) => credential.name !== name && credential.host !== request.host
+    );
+    credentials.push({
+      name,
       host: request.host,
-      username: request.username,
-      requiredHosts: [request.host],
+      username: request.username
+    });
+    const requiredHosts = mockState.builderGitAccess.requiredHosts || [];
+    const coveredHosts = Array.from(new Set(credentials.map((credential) => credential.host))).sort();
+    const missingHosts = requiredHosts.filter((host) => !coveredHosts.includes(host));
+    mockState.builderGitAccess = {
+      configured: requiredHosts.length === 0 ? credentials.length > 0 : missingHosts.length === 0,
+      requiredHosts,
+      coveredHosts,
+      missingHosts,
+      credentials: credentials.sort((a, b) => a.name.localeCompare(b.name)),
+      canConfigure: true
+    };
+    return mockState.builderGitAccess;
+  }
+
+  async deleteBuilderGitAccess(name: string): Promise<BuilderGitAccessStatus> {
+    const credentials = (mockState.builderGitAccess.credentials || []).filter(
+      (credential) => credential.name !== name
+    );
+    const requiredHosts = mockState.builderGitAccess.requiredHosts || [];
+    const coveredHosts = Array.from(new Set(credentials.map((credential) => credential.host))).sort();
+    const missingHosts = requiredHosts.filter((host) => !coveredHosts.includes(host));
+    mockState.builderGitAccess = {
+      configured: requiredHosts.length === 0 ? credentials.length > 0 : missingHosts.length === 0,
+      requiredHosts,
+      coveredHosts,
+      missingHosts,
+      credentials,
       canConfigure: true
     };
     return mockState.builderGitAccess;

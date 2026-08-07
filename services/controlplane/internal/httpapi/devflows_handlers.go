@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"appliance-code/services/controlplane/internal/authz"
@@ -61,18 +63,44 @@ type buildTargetResponse struct {
 	ImageRepository   string   `json:"imageRepository"`
 }
 
+type builderGitCredentialResponse struct {
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Username string `json:"username"`
+}
+
 type builderGitAccessStatusResponse struct {
-	Configured    bool     `json:"configured"`
-	Host          string   `json:"host,omitempty"`
-	Username      string   `json:"username,omitempty"`
-	RequiredHosts []string `json:"requiredHosts,omitempty"`
-	CanConfigure  bool     `json:"canConfigure"`
+	Configured    bool                           `json:"configured"`
+	RequiredHosts []string                       `json:"requiredHosts,omitempty"`
+	CoveredHosts  []string                       `json:"coveredHosts,omitempty"`
+	MissingHosts  []string                       `json:"missingHosts,omitempty"`
+	Credentials   []builderGitCredentialResponse `json:"credentials,omitempty"`
+	CanConfigure  bool                           `json:"canConfigure"`
 }
 
 type updateBuilderGitAccessRequest struct {
 	Host     string `json:"host"`
 	Username string `json:"username"`
 	Token    string `json:"token"`
+}
+
+func toBuilderGitAccessStatusResponse(status buildergit.Status, canConfigure bool) builderGitAccessStatusResponse {
+	credentials := make([]builderGitCredentialResponse, 0, len(status.Credentials))
+	for _, cred := range status.Credentials {
+		credentials = append(credentials, builderGitCredentialResponse{
+			Name:     cred.Name,
+			Host:     cred.Host,
+			Username: cred.Username,
+		})
+	}
+	return builderGitAccessStatusResponse{
+		Configured:    status.Configured,
+		RequiredHosts: append([]string(nil), status.RequiredHosts...),
+		CoveredHosts:  append([]string(nil), status.CoveredHosts...),
+		MissingHosts:  append([]string(nil), status.MissingHosts...),
+		Credentials:   credentials,
+		CanConfigure:  canConfigure,
+	}
 }
 
 type jobResponse struct {
@@ -157,8 +185,12 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 			"workProfile", req.WorkProfile,
 			"error", err,
 		)
-		if errors.Is(err, buildergit.ErrNotConfigured) {
-			WriteProblem(w, r, http.StatusPreconditionFailed, "builder_git_access_required", "Builder Git access is not configured", "Configure builder Git HTTPS access before creating the first workspace.")
+		if errors.Is(err, buildergit.ErrNotConfigured) || errors.Is(err, buildergit.ErrHostMismatch) {
+			WriteProblem(w, r, http.StatusPreconditionFailed, "builder_git_access_required", "Builder Git access is not configured", "Configure named builder Git HTTPS credentials for every catalog Git host before creating the first workspace.")
+			return
+		}
+		if errors.Is(err, devflows.ErrCatalogRequired) {
+			WriteProblem(w, r, http.StatusPreconditionFailed, "builder_catalog_required", "Builder catalog is not configured", "Upload a build catalog in Builder Base Settings before creating the first workspace.")
 			return
 		}
 		if errors.Is(err, devflows.ErrWorkspaceNameConflict) || errors.Is(err, devflows.ErrWorkspaceProfileConflict) || errors.Is(err, storage.ErrConflict) {
@@ -177,6 +209,61 @@ func (h *DeveloperWorkflowHandlers) CreateWorkspace(w http.ResponseWriter, r *ht
 	writeJSON(w, http.StatusCreated, toWorkspaceResponse(ws))
 }
 
+type builderCatalogStatusResponse struct {
+	Configured   bool             `json:"configured"`
+	UpdatedAt    *time.Time       `json:"updatedAt,omitempty"`
+	ContentType  string           `json:"contentType,omitempty"`
+	Catalog      devflows.Catalog `json:"catalog"`
+	Document     string           `json:"document"`
+	CanConfigure bool             `json:"canConfigure"`
+}
+
+func toBuilderCatalogStatusResponse(status devflows.CatalogStatus, canConfigure bool) builderCatalogStatusResponse {
+	return builderCatalogStatusResponse{
+		Configured:   status.Configured,
+		UpdatedAt:    status.UpdatedAt,
+		ContentType:  status.ContentType,
+		Catalog:      status.Catalog,
+		Document:     status.Document,
+		CanConfigure: canConfigure,
+	}
+}
+
+func (h *DeveloperWorkflowHandlers) GetBuilderCatalog(w http.ResponseWriter, r *http.Request) {
+	principal, _ := PrincipalFromContext(r.Context())
+	status, err := h.Devflows.GetCatalogStatus(r.Context())
+	if err != nil {
+		h.Logger.WithContext(r.Context()).Errorw("read builder catalog failed", "userID", principal.UserID, "error", err)
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, toBuilderCatalogStatusResponse(status, authz.HasPermission(principal.Permissions, roles.PermSystemOperate)))
+}
+
+func (h *DeveloperWorkflowHandlers) UpdateBuilderCatalog(w http.ResponseWriter, r *http.Request) {
+	principal, _ := PrincipalFromContext(r.Context())
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+	if err != nil {
+		WriteValidationProblem(w, r, "could not read request body", nil)
+		return
+	}
+	status, err := h.Devflows.ReplaceCatalog(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), raw)
+	if err != nil {
+		h.Logger.WithContext(r.Context()).Warnw("update builder catalog failed",
+			"userID", principal.UserID,
+			"error", err,
+		)
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	h.Logger.WithContext(r.Context()).Infow("builder catalog replaced",
+		"userID", principal.UserID,
+		"workProfiles", len(status.Catalog.WorkProfiles),
+		"repos", len(status.Catalog.Repos),
+	)
+	writeJSON(w, http.StatusOK, toBuilderCatalogStatusResponse(status, true))
+}
+
 func (h *DeveloperWorkflowHandlers) GetBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
 	principal, _ := PrincipalFromContext(r.Context())
 	status, err := h.BuilderGit.Status(r.Context())
@@ -185,13 +272,7 @@ func (h *DeveloperWorkflowHandlers) GetBuilderGitAccess(w http.ResponseWriter, r
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	writeJSON(w, http.StatusOK, builderGitAccessStatusResponse{
-		Configured:    status.Configured,
-		Host:          status.Host,
-		Username:      status.Username,
-		RequiredHosts: status.RequiredHosts,
-		CanConfigure:  authz.HasPermission(principal.Permissions, roles.PermSystemOperate),
-	})
+	writeJSON(w, http.StatusOK, toBuilderGitAccessStatusResponse(status, authz.HasPermission(principal.Permissions, roles.PermSystemOperate)))
 }
 
 func (h *DeveloperWorkflowHandlers) UpdateBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
@@ -201,10 +282,12 @@ func (h *DeveloperWorkflowHandlers) UpdateBuilderGitAccess(w http.ResponseWriter
 		return
 	}
 	principal, _ := PrincipalFromContext(r.Context())
-	status, err := h.BuilderGit.Configure(r.Context(), req.Host, req.Username, req.Token)
+	name := strings.TrimSpace(r.PathValue("name"))
+	status, err := h.BuilderGit.Upsert(r.Context(), name, req.Host, req.Username, req.Token)
 	if err != nil {
 		h.Logger.WithContext(r.Context()).Warnw("update builder Git access failed",
 			"userID", principal.UserID,
+			"name", name,
 			"host", req.Host,
 			"username", req.Username,
 			"error", err,
@@ -214,16 +297,35 @@ func (h *DeveloperWorkflowHandlers) UpdateBuilderGitAccess(w http.ResponseWriter
 	}
 	h.Logger.WithContext(r.Context()).Infow("builder Git access configured",
 		"userID", principal.UserID,
-		"host", status.Host,
-		"username", status.Username,
+		"name", name,
+		"host", req.Host,
+		"username", req.Username,
 	)
-	writeJSON(w, http.StatusOK, builderGitAccessStatusResponse{
-		Configured:    status.Configured,
-		Host:          status.Host,
-		Username:      status.Username,
-		RequiredHosts: status.RequiredHosts,
-		CanConfigure:  true,
-	})
+	writeJSON(w, http.StatusOK, toBuilderGitAccessStatusResponse(status, true))
+}
+
+func (h *DeveloperWorkflowHandlers) DeleteBuilderGitAccess(w http.ResponseWriter, r *http.Request) {
+	principal, _ := PrincipalFromContext(r.Context())
+	name := strings.TrimSpace(r.PathValue("name"))
+	status, err := h.BuilderGit.Delete(r.Context(), name)
+	if errors.Is(err, buildergit.ErrNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "not_found", "Builder Git access credential not found", "")
+		return
+	}
+	if err != nil {
+		h.Logger.WithContext(r.Context()).Warnw("delete builder Git access failed",
+			"userID", principal.UserID,
+			"name", name,
+			"error", err,
+		)
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	h.Logger.WithContext(r.Context()).Infow("builder Git access deleted",
+		"userID", principal.UserID,
+		"name", name,
+	)
+	writeJSON(w, http.StatusOK, toBuilderGitAccessStatusResponse(status, true))
 }
 
 func (h *DeveloperWorkflowHandlers) ListWorkspaces(w http.ResponseWriter, r *http.Request) {

@@ -155,6 +155,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	idempotencyStore := sqlite.NewIdempotencyStore(db)
 	workspaceStore := sqlite.NewWorkspaceStore(db)
 	jobStore := sqlite.NewJobStore(db)
+	builderCatalogStore := sqlite.NewBuilderCatalogStore(db)
 	var workflowEngine workflows.Engine
 	if buildEnabled {
 		switch cfg.WorkflowEngine {
@@ -174,7 +175,11 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	var devflowsSvc *devflows.Service
 	var builderGitSvc *buildergit.Service
 	if buildEnabled {
-		allowedGitHosts, err := cfg.BuildCatalog.RepoHosts()
+		// Runtime catalog starts empty (or from SQLite). Config/env catalog is
+		// only a test/bootstrap seed when the DB row is empty.
+		seedCatalog := cfg.BuildCatalog
+		seedCatalog.Normalize()
+		allowedGitHosts, err := seedCatalog.RepoHosts()
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: deriving build catalog git hosts: %w", err)
@@ -187,7 +192,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 				return nil, fmt.Errorf("app: wiring builder Git secret manager: %w", err)
 			}
 		}
-		builderGitSvc, err = buildergit.NewService(secretManager, workflowNamespace, buildergit.DefaultSecretName, allowedGitHosts)
+		builderGitSvc, err = buildergit.NewService(secretManager, workflowNamespace, allowedGitHosts)
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring builder Git service: %w", err)
@@ -198,11 +203,15 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		}
 		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
 			allowedGitHosts, allowedBuilderImages, cfg.BuildDefaultDeadline,
-			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, cfg.BuildCatalog.SensitiveLogValues()...)
-		devflowsSvc, err = devflows.NewService(cfg.BuildCatalog, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceProvisionerImageDigest, cfg.BuilderImageDigest, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
+			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, seedCatalog.SensitiveLogValues()...)
+		devflowsSvc, err = devflows.NewService(seedCatalog, builderCatalogStore, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceProvisionerImageDigest, cfg.BuilderImageDigest, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring developer workflows: %w", err)
+		}
+		if err := devflowsSvc.LoadPersistedCatalog(ctx); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: loading builder catalog: %w", err)
 		}
 		if err := buildsSvc.ReconcileAll(ctx); err != nil {
 			db.Close()

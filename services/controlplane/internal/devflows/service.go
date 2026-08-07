@@ -2,12 +2,15 @@ package devflows
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"gopkg.in/yaml.v3"
 
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/buildergit"
@@ -24,10 +27,15 @@ var (
 	ErrWorkspaceNameConflict    = errors.New("devflows: workspace name already exists")
 	ErrWorkspaceProfileConflict = errors.New("devflows: workspace name already exists on a different workspace profile")
 	ErrWorkspaceNotReady        = errors.New("devflows: current workspace is not ready")
+	ErrCatalogRequired          = errors.New("devflows: builder catalog is not configured")
 )
 
 type Service struct {
+	mu                 sync.RWMutex
 	catalog            Catalog
+	catalogStore       storage.BuilderCatalogStore
+	catalogContentType string
+	catalogUpdatedAt   time.Time
 	workspaces         storage.WorkspaceStore
 	jobs               storage.JobStore
 	builds             *builds.Service
@@ -41,13 +49,23 @@ type Service struct {
 	audit              *audit.Recorder
 }
 
-func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, provisionerImage, builderImage, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
+type CatalogStatus struct {
+	Configured  bool
+	Catalog     Catalog
+	ContentType string
+	UpdatedAt   *time.Time
+	Document    string
+}
+
+func NewService(catalog Catalog, catalogStore storage.BuilderCatalogStore, workspaces storage.WorkspaceStore, jobs storage.JobStore, buildsSvc *builds.Service, engine workflows.Engine, provisionerImage, builderImage, workspaceRootDir, workspaceClaimName string, builderGit *buildergit.Service, logger logging.Logger, recorder *audit.Recorder) (*Service, error) {
 	if logger == nil {
 		return nil, errors.New("devflows: logger is required")
 	}
 	catalog.Normalize()
 	return &Service{
 		catalog:            catalog,
+		catalogStore:       catalogStore,
+		catalogContentType: "application/json",
 		workspaces:         workspaces,
 		jobs:               jobs,
 		builds:             buildsSvc,
@@ -62,7 +80,137 @@ func NewService(catalog Catalog, workspaces storage.WorkspaceStore, jobs storage
 	}, nil
 }
 
-func (s *Service) Catalog() Catalog { return s.catalog }
+// LoadPersistedCatalog loads the singleton catalog from SQLite when present.
+// When the store is empty, keeps the in-memory catalog (typically empty, or a
+// test seed from config) and syncs dependent host allowlists.
+func (s *Service) LoadPersistedCatalog(ctx context.Context) error {
+	if s.catalogStore == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.syncDependentsLocked()
+	}
+	rec, err := s.catalogStore.GetBuilderCatalog(ctx)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(rec.DocumentText) == "" {
+		return s.syncDependentsLocked()
+	}
+	catalog, contentType, err := ParseCatalogDocument([]byte(rec.DocumentText))
+	if err != nil {
+		return fmt.Errorf("devflows: load persisted catalog: %w", err)
+	}
+	s.catalog = catalog
+	s.catalogContentType = contentType
+	s.catalogUpdatedAt = rec.UpdatedAt
+	return s.syncDependentsLocked()
+}
+
+func (s *Service) Catalog() Catalog {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.catalog
+}
+
+func (s *Service) CatalogConfigured() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return !s.catalog.Empty()
+}
+
+func (s *Service) GetCatalogStatus(ctx context.Context) (CatalogStatus, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	status := CatalogStatus{
+		Configured:  !s.catalog.Empty(),
+		Catalog:     s.catalog,
+		ContentType: s.catalogContentType,
+	}
+	if !s.catalogUpdatedAt.IsZero() {
+		t := s.catalogUpdatedAt
+		status.UpdatedAt = &t
+	}
+	if s.catalog.Empty() {
+		status.Document = "{}\n"
+		return status, nil
+	}
+	body, err := yaml.Marshal(s.catalog)
+	if err != nil {
+		return CatalogStatus{}, err
+	}
+	status.Document = string(body)
+	return status, nil
+}
+
+func (s *Service) ReplaceCatalog(ctx context.Context, actor audit.Actor, raw []byte) (CatalogStatus, error) {
+	catalog, contentType, err := ParseCatalogDocument(raw)
+	if err != nil {
+		return CatalogStatus{}, err
+	}
+	documentText := strings.TrimSpace(string(raw))
+	if contentType == "application/json" {
+		encoded, err := json.MarshalIndent(catalog, "", "  ")
+		if err != nil {
+			return CatalogStatus{}, err
+		}
+		documentText = string(encoded) + "\n"
+	}
+	now := time.Now().UTC()
+	if s.catalogStore != nil {
+		if err := s.catalogStore.PutBuilderCatalog(ctx, storage.BuilderCatalogRecord{
+			DocumentText: documentText,
+			ContentType:  contentType,
+			UpdatedAt:    now,
+		}); err != nil {
+			return CatalogStatus{}, err
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.catalog = catalog
+	s.catalogContentType = contentType
+	s.catalogUpdatedAt = now
+	if err := s.syncDependentsLocked(); err != nil {
+		return CatalogStatus{}, err
+	}
+	if s.audit != nil {
+		_ = s.audit.Record(ctx, actor, audit.Event{
+			Action: "builder.catalog.replace", TargetType: "builder_catalog", TargetID: "1",
+			Outcome: storage.AuditOutcomeSuccess,
+			Details: map[string]any{
+				"workProfiles": len(catalog.WorkProfiles),
+				"repos":        len(catalog.Repos),
+				"buildTargets": len(catalog.BuildTargets),
+			},
+		})
+	}
+	status := CatalogStatus{
+		Configured:  true,
+		Catalog:     catalog,
+		ContentType: contentType,
+		UpdatedAt:   &now,
+		Document:    documentText,
+	}
+	return status, nil
+}
+
+func (s *Service) syncDependentsLocked() error {
+	hosts, err := s.catalog.RepoHosts()
+	if err != nil {
+		return err
+	}
+	if s.builderGit != nil {
+		s.builderGit.SetRequiredHosts(hosts)
+	}
+	if s.builds != nil {
+		s.builds.SetAllowedGitHosts(hosts)
+		// Refresh redact markers from repo URLs when catalog changes.
+		s.builds.SetSensitiveLogValues(s.catalog.SensitiveLogValues()...)
+	}
+	return nil
+}
 
 type CreateWorkspaceRequest struct {
 	Name        string
@@ -82,6 +230,8 @@ func artifactRef(imageRepository, imageTag string) string {
 }
 
 func (s *Service) ListWorkProfiles(_ context.Context) []WorkProfile {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	out := make([]WorkProfile, len(s.catalog.WorkProfiles))
 	copy(out, s.catalog.WorkProfiles)
 	return out
@@ -96,17 +246,23 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 	if profile == "" {
 		profile = "default"
 	}
-	if _, ok := s.catalog.WorkProfile(profile); !ok {
+	s.mu.RLock()
+	catalog := s.catalog
+	s.mu.RUnlock()
+	if catalog.Empty() {
+		return storage.Workspace{}, ErrCatalogRequired
+	}
+	if _, ok := catalog.WorkProfile(profile); !ok {
 		return storage.Workspace{}, fmt.Errorf("devflows: unknown workspace profile %q", req.WorkProfile)
 	}
-	repos, err := s.catalog.ReposForProfile(profile)
+	repos, err := catalog.ReposForProfile(profile)
 	if err != nil {
 		return storage.Workspace{}, err
 	}
 	if len(repos) == 0 {
 		return storage.Workspace{}, fmt.Errorf("devflows: workspace profile %q has no repos configured", profile)
 	}
-	gitCredentialSecret, err := s.resolveWorkspaceGitCredential(ctx, repos)
+	gitCredentials, err := s.resolveWorkspaceGitCredentials(ctx, repos)
 	if err != nil {
 		return storage.Workspace{}, err
 	}
@@ -171,10 +327,10 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 		_ = s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.create", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess})
 	}
 
-	return s.submitWorkspaceProvision(ctx, ws, job, repos, provisionerImage, gitCredentialSecret)
+	return s.submitWorkspaceProvision(ctx, ws, job, repos, provisionerImage, gitCredentials)
 }
 
-func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Workspace, job storage.Job, repos []Repo, imageDigest, gitCredentialSecret string) (storage.Workspace, error) {
+func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Workspace, job storage.Job, repos []Repo, imageDigest string, gitCredentials []workflows.GitCredentialRef) (storage.Workspace, error) {
 	startedAt := time.Now().UTC()
 	workflowName := workspacePrepareWorkflowName(job.ID)
 	if s.engine == nil {
@@ -199,15 +355,15 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 	}
 
 	submitErr := s.engine.Submit(ctx, workflows.Spec{
-		Name:                workflowName,
-		Kind:                workflows.KindWorkspacePrepare,
-		BuilderImageDigest:  imageDigest,
-		GitCredentialSecret: gitCredentialSecret,
-		Deadline:            startedAt.Add(30 * time.Minute),
-		WorkspaceRootDir:    s.workspaceRootDir,
-		WorkspaceClaimName:  s.workspaceClaimName,
-		WorkspaceName:       ws.Name,
-		WorkspaceRepos:      workspaceRepoSpecs(repos),
+		Name:               workflowName,
+		Kind:               workflows.KindWorkspacePrepare,
+		BuilderImageDigest: imageDigest,
+		GitCredentials:     gitCredentials,
+		Deadline:           startedAt.Add(30 * time.Minute),
+		WorkspaceRootDir:   s.workspaceRootDir,
+		WorkspaceClaimName: s.workspaceClaimName,
+		WorkspaceName:      ws.Name,
+		WorkspaceRepos:     workspaceRepoSpecs(repos),
 	})
 	completedAt := time.Now().UTC()
 	if submitErr != nil {
@@ -246,25 +402,27 @@ func (s *Service) submitWorkspaceProvision(ctx context.Context, ws storage.Works
 	return ws, nil
 }
 
-func (s *Service) resolveWorkspaceGitCredential(ctx context.Context, repos []Repo) (string, error) {
+func (s *Service) resolveWorkspaceGitCredentials(ctx context.Context, repos []Repo) ([]workflows.GitCredentialRef, error) {
 	if s.builderGit == nil {
-		return "", nil
+		return nil, nil
 	}
-	secretName := ""
+	urls := make([]string, 0, len(repos))
 	for _, repo := range repos {
-		credential, err := s.builderGit.Resolve(ctx, repo.URL)
-		if err != nil {
-			return "", err
-		}
-		if secretName == "" {
-			secretName = credential.SecretName
-			continue
-		}
-		if credential.SecretName != secretName {
-			return "", fmt.Errorf("devflows: workspace profile requires multiple Git credentials, which is not supported yet")
-		}
+		urls = append(urls, repo.URL)
 	}
-	return secretName, nil
+	credentials, err := s.builderGit.ResolveMany(ctx, urls)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]workflows.GitCredentialRef, 0, len(credentials))
+	for _, credential := range credentials {
+		out = append(out, workflows.GitCredentialRef{
+			Name:       credential.Name,
+			Host:       credential.Host,
+			SecretName: credential.SecretName,
+		})
+	}
+	return out, nil
 }
 
 func workspaceRepoSpecs(repos []Repo) []workflows.WorkspaceRepo {
@@ -380,7 +538,10 @@ func (s *Service) ListBuildTargetsForCurrent(ctx context.Context, userID string)
 	if err != nil {
 		return nil, err
 	}
-	targets, err := s.catalog.TargetsForProfile(ws.WorkProfile)
+	s.mu.RLock()
+	catalog := s.catalog
+	s.mu.RUnlock()
+	targets, err := catalog.TargetsForProfile(ws.WorkProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +556,10 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if ws.Status != storage.WorkspaceStatusReady {
 		return storage.Job{}, ErrWorkspaceNotReady
 	}
-	resolved, err := s.catalog.ResolveTargetForProfile(ws.WorkProfile, req.TargetName)
+	s.mu.RLock()
+	catalog := s.catalog
+	s.mu.RUnlock()
+	resolved, err := catalog.ResolveTargetForProfile(ws.WorkProfile, req.TargetName)
 	if err != nil {
 		return storage.Job{}, err
 	}

@@ -72,11 +72,9 @@ config:
   # These are two independent charts with no template-level link between
   # them, so this string has to be kept in sync by hand.
   workflowExecutorServiceAccount: appliance-workflows-executor
-  # Developer workflow catalog used by the builder profile. For workspace
-  # creation this contains workspace profiles and HTTPS Git repos. Build targets
-  # are optional and are not required to materialize workspaces. Keep this empty
-  # for non-build profiles such as core, storage, landns, and
-  # storage-landns.
+  # Developer workflow catalog used by the builder profile. Runtime catalogs are
+  # uploaded after install through the control-plane API/UI and stored in SQLite.
+  # Leave this empty at install for build-capable profiles.
   buildCatalog: {}
   # Bundled appliance profile/module catalog. zonctl injects the signed
   # bundle copy so runtime profile/module resolution matches install-time

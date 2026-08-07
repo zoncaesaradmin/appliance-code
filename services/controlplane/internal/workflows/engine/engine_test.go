@@ -215,13 +215,15 @@ func TestSubmitCreatesBuildWorkflowWithSharedWorkspaceMount(t *testing.T) {
 
 func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
-		Name:                "workspace-prepare-1",
-		Kind:                workflows.KindWorkspacePrepare,
-		BuilderImageDigest:  "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-		GitCredentialSecret: "builder-git-access",
-		WorkspaceRootDir:    "/data/zon/workspaces",
-		WorkspaceClaimName:  "api-server-workspaces",
-		WorkspaceName:       "demo",
+		Name:               "workspace-prepare-1",
+		Kind:               workflows.KindWorkspacePrepare,
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		GitCredentials: []workflows.GitCredentialRef{
+			{Name: "git-internal", Host: "git.internal.example.com", SecretName: "git-access-git-internal"},
+		},
+		WorkspaceRootDir:   "/data/zon/workspaces",
+		WorkspaceClaimName: "api-server-workspaces",
+		WorkspaceName:      "demo",
 		WorkspaceRepos: []workflows.WorkspaceRepo{
 			{Name: "platformkit", URL: "https://git.internal.example.com/team/platformkit.git", Ref: "0123456789abcdef0123456789abcdef01234567"},
 			{Name: "forgeline", URL: "https://git.internal.example.com/team/forgeline", Ref: "main"},
@@ -233,7 +235,7 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 	}
 	text := workflowJSON(t, got)
 	command := workflowCommand(t, got)
-	for _, want := range []string{"workspace-storage", "api-server-workspaces", "WORKSPACE_ROOT_DIR", "WORKSPACE_NAME", "platformkit", "forgeline", "git-access", "builder-git-access", "/var/run/appliance/git-access"} {
+	for _, want := range []string{"workspace-storage", "api-server-workspaces", "WORKSPACE_ROOT_DIR", "WORKSPACE_NAME", "platformkit", "forgeline", "git-access-0", "git-access-git-internal", "/var/run/appliance/git-access/git-internal"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
@@ -243,13 +245,42 @@ func TestSubmitCreatesWorkspacePrepareWorkflow(t *testing.T) {
 			t.Fatalf("workspace workflow JSON missing %q: %s", want, text)
 		}
 	}
-	for _, want := range []string{"appliance_git_clone", "GIT_ASKPASS", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout", "Confirm builder Git access"} {
+	for _, want := range []string{"appliance_git_clone", "GIT_ASKPASS", "APPLIANCE_GIT_CRED_DIR", "git -C 'platformkit' checkout", "git -C 'forgeline' checkout", "Confirm builder Git access"} {
 		if !strings.Contains(command, want) {
 			t.Fatalf("workspace workflow command missing %q: %s", want, command)
 		}
 	}
 	if strings.Contains(command, "extraheader") {
 		t.Fatalf("workspace workflow should use GIT_ASKPASS, not http extraheader: %s", command)
+	}
+}
+
+func TestSubmitCreatesWorkspacePrepareWorkflowMultiHost(t *testing.T) {
+	got, err := workflowObject("appliance-builds", "", "", workflows.Spec{
+		Name:               "workspace-prepare-multi",
+		Kind:               workflows.KindWorkspacePrepare,
+		BuilderImageDigest: "builder@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+		GitCredentials: []workflows.GitCredentialRef{
+			{Name: "github-com", Host: "github.com", SecretName: "git-access-github-com"},
+			{Name: "gitlab-internal", Host: "gitlab.example.com", SecretName: "git-access-gitlab-internal"},
+		},
+		WorkspaceRootDir:   "/data/zon/workspaces",
+		WorkspaceClaimName: "api-server-workspaces",
+		WorkspaceName:      "demo",
+		WorkspaceRepos: []workflows.WorkspaceRepo{
+			{Name: "a", URL: "https://github.com/org/a.git", Ref: "main"},
+			{Name: "b", URL: "https://gitlab.example.com/team/b.git", Ref: "main"},
+		},
+		Deadline: time.Now().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("workflowObject: %v", err)
+	}
+	text := workflowJSON(t, got)
+	for _, want := range []string{"git-access-0", "git-access-1", "git-access-github-com", "git-access-gitlab-internal", "/var/run/appliance/git-access/github-com", "/var/run/appliance/git-access/gitlab-internal"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("multi-host workspace workflow JSON missing %q: %s", want, text)
+		}
 	}
 }
 

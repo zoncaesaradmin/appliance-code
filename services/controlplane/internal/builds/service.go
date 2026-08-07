@@ -80,6 +80,28 @@ type Service struct {
 	builderGit           *buildergit.Service
 }
 
+func (s *Service) SetAllowedGitHosts(hosts []string) {
+	normalized := make([]string, 0, len(hosts))
+	seen := map[string]struct{}{}
+	for _, host := range hosts {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if host == "" {
+			continue
+		}
+		if _, ok := seen[host]; ok {
+			continue
+		}
+		seen[host] = struct{}{}
+		normalized = append(normalized, host)
+	}
+	sort.Strings(normalized)
+	s.allowedGitHosts = normalized
+}
+
+func (s *Service) SetSensitiveLogValues(values ...string) {
+	s.sensitiveLogValues = normalizeSensitiveValues(values)
+}
+
 // NewService wires a Service from its storage, workflow-engine, and policy
 // dependencies.
 func NewService(
@@ -200,13 +222,17 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		ImageRepository: imageRepo, ImageTag: req.ImageTag, BuilderImageDigest: req.BuilderImageDigest,
 		CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(s.defaultDeadline),
 	}
-	gitCredentialSecret := ""
+	gitCredentials := []workflows.GitCredentialRef{}
 	if !workspaceBuild && s.builderGit != nil {
 		credential, err := s.builderGit.Resolve(ctx, build.SourceRepoURL)
 		if err != nil {
 			return storage.Build{}, err
 		}
-		gitCredentialSecret = credential.SecretName
+		gitCredentials = []workflows.GitCredentialRef{{
+			Name:       credential.Name,
+			Host:       credential.Host,
+			SecretName: credential.SecretName,
+		}}
 	}
 
 	err = s.db.WithTx(ctx, func(ctx context.Context) error {
@@ -235,7 +261,7 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerID string,
 		Execution: req.Execution, Args: req.Args, WorkingDirectory: req.WorkingDirectory,
 		ContainerfilePath: build.ContainerfilePath, BuilderImageDigest: build.BuilderImageDigest,
 		TargetRepository: build.ImageRepository, TargetTag: build.ImageTag,
-		GitCredentialSecret: gitCredentialSecret,
+		GitCredentials:      gitCredentials,
 		SourceCredentialRef: req.SourceCredentialRef, SourceCredentialSecret: req.SourceCredentialSecret,
 		KnownHostsSecret: req.KnownHostsSecret, Deadline: build.DeadlineAt,
 		WorkspaceRootDir: s.workspaceRootDir, WorkspaceClaimName: s.workspaceClaimName,

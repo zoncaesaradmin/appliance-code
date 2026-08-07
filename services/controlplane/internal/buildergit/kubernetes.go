@@ -60,42 +60,59 @@ func (m *KubernetesSecretManager) Get(ctx context.Context, namespace, name strin
 	if status == http.StatusNotFound {
 		return Secret{}, false, nil
 	}
-	var payload struct {
-		Metadata struct {
-			ResourceVersion string `json:"resourceVersion"`
-		} `json:"metadata"`
-		Data map[string]string `json:"data"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return Secret{}, false, fmt.Errorf("buildergit: decode Kubernetes secret: %w", err)
-	}
-	secret := Secret{
-		ResourceVersion: payload.Metadata.ResourceVersion,
-		Data:            map[string]string{},
-	}
-	for key, value := range payload.Data {
-		decoded, err := decodeSecretValue(value)
-		if err != nil {
-			return Secret{}, false, fmt.Errorf("buildergit: decode secret key %q: %w", key, err)
-		}
-		secret.Data[key] = decoded
+	secret, err := decodeKubernetesSecret(body)
+	if err != nil {
+		return Secret{}, false, err
 	}
 	return secret, true, nil
 }
 
+func (m *KubernetesSecretManager) List(ctx context.Context, namespace, labelSelector string) ([]Secret, error) {
+	path := secretsPath(namespace)
+	if strings.TrimSpace(labelSelector) != "" {
+		path += "?labelSelector=" + url.QueryEscape(labelSelector)
+	}
+	body, status, err := m.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if status == http.StatusNotFound {
+		return nil, nil
+	}
+	var payload struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("buildergit: decode Kubernetes secret list: %w", err)
+	}
+	out := make([]Secret, 0, len(payload.Items))
+	for _, item := range payload.Items {
+		secret, err := decodeKubernetesSecret(item)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, secret)
+	}
+	return out, nil
+}
+
 func (m *KubernetesSecretManager) Upsert(ctx context.Context, namespace, name string, secret Secret) error {
+	metadata := map[string]any{
+		"name":      name,
+		"namespace": namespace,
+	}
+	if secret.ResourceVersion != "" {
+		metadata["resourceVersion"] = secret.ResourceVersion
+	}
+	if len(secret.Labels) > 0 {
+		metadata["labels"] = cloneMap(secret.Labels)
+	}
 	payload := map[string]any{
 		"apiVersion": "v1",
 		"kind":       "Secret",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": namespace,
-		},
-		"type": "Opaque",
-		"data": map[string]string{},
-	}
-	if secret.ResourceVersion != "" {
-		payload["metadata"].(map[string]any)["resourceVersion"] = secret.ResourceVersion
+		"metadata":   metadata,
+		"type":       "Opaque",
+		"data":       map[string]string{},
 	}
 	for key, value := range secret.Data {
 		payload["data"].(map[string]string)[key] = EncodeSecretValue(value)
@@ -112,6 +129,45 @@ func (m *KubernetesSecretManager) Upsert(ctx context.Context, namespace, name st
 	}
 	_, _, err = m.do(ctx, method, path, body)
 	return err
+}
+
+func (m *KubernetesSecretManager) Delete(ctx context.Context, namespace, name string) error {
+	_, status, err := m.do(ctx, http.MethodDelete, secretPath(namespace, name), nil)
+	if err != nil {
+		return err
+	}
+	if status == http.StatusNotFound {
+		return nil
+	}
+	return nil
+}
+
+func decodeKubernetesSecret(body []byte) (Secret, error) {
+	var payload struct {
+		Metadata struct {
+			Name            string            `json:"name"`
+			ResourceVersion string            `json:"resourceVersion"`
+			Labels          map[string]string `json:"labels"`
+		} `json:"metadata"`
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return Secret{}, fmt.Errorf("buildergit: decode Kubernetes secret: %w", err)
+	}
+	secret := Secret{
+		Name:            payload.Metadata.Name,
+		ResourceVersion: payload.Metadata.ResourceVersion,
+		Labels:          cloneMap(payload.Metadata.Labels),
+		Data:            map[string]string{},
+	}
+	for key, value := range payload.Data {
+		decoded, err := decodeSecretValue(value)
+		if err != nil {
+			return Secret{}, fmt.Errorf("buildergit: decode secret key %q: %w", key, err)
+		}
+		secret.Data[key] = decoded
+	}
+	return secret, nil
 }
 
 func (m *KubernetesSecretManager) do(ctx context.Context, method, path string, body []byte) ([]byte, int, error) {

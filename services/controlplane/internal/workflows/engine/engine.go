@@ -257,12 +257,19 @@ func workflowContainerSpec(kind workflows.Kind, spec workflows.Spec) (map[string
 	if strings.TrimSpace(spec.SourceCredentialRef) != "" || strings.TrimSpace(spec.SourceCredentialSecret) != "" || strings.TrimSpace(spec.KnownHostsSecret) != "" {
 		return nil, nil, fmt.Errorf("workflow engine: HTTPS Git workflows do not accept SSH credential inputs")
 	}
-	if kind == workflows.KindWorkspacePrepare && strings.TrimSpace(spec.GitCredentialSecret) == "" {
+	if kind == workflows.KindWorkspacePrepare && len(spec.GitCredentials) == 0 {
 		return nil, nil, fmt.Errorf("workflow engine: workspace prepare requires builder Git HTTPS credentials")
 	}
-	if strings.TrimSpace(spec.GitCredentialSecret) != "" {
-		volumeMounts = append(volumeMounts, map[string]any{"name": "git-access", "mountPath": gitCredentialDir, "readOnly": true})
-		volumes = append(volumes, map[string]any{"name": "git-access", "secret": map[string]any{"secretName": spec.GitCredentialSecret}})
+	for i, cred := range spec.GitCredentials {
+		secretName := strings.TrimSpace(cred.SecretName)
+		credName := strings.TrimSpace(cred.Name)
+		if secretName == "" || credName == "" {
+			return nil, nil, fmt.Errorf("workflow engine: Git credential ref is missing name or secret")
+		}
+		volumeName := fmt.Sprintf("git-access-%d", i)
+		mountPath := gitCredentialDir + "/" + credName
+		volumeMounts = append(volumeMounts, map[string]any{"name": volumeName, "mountPath": mountPath, "readOnly": true})
+		volumes = append(volumes, map[string]any{"name": volumeName, "secret": map[string]any{"secretName": secretName}})
 	}
 	env = append(env, workflowToolHomeEnv()...)
 
@@ -430,7 +437,7 @@ cd "$repo_dir"
 		if spec.SourceRepoURL == "" || spec.SourceCommitSHA == "" {
 			return "", fmt.Errorf("workflow engine: workflow spec is missing required build source fields")
 		}
-		preamble = gitAuthPreamble(spec.GitCredentialSecret) + ensureToolHomeScript() + `mkdir -p /workspace/src
+		preamble = gitAuthPreamble(len(spec.GitCredentials) > 0) + ensureToolHomeScript() + `mkdir -p /workspace/src
 appliance_git_clone "$SOURCE_REPO_URL" /workspace/src
 git -C /workspace/src checkout "$SOURCE_COMMIT_SHA"
 cd /workspace/src
@@ -486,7 +493,7 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 		return "", fmt.Errorf("workflow engine: workspace workflow spec is missing required fields")
 	}
 	var b strings.Builder
-	b.WriteString(gitAuthPreamble(spec.GitCredentialSecret))
+	b.WriteString(gitAuthPreamble(len(spec.GitCredentials) > 0))
 	// The workspace directory is intentionally host-accessible to any
 	// local user (not just the shared fsGroup) so an operator can
 	// inspect or edit cloned repo content directly — see hostdirs in
@@ -544,44 +551,55 @@ func workspaceCommandScript(spec workflows.Spec) (string, error) {
 	return b.String(), nil
 }
 
-func gitAuthPreamble(secretName string) string {
-	if strings.TrimSpace(secretName) == "" {
+func gitAuthPreamble(hasCredentials bool) string {
+	if !hasCredentials {
 		// Unauthenticated clone is only for unit tests; production workspace
-		// prepare and HTTPS build clones require a mounted builder Git secret.
+		// prepare and HTTPS build clones require mounted builder Git secrets.
 		return "appliance_git_clone() {\n  git -c credential.helper= clone \"$1\" \"$2\"\n}\n"
 	}
 	// Prefer GIT_ASKPASS over http.<url>.extraHeader. The extraHeader form is
 	// easy to mis-apply across Git versions and, on auth failure, collapses into
 	// the misleading "could not read Username ... terminal prompts disabled"
 	// error that looks like credentials were never configured.
+	// Credentials are mounted under /var/run/appliance/git-access/<name>/{host,username,token}
+	// and selected by matching the clone URL host.
 	return `appliance_git_clone() {
   repo_url="$1"
   dest_dir="$2"
-  for required_file in host username token; do
-    if [ ! -r "` + gitCredentialDir + `/${required_file}" ]; then
-      echo "missing readable Git credential field: ${required_file}" >&2
-      return 1
-    fi
+  cred_dir=""
+  git_host=""
+  for dir in "` + gitCredentialDir + `"/*/; do
+    [ -d "$dir" ] || continue
+    for required_file in host username token; do
+      if [ ! -r "${dir}${required_file}" ]; then
+        echo "missing readable Git credential field: ${dir}${required_file}" >&2
+        return 1
+      fi
+    done
+    candidate_host="$(tr -d '\n\r' < "${dir}host")"
+    case "$repo_url" in
+      "https://${candidate_host}/"*)
+        cred_dir="$dir"
+        git_host="$candidate_host"
+        break
+        ;;
+    esac
   done
-  git_host="$(tr -d '\n\r' < "` + gitCredentialDir + `/host")"
-  case "$repo_url" in
-    "https://${git_host}/"*) ;;
-    *)
-      echo "repo URL host does not match configured Git credential host (${git_host})" >&2
-      return 1
-      ;;
-  esac
+  if [ -z "$cred_dir" ]; then
+    echo "no mounted Git credential matches repo URL host for ${repo_url}" >&2
+    return 1
+  fi
   mkdir -p "$HOME"
   askpass="$HOME/appliance-git-askpass.sh"
   cat > "$askpass" <<'ASKPASS'
 #!/bin/sh
 case "$1" in
   *Username*|*username*)
-    tr -d '\n\r' < "` + gitCredentialDir + `/username"
+    tr -d '\n\r' < "${APPLIANCE_GIT_CRED_DIR}username"
     exit 0
     ;;
   *Password*|*password*)
-    tr -d '\n\r' < "` + gitCredentialDir + `/token"
+    tr -d '\n\r' < "${APPLIANCE_GIT_CRED_DIR}token"
     exit 0
     ;;
 esac
@@ -589,7 +607,7 @@ echo "unexpected Git askpass prompt: $1" >&2
 exit 1
 ASKPASS
   chmod 700 "$askpass"
-  if ! GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone "$repo_url" "$dest_dir"; then
+  if ! APPLIANCE_GIT_CRED_DIR="$cred_dir" GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone "$repo_url" "$dest_dir"; then
     echo "Git HTTPS clone failed for host ${git_host}. Confirm builder Git access username/token can read the repository, then retry." >&2
     return 1
   fi

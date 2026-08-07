@@ -295,10 +295,10 @@ func (c Config) Validate() error {
 		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
 	}
 	if profileErr == nil && buildEnabled {
-		if c.BuildCatalog.Empty() {
-			errs = append(errs, "buildCatalog must not be empty when the build capability is enabled")
-		} else if err := c.BuildCatalog.Validate(); err != nil {
-			errs = append(errs, err.Error())
+		if !c.BuildCatalog.Empty() {
+			if err := c.BuildCatalog.Validate(); err != nil {
+				errs = append(errs, err.Error())
+			}
 		}
 		if strings.TrimSpace(c.WorkspaceRootDir) == "" {
 			errs = append(errs, "workspaceRootDir must not be empty when the build capability is enabled")

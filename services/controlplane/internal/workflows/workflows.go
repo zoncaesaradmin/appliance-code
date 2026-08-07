@@ -38,13 +38,20 @@ type WorkspaceRepo struct {
 	Ref  string
 }
 
+// GitCredentialRef identifies one mounted builder Git HTTPS credential.
+type GitCredentialRef struct {
+	Name       string
+	Host       string
+	SecretName string
+}
+
 // Spec describes one workflow to run as an isolated workflow pod. It carries
 // only structured values; nothing here is a free-form command or shell string.
 type Spec struct {
 	Name                   string
 	Kind                   Kind
 	BuilderImageDigest     string
-	GitCredentialSecret    string
+	GitCredentials         []GitCredentialRef
 	SourceCredentialRef    string
 	SourceCredentialSecret string
 	KnownHostsSecret       string

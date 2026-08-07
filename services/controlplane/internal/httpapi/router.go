@@ -482,17 +482,35 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.ListWorkProfiles), nil
 		}},
+		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/builder/catalog", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DevflowsH == nil {
+				return nil, fmt.Errorf("missing developer workflow handlers")
+			}
+			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.GetBuilderCatalog), nil
+		}},
+		{moduleName: appliance.ModuleNameBuild, pattern: "PUT /api/v1/builder/catalog", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DevflowsH == nil {
+				return nil, fmt.Errorf("missing developer workflow handlers")
+			}
+			return w.protect(roles.PermSystemOperate, deps.DevflowsH.UpdateBuilderCatalog), nil
+		}},
 		{moduleName: appliance.ModuleNameBuild, pattern: "GET /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermWorkProfilesRead, deps.DevflowsH.GetBuilderGitAccess), nil
 		}},
-		{moduleName: appliance.ModuleNameBuild, pattern: "PUT /api/v1/builder/git-access", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameBuild, pattern: "PUT /api/v1/builder/git-access/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {
 				return nil, fmt.Errorf("missing developer workflow handlers")
 			}
 			return w.protect(roles.PermSystemOperate, deps.DevflowsH.UpdateBuilderGitAccess), nil
+		}},
+		{moduleName: appliance.ModuleNameBuild, pattern: "DELETE /api/v1/builder/git-access/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.DevflowsH == nil {
+				return nil, fmt.Errorf("missing developer workflow handlers")
+			}
+			return w.protect(roles.PermSystemOperate, deps.DevflowsH.DeleteBuilderGitAccess), nil
 		}},
 		{moduleName: appliance.ModuleNameBuild, pattern: "POST /api/v1/workspaces", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DevflowsH == nil {

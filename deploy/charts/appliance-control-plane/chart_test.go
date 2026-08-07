@@ -700,23 +700,24 @@ config:
 	}
 }
 
-func TestValuesSchemaRejectsBuilderWithoutBuildCatalog(t *testing.T) {
+func TestValuesSchemaAllowsBuilderWithEmptyBuildCatalog(t *testing.T) {
 	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "bad-builder-catalog-required.yaml")
+	valuesPath := filepath.Join(t.TempDir(), "builder-empty-catalog.yaml")
 	values := []byte(`
 config:
   applianceProfile: builder
+  buildCatalog: {}
+  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  artifactServerBaseURL: http://appliance-registry.artifacts.svc.cluster.local:5000
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)
 	}
 	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
 	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted builder config without buildCatalog\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("buildCatalog")) {
-		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
+	if err != nil {
+		t.Fatalf("helm lint rejected builder with empty buildCatalog:\n%s", out)
 	}
 }
 
@@ -878,8 +879,8 @@ func TestBuilderWorkflowRBACRenders(t *testing.T) {
 		t.Fatalf("workflow Role namespace = %q, want appliance-builds", ns)
 	}
 	rules, _ := at(role, "rules").([]any)
-	if !roleRuleAllowsResource(rules, "secrets", "create", "get", "update") {
-		t.Fatal("workflow Role should allow create/get/update on secrets for builder Git access")
+	if !roleRuleAllowsResource(rules, "secrets", "create", "get", "list", "update", "delete") {
+		t.Fatal("workflow Role should allow create/get/list/update/delete on secrets for named builder Git access")
 	}
 	if rb := findByKindAndName(docs, "RoleBinding", controlPlaneDeploymentName+"-workflows"); rb == nil {
 		t.Fatal("expected workflow RoleBinding for builder/workflows")

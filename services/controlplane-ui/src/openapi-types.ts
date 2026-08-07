@@ -528,6 +528,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/builder/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the runtime builder catalog
+         * @description Returns the single appliance build catalog document and whether it is configured. An empty catalog returns HTTP 200 with configured=false and an empty document (not 404).
+         */
+        get: operations["getBuilderCatalog"];
+        /**
+         * Replace the runtime builder catalog
+         * @description Accepts a full appliance-native catalog document as JSON or YAML, validates it, persists it, and hot-reloads in-memory catalog state. Invalid documents return HTTP 400.
+         */
+        put: operations["putBuilderCatalog"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/builder/git-access": {
         parameters: {
             query?: never;
@@ -536,17 +560,33 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get shared builder Git access status
-         * @description Returns whether the appliance-wide HTTPS Git credential required for builder workspace provisioning and build flows has been configured.
+         * List named builder Git access credentials
+         * @description Returns named HTTPS Git credentials configured for builder workspace provisioning, plus coverage against catalog Git hosts.
          */
         get: operations["getBuilderGitAccess"];
-        /**
-         * Configure shared builder Git access
-         * @description Stores the appliance-wide HTTPS Git credential used by builder workflows when cloning configured repositories.
-         */
-        put: operations["updateBuilderGitAccess"];
+        put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/builder/git-access/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Configure a named builder Git access credential */
+        put: operations["upsertBuilderGitAccess"];
+        post?: never;
+        /** Delete a named builder Git access credential */
+        delete: operations["deleteBuilderGitAccess"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1115,11 +1155,33 @@ export interface components {
             containerfilePath: string;
             imageRepository: string;
         };
-        BuilderGitAccessStatus: {
+        BuilderGitCredential: {
+            name: string;
+            host: string;
+            username: string;
+        };
+        BuilderCatalogStatus: {
+            /** @description True when a non-empty validated catalog is stored. */
             configured: boolean;
-            host?: string;
-            username?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @description Stored document content type (application/json or application/yaml). */
+            contentType?: string;
+            /** @description Parsed appliance-native catalog object. */
+            catalog: {
+                [key: string]: unknown;
+            };
+            /** @description Canonical catalog document text suitable for download. */
+            document: string;
+            canConfigure: boolean;
+        };
+        BuilderGitAccessStatus: {
+            /** @description True when every required catalog Git host has a credential. */
+            configured: boolean;
             requiredHosts?: string[];
+            coveredHosts?: string[];
+            missingHosts?: string[];
+            credentials?: components["schemas"]["BuilderGitCredential"][];
             canConfigure: boolean;
         };
         UpdateBuilderGitAccessRequest: {
@@ -2091,6 +2153,59 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getBuilderCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Builder catalog status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderCatalogStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putBuilderCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+                "application/yaml": string;
+                "text/yaml": string;
+            };
+        };
+        responses: {
+            /** @description Stored builder catalog status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderCatalogStatus"];
+                };
+            };
+            400: components["responses"]["ValidationProblem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     getBuilderGitAccess: {
         parameters: {
             query?: never;
@@ -2113,11 +2228,13 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
-    updateBuilderGitAccess: {
+    upsertBuilderGitAccess: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                name: string;
+            };
             cookie?: never;
         };
         requestBody: {
@@ -2138,6 +2255,31 @@ export interface operations {
             400: components["responses"]["ValidationProblem"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    deleteBuilderGitAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated builder Git access status after deletion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuilderGitAccessStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listWorkspaces: {

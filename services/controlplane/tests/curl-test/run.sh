@@ -275,10 +275,19 @@ builder_git_access_body_file="${RUN_DIR}/builder-git-access.json"
 cat > "${builder_git_access_body_file}" <<EOF
 {"host":"git.internal.example.com","username":"builder-user","token":"builder-token"}
 EOF
-curl_request PUT "${PUBLIC_URL}/api/v1/builder/git-access" "Bearer ${admin_access_token}" "${builder_git_access_body_file}"
-assert_status 200 "PUT /api/v1/builder/git-access"
+curl_request PUT "${PUBLIC_URL}/api/v1/builder/git-access/git-internal" "Bearer ${admin_access_token}" "${builder_git_access_body_file}"
+assert_status 200 "PUT /api/v1/builder/git-access/git-internal"
 assert_contains "${CURL_RESPONSE_BODY}" '"configured":true' "builder Git access response"
+assert_contains "${CURL_RESPONSE_BODY}" '"name":"git-internal"' "builder Git access response"
 assert_contains "${CURL_RESPONSE_BODY}" '"host":"git.internal.example.com"' "builder Git access response"
+
+builder_catalog_body_file="${RUN_DIR}/builder-catalog.json"
+cat > "${builder_catalog_body_file}" <<EOF
+{"workProfiles":[{"name":"default","repos":[{"name":"app","enabledByDefault":true}]}],"repos":[{"name":"app","url":"https://git.internal.example.com/team/app.git","defaultRef":"main"}]}
+EOF
+curl_request PUT "${PUBLIC_URL}/api/v1/builder/catalog" "Bearer ${admin_access_token}" "${builder_catalog_body_file}"
+assert_status 200 "PUT /api/v1/builder/catalog"
+assert_contains "${CURL_RESPONSE_BODY}" '"configured":true' "builder catalog response"
 
 refresh_body_file="${RUN_DIR}/refresh.json"
 cat > "${refresh_body_file}" <<EOF

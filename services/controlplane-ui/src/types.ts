@@ -143,15 +143,32 @@ export interface CreateWorkspaceRequest {
   workProfile: string;
 }
 
+export interface BuilderGitCredential {
+  name: string;
+  host: string;
+  username: string;
+}
+
+export interface BuilderCatalogStatus {
+  configured: boolean;
+  updatedAt?: string;
+  contentType?: string;
+  catalog: Record<string, unknown>;
+  document: string;
+  canConfigure: boolean;
+}
+
 export interface BuilderGitAccessStatus {
   configured: boolean;
-  host?: string;
-  username?: string;
   requiredHosts?: string[];
+  coveredHosts?: string[];
+  missingHosts?: string[];
+  credentials?: BuilderGitCredential[];
   canConfigure: boolean;
 }
 
 export interface UpdateBuilderGitAccessRequest {
+  name: string;
   host: string;
   username: string;
   token: string;

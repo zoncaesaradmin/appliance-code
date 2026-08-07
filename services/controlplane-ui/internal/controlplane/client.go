@@ -113,15 +113,31 @@ type CreateWorkspaceRequest struct {
 	WorkProfile string `json:"workProfile"`
 }
 
-type BuilderGitAccessStatus struct {
-	Configured    bool     `json:"configured"`
-	Host          string   `json:"host,omitempty"`
-	Username      string   `json:"username,omitempty"`
-	RequiredHosts []string `json:"requiredHosts,omitempty"`
-	CanConfigure  bool     `json:"canConfigure"`
+type BuilderCatalogStatus struct {
+	Configured   bool           `json:"configured"`
+	UpdatedAt    *time.Time     `json:"updatedAt,omitempty"`
+	ContentType  string         `json:"contentType,omitempty"`
+	Catalog      map[string]any `json:"catalog"`
+	Document     string         `json:"document"`
+	CanConfigure bool           `json:"canConfigure"`
 }
 
-type ConfigureBuilderGitAccessRequest struct {
+type BuilderGitCredential struct {
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Username string `json:"username"`
+}
+
+type BuilderGitAccessStatus struct {
+	Configured    bool                   `json:"configured"`
+	RequiredHosts []string               `json:"requiredHosts,omitempty"`
+	CoveredHosts  []string               `json:"coveredHosts,omitempty"`
+	MissingHosts  []string               `json:"missingHosts,omitempty"`
+	Credentials   []BuilderGitCredential `json:"credentials,omitempty"`
+	CanConfigure  bool                   `json:"canConfigure"`
+}
+
+type UpsertBuilderGitAccessRequest struct {
 	Host     string `json:"host"`
 	Username string `json:"username"`
 	Token    string `json:"token"`
@@ -634,6 +650,36 @@ func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID s
 	return c.doJSON(req, http.StatusNoContent, nil)
 }
 
+func (c *Client) BuilderCatalog(ctx context.Context, accessToken string) (BuilderCatalogStatus, error) {
+	var out BuilderCatalogStatus
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/builder/catalog", nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) PutBuilderCatalog(ctx context.Context, accessToken string, document []byte, contentType string) (BuilderCatalogStatus, error) {
+	var out BuilderCatalogStatus
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/yaml"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/api/v1/builder/catalog", bytes.NewReader(document))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", contentType)
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
 func (c *Client) BuilderGitAccess(ctx context.Context, accessToken string) (BuilderGitAccessStatus, error) {
 	var out BuilderGitAccessStatus
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/builder/git-access", nil)
@@ -647,15 +693,29 @@ func (c *Client) BuilderGitAccess(ctx context.Context, accessToken string) (Buil
 	return out, nil
 }
 
-func (c *Client) ConfigureBuilderGitAccess(ctx context.Context, accessToken string, in ConfigureBuilderGitAccessRequest) (BuilderGitAccessStatus, error) {
+func (c *Client) UpsertBuilderGitAccess(ctx context.Context, accessToken, name string, in UpsertBuilderGitAccessRequest) (BuilderGitAccessStatus, error) {
 	var out BuilderGitAccessStatus
 	body, _ := json.Marshal(in)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/api/v1/builder/git-access", bytes.NewReader(body))
+	path := c.baseURL + "/api/v1/builder/git-access/" + url.PathEscape(strings.TrimSpace(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, path, bytes.NewReader(body))
 	if err != nil {
 		return out, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
+	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func (c *Client) DeleteBuilderGitAccess(ctx context.Context, accessToken, name string) (BuilderGitAccessStatus, error) {
+	var out BuilderGitAccessStatus
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/builder/git-access/"+url.PathEscape(strings.TrimSpace(name)), nil)
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
 		return out, err
 	}

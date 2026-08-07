@@ -123,8 +123,8 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			t.Fatalf("catalog.RepoHosts: %v", err)
 		}
 		if len(hosts) > 0 {
-			if _, err := services.BuilderGit.Configure(t.Context(), hosts[0], "builder-user", "builder-token"); err != nil {
-				t.Fatalf("BuilderGit.Configure: %v", err)
+			if _, err := services.BuilderGit.Upsert(t.Context(), "git-internal", hosts[0], "builder-user", "builder-token"); err != nil {
+				t.Fatalf("BuilderGit.Upsert: %v", err)
 			}
 		}
 	}

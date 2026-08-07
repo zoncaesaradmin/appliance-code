@@ -4,12 +4,15 @@
 package devflows
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path"
 	"regexp"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -98,6 +101,28 @@ func (c Catalog) Empty() bool {
 		}
 	}
 	return len(c.Repos) == 0
+}
+
+// ParseCatalogDocument decodes a JSON or YAML build catalog document.
+func ParseCatalogDocument(raw []byte) (Catalog, string, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" {
+		return Catalog{}, "application/json", fmt.Errorf("devflows: catalog document is empty")
+	}
+	raw = []byte(trimmed)
+	var catalog Catalog
+	contentType := "application/json"
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		if err := yaml.Unmarshal(raw, &catalog); err != nil {
+			return Catalog{}, "", fmt.Errorf("devflows: catalog document must be valid JSON or YAML")
+		}
+		contentType = "application/yaml"
+	}
+	catalog.Normalize()
+	if err := catalog.Validate(); err != nil {
+		return Catalog{}, "", err
+	}
+	return catalog, contentType, nil
 }
 
 // Normalize lifts repos[].buildTargets into the top-level buildTargets list

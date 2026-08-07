@@ -61,22 +61,41 @@ func (c *Client) do(ctx context.Context, method, path string, cred credential, b
 	return c.doWithHeaders(ctx, method, path, cred, nil, body, out)
 }
 
+func (c *Client) doRaw(ctx context.Context, method, path string, cred credential, contentType string, body []byte, out any) error {
+	headers := map[string]string{}
+	if strings.TrimSpace(contentType) != "" {
+		headers["Content-Type"] = contentType
+	}
+	return c.doWithHeaders(ctx, method, path, cred, headers, rawRequestBody(body), out)
+}
+
+type rawRequestBody []byte
+
 func (c *Client) doWithHeaders(ctx context.Context, method, path string, cred credential, headers map[string]string, body, out any) error {
 	var reqBody io.Reader
+	contentType := ""
 	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("applianceclient: encoding request body: %w", err)
+		switch typed := body.(type) {
+		case rawRequestBody:
+			reqBody = bytes.NewReader([]byte(typed))
+		case []byte:
+			reqBody = bytes.NewReader(typed)
+		default:
+			encoded, err := json.Marshal(body)
+			if err != nil {
+				return fmt.Errorf("applianceclient: encoding request body: %w", err)
+			}
+			reqBody = bytes.NewReader(encoded)
+			contentType = "application/json"
 		}
-		reqBody = bytes.NewReader(encoded)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)
 	if err != nil {
 		return fmt.Errorf("applianceclient: building request: %w", err)
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	if cred.bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+cred.bearer)
@@ -519,15 +538,38 @@ func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]Wo
 	return result.Items, nil
 }
 
-// ConfigureBuilderGitAccessRequest describes the shared HTTPS Git credential
+// UpsertBuilderGitAccessRequest describes one named HTTPS Git credential
 // stored appliance-side for builder workflows.
-type ConfigureBuilderGitAccessRequest struct {
+type UpsertBuilderGitAccessRequest struct {
 	Host     string `json:"host"`
 	Username string `json:"username"`
 	Token    string `json:"token"`
 }
 
-// GetBuilderGitAccess returns the shared builder Git HTTPS access status.
+// GetBuilderCatalog returns the singleton runtime build catalog status/document.
+func (c *Client) GetBuilderCatalog(ctx context.Context, accessToken string) (*BuilderCatalogStatus, error) {
+	var result BuilderCatalogStatus
+	if err := c.do(ctx, http.MethodGet, "/api/v1/builder/catalog", bearerCredential(accessToken), nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// PutBuilderCatalog replaces the singleton runtime build catalog with a full
+// JSON or YAML document. contentType defaults to application/yaml when empty.
+func (c *Client) PutBuilderCatalog(ctx context.Context, accessToken string, document []byte, contentType string) (*BuilderCatalogStatus, error) {
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		contentType = "application/yaml"
+	}
+	var result BuilderCatalogStatus
+	if err := c.doRaw(ctx, http.MethodPut, "/api/v1/builder/catalog", bearerCredential(accessToken), contentType, document, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// GetBuilderGitAccess returns named builder Git HTTPS access status and coverage.
 func (c *Client) GetBuilderGitAccess(ctx context.Context, accessToken string) (*BuilderGitAccessStatus, error) {
 	var result BuilderGitAccessStatus
 	if err := c.do(ctx, http.MethodGet, "/api/v1/builder/git-access", bearerCredential(accessToken), nil, &result); err != nil {
@@ -536,11 +578,21 @@ func (c *Client) GetBuilderGitAccess(ctx context.Context, accessToken string) (*
 	return &result, nil
 }
 
-// ConfigureBuilderGitAccess creates or rotates the shared builder Git HTTPS
-// credential used by workspace/build workflows.
-func (c *Client) ConfigureBuilderGitAccess(ctx context.Context, accessToken string, req ConfigureBuilderGitAccessRequest) (*BuilderGitAccessStatus, error) {
+// UpsertBuilderGitAccess creates or rotates a named builder Git HTTPS credential.
+func (c *Client) UpsertBuilderGitAccess(ctx context.Context, accessToken, name string, req UpsertBuilderGitAccessRequest) (*BuilderGitAccessStatus, error) {
 	var result BuilderGitAccessStatus
-	if err := c.do(ctx, http.MethodPut, "/api/v1/builder/git-access", bearerCredential(accessToken), req, &result); err != nil {
+	path := "/api/v1/builder/git-access/" + url.PathEscape(strings.TrimSpace(name))
+	if err := c.do(ctx, http.MethodPut, path, bearerCredential(accessToken), req, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// DeleteBuilderGitAccess removes one named builder Git HTTPS credential.
+func (c *Client) DeleteBuilderGitAccess(ctx context.Context, accessToken, name string) (*BuilderGitAccessStatus, error) {
+	var result BuilderGitAccessStatus
+	path := "/api/v1/builder/git-access/" + url.PathEscape(strings.TrimSpace(name))
+	if err := c.do(ctx, http.MethodDelete, path, bearerCredential(accessToken), nil, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
