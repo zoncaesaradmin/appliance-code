@@ -566,20 +566,8 @@
     },
     "catalogBuilderImage": {
       "type": "string",
-      "description": "Short bundle builder name (default dev-build) or an optional digest-pinned override.",
-      "oneOf": [
-        {
-          "enum": [
-            "dev-build",
-            "builder",
-            "dev-container",
-            "devcontainer"
-          ]
-        },
-        {
-          "$ref": "#/$defs/builderImageDigest"
-        }
-      ]
+      "description": "Digest-pinned operator-supplied builder image (name@sha256:...). Builder images are not packaged in the appliance.",
+      "$ref": "#/$defs/builderImageDigest"
     },
     "buildCatalog": {
       "type": "object",

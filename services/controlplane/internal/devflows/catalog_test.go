@@ -196,27 +196,27 @@ func TestCatalogNormalizesWorkingDirectoryRootAliases(t *testing.T) {
 	}
 }
 
-func TestCatalogAcceptsAutomationDevBuilderImage(t *testing.T) {
+func TestCatalogAcceptsDigestPinnedBuilderImage(t *testing.T) {
 	catalog := testCatalog()
-	catalog.BuildTargets[0].BuilderImageDigest = DefaultBuilderImageRef
+	catalog.BuildTargets[0].BuilderImageDigest = "registry.local/my-builder@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c"
 	if err := catalog.Validate(); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
 }
 
-func TestCatalogNormalizesEmptyBuilderImageToAutomationDev(t *testing.T) {
+func TestCatalogLeavesEmptyBuilderImageUnset(t *testing.T) {
 	catalog := testCatalog()
 	catalog.Normalize()
-	if catalog.BuildTargets[0].BuilderImageDigest != DefaultBuilderImageRef {
-		t.Fatalf("BuilderImageDigest = %q, want %q", catalog.BuildTargets[0].BuilderImageDigest, DefaultBuilderImageRef)
+	if catalog.BuildTargets[0].BuilderImageDigest != "" {
+		t.Fatalf("BuilderImageDigest = %q, want empty (operator-supplied at submit)", catalog.BuildTargets[0].BuilderImageDigest)
 	}
 }
 
 func TestResolveBuilderImage(t *testing.T) {
-	appliance := "registry.local/dev-build@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c"
-	got, err := ResolveBuilderImage(DefaultBuilderImageRef, appliance)
+	appliance := "registry.local/my-builder@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c"
+	got, err := ResolveBuilderImage("", appliance)
 	if err != nil {
-		t.Fatalf("ResolveBuilderImage: %v", err)
+		t.Fatalf("ResolveBuilderImage empty catalog ref: %v", err)
 	}
 	if got != appliance {
 		t.Fatalf("got %q, want appliance digest", got)
@@ -228,6 +228,12 @@ func TestResolveBuilderImage(t *testing.T) {
 	}
 	if got != override {
 		t.Fatalf("override got %q, want %q", got, override)
+	}
+	if _, err := ResolveBuilderImage("dev-build", ""); err == nil {
+		t.Fatal("expected short builder alias to be rejected")
+	}
+	if _, err := ResolveBuilderImage("", ""); err == nil {
+		t.Fatal("expected empty catalog and empty appliance default to fail")
 	}
 }
 
@@ -256,7 +262,7 @@ repos:
         args: [image]
         workingDirectory: services/controlplane
         imageRepository: appliance-images/appliance-control-plane
-        builderImageDigest: dev-build
+        builderImageDigest: registry.local/my-builder@sha256:5ccdfda08e940614d030e377b75f048a55e3f61cbb0234294ad333f27afe222c
 `)
 	catalog, contentType, err := ParseCatalogDocument(raw)
 	if err != nil {

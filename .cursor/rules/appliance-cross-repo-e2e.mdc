@@ -20,7 +20,7 @@ Install:             ctr import (gets :bundled or import-DATE) → ctr image tag
 Runtime:             config.*ImageDigest == digest pin → workflow pod image (IfNotPresent)
 ```
 
-Names today: `workspace-provisioner` (alpine/git), `dev-build` (builder), and `artifact-server` (registry).
+Names today (product packs): `workspace-provisioner` (developer), `artifact-server`/`coredns` (base), `inference-runtime` (inference pack). `dev-build` is build-host tooling only (not packaged).
 
 Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manifest).
 
@@ -43,7 +43,7 @@ Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manif
 7. **Workspace create** → Workflow `workspace-prepare` (`engine.workflowContainerSpec`)
    - Pod `image:` = provisioner digest pin
 8. **Build submit** → workflow build pod
-   - `ResolveBuilderImage("dev-build", …)` → dev-build digest pin
+   - `ResolveBuilderImage` → explicit catalog `@sha256` (operator-supplied builder image)
 9. **Registry export and release-input** (`appliance-code`)
    - `export-artifact-server-image-archive.sh` builds the appliance wrapper,
      annotates `registry.local/artifact-server:bundled`, and derives
@@ -70,7 +70,7 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 | EXTRA_OCI pairing / order | `build-full-bundle.sh` (do not append provisioner onto EXTRA list before pairing) | path↔token checks in validator |
 | `RequireReference` + tag | Bundle entry `imageReference` | `install/source.go` `imageName`, `PreloadAll` |
 | Digests in Helm values | `PrepareValuesFile` | chart ConfigMap, `config.Load`, chart schema |
-| Catalog `dev-build` alias | catalog / examples | `ResolveBuilderImage`, `builderImageReference` |
+| Catalog builder digests | operator-supplied `@sha256` in build catalog | `ResolveBuilderImage`, optional day-2 default |
 | Offline images present | preload/tag | Workflow `IfNotPresent` pods |
 | Artifact-server archive annotation + digest | `export-artifact-server-image-archive.sh` / `artifactServerImage` | release assembly, zonctl preload, appliance-registry image digest |
 | Artifact-server chart + URL | `artifactServerChart` and registry Service | `config.artifactServerBaseURL`, `APPLIANCE_ARTIFACT_SERVER_BASE_URL`, catalog and readiness |
@@ -83,7 +83,7 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 
 - **Annotation scheme** → ctl `ValidateOCIArchiveReference` + preload tag tests; release finalize + `validate-release-artifacts.py`; config.example docs
 - **Digest derivation** → finalize (archive wins); never reintroduce inspect-first pins
-- **EXTRA_OCI refs/order** → pairing comments; path/token validator; both provisioner and dev-build in bundle
+- **EXTRA_OCI refs/order** → pairing comments; path/token validator; workspace-provisioner in developer pack
 - **Builder image name** → `source.go`, `catalog.go` DefaultBuilderImageRef, chart schema, examples, tests
 - **Tag/import algorithm** → `preload.go` / tests; install+upgrade fake-ctr tests
 - **PrepareValuesFile keys** → chart `configmap.yaml` env names; config Load; chart_test

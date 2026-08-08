@@ -570,8 +570,8 @@ func (s *Service) SubmitBuildForCurrent(ctx context.Context, actor audit.Actor, 
 	if tag == "" {
 		tag = ws.Name + "-" + resolved.Target.Name
 	}
-	if s.builderImage == "" {
-		return storage.Job{}, fmt.Errorf("devflows: builderImageDigest is required for builds")
+	if s.builderImage == "" && strings.TrimSpace(resolved.Target.BuilderImageDigest) == "" {
+		return storage.Job{}, fmt.Errorf("devflows: builderImageDigest is required for builds; set a digest-pinned image in the build catalog (builder images are operator-supplied)")
 	}
 	builderImage, err := ResolveBuilderImage(resolved.Target.BuilderImageDigest, s.builderImage)
 	if err != nil {

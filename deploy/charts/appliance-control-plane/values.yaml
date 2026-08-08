@@ -83,9 +83,9 @@ config:
   # Appliance-owned generic image used by workspace provisioning workflows.
   # zonctl injects this from the signed bundle for build-capable profiles.
   workspaceProvisionerImageDigest: ""
-  # Single bundled builder/dev-container image used by all workflow build pods.
-  # zonctl injects this from the signed bundle (dev-build) for
-  # build-capable profiles. Build catalogs must not set per-target builder digests.
+  # Optional day-2 operator default builder image digest. Builder images are
+  # not packaged in the appliance; build catalogs must set explicit
+  # digest-pinned builderImageDigest values for build pods.
   builderImageDigest: ""
   # Internal Artifact Server data-plane endpoint. Artifact-bearing production profiles
   # (builder, storage, storage-landns, builder-landns, builder-storage-landns)

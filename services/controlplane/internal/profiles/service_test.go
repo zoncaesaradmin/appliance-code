@@ -99,16 +99,19 @@ func TestActivationFailsMissingEntitlement(t *testing.T) {
 func TestActivationFailsMissingBundleArtifact(t *testing.T) {
 	svc, lic := openProfiles(t, profiles.ManifestBundleChecker{
 		Present: map[string]struct{}{
-			"control-plane-image": {},
-			"control-plane-chart": {},
-			"host-agent-image":    {},
-			// workflow-templates intentionally missing
+			"control-plane-image":         {},
+			"control-plane-chart":         {},
+			"host-agent-image":            {},
+			"artifact-server-image":       {},
+			"appliance-registry-chart":    {},
+			"workspace-provisioner-image": {},
+			// workflow-templates intentionally missing (required by workflows/build)
 		},
 	})
 	if _, err := lic.AcceptBaseEntitlement(context.Background(), audit.SystemActor); err != nil {
 		t.Fatal(err)
 	}
-	validation, err := svc.Validate(context.Background(), "core")
+	validation, err := svc.Validate(context.Background(), "builder")
 	if err != nil {
 		t.Fatal(err)
 	}

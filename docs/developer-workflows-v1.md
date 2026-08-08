@@ -26,12 +26,12 @@ submission.
   build targets under `repos[].buildTargets`. The control plane flattens nested
   targets into the runtime `buildTargets` list (filling each target's `repo`
   from its parent). Top-level `buildTargets` with an explicit `repo` field
-  remain accepted. Optional per-target `builderImageDigest` defaults to the
-  short bundle name `dev-build` (also accepted when omitted). The control plane
-  resolves that name to `config.builderImageDigest`, which zonctl injects from
-  the signed bundle's packaged dev-build OCI image. Advanced catalogs may
-  override with a digest-pinned reference that is present in the bundle; users
-  should not paste floating GHCR tags.
+  remain accepted. Per-target `builderImageDigest` must be an explicit
+  digest-pinned OCI reference for an operator-supplied builder image already
+  present on the appliance (images are not packaged in the product bundle).
+  Empty/`dev-build` short aliases are not resolved from the bundle. An optional
+  day-2 `config.builderImageDigest` may supply a default when the catalog omits
+  the field; otherwise build submit fails closed. Do not paste floating GHCR tags.
 - Target mapping is name/alias → one catalog entry → one execution policy.
   One repo may expose many targets. A target whose `name` equals the repo
   name is still an explicit mapping (typically `execution: make` with

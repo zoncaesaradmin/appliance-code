@@ -21,10 +21,9 @@ const (
 
 	DefaultScriptArg = "build.sh"
 
-	// DefaultBuilderImageRef is the user-facing catalog default for the
-	// bundled CI/dev-container builder image. Install resolves it to the
-	// digest-pinned dev-build imageReference from the signed bundle.
-	DefaultBuilderImageRef = "dev-build"
+	// Builder images are operator-supplied OCI images (digest-pinned). Catalogs
+	// must set builderImageDigest to an explicit name@sha256:... reference; the
+	// appliance does not package a default builder/dev-build image.
 
 	legacyExecutionMake   = "make_target"
 	legacyExecutionScript = "repo_script"
@@ -74,10 +73,9 @@ type BuildTarget struct {
 	ContainerfilePath string   `json:"containerfilePath,omitempty" yaml:"containerfilePath,omitempty"`
 	ImageRepository   string   `json:"imageRepository" yaml:"imageRepository"`
 	ImageTagTemplate  string   `json:"imageTagTemplate,omitempty" yaml:"imageTagTemplate,omitempty"`
-	// BuilderImageDigest selects the build pod image. Prefer the short bundle
-	// name "dev-build" (default when omitted). A digest-pinned override is
-	// also accepted; symbolic names resolve at submit time to the appliance
-	// bundled builder image.
+	// BuilderImageDigest selects the build pod image. Must be an explicit
+	// digest-pinned OCI reference (name@sha256:...). Builder images are
+	// operator-supplied and are not packaged in the appliance bundle.
 	BuilderImageDigest string `json:"builderImageDigest,omitempty" yaml:"builderImageDigest,omitempty"`
 
 	// Legacy input-only fields. Accepted on unmarshal for older catalogs and
@@ -151,9 +149,7 @@ func (c *Catalog) Normalize() {
 	for i := range c.BuildTargets {
 		normalizeTargetExecution(&c.BuildTargets[i])
 		normalizeWorkingDirectory(&c.BuildTargets[i])
-		if strings.TrimSpace(c.BuildTargets[i].BuilderImageDigest) == "" {
-			c.BuildTargets[i].BuilderImageDigest = DefaultBuilderImageRef
-		}
+		c.BuildTargets[i].BuilderImageDigest = strings.TrimSpace(c.BuildTargets[i].BuilderImageDigest)
 	}
 }
 
@@ -443,43 +439,39 @@ func (c Catalog) BuilderImageDigests() []string {
 	return nil
 }
 
-// ResolveBuilderImage maps a catalog builderImageDigest value to the digests-
-// pinned image used for the workflow build pod. Empty and short names such as
-// "dev-build" resolve to applianceBuilderDigest from install. A digest-
-// pinned override is returned unchanged for allowlist checks.
+// ResolveBuilderImage maps a catalog builderImageDigest value to the image
+// used for the workflow build pod. Catalogs must supply an explicit
+// digest-pinned reference. The optional applianceBuilderDigest is a day-2
+// operator default used only when the catalog omits builderImageDigest.
 func ResolveBuilderImage(ref, applianceBuilderDigest string) (string, error) {
 	ref = strings.TrimSpace(ref)
-	if isBundledBuilderAlias(ref) {
+	if ref == "" {
 		applianceBuilderDigest = strings.TrimSpace(applianceBuilderDigest)
 		if applianceBuilderDigest == "" {
-			return "", fmt.Errorf("devflows: appliance builder image is not configured")
+			return "", fmt.Errorf("devflows: builderImageDigest is required; set an explicit digest-pinned image reference in the build catalog (builder images are operator-supplied)")
+		}
+		if !validPinnedBuilderImage(applianceBuilderDigest) {
+			return "", fmt.Errorf("devflows: configured appliance builder image is not digest-pinned")
 		}
 		return applianceBuilderDigest, nil
 	}
 	if validPinnedBuilderImage(ref) {
 		return ref, nil
 	}
-	return "", fmt.Errorf("devflows: unknown builder image %q; use %q or a digest-pinned bundle image reference", ref, DefaultBuilderImageRef)
+	return "", fmt.Errorf("devflows: builderImageDigest %q is invalid; use a digest-pinned image reference (name@sha256:...)", ref)
 }
 
 func validateCatalogBuilderImage(ref string) error {
 	ref = strings.TrimSpace(ref)
-	if isBundledBuilderAlias(ref) {
+	if ref == "" {
+		// Allowed on catalog load; ResolveBuilderImage fails closed at submit
+		// unless a day-2 appliance default digest is configured.
 		return nil
 	}
 	if validPinnedBuilderImage(ref) {
 		return nil
 	}
-	return fmt.Errorf("builderImageDigest %q is invalid; use %q or a digest-pinned image reference", ref, DefaultBuilderImageRef)
-}
-
-func isBundledBuilderAlias(ref string) bool {
-	switch strings.ToLower(strings.TrimSpace(ref)) {
-	case "", DefaultBuilderImageRef, "builder", "dev-container", "devcontainer":
-		return true
-	default:
-		return false
-	}
+	return fmt.Errorf("builderImageDigest %q is invalid; use a digest-pinned image reference (name@sha256:...)", ref)
 }
 
 func validPinnedBuilderImage(ref string) bool {

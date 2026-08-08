@@ -2,7 +2,7 @@ profiles:
   core:
     displayName: "Base (core)"
     description: "Default base appliance profile."
-    capabilities: [base, host, workflows]
+    capabilities: [base, host]
   builder:
     displayName: builder
     description: "Built-in appliance profile."

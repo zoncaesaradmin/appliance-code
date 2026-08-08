@@ -325,10 +325,11 @@ func (c Config) Validate() error {
 		} else if !strings.Contains(c.WorkspaceProvisionerImageDigest, "@sha256:") {
 			errs = append(errs, "workspaceProvisionerImageDigest must be digest-pinned")
 		}
-		if strings.TrimSpace(c.BuilderImageDigest) == "" {
-			errs = append(errs, "builderImageDigest must not be empty when the build capability is enabled")
-		} else if !strings.Contains(c.BuilderImageDigest, "@sha256:") {
-			errs = append(errs, "builderImageDigest must be digest-pinned")
+		// builderImageDigest is operator-supplied (not packaged in the appliance).
+		// When set it must be digest-pinned; builds fail at submit if the catalog
+		// target cannot resolve a usable builder image.
+		if digest := strings.TrimSpace(c.BuilderImageDigest); digest != "" && !strings.Contains(digest, "@sha256:") {
+			errs = append(errs, "builderImageDigest must be digest-pinned when set")
 		}
 	} else if profileErr == nil && !buildEnabled && !c.BuildCatalog.Empty() {
 		if err := c.BuildCatalog.Validate(); err != nil {
