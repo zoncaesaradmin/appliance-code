@@ -41,6 +41,7 @@
       "required": ["claimName", "accessMode", "size"],
       "properties": {
         "hostPath": {
+          "description": "When enabled, chart emits a static hostPath PersistentVolume + PVC so Restricted PSA pods mount a PVC while models remain on the host for models-import. Not a pod-level hostPath volume.",
           "type": "object",
           "properties": {
             "enabled": {"type": "boolean"},

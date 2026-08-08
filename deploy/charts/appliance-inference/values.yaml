@@ -20,9 +20,10 @@ service:
   targetPort: 11434
 
 persistence:
-  # Prefer hostPath so zonctl models-import can stage verified weights on
-  # the appliance host without PVC surgery. PVC remains available for
-  # advanced installs that set hostPath.enabled=false.
+  # Default: host-backed static PV+PVC so Restricted PSA pods mount a PVC
+  # (allowed) while models stay on the host for zonctl models-import.
+  # Pod-level hostPath is forbidden under Restricted; do not reintroduce it.
+  # Set hostPath.enabled=false for an ordinary StorageClass PVC instead.
   hostPath:
     enabled: true
     path: /data/zon/inference/models

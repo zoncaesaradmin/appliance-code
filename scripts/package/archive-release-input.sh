@@ -574,17 +574,18 @@ if [[ -n "${WORKFLOWS_CRDS_DIR}" && ! -d "${WORKFLOWS_CRDS_DIR}" ]]; then
   echo "archive-release-input: workflows CRDs directory not found: ${WORKFLOWS_CRDS_DIR}" >&2
   exit 1
 fi
-# The workflows chart is always packaged when its source directory
-# exists in this checkout (see below) — there is no opt-out flag — and
-# ADR 0011 requires it in the complete v1 appliance. A release-input
-# bundle that ships the chart without its CRDs installs a workflow
-# controller that crash-loops forever on startup (its first API call,
-# "get workflows.argoproj.io", 404s) until zonctl's install eventually
-# times out and rolls the whole install back. Refuse to produce that
-# bundle at packaging time rather than let it surface as a confusing
-# install-time failure.
-if [[ -d "${WORKFLOWS_CHART_DIR}" && -z "${WORKFLOWS_CRDS_DIR}" ]]; then
-  echo "archive-release-input: packaging the workflows chart (${WORKFLOWS_CHART_DIR}) requires --workflows-crds-dir; the workflow controller cannot start without its CRDs" >&2
+# Package the workflows chart only when CRDs (or other workflows inputs) are
+# provided. ADR 0011 still requires workflows in the complete appliance, but
+# pack-selective builds (developer pack omitted) may skip workflows inputs.
+# Never ship the chart without CRDs: that installs a controller that
+# crash-loops on "get workflows.argoproj.io" until install times out.
+if [[ -z "${WORKFLOWS_CRDS_DIR}" ]]; then
+  if [[ -n "${WORKFLOWS_VERSION}" || -n "${WORKFLOW_CONTROLLER_IMAGE}" || -n "${WORKFLOW_EXECUTOR_IMAGE}" ]]; then
+    echo "archive-release-input: workflows inputs require --workflows-crds-dir; the workflow controller cannot start without its CRDs" >&2
+    exit 1
+  fi
+elif [[ ! -d "${WORKFLOWS_CHART_DIR}" ]]; then
+  echo "archive-release-input: --workflows-crds-dir was set but workflows chart is missing: ${WORKFLOWS_CHART_DIR}" >&2
   exit 1
 fi
 if [[ ! -f "${VALUES_SCHEMA_PATH}" ]]; then
@@ -772,13 +773,10 @@ mkdir -p "${TMP_DIR}/appliance-inference-chart"
 cp -R "${INFERENCE_CHART_DIR}/." "${TMP_DIR}/appliance-inference-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_ARCHIVE}" appliance-inference-chart
 
-if [[ -d "${WORKFLOWS_CHART_DIR}" ]]; then
+if [[ -n "${WORKFLOWS_CRDS_DIR}" && -d "${WORKFLOWS_CHART_DIR}" ]]; then
   mkdir -p "${TMP_DIR}/workflows-chart"
   cp -R "${WORKFLOWS_CHART_DIR}/." "${TMP_DIR}/workflows-chart/"
   tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" workflows-chart
-fi
-
-if [[ -n "${WORKFLOWS_CRDS_DIR}" ]]; then
   copy_dir_or_empty "${WORKFLOWS_CRDS_DIR}" "${RELEASE_INPUT_DIR}/workflows-crds"
 fi
 

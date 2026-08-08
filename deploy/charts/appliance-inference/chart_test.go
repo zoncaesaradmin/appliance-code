@@ -40,6 +40,11 @@ func TestInferenceGatewayRender(t *testing.T) {
 		"runAsUser: 10006",
 		"name: OLLAMA_MODELS",
 		"value: \"/models\"",
+		"kind: PersistentVolume",
+		"name: inference-gateway-models",
+		"path: \"/data/zon/inference/models\"",
+		"kind: PersistentVolumeClaim",
+		"claimName: models",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
@@ -50,6 +55,29 @@ func TestInferenceGatewayRender(t *testing.T) {
 	}
 	if strings.Contains(out, "kind: Namespace") {
 		t.Error("default render must not own Namespace; zonctl EnsureNamespace creates it")
+	}
+	// Restricted PSA forbids pod-level hostPath; models must be PVC-backed.
+	if strings.Contains(out, "volumes:\n        - name: models\n          hostPath:") {
+		t.Error("models volume must not use pod-level hostPath under Restricted PSA")
+	}
+	if !strings.Contains(out, "volumes:\n        - name: models\n          persistentVolumeClaim:\n            claimName: models") {
+		t.Error("models volume must mount the models PVC")
+	}
+}
+
+func TestModelsStorageClassPVCWhenHostPathDisabled(t *testing.T) {
+	out := render(t, "--set", "persistence.hostPath.enabled=false")
+	if strings.Contains(out, "kind: PersistentVolume\n") {
+		t.Error("hostPath.enabled=false must not render a static PersistentVolume")
+	}
+	if !strings.Contains(out, "kind: PersistentVolumeClaim") {
+		t.Error("hostPath.enabled=false must still render a PVC")
+	}
+	if strings.Contains(out, "path: \"/data/zon/inference/models\"") {
+		t.Error("hostPath.enabled=false must not pin the host models path on a PV")
+	}
+	if !strings.Contains(out, "volumes:\n        - name: models\n          persistentVolumeClaim:\n            claimName: models") {
+		t.Error("models volume must still mount the models PVC")
 	}
 }
 

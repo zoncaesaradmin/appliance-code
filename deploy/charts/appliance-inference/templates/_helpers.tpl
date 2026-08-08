@@ -29,3 +29,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) }}
 {{- end -}}
 {{- end -}}
+
+{{- define "appliance-inference.modelsVolumeName" -}}
+{{- printf "%s-models" (include "appliance-inference.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}

@@ -1,4 +1,41 @@
-{{- if not .Values.persistence.hostPath.enabled }}
+{{- if .Values.persistence.hostPath.enabled }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "appliance-inference.modelsVolumeName" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+spec:
+  capacity:
+    storage: {{ .Values.persistence.size | quote }}
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath:
+    path: {{ .Values.persistence.hostPath.path | quote }}
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: {{ include "appliance-inference.namespace" . }}
+    name: {{ .Values.persistence.claimName }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.persistence.claimName }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.accessMode }}
+  storageClassName: ""
+  volumeName: {{ include "appliance-inference.modelsVolumeName" . }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+---
+{{- else }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -96,14 +133,8 @@ spec:
               mountPath: /home/ollama
       volumes:
         - name: models
-          {{- if .Values.persistence.hostPath.enabled }}
-          hostPath:
-            path: {{ .Values.persistence.hostPath.path | quote }}
-            type: DirectoryOrCreate
-          {{- else }}
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.claimName }}
-          {{- end }}
         - name: tmp
           emptyDir: {}
         - name: ollama-home

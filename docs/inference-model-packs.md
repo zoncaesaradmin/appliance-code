@@ -53,8 +53,9 @@ Behavior:
 3. Ensure `/data/zon/inference/models` exists with UID/GID `10006:20000` mode `2770`.
 4. Copy blobs into `/data/zon/inference/models/<sanitized-modelId>/`.
 
-The inference Deployment mounts that host path at `/models` (`OLLAMA_MODELS`).
-Install without a pack still succeeds: the gateway comes up and
+The inference Deployment mounts that host path at `/models` (`OLLAMA_MODELS`)
+via a static hostPath PersistentVolume + PVC (Restricted PSA forbids pod-level
+hostPath). Install without a pack still succeeds: the gateway comes up and
 `GET /inference/v1/models` may be empty until a pack is imported.
 
 ## Publishing packs (release skill)
