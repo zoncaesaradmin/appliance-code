@@ -93,6 +93,7 @@ Use explicit permissions rather than broad `write` aliases:
 - `tokens.create.any`
 - `builds.create`, `builds.read.self`, `builds.read.any`, `builds.cancel.self`, `builds.cancel.any`
 - `artifacts.read`, `artifacts.write`, `artifacts.delete.self`, `artifacts.delete.any`
+- `files.read`, `files.write`
 - `operations.read.self`, `operations.read.any`
 - `artifacts.delete`
 - `artifacts.grants.read`, `artifacts.grants.write`

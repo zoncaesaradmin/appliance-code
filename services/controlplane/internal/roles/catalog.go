@@ -70,6 +70,9 @@ const (
 	PermArtifactsDeleteSelf = "artifacts.delete.self"
 	PermArtifactsDeleteAny  = "artifacts.delete.any"
 
+	PermFilesRead  = "files.read"
+	PermFilesWrite = "files.write"
+
 	PermOperationsReadSelf = "operations.read.self"
 	PermOperationsReadAny  = "operations.read.any"
 
@@ -145,10 +148,13 @@ var AllPermissions = []storage.Permission{
 	{Name: PermJobsCancelSelf, Description: "Cancel own developer workflow jobs"},
 	{Name: PermJobsCancelAny, Description: "Cancel any developer workflow job"},
 
-	{Name: PermArtifactsRead, Description: "Read artifact metadata, OCI artifact content, and appliance-managed file content"},
-	{Name: PermArtifactsWrite, Description: "Push OCI artifacts and upload appliance-managed file artifacts"},
+	{Name: PermArtifactsRead, Description: "Read artifact metadata and OCI artifact content"},
+	{Name: PermArtifactsWrite, Description: "Push OCI artifacts to the appliance registry"},
 	{Name: PermArtifactsDeleteSelf, Description: "Delete artifacts produced by own builds"},
 	{Name: PermArtifactsDeleteAny, Description: "Delete any artifact"},
+
+	{Name: PermFilesRead, Description: "Download appliance-managed files from named file spaces"},
+	{Name: PermFilesWrite, Description: "Upload appliance-managed files into named file spaces"},
 
 	{Name: PermOperationsReadSelf, Description: "Read own durable operations"},
 	{Name: PermOperationsReadAny, Description: "Read any durable operation"},
@@ -218,6 +224,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
 			PermJobsReadSelf, PermJobsCancelSelf,
 			PermArtifactsRead, PermArtifactsWrite, PermArtifactsDeleteSelf,
+			PermFilesRead, PermFilesWrite,
 			PermHostRead, PermOperationsReadSelf,
 			PermInferenceUse, PermInferenceModelsRead,
 			PermMCPInvoke,
@@ -229,7 +236,7 @@ var BuiltInRoles = []BuiltInRole{
 		Permissions: []string{
 			PermTokensReadSelf, PermTokensCreateSelf, PermTokensRevokeSelf,
 			PermWorkProfilesRead, PermWorkspacesReadAny, PermBuildTargetsRead,
-			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead, PermHostRead,
+			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead, PermFilesRead, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRead,
 			PermInferenceModelsRead,
@@ -244,7 +251,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermWorkProfilesRead, PermWorkspacesCreate, PermWorkspacesReadSelf,
 			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
 			PermJobsReadSelf, PermJobsCancelSelf,
-			PermArtifactsRead, PermArtifactsWrite, PermHostRead,
+			PermArtifactsRead, PermArtifactsWrite, PermFilesRead, PermFilesWrite, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRegister,
 			PermDNSPublish,

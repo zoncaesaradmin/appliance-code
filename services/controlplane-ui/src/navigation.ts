@@ -70,6 +70,12 @@ export const MODES: Mode[] = [
         icon: "dns"
       },
       {
+        label: "Files",
+        path: "/manage/files",
+        description: "Upload and browse named appliance file spaces",
+        icon: "files"
+      },
+      {
         label: "Artifacts",
         path: "/manage/artifacts",
         description: "Review artifact catalog and registry grants",
@@ -108,7 +114,7 @@ export const MODES: Mode[] = [
         icon: "status"
       },
       {
-        label: "Metadata Bundle",
+        label: "Metadata",
         path: "/admin/metadata-bundle",
         description: "Install and roll back signed appliance metadata bundles",
         icon: "profiles"

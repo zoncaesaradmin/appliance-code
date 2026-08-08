@@ -2,40 +2,40 @@ profiles:
   core:
     displayName: "Base (core)"
     description: "Default base appliance profile."
-    capabilities: [base, host]
+    capabilities: [base, host, files]
   builder:
     displayName: builder
     description: "Built-in appliance profile."
-    capabilities: [base, host, workflows, build, artifact]
+    capabilities: [base, host, files, workflows, build, artifact]
   storage:
     displayName: storage
     description: "Built-in appliance profile."
-    capabilities: [base, host, artifact]
+    capabilities: [base, host, files, artifact]
   landns:
     displayName: landns
     description: "Built-in appliance profile."
-    capabilities: [base, host, dns]
+    capabilities: [base, host, files, dns]
   storage-landns:
     displayName: storage-landns
     description: "Built-in appliance profile."
-    capabilities: [base, host, artifact, dns]
+    capabilities: [base, host, files, artifact, dns]
   builder-landns:
     displayName: builder-landns
     description: "Built-in appliance profile."
-    capabilities: [base, host, workflows, build, artifact, dns]
+    capabilities: [base, host, files, workflows, build, artifact, dns]
   builder-storage-landns:
     displayName: builder-storage-landns
     description: "Built-in appliance profile."
-    capabilities: [base, host, workflows, build, artifact, dns]
+    capabilities: [base, host, files, workflows, build, artifact, dns]
   lanllm:
     displayName: lanllm
     description: "Local LLM inference API without builder."
-    capabilities: [base, host, inference]
+    capabilities: [base, host, files, inference]
   builder-lanllm:
     displayName: builder-lanllm
     description: "Builder plus local LLM inference API."
-    capabilities: [base, host, workflows, build, artifact, inference]
+    capabilities: [base, host, files, workflows, build, artifact, inference]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
-    capabilities: [base, host, workflows, build, artifact, dns, inference]
+    capabilities: [base, host, files, workflows, build, artifact, dns, inference]

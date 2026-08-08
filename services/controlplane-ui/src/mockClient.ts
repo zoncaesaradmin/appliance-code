@@ -40,7 +40,10 @@ import type {
   HostWifiAPStatus,
   HostWifiAPApplyRequest,
   HostMDNSStatus,
-  HostMDNSApplyRequest
+  HostMDNSApplyRequest,
+  ApplianceFileEntry,
+  ApplianceFileListResult,
+  ApplianceFileUploadResult
 } from "./types";
 
 function now(): string {
@@ -67,6 +70,7 @@ type MockState = {
   jobs: Job[];
   repositories: string[];
   grants: RegistryGrant[];
+  files: Record<string, { sizeBytes: number; modifiedAt: string; content: Uint8Array }>;
   licensingState: "unresolved" | "base_free" | "licensed";
   entitledCapabilities: string[];
   profiles: ApplianceProfile[];
@@ -77,7 +81,7 @@ type MockState = {
 
 const mockState: MockState = {
   initialized: true,
-  capabilities: ["base", "build", "artifact", "dns"],
+  capabilities: ["base", "files", "build", "artifact", "dns"],
 	session: {
     userId: "mock-admin",
     username: "admin",
@@ -85,6 +89,8 @@ const mockState: MockState = {
     authMethod: "password",
     permissions: [
       "dns.records.write",
+      "files.write",
+      "files.read",
       "artifacts.write",
       "artifacts.read",
       "licensing.read",
@@ -104,7 +110,7 @@ const mockState: MockState = {
       id: uuid(),
       userId: "mock-admin",
       name: "automation-bot",
-      scopes: ["artifacts.read", "artifacts.write"],
+      scopes: ["files.read", "files.write", "artifacts.read", "artifacts.write"],
       createdAt: now(),
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()
     }
@@ -203,6 +209,7 @@ const mockState: MockState = {
       createdAt: now()
     }
   ],
+  files: {},
   licensingState: "unresolved",
   entitledCapabilities: [],
   profiles: [
@@ -212,7 +219,7 @@ const mockState: MockState = {
       description: "Default base appliance profile.",
       builtIn: true,
       active: true,
-      capabilities: ["base", "host", "workflows"]
+      capabilities: ["base", "host", "files", "workflows"]
     }
   ],
   acknowledgedNotifications: [],
@@ -258,7 +265,7 @@ export class MockControlPlaneClient {
       username,
       domain: "local",
       authMethod: "password",
-      permissions: ["dns.records.write", "artifacts.write", "artifacts.read"]
+      permissions: ["dns.records.write", "files.write", "files.read", "artifacts.write", "artifacts.read"]
     };
     return {
       accessToken: uuid(),
@@ -613,6 +620,76 @@ export class MockControlPlaneClient {
     mockState.grants = mockState.grants.filter((grant) => grant.id !== id);
   }
 
+  async listApplianceFiles(path = ""): Promise<ApplianceFileListResult> {
+    const prefix = path.trim().replace(/^\/+|\/+$/g, "");
+    const itemsByName = new Map<string, ApplianceFileEntry>();
+    for (const filePath of Object.keys(mockState.files)) {
+      if (prefix) {
+        if (filePath === prefix) {
+          continue;
+        }
+        if (!filePath.startsWith(prefix + "/")) {
+          continue;
+        }
+      }
+      const remainder = prefix ? filePath.slice(prefix.length + 1) : filePath;
+      const [name, ...rest] = remainder.split("/");
+      if (!name) {
+        continue;
+      }
+      if (rest.length > 0) {
+        if (!itemsByName.has(name)) {
+          itemsByName.set(name, {
+            name,
+            path: prefix ? `${prefix}/${name}` : name,
+            type: "directory",
+            sizeBytes: 0,
+            modifiedAt: now()
+          });
+        }
+        continue;
+      }
+      const stored = mockState.files[filePath];
+      itemsByName.set(name, {
+        name,
+        path: filePath,
+        type: "file",
+        sizeBytes: stored.sizeBytes,
+        modifiedAt: stored.modifiedAt
+      });
+    }
+    return {
+      path: prefix,
+      items: [...itemsByName.values()].sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      })
+    };
+  }
+
+  async uploadApplianceFile(path: string, file: File): Promise<ApplianceFileUploadResult> {
+    const cleaned = path.trim().replace(/^\/+/, "");
+    const overwritten = Boolean(mockState.files[cleaned]);
+    const content = new Uint8Array(await file.arrayBuffer());
+    mockState.files[cleaned] = {
+      sizeBytes: content.byteLength,
+      modifiedAt: now(),
+      content
+    };
+    return { path: cleaned, size: content.byteLength, overwritten };
+  }
+
+  async downloadApplianceFile(path: string): Promise<Blob> {
+    const cleaned = path.trim().replace(/^\/+/, "");
+    const stored = mockState.files[cleaned];
+    if (!stored) {
+      throw new Error("File not found");
+    }
+    return new Blob([Uint8Array.from(stored.content)]);
+  }
+
   async getLicensingStatus(): Promise<LicensingStatus> {
     return {
       state: mockState.licensingState,
@@ -628,14 +705,14 @@ export class MockControlPlaneClient {
 
   async acceptBaseEntitlement(): Promise<LicensingStatus> {
     mockState.licensingState = "base_free";
-    mockState.entitledCapabilities = ["base", "host", "workflows"];
+    mockState.entitledCapabilities = ["base", "host", "files", "workflows"];
     return this.getLicensingStatus();
   }
 
   async importLicense(document: string): Promise<LicensingStatus> {
     void document;
     mockState.licensingState = "licensed";
-    mockState.entitledCapabilities = ["base", "host", "workflows", "build", "artifact", "dns"];
+    mockState.entitledCapabilities = ["base", "host", "files", "workflows", "build", "artifact", "dns"];
     return this.getLicensingStatus();
   }
 
@@ -684,6 +761,7 @@ export class MockControlPlaneClient {
     return [
       { id: "base", dependencies: [] },
       { id: "host", dependencies: ["base"] },
+      { id: "files", dependencies: ["base"] },
       { id: "workflows", dependencies: ["base"] },
       { id: "artifact", dependencies: ["base"] },
       { id: "build", dependencies: ["base", "workflows", "artifact"] },

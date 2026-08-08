@@ -42,8 +42,22 @@ import type {
   HostWifiAPStatus,
   HostWifiAPApplyRequest,
   HostMDNSStatus,
-  HostMDNSApplyRequest
+  HostMDNSApplyRequest,
+  ApplianceFileListResult,
+  ApplianceFileUploadResult
 } from "./types";
+
+function encodeApplianceFilePath(path: string): string {
+  const trimmed = path.trim().replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!trimmed) {
+    return "/api/v1/files";
+  }
+  return `/api/v1/files/${trimmed
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -113,6 +127,9 @@ export interface ControlPlaneClient {
   listRegistryGrants(): Promise<RegistryGrant[]>;
   createRegistryGrant(request: CreateRegistryGrantRequest): Promise<RegistryGrant>;
   deleteRegistryGrant(id: string): Promise<void>;
+  listApplianceFiles(path?: string): Promise<ApplianceFileListResult>;
+  uploadApplianceFile(path: string, file: File): Promise<ApplianceFileUploadResult>;
+  downloadApplianceFile(path: string): Promise<Blob>;
   getLicensingStatus(): Promise<LicensingStatus>;
   getLicensingEntitlements(): Promise<string[]>;
   acceptBaseEntitlement(): Promise<LicensingStatus>;
@@ -404,6 +421,48 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     await this.request(`/api/v1/registry/grants/${encodeURIComponent(id)}`, {
       method: "DELETE"
     });
+  }
+
+  async listApplianceFiles(path = ""): Promise<ApplianceFileListResult> {
+    return this.request(encodeApplianceFilePath(path));
+  }
+
+  async uploadApplianceFile(path: string, file: File): Promise<ApplianceFileUploadResult> {
+    const auth = loadAuth();
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/octet-stream"
+    };
+    if (auth?.accessToken) {
+      headers.Authorization = `Bearer ${auth.accessToken}`;
+    }
+    const response = await fetch(`${this.baseUrl}${encodeApplianceFilePath(path)}`, {
+      method: "POST",
+      headers,
+      body: file
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return (await response.json()) as ApplianceFileUploadResult;
+  }
+
+  async downloadApplianceFile(path: string): Promise<Blob> {
+    const auth = loadAuth();
+    const headers: Record<string, string> = {
+      Accept: "application/octet-stream"
+    };
+    if (auth?.accessToken) {
+      headers.Authorization = `Bearer ${auth.accessToken}`;
+    }
+    const response = await fetch(`${this.baseUrl}${encodeApplianceFilePath(path)}`, {
+      method: "GET",
+      headers
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.blob();
   }
 
   async getLicensingStatus(): Promise<LicensingStatus> {

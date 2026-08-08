@@ -15,6 +15,14 @@ capabilities:
       requiredEntitlement: zon.capabilities.host
     artifacts:
       required: [host-agent-image]
+  files:
+    displayName: Files
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.files
+    artifacts:
+      required: []
   workflows:
     displayName: Workflows
     requires: [base]

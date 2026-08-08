@@ -5,6 +5,7 @@ import { AnalyzePage } from "../pages/AnalyzePage";
 import { ArtifactsPage } from "../pages/ArtifactsPage";
 import { BuilderPage } from "../pages/BuilderPage";
 import { DNSPage } from "../pages/DNSPage";
+import { FilesPage } from "../pages/FilesPage";
 import { HomePage } from "../pages/HomePage";
 import type { Session } from "../types";
 
@@ -28,6 +29,9 @@ export function RouteView(props: {
   }
   if (props.pathname.startsWith("/manage/dns")) {
     return <DNSPage />;
+  }
+  if (props.pathname.startsWith("/manage/files")) {
+    return <FilesPage />;
   }
   if (props.pathname.startsWith("/manage/artifacts")) {
     return <ArtifactsPage pathname={props.pathname} />;

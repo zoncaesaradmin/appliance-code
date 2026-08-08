@@ -23,6 +23,9 @@ func TestResolveProfile(t *testing.T) {
 		if !resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
 			t.Fatal("core should enable workflows")
 		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
+			t.Fatal("core should enable files")
+		}
 		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
 			t.Fatal("core should not enable build")
 		}
@@ -38,6 +41,7 @@ func TestResolveProfile(t *testing.T) {
 		}
 		for _, capability := range []appliance.Capability{
 			appliance.CapabilityBase,
+			appliance.CapabilityFiles,
 			appliance.CapabilityWorkflows,
 			appliance.CapabilityBuild,
 			appliance.CapabilityArtifact,
@@ -59,6 +63,9 @@ func TestResolveProfile(t *testing.T) {
 		if !resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 			t.Fatal("landns should enable dns")
 		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
+			t.Fatal("landns should enable files")
+		}
 		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
 			t.Fatal("landns should not enable artifact")
 		}
@@ -77,6 +84,7 @@ func TestResolveProfile(t *testing.T) {
 		}
 		for _, capability := range []appliance.Capability{
 			appliance.CapabilityBase,
+			appliance.CapabilityFiles,
 			appliance.CapabilityArtifact,
 			appliance.CapabilityDNS,
 		} {
@@ -123,6 +131,9 @@ func TestResolveProfile(t *testing.T) {
 		if !resolved.Capabilities.Enabled(appliance.CapabilityInference) {
 			t.Fatal("lanllm should enable inference")
 		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
+			t.Fatal("lanllm should enable files")
+		}
 		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
 			t.Fatal("lanllm should not enable build")
 		}
@@ -138,6 +149,7 @@ func TestResolveProfile(t *testing.T) {
 		}
 		for _, capability := range []appliance.Capability{
 			appliance.CapabilityBase,
+			appliance.CapabilityFiles,
 			appliance.CapabilityWorkflows,
 			appliance.CapabilityBuild,
 			appliance.CapabilityArtifact,
@@ -157,6 +169,7 @@ func TestResolveProfile(t *testing.T) {
 		for _, capability := range []appliance.Capability{
 			appliance.CapabilityBase,
 			appliance.CapabilityHost,
+			appliance.CapabilityFiles,
 			appliance.CapabilityWorkflows,
 			appliance.CapabilityBuild,
 			appliance.CapabilityArtifact,

@@ -12,13 +12,16 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
 	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
-	if len(modules) != 1 {
-		t.Fatalf("ResolveModules(core) returned %d modules, want 1", len(modules))
+	if len(modules) != 2 {
+		t.Fatalf("ResolveModules(core) returned %d modules, want 2", len(modules))
 	}
-	module := modules[0]
-	if module.Name != "host-agent" {
-		t.Fatalf("module.Name = %q, want host-agent", module.Name)
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameHostAgent) {
+		t.Fatal("core modules should include host-agent")
 	}
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
+		t.Fatal("core modules should include files")
+	}
+	module, _ := appliance.ModuleNamed(modules, appliance.ModuleNameHostAgent)
 	if module.PrimaryCapability() != appliance.CapabilityHost {
 		t.Fatalf("PrimaryCapability = %q, want %q", module.PrimaryCapability(), appliance.CapabilityHost)
 	}

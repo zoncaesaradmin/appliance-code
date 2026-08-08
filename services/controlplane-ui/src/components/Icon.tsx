@@ -10,6 +10,7 @@ export type IconName =
   | "builder"
   | "catalog"
   | "dns"
+  | "files"
   | "help"
   | "home"
   | "key"
@@ -113,6 +114,14 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
           <path d="M4 12h16" />
           <path d="M12 4a12 12 0 0 1 0 16" />
           <path d="M12 4a12 12 0 0 0 0 16" />
+        </svg>
+      );
+    case "files":
+      return (
+        <svg {...common}>
+          <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H12l2 2h3.5A2.5 2.5 0 0 1 20 8.5v9A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-11Z" />
+          <path d="M8 12h8" />
+          <path d="M8 15h5" />
         </svg>
       );
     case "artifacts":

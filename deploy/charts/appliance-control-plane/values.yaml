@@ -118,6 +118,8 @@ config:
   dnsAllowFakeZoneSync: false
 
 files:
+  # Backing store for the files capability (/api/v1/files). Present on every
+  # v1 profile; who may upload/download is controlled by files.read/files.write.
   rootDir: /data/zon/files
   # Keep as a quoted decimal string. Bare YAML integers above 2^31 can be
   # loaded as float64 and | quote then emits scientific notation that Go's

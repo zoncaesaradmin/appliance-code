@@ -39,6 +39,7 @@ func TestFileCatalogLoaderLoadsBuiltInCatalogDocument(t *testing.T) {
 	}
 	for _, moduleName := range []string{
 		appliance.ModuleNameHostAgent,
+		appliance.ModuleNameFiles,
 		appliance.ModuleNameArtifactRegistry,
 		appliance.ModuleNameBuild,
 		appliance.ModuleNameLANDNS,

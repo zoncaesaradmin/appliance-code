@@ -27,7 +27,7 @@ type Deps struct {
 	RegistryH        *RegistryTokenHandlers
 	RegistryGrantsH  *RegistryGrantHandlers
 	RegistryCatalogH *RegistryCatalogHandlers
-	FilesH           *ArtifactFileHandlers
+	FilesH           *FileHandlers
 	DNSH             *DNSHandlers
 	LANDNSPublishH   *LANDNSPublishHandlers
 	BuildsH          *BuildHandlers
@@ -446,17 +446,23 @@ func publicRoutes() []publicRoute {
 			}
 			return w.authenticatedOnly(deps.RegistryCatalogH.CatalogItem), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameFiles, pattern: "GET /api/v1/files", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.FilesH == nil {
-				return nil, fmt.Errorf("missing artifact file handlers")
+				return nil, fmt.Errorf("missing file handlers")
 			}
-			return w.protect(roles.PermArtifactsRead, deps.FilesH.Download), nil
+			return w.protect(roles.PermFilesRead, deps.FilesH.Get), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "POST /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{moduleName: appliance.ModuleNameFiles, pattern: "GET /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.FilesH == nil {
-				return nil, fmt.Errorf("missing artifact file handlers")
+				return nil, fmt.Errorf("missing file handlers")
 			}
-			return w.protect(roles.PermArtifactsWrite, deps.FilesH.Upload), nil
+			return w.protect(roles.PermFilesRead, deps.FilesH.Get), nil
+		}},
+		{moduleName: appliance.ModuleNameFiles, pattern: "POST /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FilesH == nil {
+				return nil, fmt.Errorf("missing file handlers")
+			}
+			return w.protect(roles.PermFilesWrite, deps.FilesH.Upload), nil
 		}},
 		{moduleName: appliance.ModuleNameLANDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {

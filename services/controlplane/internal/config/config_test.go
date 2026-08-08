@@ -209,9 +209,9 @@ func TestArtifactProfileAllowsExplicitFakeArtifactServerForLocalTests(t *testing
 	}
 }
 
-func TestArtifactProfilesRequireAbsoluteFilesRootDir(t *testing.T) {
+func TestFilesProfilesRequireAbsoluteFilesRootDir(t *testing.T) {
 	cfg := config.Default()
-	cfg.ApplianceProfile = "storage"
+	cfg.ApplianceProfile = "core"
 	cfg.FilesRootDir = "relative/files"
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "filesRootDir") {
 		t.Fatalf("Validate with relative filesRootDir = %v, want filesRootDir error", err)

@@ -56,16 +56,18 @@ The initial v1 appliance capabilities are:
 | Capability | Purpose |
 | --- | --- |
 | `base` | Mandatory control-plane baseline: server startup, health/version surface, authentication/session shell, user/role/token administration, internal forward-auth checks, and the minimum API contract required for any appliance profile |
+| `files` | Named appliance file spaces with authenticated upload/download under `/api/v1/files/*`; present on every v1 profile and gated by RBAC (`files.read` / `files.write`) |
 | `workflows` | Workflow substrate awareness and workflow-dependent module activation for v1 and future expansion |
 | `build` | Build APIs and build service/module behavior |
-| `artifact` | Artifact-facing APIs and module behavior; in the current v1 implementation this maps to OCI registry-token, grant, repository, and catalog flows backed by Artifact Server |
+| `artifact` | OCI registry APIs and module behavior: registry-token, grant, repository, and catalog flows backed by Artifact Server |
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
 | `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns`) readiness |
 
 Notes:
 
 - `base` is required for every appliance profile.
-- `artifact` is the generic product term. The current implementation behind
+- `files` is required on every shipped v1 profile. It is intentionally separate from `artifact` so inference-only and core appliances can accept laptop uploads without an OCI registry.
+- `artifact` is the OCI registry capability. The current implementation behind
   it is registry-oriented, but the capability name is intentionally not tied
   to a specific vendor or protocol brand.
 - `/mcp` remains part of `base` in v1. If MCP later needs its own appliance
@@ -77,16 +79,16 @@ The initial v1 appliance profiles are:
 
 | Appliance profile | Default | Resolved appliance capabilities |
 | --- | --- | --- |
-| `core` | Yes (default base profile) | `base`, `host`, `workflows` |
-| `builder` | No | `base`, `host`, `workflows`, `build`, `artifact` |
-| `storage` | No | `base`, `host`, `artifact` |
-| `landns` | No | `base`, `host`, `dns` |
-| `storage-landns` | No | `base`, `host`, `artifact`, `dns` |
-| `builder-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
-| `builder-storage-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns` |
-| `lanllm` | No | `base`, `host`, `inference` |
-| `builder-lanllm` | No | `base`, `host`, `workflows`, `build`, `artifact`, `inference` |
-| `builder-lanllm-storage-landns` | No | `base`, `host`, `workflows`, `build`, `artifact`, `dns`, `inference` |
+| `core` | Yes (default base profile) | `base`, `host`, `files`, `workflows` |
+| `builder` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact` |
+| `storage` | No | `base`, `host`, `files`, `artifact` |
+| `landns` | No | `base`, `host`, `files`, `dns` |
+| `storage-landns` | No | `base`, `host`, `files`, `artifact`, `dns` |
+| `builder-landns` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `dns` |
+| `builder-storage-landns` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `dns` |
+| `lanllm` | No | `base`, `host`, `files`, `inference` |
+| `builder-lanllm` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `inference` |
+| `builder-lanllm-storage-landns` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `dns`, `inference` |
 
 Notes:
 
@@ -127,6 +129,7 @@ The v1 dependency set is:
 | Capability | Depends on |
 | --- | --- |
 | `base` | none |
+| `files` | `base` |
 | `workflows` | `base` |
 | `build` | `base`, `workflows`, `artifact` |
 | `artifact` | `base` |
@@ -192,9 +195,22 @@ including:
 It also owns the build service and workflow-engine integration required to
 accept, track, and manage build requests.
 
+### `files`
+
+`files` owns the authenticated appliance file-space API:
+
+- `GET /api/v1/files`
+- `GET /api/v1/files/{rest...}` (download a file, or list a directory)
+- `POST /api/v1/files/{rest...}` (upload / overwrite a file)
+
+Permissions: `files.read`, `files.write`. The control plane stores content under
+the configured `files.rootDir` host path (default `/data/zon/files`). Every v1
+profile enables `files`; who may upload or download is controlled by RBAC.
+The Manage UI exposes this as **Files** at `/manage/files`.
+
 ### `artifact`
 
-`artifact` owns artifact-facing API registration and module activation.
+`artifact` owns OCI registry API registration and module activation.
 In the current v1 implementation this includes:
 
 - `/api/v1/registry/token`
@@ -216,7 +232,8 @@ production chart sets it to false.
 
 Production `storage-landns` deployments follow the same artifact contract,
 because they still enable the `artifact` capability even though they do not
-enable workflows or build.
+enable workflows or build. The `storage` profile also enables `files`, so the
+same appliance acts as both a file server and an OCI artifact server.
 
 ### `dns`
 

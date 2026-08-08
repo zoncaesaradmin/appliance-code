@@ -288,6 +288,7 @@ func (c Config) Validate() error {
 
 	resolved, profileErr := c.ResolveProfile()
 	buildEnabled := false
+	filesEnabled := false
 	artifactEnabled := false
 	dnsEnabled := false
 	inferenceEnabled := false
@@ -299,6 +300,7 @@ func (c Config) Validate() error {
 			errs = append(errs, fmt.Sprintf("applianceCatalog is invalid: %v", err))
 		}
 		buildEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameBuild)
+		filesEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameFiles)
 		artifactEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry)
 		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
 		inferenceEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime)
@@ -349,16 +351,18 @@ func (c Config) Validate() error {
 		} else if u, err := url.Parse(c.ArtifactServerBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "artifactServerBaseURL must be an absolute http(s) URL with no path")
 		}
+	}
+	if profileErr == nil && filesEnabled {
 		if strings.TrimSpace(c.FilesRootDir) == "" {
-			errs = append(errs, "filesRootDir must not be empty when the artifact capability is enabled")
+			errs = append(errs, "filesRootDir must not be empty when the files capability is enabled")
 		} else if !strings.HasPrefix(c.FilesRootDir, "/") {
 			errs = append(errs, "filesRootDir must be an absolute path")
 		}
 		if c.FilesTransferTimeout <= 0 {
-			errs = append(errs, "filesTransferTimeout must be positive when the artifact capability is enabled")
+			errs = append(errs, "filesTransferTimeout must be positive when the files capability is enabled")
 		}
 		if c.FilesMaxUploadBytes <= 0 {
-			errs = append(errs, "filesMaxUploadBytes must be positive when the artifact capability is enabled")
+			errs = append(errs, "filesMaxUploadBytes must be positive when the files capability is enabled")
 		}
 	}
 	if profileErr == nil && dnsEnabled {

@@ -28,6 +28,7 @@ describe("navigation model", () => {
 
   it("maps nested paths to the owning mode", () => {
     expect(currentMode("/manage/dns").id).toBe("manage");
+    expect(currentMode("/manage/files").id).toBe("manage");
     expect(currentMode("/analyze/workflows").id).toBe("analyze");
     expect(currentMode("/admin/system-status").id).toBe("admin");
     expect(currentMode("/admin/system-status/resources").id).toBe("admin");

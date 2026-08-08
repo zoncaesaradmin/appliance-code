@@ -9,30 +9,46 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
 
-type ArtifactFileHandlers struct {
+type FileHandlers struct {
 	RootDir         string
 	MaxUploadBytes  int64
 	TransferTimeout time.Duration
 }
 
-type artifactFileResponse struct {
+type fileResponse struct {
 	Path        string `json:"path"`
 	Size        int64  `json:"size"`
 	Overwritten bool   `json:"overwritten"`
 }
 
-func (h *ArtifactFileHandlers) Download(w http.ResponseWriter, r *http.Request) {
-	_, fullPath, err := h.resolvePath(r.PathValue("rest"))
+type fileEntry struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	Type       string `json:"type"` // "file" or "directory"
+	Size       int64  `json:"sizeBytes"`
+	ModifiedAt string `json:"modifiedAt"`
+}
+
+type fileListResponse struct {
+	Path  string      `json:"path"`
+	Items []fileEntry `json:"items"`
+}
+
+// Get serves a file download, or a directory listing when the path is empty
+// or refers to a directory.
+func (h *FileHandlers) Get(w http.ResponseWriter, r *http.Request) {
+	relativePath, fullPath, err := h.resolvePathAllowRoot(r.PathValue("rest"))
 	if err != nil {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}
 
-	file, err := os.Open(fullPath)
+	info, err := os.Stat(fullPath)
 	if errors.Is(err, os.ErrNotExist) {
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
 		return
@@ -41,17 +57,17 @@ func (h *ArtifactFileHandlers) Download(w http.ResponseWriter, r *http.Request) 
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	defer file.Close()
+	if info.IsDir() {
+		h.writeList(w, r, relativePath, fullPath)
+		return
+	}
 
-	info, err := file.Stat()
+	file, err := os.Open(fullPath)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	if info.IsDir() {
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
-		return
-	}
+	defer file.Close()
 
 	if err := h.extendTransferDeadlines(w); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
@@ -65,7 +81,52 @@ func (h *ArtifactFileHandlers) Download(w http.ResponseWriter, r *http.Request) 
 	http.ServeContent(w, r, path.Base(fullPath), info.ModTime(), file)
 }
 
-func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
+// Download keeps the previous handler name for older call sites/tests.
+func (h *FileHandlers) Download(w http.ResponseWriter, r *http.Request) {
+	h.Get(w, r)
+}
+
+func (h *FileHandlers) writeList(w http.ResponseWriter, r *http.Request, relativePath, fullPath string) {
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	items := make([]fileEntry, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		name := entry.Name()
+		childPath := name
+		if relativePath != "" {
+			childPath = path.Join(relativePath, name)
+		}
+		kind := "file"
+		size := info.Size()
+		if entry.IsDir() {
+			kind = "directory"
+			size = 0
+		}
+		items = append(items, fileEntry{
+			Name:       name,
+			Path:       childPath,
+			Type:       kind,
+			Size:       size,
+			ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Type != items[j].Type {
+			return items[i].Type == "directory"
+		}
+		return items[i].Name < items[j].Name
+	})
+	writeJSON(w, http.StatusOK, fileListResponse{Path: relativePath, Items: items})
+}
+
+func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 	relativePath, fullPath, err := h.resolvePath(r.PathValue("rest"))
 	if err != nil {
 		WriteValidationProblem(w, r, err.Error(), nil)
@@ -134,14 +195,14 @@ func (h *ArtifactFileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 	if overwritten {
 		status = http.StatusOK
 	}
-	writeJSON(w, status, artifactFileResponse{
+	writeJSON(w, status, fileResponse{
 		Path:        relativePath,
 		Size:        written,
 		Overwritten: overwritten,
 	})
 }
 
-func (h *ArtifactFileHandlers) extendTransferDeadlines(w http.ResponseWriter) error {
+func (h *FileHandlers) extendTransferDeadlines(w http.ResponseWriter) error {
 	if h.TransferTimeout <= 0 {
 		return nil
 	}
@@ -156,7 +217,18 @@ func (h *ArtifactFileHandlers) extendTransferDeadlines(w http.ResponseWriter) er
 	return nil
 }
 
-func (h *ArtifactFileHandlers) resolvePath(raw string) (string, string, error) {
+func (h *FileHandlers) resolvePath(raw string) (string, string, error) {
+	relative, full, err := h.resolvePathAllowRoot(raw)
+	if err != nil {
+		return "", "", err
+	}
+	if relative == "" {
+		return "", "", fmt.Errorf("file path is required")
+	}
+	return relative, full, nil
+}
+
+func (h *FileHandlers) resolvePathAllowRoot(raw string) (string, string, error) {
 	root := strings.TrimSpace(h.RootDir)
 	if root == "" {
 		return "", "", fmt.Errorf("filesRootDir is not configured")
@@ -166,12 +238,12 @@ func (h *ArtifactFileHandlers) resolvePath(raw string) (string, string, error) {
 	}
 
 	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return "", "", fmt.Errorf("file path is required")
+	if trimmed == "" || trimmed == "." || trimmed == "/" {
+		return "", root, nil
 	}
 	cleaned := strings.TrimPrefix(path.Clean("/"+trimmed), "/")
 	if cleaned == "" || cleaned == "." {
-		return "", "", fmt.Errorf("file path is required")
+		return "", root, nil
 	}
 
 	fullPath := filepath.Join(root, filepath.FromSlash(cleaned))
@@ -182,5 +254,5 @@ func (h *ArtifactFileHandlers) resolvePath(raw string) (string, string, error) {
 	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
 		return "", "", fmt.Errorf("invalid file path")
 	}
-	return cleaned, fullPath, nil
+	return filepath.ToSlash(relative), fullPath, nil
 }

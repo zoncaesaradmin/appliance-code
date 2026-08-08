@@ -223,6 +223,7 @@ func baseFreeCapabilities() []string {
 	return []string{
 		string(appliance.CapabilityBase),
 		string(appliance.CapabilityHost),
+		string(appliance.CapabilityFiles),
 		string(appliance.CapabilityWorkflows),
 	}
 }

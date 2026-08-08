@@ -17,7 +17,7 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	adminToken := ts.login(t, "admin", testPassword)
 
-	createRoleResp := ts.doJSON(t, "POST", "/api/v1/roles", adminToken, `{"name":"artifact-writer","permissions":["artifacts.read","artifacts.write"]}`)
+	createRoleResp := ts.doJSON(t, "POST", "/api/v1/roles", adminToken, `{"name":"file-writer","permissions":["files.read","files.write"]}`)
 	defer createRoleResp.Body.Close()
 	if createRoleResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create role status = %d, want 201", createRoleResp.StatusCode)
@@ -75,6 +75,44 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 	}
 	if string(body) != "hello from appliance" {
 		t.Fatalf("download body = %q, want %q", string(body), "hello from appliance")
+	}
+
+	listResp := ts.doJSON(t, "GET", "/api/v1/files", token, "")
+	defer listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("list root status = %d, want 200", listResp.StatusCode)
+	}
+	var rootList struct {
+		Path  string `json:"path"`
+		Items []struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+			Type string `json:"type"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&rootList); err != nil {
+		t.Fatalf("decode root list: %v", err)
+	}
+	if len(rootList.Items) != 1 || rootList.Items[0].Name != "releases" || rootList.Items[0].Type != "directory" {
+		t.Fatalf("root list = %+v, want releases directory", rootList.Items)
+	}
+
+	nestedResp := ts.doJSON(t, "GET", "/api/v1/files/releases/v1", token, "")
+	defer nestedResp.Body.Close()
+	if nestedResp.StatusCode != http.StatusOK {
+		t.Fatalf("list nested status = %d, want 200", nestedResp.StatusCode)
+	}
+	var nestedList struct {
+		Items []struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(nestedResp.Body).Decode(&nestedList); err != nil {
+		t.Fatalf("decode nested list: %v", err)
+	}
+	if len(nestedList.Items) != 1 || nestedList.Items[0].Name != "bundle.txt" || nestedList.Items[0].Type != "file" {
+		t.Fatalf("nested list = %+v, want bundle.txt file", nestedList.Items)
 	}
 }
 

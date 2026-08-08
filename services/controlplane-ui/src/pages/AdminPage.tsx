@@ -1041,7 +1041,7 @@ function AdminMetadataBundlePage(): React.JSX.Element {
 
   return (
     <PageFrame
-      title="Metadata Bundle"
+      title="Metadata"
       eyebrow=""
       description="Install or roll back the signed appliance metadata bundle that defines profiles and capabilities."
       pathname="/admin/metadata-bundle"

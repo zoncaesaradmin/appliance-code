@@ -106,6 +106,25 @@ export interface DNSRecordsResult {
   items: DNSRecord[];
 }
 
+export interface ApplianceFileEntry {
+  name: string;
+  path: string;
+  type: "file" | "directory";
+  sizeBytes: number;
+  modifiedAt: string;
+}
+
+export interface ApplianceFileListResult {
+  path: string;
+  items: ApplianceFileEntry[];
+}
+
+export interface ApplianceFileUploadResult {
+  path: string;
+  size: number;
+  overwritten: boolean;
+}
+
 export interface UpsertDNSRecordRequest {
   ipv4: string;
   ttl: number;

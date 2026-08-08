@@ -143,7 +143,9 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
 			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
-		deps.FilesH = &httpapi.ArtifactFileHandlers{
+	}
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) {
+		deps.FilesH = &httpapi.FileHandlers{
 			RootDir:         cfg.FilesRootDir,
 			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
 			TransferTimeout: cfg.FilesTransferTimeout,

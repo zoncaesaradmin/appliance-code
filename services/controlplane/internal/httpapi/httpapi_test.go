@@ -99,7 +99,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
 	var filesRoot string
-	if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+	if resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
 		filesRoot = t.TempDir()
 		cfg.FilesRootDir = filesRoot
 	}
@@ -173,7 +173,9 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
 			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
-		deps.FilesH = &httpapi.ArtifactFileHandlers{
+	}
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) {
+		deps.FilesH = &httpapi.FileHandlers{
 			RootDir:         cfg.FilesRootDir,
 			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
 			TransferTimeout: cfg.FilesTransferTimeout,
@@ -270,13 +272,13 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		profile appliance.Profile
 		want    []string
 	}{
-		{appliance.ProfileCore, []string{"base", "host", "workflows"}},
-		{appliance.ProfileBuilder, []string{"artifact", "base", "build", "host", "workflows"}},
-		{appliance.ProfileStorage, []string{"artifact", "base", "host"}},
-		{appliance.ProfileLANDNS, []string{"base", "dns", "host"}},
-		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "host"}},
-		{appliance.ProfileBuilderLANDNS, []string{"artifact", "base", "build", "dns", "host", "workflows"}},
-		{appliance.ProfileBuilderStorageLANDNS, []string{"artifact", "base", "build", "dns", "host", "workflows"}},
+		{appliance.ProfileCore, []string{"base", "files", "host", "workflows"}},
+		{appliance.ProfileBuilder, []string{"artifact", "base", "build", "files", "host", "workflows"}},
+		{appliance.ProfileStorage, []string{"artifact", "base", "files", "host"}},
+		{appliance.ProfileLANDNS, []string{"base", "dns", "files", "host"}},
+		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "files", "host"}},
+		{appliance.ProfileBuilderLANDNS, []string{"artifact", "base", "build", "dns", "files", "host", "workflows"}},
+		{appliance.ProfileBuilderStorageLANDNS, []string{"artifact", "base", "build", "dns", "files", "host", "workflows"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
