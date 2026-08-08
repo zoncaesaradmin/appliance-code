@@ -38,6 +38,8 @@ func TestInferenceGatewayRender(t *testing.T) {
 	for _, want := range []string{
 		"kind: Service\nmetadata:\n  name: inference-gateway",
 		"runAsUser: 10006",
+		"name: HOME",
+		"value: \"/home/ollama\"",
 		"name: OLLAMA_MODELS",
 		"value: \"/models\"",
 		"kind: PersistentVolume",

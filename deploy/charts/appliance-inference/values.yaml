@@ -57,6 +57,9 @@ containerSecurityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
+# HOME is forced to /home/ollama (emptyDir) in the Deployment: the upstream
+# ollama image defaults HOME=/ for numeric UIDs, which fails under
+# readOnlyRootFilesystem (mkdir /.ollama).
 
 resources:
   requests:
