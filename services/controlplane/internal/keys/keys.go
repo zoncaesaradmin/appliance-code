@@ -26,6 +26,7 @@ const (
 	registryPrivateFile = "registry_ed25519_private.key"
 	apiTokenPepperFile  = "api_token_pepper.key"
 	refreshPepperFile   = "refresh_pepper.key"
+	cursorHMACFile      = "cursor_hmac.key"
 
 	pepperLength = 32
 )
@@ -45,6 +46,7 @@ type Material struct {
 
 	APITokenPepper []byte
 	RefreshPepper  []byte
+	CursorHMACKey  []byte
 }
 
 // LoadOrGenerate reads key material from dir, generating and persisting any
@@ -80,6 +82,10 @@ func LoadOrGenerate(dir string) (*Material, error) {
 	if err != nil {
 		return nil, err
 	}
+	cursorHMAC, err := loadOrGenerateBytes(filepath.Join(dir, cursorHMACFile), pepperLength)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Material{
 		SessionPrivateKey:  priv,
@@ -90,6 +96,7 @@ func LoadOrGenerate(dir string) (*Material, error) {
 		RegistryKeyID:      keyID(registryPub),
 		APITokenPepper:     apiTokenPepper,
 		RefreshPepper:      refreshPepper,
+		CursorHMACKey:      cursorHMAC,
 	}, nil
 }
 

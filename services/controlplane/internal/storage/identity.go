@@ -201,6 +201,7 @@ const (
 // contain passwords, raw tokens, authorization headers, or other secrets.
 type AuditEvent struct {
 	ID           string
+	Sequence     int64
 	OccurredAt   time.Time
 	ActorUserID  string
 	ActorType    AuditActorType
@@ -219,10 +220,19 @@ type AuditEvent struct {
 
 // AuditFilter narrows AuditStore.List results.
 type AuditFilter struct {
-	ActorUserID string
-	Action      string
-	Since       time.Time
-	Limit       int
+	ActorUserID    string
+	Action         string
+	Since          time.Time
+	BeforeSequence int64 // when > 0, return events with sequence strictly less than this
+	Limit          int
+}
+
+// AuditCheckpoint records a verified point in the audit hash chain.
+type AuditCheckpoint struct {
+	ID           string
+	CreatedAt    time.Time
+	LastSequence int64
+	ChainHash    []byte
 }
 
 // AuditStore appends and lists AuditEvent records. Appends are hash-chained
@@ -232,6 +242,11 @@ type AuditStore interface {
 	Append(ctx context.Context, event AuditEvent) error
 	List(ctx context.Context, filter AuditFilter) ([]AuditEvent, error)
 	VerifyChain(ctx context.Context) error
+	LatestSequence(ctx context.Context) (int64, []byte, error)
+	CreateCheckpoint(ctx context.Context, checkpoint AuditCheckpoint) error
+	LatestCheckpoint(ctx context.Context) (AuditCheckpoint, error)
+	DeleteOlderThan(ctx context.Context, cutoff time.Time, maxSequence int64) (int64, error)
+	ExportEvents(ctx context.Context, sinceSequence int64, limit int) ([]AuditEvent, error)
 }
 
 // ThrottleState is the durable per-account login-failure counter used to

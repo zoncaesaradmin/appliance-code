@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
@@ -22,6 +23,7 @@ type DeveloperWorkflowHandlers struct {
 	Devflows   *devflows.Service
 	BuilderGit *buildergit.Service
 	Logger     logging.Logger
+	Audit      *audit.Recorder
 }
 
 // workProfileResponse keeps the ForgeLine-compatible wire name, but the
@@ -295,6 +297,16 @@ func (h *DeveloperWorkflowHandlers) UpdateBuilderGitAccess(w http.ResponseWriter
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}
+	if h.Audit != nil {
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "builder.git_access.upsert", TargetType: "builder_git_access", TargetID: name,
+			Outcome: storage.AuditOutcomeSuccess,
+			Details: map[string]any{"host": req.Host, "username": req.Username},
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
+	}
 	h.Logger.WithContext(r.Context()).Infow("builder Git access configured",
 		"userID", principal.UserID,
 		"name", name,
@@ -320,6 +332,15 @@ func (h *DeveloperWorkflowHandlers) DeleteBuilderGitAccess(w http.ResponseWriter
 		)
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
+	}
+	if h.Audit != nil {
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "builder.git_access.delete", TargetType: "builder_git_access", TargetID: name,
+			Outcome: storage.AuditOutcomeSuccess,
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
 	}
 	h.Logger.WithContext(r.Context()).Infow("builder Git access deleted",
 		"userID", principal.UserID,
@@ -420,7 +441,7 @@ func (h *DeveloperWorkflowHandlers) SetCurrentWorkspace(w http.ResponseWriter, r
 		return
 	}
 	principal, _ := PrincipalFromContext(r.Context())
-	ws, err := h.Devflows.SetCurrentWorkspace(r.Context(), principal.UserID, req.WorkspaceID)
+	ws, err := h.Devflows.SetCurrentWorkspace(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), principal.UserID, req.WorkspaceID)
 	if errors.Is(err, storage.ErrNotFound) {
 		h.Logger.WithContext(r.Context()).Warnw("set current workspace failed",
 			"userID", principal.UserID,

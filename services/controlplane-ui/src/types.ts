@@ -412,3 +412,27 @@ export interface HostMDNSStatus {
 export interface HostMDNSApplyRequest {
   desired: boolean;
 }
+
+export interface AuditEvent {
+  id: string;
+  sequence: number;
+  occurredAt: string;
+  actorUserId?: string;
+  actorType: string;
+  authMethod?: string;
+  credentialId?: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  outcome: string;
+  reasonCode?: string;
+  requestId?: string;
+  sourceAddr?: string;
+  severity: string;
+  details?: Record<string, unknown>;
+}
+
+export interface AuditEventsResult {
+  items: AuditEvent[];
+  nextCursor?: string;
+}

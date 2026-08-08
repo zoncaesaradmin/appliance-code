@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/artifactserver"
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/auditops"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/buildergit"
@@ -75,8 +76,9 @@ type Services struct {
 	Profiles           *profiles.Service
 	Notifications      *notifications.Service
 
-	Keys  *keys.Material
-	Audit *audit.Recorder
+	Keys     *keys.Material
+	Audit    *audit.Recorder
+	AuditOps *auditops.Service
 }
 
 func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
@@ -123,6 +125,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	sessionStore := sqlite.NewSessionStore(db)
 	throttleStore := sqlite.NewThrottleStore(db)
 	auditStore := sqlite.NewAuditStore(db)
+	operationsStore := sqlite.NewOperationsStore(db)
 	registryGrantStore := sqlite.NewRegistryGrantStore(db)
 	dnsRecordStore := sqlite.NewDNSRecordStore(db)
 	licensingStore := sqlite.NewLicensingStore(db)
@@ -270,6 +273,12 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		}
 	}
 
+	auditOps, err := auditops.NewService(auditStore, operationsStore, cfg.DataDir, cfg.AuditRetentionDays, logger)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("app: initializing audit ops: %w", err)
+	}
+
 	return &Services{
 		ApplianceProfile:   resolved,
 		Modules:            resolvedModules,
@@ -301,6 +310,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Notifications:      notificationsSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
+		AuditOps:           auditOps,
 	}, nil
 }
 

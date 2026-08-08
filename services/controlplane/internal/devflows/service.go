@@ -176,7 +176,7 @@ func (s *Service) ReplaceCatalog(ctx context.Context, actor audit.Actor, raw []b
 		return CatalogStatus{}, err
 	}
 	if s.audit != nil {
-		_ = s.audit.Record(ctx, actor, audit.Event{
+		if err := s.audit.Record(ctx, actor, audit.Event{
 			Action: "builder.catalog.replace", TargetType: "builder_catalog", TargetID: "1",
 			Outcome: storage.AuditOutcomeSuccess,
 			Details: map[string]any{
@@ -184,7 +184,9 @@ func (s *Service) ReplaceCatalog(ctx context.Context, actor audit.Actor, raw []b
 				"repos":        len(catalog.Repos),
 				"buildTargets": len(catalog.BuildTargets),
 			},
-		})
+		}); err != nil {
+			return CatalogStatus{}, err
+		}
 	}
 	status := CatalogStatus{
 		Configured:  true,
@@ -324,7 +326,9 @@ func (s *Service) CreateWorkspace(ctx context.Context, actor audit.Actor, ownerI
 		CreatedAt: now,
 	})
 	if s.audit != nil {
-		_ = s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.create", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess})
+		if err := s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.create", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess}); err != nil {
+			return storage.Workspace{}, err
+		}
 	}
 
 	return s.submitWorkspaceProvision(ctx, ws, job, repos, provisionerImage, gitCredentials)
@@ -493,12 +497,14 @@ func (s *Service) DeleteWorkspace(ctx context.Context, actor audit.Actor, id, ow
 		return err
 	}
 	if s.audit != nil {
-		_ = s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.delete", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess})
+		if err := s.audit.Record(ctx, actor, audit.Event{Action: "workspaces.delete", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (s *Service) SetCurrentWorkspace(ctx context.Context, userID, workspaceID string) (storage.Workspace, error) {
+func (s *Service) SetCurrentWorkspace(ctx context.Context, actor audit.Actor, userID, workspaceID string) (storage.Workspace, error) {
 	ws, err := s.GetWorkspace(ctx, workspaceID, userID, false)
 	if err != nil {
 		return storage.Workspace{}, err
@@ -508,6 +514,13 @@ func (s *Service) SetCurrentWorkspace(ctx context.Context, userID, workspaceID s
 	}
 	if err := s.workspaces.SetCurrent(ctx, userID, workspaceID); err != nil {
 		return storage.Workspace{}, err
+	}
+	if s.audit != nil {
+		if err := s.audit.Record(ctx, actor, audit.Event{
+			Action: "workspaces.current.set", TargetType: "workspace", TargetID: ws.ID, Outcome: storage.AuditOutcomeSuccess,
+		}); err != nil {
+			return storage.Workspace{}, err
+		}
 	}
 	return s.reconcileWorkspace(ctx, ws)
 }
@@ -690,6 +703,14 @@ func (s *Service) CancelJob(ctx context.Context, actor audit.Actor, id, ownerID 
 	} else if job.Type == storage.JobTypeWorkspacePrepare && s.engine != nil {
 		if err := s.engine.Cancel(ctx, workspacePrepareWorkflowName(job.ID)); err != nil && !errors.Is(err, workflows.ErrNotFound) {
 			return storage.Job{}, err
+		}
+		if s.audit != nil {
+			if err := s.audit.Record(ctx, actor, audit.Event{
+				Action: "jobs.cancel", TargetType: "job", TargetID: job.ID, Outcome: storage.AuditOutcomeSuccess,
+				Details: map[string]any{"jobType": string(job.Type)},
+			}); err != nil {
+				return storage.Job{}, err
+			}
 		}
 	}
 	return s.GetJob(ctx, id, ownerID, canAny)

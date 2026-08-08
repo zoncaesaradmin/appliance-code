@@ -125,6 +125,10 @@ func (s *AuditStore) List(ctx context.Context, filter storage.AuditFilter) ([]st
 		query += ` AND occurred_at >= ?`
 		args = append(args, filter.Since.UTC().Format(time.RFC3339Nano))
 	}
+	if filter.BeforeSequence > 0 {
+		query += ` AND sequence < ?`
+		args = append(args, filter.BeforeSequence)
+	}
 	query += ` ORDER BY sequence DESC LIMIT ?`
 	args = append(args, limit)
 
@@ -136,10 +140,11 @@ func (s *AuditStore) List(ctx context.Context, filter storage.AuditFilter) ([]st
 
 	var events []storage.AuditEvent
 	for rows.Next() {
-		e, _, err := scanAuditEvent(rows)
+		e, sequence, err := scanAuditEvent(rows)
 		if err != nil {
 			return nil, err
 		}
+		e.Sequence = sequence
 		events = append(events, e)
 	}
 	return events, rows.Err()
@@ -177,7 +182,9 @@ func scanAuditEvent(row interface{ Scan(dest ...any) error }) (storage.AuditEven
 
 // VerifyChain recomputes the hash chain over every stored audit event in
 // sequence order and fails on the first mismatch, proving no record has
-// been altered or removed since it was appended.
+// been altered or removed since it was appended. After retention prune the
+// remaining contiguous suffix is verified using the first retained event's
+// prev_hash as the baseline.
 func (s *AuditStore) VerifyChain(ctx context.Context) error {
 	rows, err := s.db.q(ctx).QueryContext(ctx, `
 		SELECT id, sequence, occurred_at, actor_user_id, actor_type, auth_method, credential_id,
@@ -190,6 +197,7 @@ func (s *AuditStore) VerifyChain(ctx context.Context) error {
 	defer rows.Close()
 
 	var expectedPrevHash []byte
+	first := true
 	for rows.Next() {
 		var (
 			e                                                                                              storage.AuditEvent
@@ -211,7 +219,12 @@ func (s *AuditStore) VerifyChain(ctx context.Context) error {
 		e.ActorUserID, e.AuthMethod, e.CredentialID = actorUserID.String, authMethod.String, credentialID.String
 		e.TargetType, e.TargetID, e.ReasonCode = targetType.String, targetID.String, reasonCode.String
 		e.RequestID, e.SourceAddr = requestID.String, sourceAddr.String
+		e.Sequence = sequence
 
+		if first {
+			expectedPrevHash = append([]byte(nil), prevHash...)
+			first = false
+		}
 		if string(prevHash) != string(expectedPrevHash) {
 			return fmt.Errorf("sqlite: audit chain broken at sequence %d: unexpected prev_hash", sequence)
 		}
@@ -222,4 +235,100 @@ func (s *AuditStore) VerifyChain(ctx context.Context) error {
 		expectedPrevHash = hash
 	}
 	return rows.Err()
+}
+
+func (s *AuditStore) LatestSequence(ctx context.Context) (int64, []byte, error) {
+	var seq int64
+	var hash []byte
+	err := s.db.q(ctx).QueryRowContext(ctx, `SELECT sequence, hash FROM audit_events ORDER BY sequence DESC LIMIT 1`).Scan(&seq, &hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil, nil
+	}
+	if err != nil {
+		return 0, nil, fmt.Errorf("sqlite: reading latest audit sequence: %w", err)
+	}
+	return seq, hash, nil
+}
+
+func (s *AuditStore) CreateCheckpoint(ctx context.Context, checkpoint storage.AuditCheckpoint) error {
+	if checkpoint.ID == "" {
+		return fmt.Errorf("sqlite: audit checkpoint id is required")
+	}
+	if checkpoint.CreatedAt.IsZero() {
+		checkpoint.CreatedAt = time.Now().UTC()
+	}
+	_, err := s.db.q(ctx).ExecContext(ctx, `
+		INSERT INTO audit_checkpoints (id, created_at, last_sequence, chain_hash)
+		VALUES (?, ?, ?, ?)`,
+		checkpoint.ID, checkpoint.CreatedAt.Format(time.RFC3339Nano), checkpoint.LastSequence, checkpoint.ChainHash,
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: creating audit checkpoint: %w", err)
+	}
+	return nil
+}
+
+func (s *AuditStore) LatestCheckpoint(ctx context.Context) (storage.AuditCheckpoint, error) {
+	var cp storage.AuditCheckpoint
+	var createdAt string
+	err := s.db.q(ctx).QueryRowContext(ctx, `
+		SELECT id, created_at, last_sequence, chain_hash
+		FROM audit_checkpoints ORDER BY last_sequence DESC LIMIT 1`).Scan(
+		&cp.ID, &createdAt, &cp.LastSequence, &cp.ChainHash,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return storage.AuditCheckpoint{}, storage.ErrNotFound
+	}
+	if err != nil {
+		return storage.AuditCheckpoint{}, fmt.Errorf("sqlite: reading latest audit checkpoint: %w", err)
+	}
+	cp.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
+	if err != nil {
+		return storage.AuditCheckpoint{}, err
+	}
+	return cp, nil
+}
+
+func (s *AuditStore) DeleteOlderThan(ctx context.Context, cutoff time.Time, maxSequence int64) (int64, error) {
+	res, err := s.db.q(ctx).ExecContext(ctx, `
+		DELETE FROM audit_events
+		WHERE occurred_at < ? AND sequence <= ?`,
+		cutoff.UTC().Format(time.RFC3339Nano), maxSequence,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("sqlite: pruning audit events: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func (s *AuditStore) ExportEvents(ctx context.Context, sinceSequence int64, limit int) ([]storage.AuditEvent, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	rows, err := s.db.q(ctx).QueryContext(ctx, `
+		SELECT id, sequence, occurred_at, actor_user_id, actor_type, auth_method, credential_id,
+			action, target_type, target_id, outcome, reason_code, request_id, source_addr, severity, details
+		FROM audit_events
+		WHERE sequence > ?
+		ORDER BY sequence ASC
+		LIMIT ?`, sinceSequence, limit)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite: exporting audit events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []storage.AuditEvent
+	for rows.Next() {
+		e, sequence, err := scanAuditEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		e.Sequence = sequence
+		events = append(events, e)
+	}
+	return events, rows.Err()
 }

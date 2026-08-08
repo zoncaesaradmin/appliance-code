@@ -58,13 +58,14 @@ type Config struct {
 	WorkspaceRootDir                string           `json:"workspaceRootDir"`
 	WorkspaceClaimName              string           `json:"workspaceClaimName"`
 
-	ReadHeaderTimeout time.Duration `json:"readHeaderTimeout"`
-	ReadTimeout       time.Duration `json:"readTimeout"`
-	WriteTimeout      time.Duration `json:"writeTimeout"`
-	IdleTimeout       time.Duration `json:"idleTimeout"`
-	ShutdownTimeout   time.Duration `json:"shutdownTimeout"`
-	MaxHeaderBytes    int64         `json:"maxHeaderBytes"`
-	MaxBodyBytes      int64         `json:"maxBodyBytes"`
+	ReadHeaderTimeout  time.Duration `json:"readHeaderTimeout"`
+	ReadTimeout        time.Duration `json:"readTimeout"`
+	WriteTimeout       time.Duration `json:"writeTimeout"`
+	IdleTimeout        time.Duration `json:"idleTimeout"`
+	ShutdownTimeout    time.Duration `json:"shutdownTimeout"`
+	MaxHeaderBytes     int64         `json:"maxHeaderBytes"`
+	MaxBodyBytes       int64         `json:"maxBodyBytes"`
+	AuditRetentionDays int           `json:"auditRetentionDays"`
 }
 
 // Default returns the local-development default configuration.
@@ -101,6 +102,7 @@ func Default() Config {
 		ShutdownTimeout:                30 * time.Second,
 		MaxHeaderBytes:                 16 * 1024,
 		MaxBodyBytes:                   1 * 1024 * 1024,
+		AuditRetentionDays:             365,
 		BuildDefaultDeadline:           30 * time.Minute,
 		WorkflowEngine:                 "fake",
 		WorkflowInstanceID:             "appliance",
@@ -214,6 +216,14 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			errs = append(errs, fmt.Sprintf("TRUSTED_PROXY_COUNT: %v", err))
 		} else {
 			cfg.TrustedProxyCount = n
+		}
+	}
+	if v, ok := env[envPrefix+"AUDIT_RETENTION_DAYS"]; ok {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("AUDIT_RETENTION_DAYS: %v", err))
+		} else {
+			cfg.AuditRetentionDays = n
 		}
 	}
 
@@ -424,6 +434,9 @@ func (c Config) Validate() error {
 
 	if c.TrustedProxyCount < 0 {
 		errs = append(errs, "trustedProxyCount must not be negative")
+	}
+	if c.AuditRetentionDays < 90 || c.AuditRetentionDays > 3650 {
+		errs = append(errs, "auditRetentionDays must be between 90 and 3650")
 	}
 
 	switch c.WorkflowEngine {

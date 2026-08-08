@@ -146,6 +146,7 @@ func (h *SetupStateHandlers) Get(w http.ResponseWriter, r *http.Request) {
 
 type NotificationHandlers struct {
 	Notifications *notifications.Service
+	Audit         *audit.Recorder
 }
 
 func (h *NotificationHandlers) List(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +180,15 @@ func (h *NotificationHandlers) Acknowledge(w http.ResponseWriter, r *http.Reques
 	if err := h.Notifications.Acknowledge(r.Context(), principal.UserID, id); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
+	}
+	if h.Audit != nil {
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "notifications.acknowledge", TargetType: "notification", TargetID: id,
+			Outcome: storage.AuditOutcomeSuccess,
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

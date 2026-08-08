@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/keys"
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/reqauth"
@@ -96,6 +97,7 @@ func (h *RegistryTokenHandlers) Token(w http.ResponseWriter, r *http.Request) {
 // HTTP surface.
 type RegistryGrantHandlers struct {
 	Grants storage.RegistryGrantStore
+	Audit  *audit.Recorder
 }
 
 type registryGrantResponse struct {
@@ -175,11 +177,28 @@ func (h *RegistryGrantHandlers) Create(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
+	if h.Audit != nil {
+		principal, _ := PrincipalFromContext(r.Context())
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "registry.grants.create", TargetType: "registry_grant", TargetID: grant.ID,
+			Outcome: storage.AuditOutcomeSuccess,
+			Details: map[string]any{
+				"subjectType": string(grant.SubjectType),
+				"subjectId":   grant.SubjectID,
+				"pathPrefix":  grant.PathPrefix,
+				"actions":     grant.Actions,
+			},
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, toRegistryGrantResponse(grant))
 }
 
 func (h *RegistryGrantHandlers) Delete(w http.ResponseWriter, r *http.Request) {
-	err := h.Grants.Delete(r.Context(), r.PathValue("id"))
+	id := r.PathValue("id")
+	err := h.Grants.Delete(r.Context(), id)
 	if errors.Is(err, storage.ErrNotFound) {
 		WriteProblem(w, r, http.StatusNotFound, "not_found", "Registry grant not found", "")
 		return
@@ -187,6 +206,16 @@ func (h *RegistryGrantHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
+	}
+	if h.Audit != nil {
+		principal, _ := PrincipalFromContext(r.Context())
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "registry.grants.delete", TargetType: "registry_grant", TargetID: id,
+			Outcome: storage.AuditOutcomeSuccess,
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

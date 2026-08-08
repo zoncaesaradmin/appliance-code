@@ -12,12 +12,16 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/storage"
 )
 
 type FileHandlers struct {
 	RootDir         string
 	MaxUploadBytes  int64
 	TransferTimeout time.Duration
+	Audit           *audit.Recorder
 }
 
 type fileResponse struct {
@@ -191,6 +195,18 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.Audit != nil {
+		principal, _ := PrincipalFromContext(r.Context())
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "files.write", TargetType: "file", TargetID: relativePath,
+			Outcome: storage.AuditOutcomeSuccess,
+			Details: map[string]any{"size": written, "overwritten": overwritten},
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
+	}
+
 	status := http.StatusCreated
 	if overwritten {
 		status = http.StatusOK
@@ -203,7 +219,7 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {
-	_, fullPath, err := h.resolvePath(r.PathValue("rest"))
+	relativePath, fullPath, err := h.resolvePath(r.PathValue("rest"))
 	if err != nil {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
@@ -225,6 +241,17 @@ func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	} else if err := os.Remove(fullPath); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
+	}
+	if h.Audit != nil {
+		principal, _ := PrincipalFromContext(r.Context())
+		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+			Action: "files.delete", TargetType: "file", TargetID: relativePath,
+			Outcome: storage.AuditOutcomeSuccess,
+			Details: map[string]any{"directory": info.IsDir()},
+		}); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

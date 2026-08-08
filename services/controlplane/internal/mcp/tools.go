@@ -265,7 +265,7 @@ func (h *Handler) callTool(r *http.Request, principal reqauth.Principal, params 
 		if err != nil {
 			return toolCallResult{}, err
 		}
-		ws, err := h.devflows.SetCurrentWorkspace(r.Context(), principal.UserID, workspaceID)
+		ws, err := h.devflows.SetCurrentWorkspace(r.Context(), actor, principal.UserID, workspaceID)
 		if err != nil {
 			return toolCallResult{}, err
 		}

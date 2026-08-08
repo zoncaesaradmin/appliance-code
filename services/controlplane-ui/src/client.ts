@@ -44,7 +44,8 @@ import type {
   HostMDNSStatus,
   HostMDNSApplyRequest,
   ApplianceFileListResult,
-  ApplianceFileUploadResult
+  ApplianceFileUploadResult,
+  AuditEventsResult
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -152,6 +153,7 @@ export interface ControlPlaneClient {
   applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus>;
   getHostMDNS(): Promise<HostMDNSStatus>;
   applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus>;
+  listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
 
 type RequestOptions = {
@@ -567,6 +569,15 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus> {
     return this.request("/api/v1/host/mdns", { method: "PUT", body: request });
+  }
+
+  async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
+    const query = new URLSearchParams();
+    query.set("limit", String(params?.limit ?? 10));
+    if (params?.cursor) {
+      query.set("cursor", params.cursor);
+    }
+    return this.request(`/api/v1/audit/events?${query.toString()}`);
   }
 
   private async uploadMetadataBundle<T>(path: string, file: File, signature: string): Promise<T> {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/version"
@@ -37,8 +38,10 @@ type Deps struct {
 	NotificationsH   *NotificationHandlers
 	ProfilesH        *ProfileHandlers
 	MetadataH        *MetadataBundleHandlers
+	AuditH           *AuditHandlers
 	MCPHandler       http.Handler
 	ProxiedServices  []ServiceProxyRegistration
+	Audit            *audit.Recorder
 }
 
 type publicRoute struct {
@@ -275,6 +278,30 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing metadata-bundle handlers")
 			}
 			return w.protect(roles.PermMetadataManage, deps.MetadataH.Rollback), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/audit/events", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuditH == nil {
+				return nil, fmt.Errorf("missing audit handlers")
+			}
+			return w.protect(roles.PermAuditRead, deps.AuditH.ListEvents), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/audit/exports", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuditH == nil {
+				return nil, fmt.Errorf("missing audit handlers")
+			}
+			return w.protect(roles.PermAuditExport, deps.AuditH.CreateExport), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/audit/exports/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuditH == nil {
+				return nil, fmt.Errorf("missing audit handlers")
+			}
+			return w.protect(roles.PermAuditExport, deps.AuditH.GetExport), nil
+		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/audit/exports/{id}/content", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuditH == nil {
+				return nil, fmt.Errorf("missing audit handlers")
+			}
+			return w.protect(roles.PermAuditExport, deps.AuditH.GetExportContent), nil
 		}},
 		{capability: appliance.CapabilityBase, pattern: "/internal/auth/check", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.ForwardAuthH == nil {

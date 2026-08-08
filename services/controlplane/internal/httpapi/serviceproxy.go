@@ -10,11 +10,13 @@ import (
 	"github.com/zoncaesaradmin/platformkit/ctxutil"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/forwardauth"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/serviceregistry"
+	"appliance-code/services/controlplane/internal/storage"
 )
 
 type ServiceProxyRoute struct {
@@ -64,7 +66,7 @@ func proxiedServiceRoutes(registrations []ServiceProxyRegistration) []publicRout
 				moduleName: reg.Name,
 				pattern:    rt.Method + " " + rt.ExternalPath,
 				build: func(deps Deps, w wrappers) (http.Handler, error) {
-					handler, err := newServiceProxyHandler(deps.Logger, reg, rt)
+					handler, err := newServiceProxyHandler(deps.Logger, deps.Audit, reg, rt)
 					if err != nil {
 						return nil, err
 					}
@@ -78,7 +80,7 @@ func proxiedServiceRoutes(registrations []ServiceProxyRegistration) []publicRout
 	return routes
 }
 
-func newServiceProxyHandler(logger logging.Logger, registration ServiceProxyRegistration, route ServiceProxyRoute) (http.Handler, error) {
+func newServiceProxyHandler(logger logging.Logger, recorder *audit.Recorder, registration ServiceProxyRegistration, route ServiceProxyRoute) (http.Handler, error) {
 	target, err := url.Parse(strings.TrimSpace(registration.BaseURL))
 	if err != nil {
 		return nil, fmt.Errorf("parse proxied service %q base URL: %w", registration.Name, err)
@@ -138,6 +140,37 @@ func newServiceProxyHandler(logger logging.Logger, registration ServiceProxyRegi
 		if traceID, ok := ctxutil.GetTraceID(r.Context()); ok && traceID != "" {
 			r.Header.Set(ctxutil.TraceIDHeader, traceID)
 		}
-		proxy.ServeHTTP(w, r)
+
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		proxy.ServeHTTP(rec, r)
+
+		if recorder != nil && isMutatingProxyMethod(route.Method) && rec.status >= 200 && rec.status < 300 {
+			action, targetType := proxiedMutationAudit(route.ExternalPath)
+			_ = recorder.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+				Action: action, TargetType: targetType, TargetID: route.ExternalPath,
+				Outcome: storage.AuditOutcomeSuccess,
+				Details: map[string]any{"method": route.Method, "service": registration.Name, "status": rec.status},
+			})
+		}
 	}), nil
+}
+
+func isMutatingProxyMethod(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func proxiedMutationAudit(externalPath string) (action, targetType string) {
+	switch {
+	case strings.HasSuffix(externalPath, "/host/wifi-ap"):
+		return "host.wifi_ap.update", "host_wifi_ap"
+	case strings.HasSuffix(externalPath, "/host/mdns"):
+		return "host.mdns.update", "host_mdns"
+	default:
+		return "host.proxy.mutate", "host_proxy"
+	}
 }

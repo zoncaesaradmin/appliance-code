@@ -700,6 +700,15 @@ button {
   color: var(--navy);
 }
 
+.pill--warn {
+  background: #f7e3c8;
+  color: #8a4b08;
+}
+
+.audit-log-list .resource-list__row {
+  grid-template-columns: 1.3fr 1.2fr 0.9fr 1fr 1.2fr 1fr 1fr auto;
+}
+
 .table-list__row {
   padding: 14px 0;
   border-bottom: 1px solid var(--border);

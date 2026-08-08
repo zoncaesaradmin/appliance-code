@@ -121,25 +121,29 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		UsersH:         &httpapi.UserHandlers{Users: services.Users, Roles: services.Roles},
 		RolesH:         &httpapi.RoleHandlers{Roles: services.Roles},
 		TokensH:        &httpapi.TokenHandlers{Tokens: services.Tokens},
-		LANDNSPublishH: &httpapi.LANDNSPublishHandlers{},
+		LANDNSPublishH: &httpapi.LANDNSPublishHandlers{Audit: services.Audit},
 		LicensingH:     &httpapi.LicensingHandlers{Licensing: services.Licensing},
 		SetupStateH: &httpapi.SetupStateHandlers{
 			Licensing: services.Licensing, Profiles: services.Profiles, Metadata: services.Metadata,
 			Notifications: services.Notifications, RuntimeProfile: string(services.ApplianceProfile.Name),
 		},
-		NotificationsH: &httpapi.NotificationHandlers{Notifications: services.Notifications},
+		NotificationsH: &httpapi.NotificationHandlers{Notifications: services.Notifications, Audit: services.Audit},
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
+		AuditH: &httpapi.AuditHandlers{
+			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
+		},
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
 		ProxiedServices: httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry),
+		Audit:           services.Audit,
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{
 			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,
 			Keys: services.Keys, Issuer: cfg.CanonicalOrigin,
 		}
-		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore}
+		deps.RegistryGrantsH = &httpapi.RegistryGrantHandlers{Grants: services.RegistryGrantStore, Audit: services.Audit}
 		deps.RegistryCatalogH = &httpapi.RegistryCatalogHandlers{
 			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
@@ -149,11 +153,12 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			RootDir:         cfg.FilesRootDir,
 			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
 			TransferTimeout: cfg.FilesTransferTimeout,
+			Audit:           services.Audit,
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
-		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger}
+		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger, Audit: services.Audit}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameLANDNS) {
 		if services.DNS == nil {
@@ -207,6 +212,10 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 // both servers within the configured shutdown timeout before returning.
 func (a *App) Run(ctx context.Context) error {
 	errCh := make(chan error, 2)
+
+	if a.services != nil && a.services.AuditOps != nil {
+		a.services.AuditOps.StartMaintenance(ctx, time.Hour)
+	}
 
 	go func() {
 		a.processLogger.Infow("public listener starting", "addr", a.cfg.PublicAddr)

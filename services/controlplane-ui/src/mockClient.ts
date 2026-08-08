@@ -43,7 +43,9 @@ import type {
   HostMDNSApplyRequest,
   ApplianceFileEntry,
   ApplianceFileListResult,
-  ApplianceFileUploadResult
+  ApplianceFileUploadResult,
+  AuditEvent,
+  AuditEventsResult
 } from "./types";
 
 function now(): string {
@@ -982,5 +984,56 @@ export class MockControlPlaneClient {
       message: "mdns (avahi-daemon) is active"
     };
     return { ...mockState.mdns };
+  }
+
+  async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
+    const limit = params?.limit ?? 10;
+    const all: AuditEvent[] = [
+      {
+        id: "evt-1",
+        sequence: 3,
+        occurredAt: now(),
+        actorUserId: "admin",
+        actorType: "user",
+        authMethod: "session",
+        action: "auth.login",
+        targetType: "user",
+        targetId: "admin",
+        outcome: "success",
+        sourceAddr: "127.0.0.1:1",
+        requestId: "req-1",
+        severity: "info"
+      },
+      {
+        id: "evt-2",
+        sequence: 2,
+        occurredAt: now(),
+        actorUserId: "admin",
+        actorType: "user",
+        authMethod: "session",
+        action: "users.create",
+        targetType: "user",
+        targetId: "alice",
+        outcome: "success",
+        sourceAddr: "127.0.0.1:1",
+        requestId: "req-2",
+        severity: "info"
+      },
+      {
+        id: "evt-3",
+        sequence: 1,
+        occurredAt: now(),
+        actorType: "system",
+        action: "profiles.activate",
+        targetType: "profile",
+        targetId: "core",
+        outcome: "success",
+        severity: "info"
+      }
+    ];
+    const start = params?.cursor ? Number(params.cursor) : 0;
+    const slice = all.slice(start, start + limit);
+    const next = start + limit < all.length ? String(start + limit) : undefined;
+    return { items: slice, nextCursor: next };
   }
 }
