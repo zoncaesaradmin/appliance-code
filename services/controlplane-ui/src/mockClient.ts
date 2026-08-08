@@ -690,6 +690,26 @@ export class MockControlPlaneClient {
     return new Blob([Uint8Array.from(stored.content)]);
   }
 
+  async deleteApplianceFile(path: string): Promise<void> {
+    const cleaned = path.trim().replace(/^\/+|\/+$/g, "");
+    const exact = mockState.files[cleaned];
+    if (exact) {
+      delete mockState.files[cleaned];
+      return;
+    }
+    const prefix = cleaned + "/";
+    let removed = false;
+    for (const key of Object.keys(mockState.files)) {
+      if (key === cleaned || key.startsWith(prefix)) {
+        delete mockState.files[key];
+        removed = true;
+      }
+    }
+    if (!removed) {
+      throw new Error("File not found");
+    }
+  }
+
   async getLicensingStatus(): Promise<LicensingStatus> {
     return {
       state: mockState.licensingState,

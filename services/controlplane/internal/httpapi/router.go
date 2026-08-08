@@ -464,6 +464,12 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermFilesWrite, deps.FilesH.Upload), nil
 		}},
+		{moduleName: appliance.ModuleNameFiles, pattern: "DELETE /api/v1/files/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FilesH == nil {
+				return nil, fmt.Errorf("missing file handlers")
+			}
+			return w.protect(roles.PermFilesWrite, deps.FilesH.Delete), nil
+		}},
 		{moduleName: appliance.ModuleNameLANDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {
 				return nil, fmt.Errorf("missing dns handlers")

@@ -202,6 +202,7 @@ accept, track, and manage build requests.
 - `GET /api/v1/files`
 - `GET /api/v1/files/{rest...}` (download a file, or list a directory)
 - `POST /api/v1/files/{rest...}` (upload / overwrite a file)
+- `DELETE /api/v1/files/{rest...}` (delete a file or directory tree)
 
 Permissions: `files.read`, `files.write`. The control plane stores content under
 the configured `files.rootDir` host path (default `/data/zon/files`). Every v1

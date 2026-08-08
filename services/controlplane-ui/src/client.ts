@@ -130,6 +130,7 @@ export interface ControlPlaneClient {
   listApplianceFiles(path?: string): Promise<ApplianceFileListResult>;
   uploadApplianceFile(path: string, file: File): Promise<ApplianceFileUploadResult>;
   downloadApplianceFile(path: string): Promise<Blob>;
+  deleteApplianceFile(path: string): Promise<void>;
   getLicensingStatus(): Promise<LicensingStatus>;
   getLicensingEntitlements(): Promise<string[]>;
   acceptBaseEntitlement(): Promise<LicensingStatus>;
@@ -463,6 +464,10 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
       throw await ApiError.fromResponse(response);
     }
     return response.blob();
+  }
+
+  async deleteApplianceFile(path: string): Promise<void> {
+    await this.request(encodeApplianceFilePath(path), { method: "DELETE" });
   }
 
   async getLicensingStatus(): Promise<LicensingStatus> {

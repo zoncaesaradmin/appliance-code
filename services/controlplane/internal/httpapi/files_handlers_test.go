@@ -114,6 +114,23 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 	if len(nestedList.Items) != 1 || nestedList.Items[0].Name != "bundle.txt" || nestedList.Items[0].Type != "file" {
 		t.Fatalf("nested list = %+v, want bundle.txt file", nestedList.Items)
 	}
+
+	deleteReq, err := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/files/releases/v1/bundle.txt", nil)
+	if err != nil {
+		t.Fatalf("build delete request: %v", err)
+	}
+	deleteReq.Header.Set("Authorization", "Bearer "+token)
+	deleteResp, err := http.DefaultClient.Do(deleteReq)
+	if err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	defer deleteResp.Body.Close()
+	if deleteResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want 204", deleteResp.StatusCode)
+	}
+	if _, err := os.Stat(uploadedPath); !os.IsNotExist(err) {
+		t.Fatalf("expected uploaded file to be removed, stat err = %v", err)
+	}
 }
 
 func TestArtifactFilesRequireWritePermission(t *testing.T) {

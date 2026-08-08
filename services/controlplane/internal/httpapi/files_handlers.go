@@ -202,6 +202,33 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {
+	_, fullPath, err := h.resolvePath(r.PathValue("rest"))
+	if err != nil {
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	info, err := os.Stat(fullPath)
+	if errors.Is(err, os.ErrNotExist) {
+		WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	if info.IsDir() {
+		if err := os.RemoveAll(fullPath); err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
+	} else if err := os.Remove(fullPath); err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *FileHandlers) extendTransferDeadlines(w http.ResponseWriter) error {
 	if h.TransferTimeout <= 0 {
 		return nil

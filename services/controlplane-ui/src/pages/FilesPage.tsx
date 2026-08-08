@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, PageFrame } from "../components";
+import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow } from "../components";
 import { ApiError } from "../client";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
@@ -16,6 +16,23 @@ function formatBytes(size: number): string {
     return `${(size / (1024 * 1024)).toFixed(1)} MiB`;
   }
   return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
+}
+
+function formatModifiedAt(value: string): string {
+  if (!value) {
+    return "—";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function joinFilePath(prefix: string, name: string): string {
@@ -43,17 +60,6 @@ export function FilesPage(): React.JSX.Element {
   const [logicalName, setLogicalName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-
-  const breadcrumbs = useMemo(() => {
-    const parts = currentPath.split("/").filter(Boolean);
-    const crumbs = [{ label: "root", path: "" }];
-    let walking = "";
-    for (const part of parts) {
-      walking = walking ? `${walking}/${part}` : part;
-      crumbs.push({ label: part, path: walking });
-    }
-    return crumbs;
-  }, [currentPath]);
 
   const destinationPreview = useMemo(() => {
     const name = logicalName.trim().replace(/^\/+/, "");
@@ -120,8 +126,7 @@ export function FilesPage(): React.JSX.Element {
           : `Uploaded ${result.path} (${formatBytes(result.size)}).`
       );
       setShowUploadDialog(false);
-      const nextPath = parentPath(result.path);
-      await refresh(nextPath);
+      await refresh(parentPath(result.path));
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -129,18 +134,18 @@ export function FilesPage(): React.JSX.Element {
     }
   }
 
-  async function downloadFile(entry: ApplianceFileEntry) {
+  async function deleteEntry(entry: ApplianceFileEntry) {
+    const kind = entry.type === "directory" ? "directory" : "file";
+    if (!window.confirm(`Delete ${kind} “${entry.name}”? This cannot be undone.`)) {
+      return;
+    }
     setError("");
     try {
-      const blob = await client.downloadApplianceFile(entry.path);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = entry.name;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await client.deleteApplianceFile(entry.path);
+      setMessage(`Deleted ${entry.path}.`);
+      await refresh(currentPath);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Download failed.");
+      setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Delete failed.");
     }
   }
 
@@ -148,7 +153,7 @@ export function FilesPage(): React.JSX.Element {
     <PageFrame
       title="Files"
       eyebrow=""
-      description="Named file spaces on this appliance. Paths are relative to the appliance files store — no host login required."
+      description="Named file spaces on this appliance."
       pathname="/manage/files"
       onNavigate={navigate}
       tabs={[{ label: "Browse", path: "/manage/files" }]}
@@ -156,31 +161,11 @@ export function FilesPage(): React.JSX.Element {
       {message ? <div className="message">{message}</div> : null}
       {error ? <div className="message message--error">{error}</div> : null}
 
-      <Card
-        title="File spaces"
-        subtitle="Browse directories and files already stored on the appliance"
-      >
+      <Card title="File spaces" subtitle="Browse directories and files stored on the appliance">
         <div className="button-row" style={{ marginBottom: "1rem" }}>
           <button className="button button--primary" type="button" onClick={openUploadDialog}>
             + Add file
           </button>
-          <button className="button button--ghost" type="button" onClick={() => void refresh(currentPath)}>
-            Refresh
-          </button>
-        </div>
-
-        <div className="badge-row" style={{ marginBottom: "1rem" }}>
-          {breadcrumbs.map((crumb, index) => (
-            <button
-              key={`${crumb.path}-${crumb.label}`}
-              className="pill"
-              type="button"
-              onClick={() => void refresh(crumb.path)}
-              style={{ cursor: "pointer" }}
-            >
-              {index === 0 ? "files:/" : crumb.label}
-            </button>
-          ))}
         </div>
 
         {loading ? (
@@ -188,30 +173,45 @@ export function FilesPage(): React.JSX.Element {
         ) : items.length === 0 ? (
           <EmptyState message="No files here yet. Use Add file to upload from this machine." />
         ) : (
-          <div className="table-list">
+          <ResourceList>
             {items.map((entry) => (
-              <div className="table-list__row" key={entry.path}>
-                <div>
-                  <strong>{entry.name}</strong>
-                  <span>
-                    {entry.path} · {entry.type === "directory" ? "directory" : formatBytes(entry.sizeBytes)}
-                    {entry.modifiedAt ? ` · ${entry.modifiedAt}` : ""}
-                  </span>
-                </div>
-                <div className="button-row">
-                  {entry.type === "directory" ? (
-                    <button className="button button--ghost" type="button" onClick={() => void refresh(entry.path)}>
-                      Open
-                    </button>
-                  ) : (
-                    <button className="button button--ghost" type="button" onClick={() => void downloadFile(entry)}>
-                      Download
-                    </button>
-                  )}
-                </div>
-              </div>
+              <ResourceListRow
+                key={entry.path}
+                ariaLabel={
+                  entry.type === "directory"
+                    ? `Open directory ${entry.name}`
+                    : `File ${entry.name}`
+                }
+                onClick={entry.type === "directory" ? () => void refresh(entry.path) : undefined}
+                actionsLabel={`Actions for ${entry.name}`}
+                columns={[
+                  {
+                    key: "name",
+                    label: "Name",
+                    value: entry.type === "directory" ? `${entry.name}/` : entry.name
+                  },
+                  {
+                    key: "size",
+                    label: "Size",
+                    value: entry.type === "directory" ? "—" : formatBytes(entry.sizeBytes)
+                  },
+                  {
+                    key: "modified",
+                    label: "Modified",
+                    value: formatModifiedAt(entry.modifiedAt)
+                  }
+                ]}
+                actions={[
+                  {
+                    id: "delete",
+                    label: "Delete",
+                    danger: true,
+                    onSelect: () => void deleteEntry(entry)
+                  }
+                ]}
+              />
             ))}
-          </div>
+          </ResourceList>
         )}
       </Card>
 
