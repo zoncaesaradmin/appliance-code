@@ -14,12 +14,17 @@ ARG UI_WEB_DEPS_IMAGE=docker.io/library/node:22-alpine
 ARG USE_PREBAKED_NPM=0
 ARG RUNTIME_PREBAKED=0
 
-FROM ${UI_NODE_IMAGE} AS deps-0
+# Fixed stage names (not deps-${USE_PREBAKED_NPM}): buildah does not treat
+# ARG-expanded FROM targets as prior stages and tries to pull "deps-0" as an
+# image short-name instead.
+FROM ${UI_NODE_IMAGE} AS deps-online
 RUN mkdir -p /deps/node_modules
 
-FROM ${UI_WEB_DEPS_IMAGE} AS deps-1
-
-FROM deps-${USE_PREBAKED_NPM} AS web-deps
+FROM ${UI_WEB_DEPS_IMAGE} AS deps-offline
+# Online builds still instantiate this stage with the stock node image; ensure
+# /deps exists so COPY --from=deps-offline always succeeds. Offline builds use
+# a prebaked image that already has /deps/node_modules.
+RUN mkdir -p /deps/node_modules
 
 # Frontend build stage: compiles the React/Vite SPA into dist/.
 FROM ${UI_NODE_IMAGE} AS web-build
@@ -29,10 +34,11 @@ COPY package.json package-lock.json ./
 COPY tsconfig.json index.html ./
 COPY scripts ./scripts
 COPY src ./src
-COPY --from=web-deps /deps/node_modules /prebaked/node_modules
+COPY --from=deps-online /deps/node_modules /prebaked-online/node_modules
+COPY --from=deps-offline /deps/node_modules /prebaked-offline/node_modules
 RUN set -eux; \
     if [ "${USE_PREBAKED_NPM}" = "1" ]; then \
-      cp -a /prebaked/node_modules ./node_modules; \
+      cp -a /prebaked-offline/node_modules ./node_modules; \
     else \
       npm ci; \
     fi
