@@ -501,7 +501,7 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" && ! -f "${INFERENCE_RUNTIME_IMAGE}" ]]; t
   echo "archive-release-input: inference-runtime image not found: ${INFERENCE_RUNTIME_IMAGE}" >&2
   exit 1
 fi
-if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" ]]; then
+if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" || -n "${INFERENCE_VERSION}" ]]; then
   if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" ]]; then
     echo "archive-release-input: --inference-runtime-image and --inference-runtime-image-reference must be provided together" >&2
     exit 2
@@ -509,6 +509,19 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE
   if [[ ! "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" =~ ^registry\.local/inference-runtime@sha256:[0-9a-f]{64}$ ]]; then
     echo "archive-release-input: --inference-runtime-image-reference must be registry.local/inference-runtime@sha256:<64 lowercase hex>" >&2
     exit 2
+  fi
+  if [[ ! -d "${INFERENCE_CHART_DIR}" ]]; then
+    echo "archive-release-input: missing appliance-inference chart: ${INFERENCE_CHART_DIR}" >&2
+    exit 1
+  fi
+  if [[ -z "${INFERENCE_VERSION}" ]]; then
+    INFERENCE_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${INFERENCE_CHART_DIR}/Chart.yaml")"
+  fi
+  # compatibility.inferenceVersion is unprefixed; Chart.yaml appVersion may be v0.6.5.
+  INFERENCE_VERSION="${INFERENCE_VERSION#v}"
+  if [[ -z "${INFERENCE_VERSION}" ]]; then
+    echo "archive-release-input: unable to derive inferenceVersion from ${INFERENCE_CHART_DIR}/Chart.yaml" >&2
+    exit 1
   fi
   if ! command -v python3 >/dev/null 2>&1; then
     echo "archive-release-input: python3 is required to validate the inference-runtime OCI archive contract" >&2
@@ -540,9 +553,10 @@ if reference != "registry.local/inference-runtime@" + digest:
     raise SystemExit(f"archive-release-input: inference-runtime image reference {reference!r} does not match index digest {digest!r}")
 PY
 fi
-if [[ ! -d "${INFERENCE_CHART_DIR}" ]]; then
-  echo "archive-release-input: missing appliance-inference chart: ${INFERENCE_CHART_DIR}" >&2
-  exit 1
+# Pack-selective builds may omit inference inputs (inference pack not selected).
+# Never ship inferenceVersion/chart without the runtime image.
+if [[ -z "${INFERENCE_RUNTIME_IMAGE}" ]]; then
+  INFERENCE_VERSION=""
 fi
 if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" && ! -f "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
   echo "archive-release-input: workflow controller image not found: ${WORKFLOW_CONTROLLER_IMAGE}" >&2
@@ -612,15 +626,6 @@ fi
 DNS_VERSION="${DNS_VERSION#v}"
 if [[ -z "${DNS_VERSION}" ]]; then
   echo "archive-release-input: unable to derive dnsVersion from ${DNS_CHART_DIR}/Chart.yaml" >&2
-  exit 1
-fi
-if [[ -z "${INFERENCE_VERSION}" ]]; then
-  INFERENCE_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${INFERENCE_CHART_DIR}/Chart.yaml")"
-fi
-# compatibility.inferenceVersion is unprefixed; Chart.yaml appVersion may be v0.6.5.
-INFERENCE_VERSION="${INFERENCE_VERSION#v}"
-if [[ -z "${INFERENCE_VERSION}" ]]; then
-  echo "archive-release-input: unable to derive inferenceVersion from ${INFERENCE_CHART_DIR}/Chart.yaml" >&2
   exit 1
 fi
 if [[ -z "${RELEASE_ID}" ]]; then
@@ -769,9 +774,13 @@ mkdir -p "${TMP_DIR}/appliance-dns-chart"
 cp -R "${DNS_CHART_DIR}/." "${TMP_DIR}/appliance-dns-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" appliance-dns-chart
 
-mkdir -p "${TMP_DIR}/appliance-inference-chart"
-cp -R "${INFERENCE_CHART_DIR}/." "${TMP_DIR}/appliance-inference-chart/"
-tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_ARCHIVE}" appliance-inference-chart
+INFERENCE_CHART_BASENAME=""
+if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
+  mkdir -p "${TMP_DIR}/appliance-inference-chart"
+  cp -R "${INFERENCE_CHART_DIR}/." "${TMP_DIR}/appliance-inference-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_ARCHIVE}" appliance-inference-chart
+  INFERENCE_CHART_BASENAME="${INFERENCE_CHART_ARCHIVE}"
+fi
 
 if [[ -n "${WORKFLOWS_CRDS_DIR}" && -d "${WORKFLOWS_CHART_DIR}" ]]; then
   mkdir -p "${TMP_DIR}/workflows-chart"
@@ -786,7 +795,9 @@ fi
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
   printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
   printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
-  printf ',\n  "inferenceVersion": "%s"' "${INFERENCE_VERSION}"
+  if [[ -n "${INFERENCE_VERSION}" ]]; then
+    printf ',\n  "inferenceVersion": "%s"' "${INFERENCE_VERSION}"
+  fi
   if [[ -n "${WORKFLOWS_VERSION}" ]]; then
     printf ',\n  "workflowsVersion": "%s"' "${WORKFLOWS_VERSION}"
   fi
@@ -819,7 +830,6 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
     "${CHART_ARCHIVE}" \
     "${ARTIFACT_SERVER_CHART_ARCHIVE}" \
     "${DNS_CHART_ARCHIVE}" \
-    "${INFERENCE_CHART_ARCHIVE}" \
     "${METADATA_BUNDLE_BASENAME}" \
     "${CONFIG_SCHEMA_BASENAME}" \
     "${COMPATIBILITY_BASENAME}"
@@ -834,6 +844,9 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   fi
   if [[ -n "${DNS_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" | sed 's/^sha256://')" "${DNS_BASENAME}"
+  fi
+  if [[ -n "${INFERENCE_CHART_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_BASENAME}" | sed 's/^sha256://')" "${INFERENCE_CHART_BASENAME}"
   fi
   if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}" | sed 's/^sha256://')" "${INFERENCE_RUNTIME_BASENAME}"
@@ -891,7 +904,10 @@ if [[ -n "${WORKFLOWS_VERSION}" ]]; then
 fi
 ARTIFACT_SERVER_COMPATIBILITY_JSON=', "artifactServerVersion": "'"${ARTIFACT_SERVER_VERSION}"'"'
 DNS_COMPATIBILITY_JSON=', "dnsVersion": "'"${DNS_VERSION}"'"'
-INFERENCE_COMPATIBILITY_JSON=', "inferenceVersion": "'"${INFERENCE_VERSION}"'"'
+INFERENCE_COMPATIBILITY_JSON=""
+if [[ -n "${INFERENCE_VERSION}" ]]; then
+  INFERENCE_COMPATIBILITY_JSON=', "inferenceVersion": "'"${INFERENCE_VERSION}"'"'
+fi
 
 OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=""
 if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
@@ -905,10 +921,14 @@ if [[ -n "${DNS_BASENAME}" ]]; then
     "dnsImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" "${DNS_BASENAME}" "${DNS_IMAGE_REFERENCE}")"
 fi
 
-OPTIONAL_INFERENCE_RUNTIME_IMAGE_JSON=""
-if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
-  OPTIONAL_INFERENCE_RUNTIME_IMAGE_JSON=',
+OPTIONAL_INFERENCE_ARTIFACTS_JSON=""
+if [[ -n "${INFERENCE_CHART_BASENAME}" ]]; then
+  OPTIONAL_INFERENCE_ARTIFACTS_JSON=',
+    "inferenceChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_BASENAME}" "${INFERENCE_CHART_BASENAME}")"
+  if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
+    OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
     "inferenceRuntimeImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}" "${INFERENCE_RUNTIME_BASENAME}" "${INFERENCE_RUNTIME_IMAGE_REFERENCE}")"
+  fi
 fi
 
 OPTIONAL_WORKFLOWS_ARTIFACTS_JSON=""
@@ -960,8 +980,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${HOST_PACKAGES_JSON},
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "artifactServerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" "${ARTIFACT_SERVER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON},
-    "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON},
-    "inferenceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_ARCHIVE}" "${INFERENCE_CHART_ARCHIVE}")${OPTIONAL_INFERENCE_RUNTIME_IMAGE_JSON},
+    "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
