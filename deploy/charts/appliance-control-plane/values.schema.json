@@ -163,8 +163,7 @@
           },
           "then": {
             "required": [
-              "workspaceProvisionerImageDigest",
-              "builderImageDigest"
+              "workspaceProvisionerImageDigest"
             ],
             "properties": {
               "buildCatalog": {
@@ -174,7 +173,7 @@
                 "$ref": "#/$defs/builderImageDigest"
               },
               "builderImageDigest": {
-                "$ref": "#/$defs/builderImageDigest"
+                "$ref": "#/$defs/optionalBuilderImageDigest"
               }
             }
           }
@@ -561,6 +560,18 @@
           "not": {
             "pattern": "@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef$"
           }
+        }
+      ]
+    },
+    "optionalBuilderImageDigest": {
+      "description": "Optional day-2 default builder image. Empty omits a default; when set must be digest-pinned. Catalog targets still require explicit digests.",
+      "oneOf": [
+        {
+          "type": "string",
+          "const": ""
+        },
+        {
+          "$ref": "#/$defs/builderImageDigest"
         }
       ]
     },

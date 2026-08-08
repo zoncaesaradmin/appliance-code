@@ -427,12 +427,12 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		name, _ := svc["name"].(string)
 		priority, _ := route["priority"].(int)
 		switch {
-		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`))" && name == controlPlaneServiceName:
+		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/inference/v1`))" && name == controlPlaneServiceName:
 			if priority != 100 {
 				t.Errorf("API route priority = %v, want 100", route["priority"])
 			}
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
 			if priority != 1 {
 				t.Errorf("UI route priority = %v, want 1", route["priority"])
 			}
@@ -440,10 +440,10 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		}
 	}
 	if !apiRouteOK {
-		t.Error("expected /api/v1 and /mcp route to target control-plane service")
+		t.Error("expected /api/v1, /mcp, and /inference/v1 route to target control-plane service")
 	}
 	if !uiRouteOK {
-		t.Error("expected / route to target UI service with API/registry exclusions")
+		t.Error("expected / route to target UI service with API/MCP/inference/registry exclusions")
 	}
 }
 
@@ -718,6 +718,29 @@ config:
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("helm lint rejected builder with empty buildCatalog:\n%s", out)
+	}
+}
+
+func TestValuesSchemaAllowsBuilderWithoutDay2BuilderImageDigest(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "builder-no-day2-builder.yaml")
+	// builderImageDigest is an optional day-2 default (not packaged). Install
+	// must succeed with empty/omitted; catalogs supply digests at build submit.
+	values := []byte(`
+config:
+  applianceProfile: builder
+  buildCatalog: {}
+  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  builderImageDigest: ""
+  artifactServerBaseURL: http://appliance-registry.artifacts.svc.cluster.local:5000
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helm lint rejected builder with empty day-2 builderImageDigest:\n%s", out)
 	}
 }
 
