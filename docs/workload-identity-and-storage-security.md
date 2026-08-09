@@ -12,6 +12,11 @@ stable across releases.
 | --- | ---: | ---: | --- |
 | Control plane | 10001 | 10001 | Main API service |
 | Control plane UI | 10002 | 10002 | Browser-facing UI service |
+| Artifact server | 10003 | 10003 | Offline registry (zot wrapper) |
+| LAN DNS (CoreDNS) | 10004 | 10004 | appliance-dns chart |
+| Host agent | 10005 | 10005 | In-cluster host-agent pod |
+| Inference runtime | 10006 | 10006 | appliance-inference chart |
+| Automation runtime | 10007 | 10007 | Metadata bundle + DSL execution |
 | Workflow controller wrapper | 65532 | 65532 | Upstream non-root controller identity |
 | Builder/workspace workflow pods | 10010 | 10010 | Appliance-generated workflow workloads |
 | Shared appliance filesystem group | n/a | 20000 | Supplemental group for shared writable storage |
@@ -19,7 +24,7 @@ stable across releases.
 Do not reuse a service UID as the shared filesystem GID. Shared writable mounts
 must use GID `20000`, `fsGroup: 20000`, and
 `fsGroupChangePolicy: OnRootMismatch` unless a future ADR deliberately changes
-the registry.
+the registry. Never reuse a service UID across components.
 
 ## Storage Rules
 

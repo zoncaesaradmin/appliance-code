@@ -209,6 +209,13 @@ automation-runtime
 {{- end -}}
 
 {{/*
+Automation Runtime PVC name (own SQLite store; never share the control-plane PVC).
+*/}}
+{{- define "appliance-control-plane.automationRuntimeClaimName" -}}
+{{- printf "%s-data" (include "appliance-control-plane.automationRuntimeName" .) -}}
+{{- end -}}
+
+{{/*
 Workspace PV name for the fixed host-path builder workspace storage.
 */}}
 {{- define "appliance-control-plane.workspaceVolumeName" -}}

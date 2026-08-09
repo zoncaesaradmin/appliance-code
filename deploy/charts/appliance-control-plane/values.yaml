@@ -168,8 +168,13 @@ automationRuntime:
     port: 8082
   config:
     logLevel: info
-    dataDir: /var/lib/appliance/data
+    dataDir: /var/lib/appliance/automation-runtime
     applicationLogPath: /data/zon/logs/automation-runtime/application.log
+  persistence:
+    enabled: true
+    storageClassName: ""
+    size: 2Gi
+    accessMode: ReadWriteOnce
   resources:
     requests:
       cpu: 100m
@@ -179,8 +184,9 @@ automationRuntime:
       memory: 256Mi
   podSecurityContext:
     runAsNonRoot: true
-    runAsUser: 10006
-    runAsGroup: 10006
+    # Distinct from inference (10006); never reuse service UIDs.
+    runAsUser: 10007
+    runAsGroup: 10007
     fsGroup: 20000
     fsGroupChangePolicy: OnRootMismatch
     seccompProfile:

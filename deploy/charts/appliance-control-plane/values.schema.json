@@ -154,7 +154,7 @@
             }
           }
         },
-        "config": {
+		"config": {
           "type": "object",
           "required": [
             "logLevel",
@@ -176,6 +176,25 @@
               "minLength": 1
             },
             "applicationLogPath": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "storageClassName": {
+              "type": "string"
+            },
+            "size": {
+              "type": "string",
+              "minLength": 1
+            },
+            "accessMode": {
               "type": "string",
               "minLength": 1
             }

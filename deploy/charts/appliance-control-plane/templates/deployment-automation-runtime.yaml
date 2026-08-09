@@ -64,12 +64,12 @@ spec:
               mountPath: /tmp
             - name: appliance-logs
               mountPath: /data/zon/logs
-            {{- if .Values.persistence.enabled }}
+            {{- if .Values.automationRuntime.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.automationRuntime.config.dataDir }}
+            {{- end }}
             - name: metadata-bundles
               mountPath: {{ .Values.automationRuntime.config.dataDir }}/metadata-bundles
-            {{- end }}
             - name: keys
               mountPath: {{ .Values.automationRuntime.config.dataDir }}/keys
               readOnly: true
@@ -80,17 +80,18 @@ spec:
           hostPath:
             path: /data/zon/logs
             type: DirectoryOrCreate
-        {{- if .Values.persistence.enabled }}
+        {{- if .Values.automationRuntime.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "appliance-control-plane.fullname" . }}-data
+            claimName: {{ include "appliance-control-plane.automationRuntimeClaimName" . }}
+        {{- end }}
         - name: metadata-bundles
           hostPath:
             path: {{ .Values.persistence.metadataBundlesHostPath }}
             type: DirectoryOrCreate
-        {{- end }}
         - name: keys
           secret:
             secretName: {{ .Values.secrets.keysSecretName }}
+            # Non-root runtime: key files must be group-readable via fsGroup.
             defaultMode: 0440
 {{- end }}

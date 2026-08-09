@@ -127,6 +127,7 @@ Examples:
 ```text
 /data/zon/logs/api-server/
 /data/zon/logs/ui/
+/data/zon/logs/automation-runtime/
 /data/zon/logs/workflow-controller/
 /data/zon/logs/artifactserver/
 /data/zon/logs/dns/

@@ -27,7 +27,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Addr:               "127.0.0.1:8082",
-		DataDir:            "/var/lib/appliance/data",
+		DataDir:            "/var/lib/appliance/automation-runtime",
 		ApplicationLogPath: "/data/zon/logs/automation-runtime/application.log",
 		LogLevel:           "info",
 		ReadHeaderTimeout:  5 * time.Second,

@@ -404,6 +404,32 @@ func TestAutomationRuntimeResourcesRenderByDefault(t *testing.T) {
 	if findByKindAndName(docs, "NetworkPolicy", automationRuntimeName+"-allow") == nil {
 		t.Fatal("expected automation runtime NetworkPolicy")
 	}
+	if findByKindAndName(docs, "PersistentVolumeClaim", automationRuntimeName+"-data") == nil {
+		t.Fatal("expected automation runtime PVC")
+	}
+	dep := findByKindAndName(docs, "Deployment", automationRuntimeName)
+	sec, _ := at(dep, "spec", "template", "spec", "securityContext").(map[string]any)
+	if runAsUser, _ := sec["runAsUser"].(int); runAsUser != 10007 {
+		t.Fatalf("automation runtime runAsUser = %d, want 10007 (must not reuse inference 10006)", runAsUser)
+	}
+	volumes, _ := at(dep, "spec", "template", "spec", "volumes").([]any)
+	var sawOwnPVC bool
+	for _, raw := range volumes {
+		volume, _ := raw.(map[string]any)
+		if name, _ := volume["name"].(string); name != "data" {
+			continue
+		}
+		claim, _ := at(volume, "persistentVolumeClaim", "claimName").(string)
+		if claim == automationRuntimeName+"-data" {
+			sawOwnPVC = true
+		}
+		if claim == controlPlaneDeploymentName+"-data" {
+			t.Fatal("automation runtime must not mount the control-plane data PVC (single-writer SQLite)")
+		}
+	}
+	if !sawOwnPVC {
+		t.Fatal("expected automation runtime to mount its own data PVC")
+	}
 }
 
 func TestControlPlaneConfigPointsToAutomationRuntimeService(t *testing.T) {
@@ -504,7 +530,7 @@ func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 }
 
 func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
-	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
+	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "automationRuntime.persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
 	if len(findByKind(docs, "Namespace")) != 0 {
 		t.Error("namespace.create=false should omit the Namespace object")
 	}
