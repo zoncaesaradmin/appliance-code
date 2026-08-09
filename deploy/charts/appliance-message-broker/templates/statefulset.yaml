@@ -25,9 +25,9 @@ spec:
           command:
             - nats-server
           args:
+            - --config=/etc/nats/nats.conf
             - --jetstream
             - --store_dir=/data/jetstream
-            - --max_payload={{ .Values.config.maxPayload }}
             - --http_port=8222
           ports:
             - name: client
@@ -55,6 +55,13 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: config
+              mountPath: /etc/nats
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "appliance-message-broker.fullname" . }}
   volumeClaimTemplates:
     - metadata:
         name: data

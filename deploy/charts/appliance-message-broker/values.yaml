@@ -13,7 +13,7 @@ storage:
   storageClassName: ""
 
 config:
-  maxPayload: 8MiB
+  maxPayload: "8388608"
 
 resources:
   requests:
