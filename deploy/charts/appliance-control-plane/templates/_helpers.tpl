@@ -57,6 +57,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
+Common labels for the automation runtime component.
+*/}}
+{{- define "appliance-control-plane.automationRuntimeLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "appliance-control-plane.automationRuntimeSelectorLabels" . }}
+app.kubernetes.io/component: automation-runtime
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
+{{/*
 Selector labels.
 */}}
 {{- define "appliance-control-plane.selectorLabels" -}}
@@ -77,6 +88,14 @@ Selector labels for the host-agent pod.
 */}}
 {{- define "appliance-control-plane.hostAgentSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.hostAgentName" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/*
+Selector labels for the automation runtime pod.
+*/}}
+{{- define "appliance-control-plane.automationRuntimeSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.automationRuntimeName" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -180,6 +199,13 @@ pods are host-agent-* rather than api-server-host-agent-*.
 */}}
 {{- define "appliance-control-plane.hostAgentName" -}}
 {{- .Values.hostAgent.nameOverride | default "host-agent" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Automation Runtime Deployment/Service name.
+*/}}
+{{- define "appliance-control-plane.automationRuntimeName" -}}
+automation-runtime
 {{- end -}}
 
 {{/*

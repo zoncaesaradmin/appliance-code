@@ -108,6 +108,15 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.hostAgentPort }}
     {{- end }}
+    {{- if .Values.automationRuntime.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.automationRuntimePort }}
+    {{- end }}
     # Cluster DNS is required for Service name lookup (registry, dns, …).
     - to:
         - namespaceSelector:
@@ -154,6 +163,41 @@ spec:
           port: {{ .Values.service.publicPort }}
         - protocol: TCP
           port: {{ .Values.service.internalPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
+{{- if .Values.automationRuntime.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.automationRuntimeName" . }}-allow
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.automationRuntime.service.port }}
+  egress:
     - to:
         - namespaceSelector:
             matchLabels:

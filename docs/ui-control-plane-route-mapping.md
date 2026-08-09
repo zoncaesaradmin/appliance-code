@@ -64,7 +64,9 @@ Useful event names:
 | `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard` |
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard` |
 | `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |
-| `GET /dashboard` | `dashboardData` | `GET /api/v1/auth/session`; if expired, `POST /api/v1/auth/refresh` then `GET /api/v1/auth/session`; `GET /version` on the internal listener; `GET /health/ready` on the internal listener | `200` full HTML page |
+| `GET /home` | React `HomePage` Overview | `GET /version`, `GET /health/ready`, `GET /api/v1/appliance/identity`, `GET /api/v1/appliance/setup-state` | SPA page |
+| `GET /home/topology` | React `HomePage` Topology | Same overview fetches as `/home` | SPA page |
+| `GET /home/audit-logs` | React `HomePage` Audit Logs | Session must include `audit.read`; `GET /api/v1/audit/events?limit=10` with optional `cursor` for Next page | SPA page |
 | `GET /partials/status` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
 | `GET /partials/session` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
 | `GET /artifacts` | `artifactPageData` | Session refresh as needed; `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional `GET /api/v1/registry/repositories/{repository}/referrers?digest=...`; `GET /api/v1/registry/grants` when authorized | `200` full HTML registry browser and grant administration page |

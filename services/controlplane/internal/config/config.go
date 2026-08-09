@@ -29,24 +29,25 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath      string                    `json:"applicationLogPath"`
-	LogLevel                string                    `json:"logLevel"`
-	TrustedProxyCount       int                       `json:"trustedProxyCount"`
-	ApplianceCatalog        appliance.CatalogDocument `json:"applianceCatalog"`
-	ArtifactServerBaseURL   string                    `json:"artifactServerBaseURL"`
-	ArtifactServerAllowFake bool                      `json:"artifactServerAllowFake"`
-	ServiceRegistry         serviceregistry.Registry  `json:"serviceRegistry"`
-	FilesRootDir            string                    `json:"filesRootDir"`
-	FilesTransferTimeout    time.Duration             `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes     int64                     `json:"filesMaxUploadBytes"`
-	DNSReadyURL             string                    `json:"dnsReadyURL"`
-	DNSZoneName             string                    `json:"dnsZoneName"`
-	DNSConfigMapNamespace   string                    `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName        string                    `json:"dnsConfigMapName"`
-	DNSBootstrapHostname    string                    `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4        string                    `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync    bool                      `json:"dnsAllowFakeZoneSync"`
-	InferenceGatewayBaseURL string                    `json:"inferenceGatewayBaseURL"`
+	ApplicationLogPath       string                    `json:"applicationLogPath"`
+	LogLevel                 string                    `json:"logLevel"`
+	TrustedProxyCount        int                       `json:"trustedProxyCount"`
+	ApplianceCatalog         appliance.CatalogDocument `json:"applianceCatalog"`
+	AutomationRuntimeBaseURL string                    `json:"automationRuntimeBaseURL"`
+	ArtifactServerBaseURL    string                    `json:"artifactServerBaseURL"`
+	ArtifactServerAllowFake  bool                      `json:"artifactServerAllowFake"`
+	ServiceRegistry          serviceregistry.Registry  `json:"serviceRegistry"`
+	FilesRootDir             string                    `json:"filesRootDir"`
+	FilesTransferTimeout     time.Duration             `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes      int64                     `json:"filesMaxUploadBytes"`
+	DNSReadyURL              string                    `json:"dnsReadyURL"`
+	DNSZoneName              string                    `json:"dnsZoneName"`
+	DNSConfigMapNamespace    string                    `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName         string                    `json:"dnsConfigMapName"`
+	DNSBootstrapHostname     string                    `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4         string                    `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync     bool                      `json:"dnsAllowFakeZoneSync"`
+	InferenceGatewayBaseURL  string                    `json:"inferenceGatewayBaseURL"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -71,23 +72,24 @@ type Config struct {
 // Default returns the local-development default configuration.
 func Default() Config {
 	return Config{
-		ApplianceProfile:        string(appliance.ProfileCore),
-		CanonicalOrigin:         "http://localhost:8080",
-		PublicAddr:              "127.0.0.1:8080",
-		InternalAddr:            "127.0.0.1:8081",
-		DataDir:                 "./data",
-		ApplicationLogPath:      "/data/zon/logs/api-server/application.log",
-		LogLevel:                "info",
-		TrustedProxyCount:       0,
-		ArtifactServerAllowFake: true,
-		FilesRootDir:            "/data/zon/files",
-		FilesTransferTimeout:    30 * time.Minute,
-		FilesMaxUploadBytes:     20 * 1024 * 1024 * 1024,
-		DNSZoneName:             "appliance.internal",
-		DNSConfigMapNamespace:   "dns",
-		DNSConfigMapName:        "dns-server-config",
-		DNSAllowFakeZoneSync:    true,
-		ReadHeaderTimeout:       5 * time.Second,
+		ApplianceProfile:         string(appliance.ProfileCore),
+		CanonicalOrigin:          "http://localhost:8080",
+		PublicAddr:               "127.0.0.1:8080",
+		InternalAddr:             "127.0.0.1:8081",
+		DataDir:                  "./data",
+		ApplicationLogPath:       "/data/zon/logs/api-server/application.log",
+		LogLevel:                 "info",
+		TrustedProxyCount:        0,
+		AutomationRuntimeBaseURL: "",
+		ArtifactServerAllowFake:  true,
+		FilesRootDir:             "/data/zon/files",
+		FilesTransferTimeout:     30 * time.Minute,
+		FilesMaxUploadBytes:      20 * 1024 * 1024 * 1024,
+		DNSZoneName:              "appliance.internal",
+		DNSConfigMapNamespace:    "dns",
+		DNSConfigMapName:         "dns-server-config",
+		DNSAllowFakeZoneSync:     true,
+		ReadHeaderTimeout:        5 * time.Second,
 		// Must cover multi-GB /api/v1/files uploads. Keep this aligned with
 		// FilesTransferTimeout; handlers also extend the connection deadline
 		// via ResponseController (requires middleware Unwrap).
@@ -174,6 +176,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DATA_DIR", &cfg.DataDir)
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
+	str("AUTOMATION_RUNTIME_BASE_URL", &cfg.AutomationRuntimeBaseURL)
 	str("ARTIFACT_SERVER_BASE_URL", &cfg.ArtifactServerBaseURL)
 	str("FILES_ROOT_DIR", &cfg.FilesRootDir)
 	str("DNS_READY_URL", &cfg.DNSReadyURL)
@@ -360,6 +363,11 @@ func (c Config) Validate() error {
 			}
 		} else if u, err := url.Parse(c.ArtifactServerBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "artifactServerBaseURL must be an absolute http(s) URL with no path")
+		}
+	}
+	if runtimeURL := strings.TrimSpace(c.AutomationRuntimeBaseURL); runtimeURL != "" {
+		if u, err := url.Parse(runtimeURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "automationRuntimeBaseURL must be an absolute http(s) URL with no path")
 		}
 	}
 	if profileErr == nil && filesEnabled {

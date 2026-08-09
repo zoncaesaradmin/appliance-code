@@ -279,6 +279,12 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermMetadataManage, deps.MetadataH.Rollback), nil
 		}},
+		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/appliance/automations/{automationId}/invoke", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.MetadataH == nil {
+				return nil, fmt.Errorf("missing metadata-bundle handlers")
+			}
+			return w.protect(roles.PermMetadataManage, deps.MetadataH.InvokeAutomation), nil
+		}},
 		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/audit/events", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.AuditH == nil {
 				return nil, fmt.Errorf("missing audit handlers")

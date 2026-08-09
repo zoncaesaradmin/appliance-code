@@ -25,7 +25,7 @@ func openProfiles(t *testing.T, bundle profiles.BundleChecker) (*profiles.Servic
 	store := sqlite.NewLicensingStore(db)
 	recorder := audit.NewRecorder(sqlite.NewAuditStore(db))
 	lic := licensing.NewService(db, store, recorder)
-	policy, err := metadatabundle.NewService(db, sqlite.NewMetadataBundleStore(db), recorder, dir)
+	policy, err := metadatabundle.NewService(db, sqlite.NewMetadataBundleStore(db), recorder, nil, dir)
 	if err != nil {
 		t.Fatalf("metadata: %v", err)
 	}

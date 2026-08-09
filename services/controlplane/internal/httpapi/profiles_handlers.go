@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -27,7 +28,7 @@ func (h *ProfileHandlers) actor(r *http.Request) audit.Actor {
 }
 
 func (h *ProfileHandlers) ListCapabilities(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"items": h.Profiles.ListCapabilities()})
+	writeJSON(w, http.StatusOK, map[string]any{"items": h.Profiles.ListCapabilities(r.Context())})
 }
 
 func (h *ProfileHandlers) List(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +101,7 @@ func (h *ProfileHandlers) Activate(w http.ResponseWriter, r *http.Request) {
 }
 
 type MetadataBundleHandlers struct {
-	Metadata *metadatabundle.Service
+	Metadata metadatabundle.Runtime
 }
 
 func (h *MetadataBundleHandlers) actor(r *http.Request) audit.Actor {
@@ -177,6 +178,25 @@ func (h *MetadataBundleHandlers) Rollback(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+func (h *MetadataBundleHandlers) InvokeAutomation(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Input json.RawMessage `json:"input"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	result, err := h.Metadata.InvokeAutomation(r.Context(), h.actor(r), r.PathValue("automationId"), req.Input)
+	if errors.Is(err, metadatabundle.ErrNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "not_found", "Automation not found", "")
+		return
+	}
+	if err != nil {
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *MetadataBundleHandlers) readUploadedArchive(w http.ResponseWriter, r *http.Request) (string, string, func(), error) {

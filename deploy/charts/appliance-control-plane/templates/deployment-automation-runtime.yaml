@@ -1,0 +1,96 @@
+{{- if .Values.automationRuntime.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.automationRuntimeName" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "appliance-control-plane.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.automationRuntime.podSecurityContext | nindent 8 }}
+      containers:
+        - name: automation-runtime
+          image: {{ include "appliance-control-plane.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - /appliance-automation-runtime
+          ports:
+            - name: http
+              containerPort: {{ .Values.automationRuntime.service.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "appliance-control-plane.automationRuntimeName" . }}-config
+          securityContext:
+            {{- toYaml .Values.automationRuntime.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.automationRuntime.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: appliance-logs
+              mountPath: /data/zon/logs
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.automationRuntime.config.dataDir }}
+            - name: metadata-bundles
+              mountPath: {{ .Values.automationRuntime.config.dataDir }}/metadata-bundles
+            {{- end }}
+            - name: keys
+              mountPath: {{ .Values.automationRuntime.config.dataDir }}/keys
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: appliance-logs
+          hostPath:
+            path: /data/zon/logs
+            type: DirectoryOrCreate
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "appliance-control-plane.fullname" . }}-data
+        - name: metadata-bundles
+          hostPath:
+            path: {{ .Values.persistence.metadataBundlesHostPath }}
+            type: DirectoryOrCreate
+        {{- end }}
+        - name: keys
+          secret:
+            secretName: {{ .Values.secrets.keysSecretName }}
+            defaultMode: 0440
+{{- end }}

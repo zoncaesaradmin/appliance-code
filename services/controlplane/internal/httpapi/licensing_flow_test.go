@@ -70,6 +70,19 @@ func TestLicensingAndProfileFlow(t *testing.T) {
 		body, _ := io.ReadAll(metadataResp.Body)
 		t.Fatalf("metadata status code=%d body=%s", metadataResp.StatusCode, body)
 	}
+	invokeResp := ts.doJSON(t, "POST", "/api/v1/appliance/automations/zon.debug-tools:export-audit-events/invoke", adminToken, `{"input":{}}`)
+	defer invokeResp.Body.Close()
+	if invokeResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(invokeResp.Body)
+		t.Fatalf("automation invoke code=%d body=%s", invokeResp.StatusCode, body)
+	}
+	var invokeBody map[string]any
+	if err := json.NewDecoder(invokeResp.Body).Decode(&invokeBody); err != nil {
+		t.Fatal(err)
+	}
+	if invokeBody["automationId"] != "zon.debug-tools:export-audit-events" {
+		t.Fatalf("unexpected automation response: %#v", invokeBody)
+	}
 
 	ts.createUserWithRole(t, "viewer-user", testPassword, roles.ViewerRoleID)
 	viewerToken := ts.login(t, "viewer-user", testPassword)

@@ -1,10 +1,13 @@
 package metadatabundle
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"appliance-code/services/controlplane/internal/audit"
 )
 
 const (
@@ -19,6 +22,7 @@ type Bundle struct {
 	Manifest     Manifest
 	Profiles     ProfileCatalog
 	Capabilities CapabilityCatalog
+	DebugTools   *DebugToolsSection
 }
 
 type Manifest struct {
@@ -66,15 +70,93 @@ type CapabilityArtifacts struct {
 	Required []string `yaml:"required" json:"required"`
 }
 
+type DebugToolsSection struct {
+	AllowedAPIs map[string]AllowedAPI
+	Automations map[string]AutomationDocument
+}
+
+type AllowedAPIsFile struct {
+	APIVersion string       `yaml:"apiVersion" json:"apiVersion"`
+	Kind       string       `yaml:"kind" json:"kind"`
+	APIs       []AllowedAPI `yaml:"apis" json:"apis"`
+}
+
+type AllowedAPI struct {
+	ID       string `yaml:"id" json:"id"`
+	Function string `yaml:"function" json:"function"`
+	Method   string `yaml:"method" json:"method"`
+	Path     string `yaml:"path" json:"path"`
+}
+
+type AutomationDocument struct {
+	ID               string
+	FilePath         string
+	Document         AutomationDocumentMeta `yaml:"document" json:"document"`
+	Input            AutomationIO           `yaml:"input" json:"input"`
+	Output           AutomationIO           `yaml:"output" json:"output"`
+	Do               []AutomationStep       `yaml:"do" json:"do"`
+	SectionDir       string
+	InputSchemaPath  string
+	OutputSchemaPath string
+}
+
+type AutomationDocumentMeta struct {
+	DSL       string `yaml:"dsl" json:"dsl"`
+	Namespace string `yaml:"namespace" json:"namespace"`
+	Name      string `yaml:"name" json:"name"`
+	Version   string `yaml:"version" json:"version"`
+	Title     string `yaml:"title" json:"title"`
+}
+
+type AutomationIO struct {
+	Schema AutomationSchemaRef `yaml:"schema" json:"schema"`
+}
+
+type AutomationSchemaRef struct {
+	Format   string                      `yaml:"format" json:"format"`
+	Resource AutomationSchemaResourceRef `yaml:"resource" json:"resource"`
+}
+
+type AutomationSchemaResourceRef struct {
+	Endpoint string `yaml:"endpoint" json:"endpoint"`
+}
+
+type AutomationStep struct {
+	Name string
+	Call AutomationCall `json:"call"`
+}
+
+type AutomationCall struct {
+	Function string         `yaml:"call" json:"call"`
+	With     map[string]any `yaml:"with" json:"with"`
+}
+
 // Status is the API-facing active metadata bundle status.
 type Status struct {
 	SoftwareVersion         string `json:"softwareVersion"`
+	BaseMetadataVersion     string `json:"baseMetadataVersion,omitempty"`
 	ActiveMetadataVersion   string `json:"activeMetadataVersion"`
 	ActiveDigest            string `json:"activeDigest,omitempty"`
 	PreviousMetadataVersion string `json:"previousMetadataVersion,omitempty"`
 	PreviousDigest          string `json:"previousDigest,omitempty"`
 	DirectoryName           string `json:"directoryName,omitempty"`
 	CanRollback             bool   `json:"canRollback"`
+}
+
+type AutomationInvokeResult struct {
+	AutomationID    string         `json:"automationId"`
+	DocumentVersion string         `json:"documentVersion"`
+	MetadataVersion string         `json:"metadataVersion"`
+	Output          map[string]any `json:"output"`
+}
+
+type Runtime interface {
+	Status(ctx context.Context) (Status, error)
+	ValidateArchive(ctx context.Context, archivePath, signature string) (ValidationResult, *Bundle, error)
+	InstallArchive(ctx context.Context, actor audit.Actor, archivePath, signature string) (Status, ValidationResult, error)
+	Rollback(ctx context.Context, actor audit.Actor) (Status, error)
+	InvokeAutomation(ctx context.Context, actor audit.Actor, automationID string, input []byte) (AutomationInvokeResult, error)
+	ActiveBundle(ctx context.Context) (*Bundle, error)
 }
 
 // ValidationResult groups metadata-bundle validation checks.

@@ -38,6 +38,29 @@ data:
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}
   APPLIANCE_INTERNAL_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.internalPort | int) | quote }}
   APPLIANCE_DATA_DIR: {{ .Values.persistence.dataDir | quote }}
+  APPLIANCE_AUTOMATION_RUNTIME_BASE_URL: {{ printf "http://%s:%d" (include "appliance-control-plane.automationRuntimeName" .) (.Values.automationRuntime.service.port | int) | quote }}
+{{- if .Values.automationRuntime.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "appliance-control-plane.automationRuntimeName" . }}-config
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+data:
+  AUTOMATION_RUNTIME_ADDR: {{ printf "0.0.0.0:%d" (.Values.automationRuntime.service.port | int) | quote }}
+  AUTOMATION_RUNTIME_DATA_DIR: {{ .Values.automationRuntime.config.dataDir | quote }}
+  AUTOMATION_RUNTIME_APPLICATION_LOG_PATH: {{ .Values.automationRuntime.config.applicationLogPath | quote }}
+  AUTOMATION_RUNTIME_LOG_LEVEL: {{ .Values.automationRuntime.config.logLevel | quote }}
+  AUTOMATION_RUNTIME_READ_HEADER_TIMEOUT: "5s"
+  AUTOMATION_RUNTIME_READ_TIMEOUT: "30m"
+  AUTOMATION_RUNTIME_WRITE_TIMEOUT: "30m"
+  AUTOMATION_RUNTIME_IDLE_TIMEOUT: "60s"
+  AUTOMATION_RUNTIME_SHUTDOWN_TIMEOUT: "30s"
+  AUTOMATION_RUNTIME_MAX_HEADER_BYTES: "16384"
+  AUTOMATION_RUNTIME_AUDIT_RETENTION_DAYS: "365"
+{{- end }}
 {{- if .Values.ui.enabled }}
 ---
 apiVersion: v1

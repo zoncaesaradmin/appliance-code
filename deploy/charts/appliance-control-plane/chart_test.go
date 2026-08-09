@@ -125,6 +125,8 @@ const (
 	controlPlaneDeploymentName = "api-server"
 	controlPlaneConfigMapName  = "api-server-config"
 	controlPlaneServiceName    = "api-server"
+	automationRuntimeName      = "automation-runtime"
+	automationRuntimeConfig    = "automation-runtime-config"
 	controlPlaneUIName         = "ui-server"
 	controlPlaneUIConfigName   = "ui-server-config"
 )
@@ -385,6 +387,34 @@ func TestUIResourcesRenderByDefault(t *testing.T) {
 	}
 	if findByKindAndName(docs, "NetworkPolicy", controlPlaneUIName+"-allow") == nil {
 		t.Fatal("expected UI NetworkPolicy")
+	}
+}
+
+func TestAutomationRuntimeResourcesRenderByDefault(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	if findByKindAndName(docs, "Deployment", automationRuntimeName) == nil {
+		t.Fatal("expected automation runtime Deployment")
+	}
+	if findByKindAndName(docs, "Service", automationRuntimeName) == nil {
+		t.Fatal("expected automation runtime Service")
+	}
+	if findByKindAndName(docs, "ConfigMap", automationRuntimeConfig) == nil {
+		t.Fatal("expected automation runtime ConfigMap")
+	}
+	if findByKindAndName(docs, "NetworkPolicy", automationRuntimeName+"-allow") == nil {
+		t.Fatal("expected automation runtime NetworkPolicy")
+	}
+}
+
+func TestControlPlaneConfigPointsToAutomationRuntimeService(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+	if cm == nil {
+		t.Fatal("expected control-plane ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime:8082" {
+		t.Fatalf("APPLIANCE_AUTOMATION_RUNTIME_BASE_URL = %q, want http://automation-runtime:8082", got)
 	}
 }
 

@@ -3,6 +3,7 @@ package metadatabundle
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ var allowedTopDirs = map[string]struct{}{
 	"ui":            {},
 	"notifications": {},
 	"mcp-tools":     {},
+	"debug-tools":   {},
 }
 
 // ValidateBundle checks schema, cross-refs, and directory rules.
@@ -97,6 +99,72 @@ func ValidateBundle(b *Bundle) error {
 		if err := validateDirectoryLayout(b.RootDir); err != nil {
 			return err
 		}
+	}
+	if err := validateDebugTools(b); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateDebugTools(b *Bundle) error {
+	if b.DebugTools == nil {
+		return nil
+	}
+	if len(b.DebugTools.AllowedAPIs) == 0 {
+		return fmt.Errorf("metadatabundle: debug-tools/allowed-apis.yaml must define at least one API")
+	}
+	for function, api := range b.DebugTools.AllowedAPIs {
+		if strings.TrimSpace(function) == "" {
+			return fmt.Errorf("metadatabundle: debug-tools allowed API function must not be empty")
+		}
+		if strings.TrimSpace(api.Method) == "" || strings.TrimSpace(api.Path) == "" {
+			return fmt.Errorf("metadatabundle: debug-tools allowed API %q must define method and path", function)
+		}
+	}
+	for id, doc := range b.DebugTools.Automations {
+		if strings.TrimSpace(doc.Document.DSL) != "1.0.3" {
+			return fmt.Errorf("metadatabundle: automation %q must declare dsl 1.0.3", id)
+		}
+		if strings.TrimSpace(doc.Document.Namespace) == "" || strings.TrimSpace(doc.Document.Name) == "" {
+			return fmt.Errorf("metadatabundle: automation in %s must define namespace and name", filepath.Base(doc.FilePath))
+		}
+		if len(doc.Do) != 1 {
+			return fmt.Errorf("metadatabundle: automation %q must contain exactly one supported do step", id)
+		}
+		step := doc.Do[0]
+		if _, ok := b.DebugTools.AllowedAPIs[strings.TrimSpace(step.Call.Function)]; !ok {
+			return fmt.Errorf("metadatabundle: automation %q references disallowed function %q", id, step.Call.Function)
+		}
+		if err := validateBundleLocalSchemaPath(doc.Input.Schema.Resource.Endpoint); err != nil {
+			return fmt.Errorf("metadatabundle: automation %q input schema: %w", id, err)
+		}
+		if err := validateBundleLocalSchemaPath(doc.Output.Schema.Resource.Endpoint); err != nil {
+			return fmt.Errorf("metadatabundle: automation %q output schema: %w", id, err)
+		}
+		if _, err := os.Stat(doc.InputSchemaPath); err != nil {
+			return fmt.Errorf("metadatabundle: automation %q missing input schema %q", id, doc.Input.Schema.Resource.Endpoint)
+		}
+		if _, err := os.Stat(doc.OutputSchemaPath); err != nil {
+			return fmt.Errorf("metadatabundle: automation %q missing output schema %q", id, doc.Output.Schema.Resource.Endpoint)
+		}
+	}
+	return nil
+}
+
+func validateBundleLocalSchemaPath(endpoint string) error {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return fmt.Errorf("schema endpoint is required")
+	}
+	if strings.Contains(endpoint, "://") {
+		return fmt.Errorf("remote schema endpoints are not allowed")
+	}
+	clean := path.Clean("/" + endpoint)
+	if clean == "/" || strings.Contains(clean, "..") {
+		return fmt.Errorf("schema endpoint must stay within the bundle section")
+	}
+	if strings.HasPrefix(endpoint, "/") {
+		return fmt.Errorf("schema endpoint must be relative")
 	}
 	return nil
 }

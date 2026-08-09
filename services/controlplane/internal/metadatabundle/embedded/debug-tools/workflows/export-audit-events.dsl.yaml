@@ -1,0 +1,19 @@
+document:
+  dsl: "1.0.3"
+  namespace: zon.debug-tools
+  name: export-audit-events
+  version: "1.0.0"
+  title: Export Audit Events
+input:
+  schema:
+    format: json
+    resource:
+      endpoint: schemas/export-audit-events.input.schema.json
+output:
+  schema:
+    format: json
+    resource:
+      endpoint: schemas/export-audit-events.output.schema.json
+do:
+  - createAuditExport:
+      call: zon:api:audit.export.create

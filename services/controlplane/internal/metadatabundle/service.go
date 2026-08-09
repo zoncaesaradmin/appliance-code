@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/auditops"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/version"
 )
@@ -31,16 +32,18 @@ type Service struct {
 	store    storage.MetadataBundleStore
 	db       storage.DB
 	audit    *audit.Recorder
+	auditOps *auditops.Service
 	dataDir  string
 	software string
 	now      func() time.Time
 }
 
-func NewService(db storage.DB, store storage.MetadataBundleStore, recorder *audit.Recorder, dataDir string) (*Service, error) {
+func NewService(db storage.DB, store storage.MetadataBundleStore, recorder *audit.Recorder, auditOps *auditops.Service, dataDir string) (*Service, error) {
 	s := &Service{
 		db:       db,
 		store:    store,
 		audit:    recorder,
+		auditOps: auditOps,
 		dataDir:  dataDir,
 		software: version.Version,
 		now:      time.Now,
@@ -57,6 +60,10 @@ func (s *Service) Active() *Bundle {
 	return s.active
 }
 
+func (s *Service) ActiveBundle(context.Context) (*Bundle, error) {
+	return s.Active(), nil
+}
+
 func (s *Service) Status(ctx context.Context) (Status, error) {
 	activeRec, err := s.store.GetMetadataBundle(ctx, "active")
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -69,6 +76,9 @@ func (s *Service) Status(ctx context.Context) (Status, error) {
 	st := Status{
 		SoftwareVersion: s.software,
 		CanRollback:     prevRec.MetadataVersion != "",
+	}
+	if baseVer, err := BaseMetadataVersion(s.software); err == nil {
+		st.BaseMetadataVersion = baseVer
 	}
 	if activeRec.MetadataVersion != "" {
 		st.ActiveMetadataVersion = activeRec.MetadataVersion

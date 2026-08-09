@@ -77,7 +77,7 @@ func (h *LicensingHandlers) ImportLicense(w http.ResponseWriter, r *http.Request
 type SetupStateHandlers struct {
 	Licensing      *licensing.Service
 	Profiles       *profiles.Service
-	Metadata       *metadatabundle.Service
+	Metadata       metadatabundle.Runtime
 	Notifications  *notifications.Service
 	RuntimeProfile string
 }

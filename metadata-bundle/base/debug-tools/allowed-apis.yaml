@@ -1,0 +1,7 @@
+apiVersion: metadata.zon/v1
+kind: AllowedAPIs
+apis:
+  - id: audit.export.create
+    function: zon:api:audit.export.create
+    method: POST
+    path: /api/v1/audit/exports

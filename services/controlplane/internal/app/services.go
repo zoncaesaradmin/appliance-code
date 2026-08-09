@@ -15,6 +15,8 @@ import (
 	"appliance-code/services/controlplane/internal/auditops"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
+	"appliance-code/services/controlplane/internal/automationruntimeauth"
+	"appliance-code/services/controlplane/internal/automationruntimeclient"
 	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
@@ -72,7 +74,7 @@ type Services struct {
 	BuilderGit         *buildergit.Service
 	DNS                *dnsrecords.Service
 	Licensing          *licensing.Service
-	Metadata           *metadatabundle.Service
+	Metadata           metadatabundle.Runtime
 	Profiles           *profiles.Service
 	Notifications      *notifications.Service
 
@@ -129,13 +131,27 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	registryGrantStore := sqlite.NewRegistryGrantStore(db)
 	dnsRecordStore := sqlite.NewDNSRecordStore(db)
 	licensingStore := sqlite.NewLicensingStore(db)
-	metadataStore := sqlite.NewMetadataBundleStore(db)
 	recorder := audit.NewRecorder(auditStore)
 	licensingSvc := licensing.NewService(db, licensingStore, recorder)
-	metadataSvc, err := metadatabundle.NewService(db, metadataStore, recorder, cfg.DataDir)
+	auditOps, err := auditops.NewService(auditStore, operationsStore, cfg.DataDir, cfg.AuditRetentionDays, logger)
 	if err != nil {
 		db.Close()
-		return nil, fmt.Errorf("app: initializing metadata bundle: %w", err)
+		return nil, fmt.Errorf("app: initializing audit ops: %w", err)
+	}
+	var metadataSvc metadatabundle.Runtime
+	if strings.TrimSpace(cfg.AutomationRuntimeBaseURL) != "" {
+		metadataSvc, err = automationruntimeclient.New(cfg.AutomationRuntimeBaseURL, nil, automationruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper))
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: initializing automation runtime client: %w", err)
+		}
+	} else {
+		metadataStore := sqlite.NewMetadataBundleStore(db)
+		metadataSvc, err = metadatabundle.NewService(db, metadataStore, recorder, auditOps, cfg.DataDir)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: initializing metadata bundle: %w", err)
+		}
 	}
 	profilesSvc := profiles.NewService(db, licensingStore, licensingSvc, metadataSvc, recorder, string(resolved.Name), profiles.CompleteBundleChecker{})
 	notificationsSvc := notifications.NewService(licensingSvc, licensingStore)
@@ -271,12 +287,6 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 			db.Close()
 			return nil, fmt.Errorf("app: reconciling dns zone: %w", err)
 		}
-	}
-
-	auditOps, err := auditops.NewService(auditStore, operationsStore, cfg.DataDir, cfg.AuditRetentionDays, logger)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("app: initializing audit ops: %w", err)
 	}
 
 	return &Services{

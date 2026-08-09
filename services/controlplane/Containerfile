@@ -22,6 +22,11 @@ RUN CGO_ENABLED=0 go build -mod=vendor \
               -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \
     -o /out/appliance-server ./cmd/appliance-server
+RUN CGO_ENABLED=0 go build -mod=vendor \
+    -ldflags "-X appliance-code/services/controlplane/internal/version.Version=${VERSION} \
+              -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \
+              -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \
+    -o /out/appliance-automation-runtime ./cmd/appliance-automation-runtime
 
 # Final stage: small Alpine runtime with basic operator/debug ergonomics
 # while still staying lean. We keep the runtime to a static Go binary,
@@ -54,6 +59,7 @@ RUN set -eux; \
     addgroup -S -g 10001 appliance; \
     adduser -S -D -H -u 10001 -G appliance appliance
 COPY --from=build /out/appliance-server /appliance-server
+COPY --from=build /out/appliance-automation-runtime /appliance-automation-runtime
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 0755 /usr/local/bin/entrypoint.sh
 USER 10001:10001

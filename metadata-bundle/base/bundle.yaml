@@ -13,3 +13,4 @@ sections:
   - ui
   - notifications
   - mcp-tools
+  - debug-tools

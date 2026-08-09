@@ -129,6 +129,63 @@
         }
       }
     },
+    "automationRuntime": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "service",
+        "config",
+        "resources"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "service": {
+          "type": "object",
+          "required": [
+            "port"
+          ],
+          "properties": {
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        },
+        "config": {
+          "type": "object",
+          "required": [
+            "logLevel",
+            "dataDir",
+            "applicationLogPath"
+          ],
+          "properties": {
+            "logLevel": {
+              "type": "string",
+              "enum": [
+                "debug",
+                "info",
+                "warn",
+                "error"
+              ]
+            },
+            "dataDir": {
+              "type": "string",
+              "minLength": 1
+            },
+            "applicationLogPath": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "resources": {
+          "type": "object"
+        }
+      }
+    },
     "namespace": {
       "type": "object",
       "properties": {

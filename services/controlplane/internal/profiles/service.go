@@ -80,7 +80,7 @@ func (m ManifestBundleChecker) ArtifactPresent(name string) bool {
 
 // MetadataSource provides the active metadata bundle.
 type MetadataSource interface {
-	Active() *metadatabundle.Bundle
+	ActiveBundle(ctx context.Context) (*metadatabundle.Bundle, error)
 }
 
 type Service struct {
@@ -118,9 +118,9 @@ func NewService(
 	}
 }
 
-func (s *Service) ListCapabilities() []CapabilityInfo {
-	b := s.metadata.Active()
-	if b == nil {
+func (s *Service) ListCapabilities(ctx context.Context) []CapabilityInfo {
+	b, err := s.metadata.ActiveBundle(ctx)
+	if err != nil || b == nil {
 		return nil
 	}
 	var out []CapabilityInfo
@@ -144,7 +144,10 @@ func (s *Service) ListCapabilities() []CapabilityInfo {
 }
 
 func (s *Service) List(ctx context.Context) ([]ProfileView, error) {
-	b := s.metadata.Active()
+	b, err := s.metadata.ActiveBundle(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if b == nil {
 		return nil, fmt.Errorf("profiles: no active metadata bundle")
 	}
@@ -182,7 +185,10 @@ func (s *Service) Get(ctx context.Context, id string) (ProfileView, error) {
 }
 
 func (s *Service) Validate(ctx context.Context, profileID string) (ValidationResult, error) {
-	b := s.metadata.Active()
+	b, err := s.metadata.ActiveBundle(ctx)
+	if err != nil {
+		return ValidationResult{}, err
+	}
 	if b == nil {
 		return ValidationResult{}, fmt.Errorf("profiles: no active metadata bundle")
 	}
