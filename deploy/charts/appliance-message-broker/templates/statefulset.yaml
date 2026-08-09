@@ -22,6 +22,8 @@ spec:
         - name: nats
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - nats-server
           args:
             - --jetstream
             - --store_dir=/data/jetstream
