@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/oci-pull.sh"
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
-SOURCE_IMAGE="${MESSAGE_BROKER_SOURCE_IMAGE:-nats:2.10.26-alpine}"
+SOURCE_IMAGE="${MESSAGE_BROKER_SOURCE_IMAGE:-docker.io/library/nats:2.10.26-alpine}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out-file) OUT_FILE="${2:-}"; shift 2 ;;
@@ -21,7 +21,20 @@ for tool in skopeo python3 tar; do command -v "${tool}" >/dev/null || { echo "ex
 mkdir -p "$(dirname "${OUT_FILE}")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "localhost/appliance-message-broker:2.10.26"
+if ! oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "localhost/appliance-message-broker:2.10.26"; then
+  if oci_ref_is_dev_registry "${SOURCE_IMAGE}"; then
+    cat >&2 <<EOF
+export-message-broker-image-archive: seeded message broker image is missing or unavailable
+export-message-broker-image-archive: expected LAN image: ${SOURCE_IMAGE}
+export-message-broker-image-archive: seed it before an offline build with:
+export-message-broker-image-archive:   make -C deps/message-broker release
+export-message-broker-image-archive: or: make seed-build-deps
+EOF
+  else
+    echo "export-message-broker-image-archive: unable to pull source image ${SOURCE_IMAGE}" >&2
+  fi
+  exit 1
+fi
 skopeo copy --override-os linux --override-arch amd64 containers-storage:localhost/appliance-message-broker:2.10.26 "oci:${tmp}/oci:registry.local/nats:bundled"
 digest="$(python3 - "${tmp}/oci/index.json" <<'PY'
 import json, sys
