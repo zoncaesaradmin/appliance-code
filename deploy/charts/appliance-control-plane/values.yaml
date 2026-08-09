@@ -129,8 +129,10 @@ files:
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects
-  # (session_ed25519_private.key, api_token_pepper.key, refresh_pepper.key),
-  # mounted read-only at dataDir/keys.
+  # (session_ed25519_private.key, registry_ed25519_private.key,
+  # api_token_pepper.key, refresh_pepper.key, cursor_hmac.key), mounted
+  # read-only at dataDir/keys. zonctl generates every file; pods never write
+  # key material at runtime.
   keysSecretName: "appliance-keys"
 
 persistence:
