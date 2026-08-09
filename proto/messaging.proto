@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package appliance.messaging.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "appliance-code/sdk/golang/gen/messaging;messaginggen";
+
+// Message is the only wire type carried by the appliance broker. The oneof
+// makes the payload family explicit and prevents an untyped byte bag from
+// becoming a hidden second protocol.
+message Message {
+  Header header = 1;
+  oneof body {
+    OperationalEvent operational_event = 10;
+    WorkflowEvent workflow_event = 11;
+    AuditEvent audit_event = 12;
+    SystemEvent system_event = 13;
+    WorkflowCommand workflow_command = 14;
+    ServiceCommand service_command = 15;
+    Reply reply = 16;
+  }
+}
+
+message Header {
+  string id = 1;
+  string subject = 2;
+  string producer = 3;
+  string correlation_id = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message OperationalEvent {
+  enum Type { TYPE_UNSPECIFIED = 0; STARTED = 1; UPDATED = 2; COMPLETED = 3; FAILED = 4; }
+  Type type = 1;
+  string resource_type = 2;
+  string resource_id = 3;
+  string state = 4;
+  string message = 5;
+}
+
+message WorkflowEvent {
+  enum State { STATE_UNSPECIFIED = 0; QUEUED = 1; RUNNING = 2; SUCCEEDED = 3; FAILED = 4; CANCELLED = 5; }
+  string execution_id = 1;
+  string workflow_name = 2;
+  string workflow_version = 3;
+  State state = 4;
+  string step_id = 5;
+  string error = 6;
+}
+
+message AuditEvent {
+  string actor = 1;
+  string operation = 2;
+  string resource_type = 3;
+  string resource_id = 4;
+  bool succeeded = 5;
+  string reason = 6;
+}
+
+message SystemEvent {
+  enum State { STATE_UNSPECIFIED = 0; STARTING = 1; READY = 2; DEGRADED = 3; STOPPING = 4; }
+  string service = 1;
+  string version = 2;
+  State state = 3;
+  string message = 4;
+}
+
+message WorkflowCommand {
+  enum Operation { OPERATION_UNSPECIFIED = 0; START = 1; CANCEL = 2; RETRY = 3; }
+  Operation operation = 1;
+  string workflow_name = 2;
+  string workflow_version = 3;
+  string execution_id = 4;
+}
+
+message ServiceCommand {
+  string service = 1;
+  string operation = 2;
+  string request_id = 3;
+}
+
+message Reply {
+  bool succeeded = 1;
+  string code = 2;
+  string message = 3;
+  string request_id = 4;
+}

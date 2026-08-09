@@ -86,6 +86,9 @@ Options:
   --metadata-bundle PATH             Appliance metadata-bundle archive
                                    (appliance-metadata-bundle-X.Y.Z.N.tar.zst).
                                    Defaults to generating from metadata-bundle/base.
+  --message-broker-image PATH        Pinned NATS/JetStream OCI archive. Required.
+  --message-broker-image-reference REF
+                                   Canonical registry.local/nats@sha256:... reference.
   --help                           Show this help.
 USAGE
 }
@@ -93,6 +96,7 @@ USAGE
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
+MESSAGE_BROKER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-message-broker"
 WORKFLOWS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-workflows"
 ARTIFACT_SERVER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
 DNS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-dns"
@@ -136,6 +140,8 @@ PROVENANCE_DIR=""
 NOTICES_DIR=""
 TESTS_DIR=""
 METADATA_BUNDLE=""
+MESSAGE_BROKER_IMAGE=""
+MESSAGE_BROKER_IMAGE_REFERENCE=""
 SUPPORTED_UPGRADE_SOURCES=()
 
 while [[ $# -gt 0 ]]; do
@@ -292,6 +298,14 @@ while [[ $# -gt 0 ]]; do
       METADATA_BUNDLE="${2:-}"
       shift 2
       ;;
+    --message-broker-image)
+      MESSAGE_BROKER_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --message-broker-image-reference)
+      MESSAGE_BROKER_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -346,6 +360,10 @@ if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" ||
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
+fi
+if [[ -n "${MESSAGE_BROKER_IMAGE}" || -n "${MESSAGE_BROKER_IMAGE_REFERENCE}" ]]; then
+  if [[ ! -f "${MESSAGE_BROKER_IMAGE}" ]]; then echo "archive-release-input: message broker image not found: ${MESSAGE_BROKER_IMAGE}" >&2; exit 1; fi
+  if [[ ! "${MESSAGE_BROKER_IMAGE_REFERENCE}" =~ ^registry\.local/nats@sha256:[0-9a-f]{64}$ ]]; then echo "archive-release-input: --message-broker-image-reference must be registry.local/nats@sha256:<64 lowercase hex>" >&2; exit 2; fi
 fi
 
 if [[ ! -f "${CONTROL_PLANE_IMAGE}" ]]; then
@@ -702,6 +720,7 @@ ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 INFERENCE_RUNTIME_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
+MESSAGE_BROKER_CHART_ARCHIVE="appliance-message-broker-${CODE_VERSION}.tgz"
 WORKFLOWS_CHART_ARCHIVE="workflows-chart-${CODE_VERSION}.tgz"
 ARTIFACT_SERVER_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
 DNS_CHART_ARCHIVE="appliance-dns-chart-${CODE_VERSION}.tgz"
@@ -722,12 +741,15 @@ if [[ ! "${METADATA_BUNDLE_BASENAME}" =~ ^appliance-metadata-bundle-[0-9]+\.[0-9
   echo "archive-release-input: metadata bundle basename must be appliance-metadata-bundle-X.Y.Z.N.tar.zst, got ${METADATA_BUNDLE_BASENAME}" >&2
   exit 1
 fi
+MESSAGE_BROKER_BASENAME=""
+if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then MESSAGE_BROKER_BASENAME="$(basename "${MESSAGE_BROKER_IMAGE}")"; fi
 
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
 cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
 cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
+if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then cp "${MESSAGE_BROKER_IMAGE}" "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}"; fi
 copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
 if [[ -n "${ARTIFACT_SERVER_IMAGE}" ]]; then
   ARTIFACT_SERVER_BASENAME="$(basename "${ARTIFACT_SERVER_IMAGE}")"
@@ -765,6 +787,10 @@ fi
 mkdir -p "${TMP_DIR}/appliance-chart"
 cp -R "${CHART_DIR}/." "${TMP_DIR}/appliance-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" appliance-chart
+
+mkdir -p "${TMP_DIR}/appliance-message-broker-chart"
+cp -R "${MESSAGE_BROKER_CHART_DIR}/." "${TMP_DIR}/appliance-message-broker-chart/"
+tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" appliance-message-broker-chart
 
 mkdir -p "${TMP_DIR}/appliance-registry-chart"
 cp -R "${ARTIFACT_SERVER_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
@@ -979,9 +1005,11 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "hostAgentImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}"),
     "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${HOST_PACKAGES_JSON},
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
+    "messageBrokerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" "${MESSAGE_BROKER_CHART_ARCHIVE}"),
     "artifactServerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" "${ARTIFACT_SERVER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON},
     "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
+$(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": %s,\n' "$(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_IMAGE_REFERENCE}")"; fi)
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
     "checksums": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}" "${CHECKSUMS_BASENAME}"),

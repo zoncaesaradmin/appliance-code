@@ -1,0 +1,10 @@
+apiVersion: v2
+name: appliance-message-broker
+description: Always-on internal JetStream message broker for appliance services
+type: application
+version: 0.1.0
+appVersion: "2.10.26"
+keywords:
+  - appliance
+  - messaging
+  - jetstream

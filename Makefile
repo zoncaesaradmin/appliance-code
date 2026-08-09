@@ -2,10 +2,12 @@ BACKEND_DIR := services/controlplane
 UI_DIR      := services/controlplane-ui
 HOST_AGENT_SERVICE_DIR := services/hostagent
 SDK_DIR     := sdk/golang/applianceclient
+MESSAGING_SDK_DIR := sdk/golang/messaging
 CHART_DIR   := deploy/charts/appliance-control-plane
 REGISTRY_CHART_DIR := deploy/charts/appliance-registry
 DNS_CHART_DIR := deploy/charts/appliance-dns
 INFERENCE_CHART_DIR := deploy/charts/appliance-inference
+MESSAGE_BROKER_CHART_DIR := deploy/charts/appliance-message-broker
 E2E_DIR     := e2etests
 VERIFY_LOG_DIR := $(CURDIR)/.run/logs
 VERIFY_BUILD_LOG := $(VERIFY_LOG_DIR)/verify-build.log
@@ -16,7 +18,7 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR)
 # Product/release version for packaged images and /version. Prefer an explicit
 # CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
 # reachable git tag, not a bare commit SHA from `git describe --always`.
@@ -87,7 +89,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -214,6 +216,8 @@ dev-k3s:
 	@$(MAKE) -C $(DNS_CHART_DIR) template
 	@$(MAKE) -C $(INFERENCE_CHART_DIR) lint
 	@$(MAKE) -C $(INFERENCE_CHART_DIR) template
+	@$(MAKE) -C $(MESSAGE_BROKER_CHART_DIR) lint
+	@$(MAKE) -C $(MESSAGE_BROKER_CHART_DIR) template
 
 ## clean: remove build/run/coverage artifacts from every module
 clean:
@@ -306,6 +310,13 @@ package-inference-runtime-image-archive:
 		--reference-out-file "$$reference_file" \
 		$${INFERENCE_SOURCE_IMAGE:+--source-image "$${INFERENCE_SOURCE_IMAGE}"} \
 		$${INFERENCE_VERSION:+--inference-version "$${INFERENCE_VERSION}"}
+
+package-message-broker-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/message-broker-image.tar}"; \
+	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	bash ./scripts/package/export-message-broker-image-archive.sh \
+		--out-file "$$out_file" --reference-out-file "$$reference_file" \
+		$${MESSAGE_BROKER_SOURCE_IMAGE:+--source-image "$${MESSAGE_BROKER_SOURCE_IMAGE}"}
 
 ## package-host-packages: export the offline Ubuntu host package payload
 ## for the complete product super-set (mDNS + wifi-ap). Install-time flags only
