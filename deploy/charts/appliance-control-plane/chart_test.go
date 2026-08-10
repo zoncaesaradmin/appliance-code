@@ -534,8 +534,8 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	if findByKindAndName(docs, "Namespace", "ace-system") != nil {
 		t.Error("namespace.create=false should omit the control-plane Namespace object")
 	}
-	if findByKindAndName(docs, "Namespace", "apps") == nil {
-		t.Error("permanent apps Namespace should remain present")
+	if findByKindAndName(docs, "Namespace", "apps") != nil {
+		t.Error("application namespace must be provisioned by the installer, not rendered by Helm")
 	}
 	if len(findByKind(docs, "PersistentVolumeClaim")) != 0 {
 		t.Error("persistence.enabled=false should omit the PersistentVolumeClaim")
@@ -1090,12 +1090,8 @@ func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
 func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
 	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps")
 	ns := findByKindAndName(docs, "Namespace", "apps")
-	if ns == nil {
-		t.Fatal("expected permanent apps namespace")
-	}
-	labels, _ := at(ns, "metadata", "labels").(map[string]any)
-	if got, _ := labels["app.kubernetes.io/component"].(string); got != "managed-applications" {
-		t.Fatalf("apps namespace component label = %q", got)
+	if ns != nil {
+		t.Fatal("application namespace must be installer-owned, not Helm-owned")
 	}
 	marker := findByKindAndName(docs, "ConfigMap", "appliance-application-management")
 	if marker == nil {
