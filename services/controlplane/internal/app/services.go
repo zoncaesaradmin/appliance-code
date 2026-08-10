@@ -87,6 +87,10 @@ type Services struct {
 	AuditOps *auditops.Service
 }
 
+type dnsBootstrapper interface {
+	BootstrapSelf(context.Context) error
+}
+
 func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
 	resolved, err := cfg.ResolveProfile()
 	if err != nil {
@@ -297,8 +301,10 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		})
 		// Reconcile (and optionally seed) the zone. Default install leaves
 		// bootstrap hostname/IP empty so no product A record is created;
-		// records come from the DNS API/UI or peer publish.
-		if err := dnsSvc.BootstrapSelf(ctx); err != nil {
+		// records come from the DNS API/UI or peer publish. During fresh
+		// install, the DNS support namespace/RBAC may still be converging,
+		// so zone sync failure must not block ace-system startup.
+		if err := bootstrapDNS(ctx, logger, dnsSvc); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: reconciling dns zone: %w", err)
 		}
@@ -340,6 +346,19 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Audit:              recorder,
 		AuditOps:           auditOps,
 	}, nil
+}
+
+func bootstrapDNS(ctx context.Context, logger logging.Logger, svc dnsBootstrapper) error {
+	if svc == nil {
+		return nil
+	}
+	if err := svc.BootstrapSelf(ctx); err != nil {
+		if logger != nil {
+			logger.Warnw("dns zone bootstrap deferred until dns support is ready", "error", err.Error())
+		}
+		return nil
+	}
+	return nil
 }
 
 func newInternalArtifactServerRequestEditor(keyMaterial *keys.Material, issuer string) func(*http.Request) error {
