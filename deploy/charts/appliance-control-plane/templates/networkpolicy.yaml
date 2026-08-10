@@ -11,6 +11,21 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+{{- if include "appliance-control-plane.appsNamespaced" . }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}-apps-default-deny
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -46,12 +61,20 @@ spec:
         - protocol: TCP
           port: {{ .Values.service.internalPort }}
     {{- if .Values.ui.enabled }}
-    # The UI pod calls the control-plane API and internal metadata/health
-    # endpoints over same-namespace services.
+    # UI pod calls the control-plane API (may live in appsNamespace).
     - from:
+        {{- if include "appliance-control-plane.appsNamespaced" . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.appsNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.uiSelectorLabels" . | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               {{- include "appliance-control-plane.uiSelectorLabels" . | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.service.publicPort }}
@@ -101,18 +124,36 @@ spec:
     {{- end }}
     {{- if .Values.hostAgent.enabled }}
     - to:
+        {{- if include "appliance-control-plane.appsNamespaced" . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.appsNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.hostAgentSelectorLabels" . | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               {{- include "appliance-control-plane.hostAgentSelectorLabels" . | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.networkPolicy.hostAgentPort }}
     {{- end }}
     {{- if .Values.automationRuntime.enabled }}
     - to:
+        {{- if include "appliance-control-plane.appsNamespaced" . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.appsNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.networkPolicy.automationRuntimePort }}
@@ -133,7 +174,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "appliance-control-plane.uiServiceName" . }}-allow
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.uiLabels" . | nindent 4 }}
 spec:
@@ -155,9 +196,18 @@ spec:
     {{- end }}
   egress:
     - to:
+        {{- if include "appliance-control-plane.appsNamespaced" . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.namespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.service.publicPort }}
@@ -179,7 +229,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "appliance-control-plane.automationRuntimeName" . }}-allow
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
 spec:
@@ -191,9 +241,18 @@ spec:
     - Egress
   ingress:
     - from:
+        {{- if include "appliance-control-plane.appsNamespaced" . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.namespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.automationRuntime.service.port }}
@@ -214,7 +273,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "appliance-control-plane.hostAgentName" . }}-allow
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.hostAgentLabels" . | nindent 4 }}
 spec:
@@ -226,9 +285,18 @@ spec:
     - Egress
   ingress:
     - from:
+        {{- if include "appliance-control-plane.appsNamespaced" . }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.namespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+        {{- else }}
         - podSelector:
             matchLabels:
               {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.hostAgent.service.port }}

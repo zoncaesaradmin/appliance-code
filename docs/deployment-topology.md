@@ -15,12 +15,21 @@ flowchart TD
             Traefik["Traefik pod<br/>HTTPS ingress"]
         end
 
-        subgraph AppNS["ace-system namespace"]
-            Control["Control-plane pod<br/>One Go server replica<br/>REST + MCP + auth + RBAC + orchestration"]
-            UI["UI pod<br/>One Go static host replica<br/>React + TypeScript SPA assets"]
-            ArtifactServer["Artifact Server pod<br/>One registry replica<br/>OCI data plane"]
+        subgraph SystemNS["ace-system namespace"]
+            Control["Controlplane pod<br/>REST + MCP + auth + orchestration"]
             ControlPVC[("Control-plane RWO PVC<br/>SQLite + durable application state")]
-            ArtifactServerPVC[("Artifact Server RWO PVC<br/>OCI manifests + blobs + indexes")]
+            MessageBroker["Message broker (NATS)<br/>JetStream"]
+        end
+
+        subgraph AppsNS["ace-apps namespace"]
+            UI["UI pod<br/>SPA + reverse proxy to controlplane"]
+            HostAgent["Host-agent pod"]
+            AutomationRuntime["Automation-runtime pod"]
+        end
+
+        subgraph ArtNS["artifacts namespace"]
+            ArtifactServer["Artifact Server pod"]
+            ArtifactServerPVC[("Artifact Server RWO PVC")]
         end
 
         subgraph WorkflowNS["workflows namespace"]

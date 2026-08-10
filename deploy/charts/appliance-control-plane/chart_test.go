@@ -439,8 +439,8 @@ func TestControlPlaneConfigPointsToAutomationRuntimeService(t *testing.T) {
 		t.Fatal("expected control-plane ConfigMap")
 	}
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime:8082" {
-		t.Fatalf("APPLIANCE_AUTOMATION_RUNTIME_BASE_URL = %q, want http://automation-runtime:8082", got)
+	if got, _ := data["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime.appliance.svc.cluster.local:8082" {
+		t.Fatalf("APPLIANCE_AUTOMATION_RUNTIME_BASE_URL = %q, want http://automation-runtime.appliance.svc.cluster.local:8082", got)
 	}
 }
 
@@ -452,11 +452,11 @@ func TestUIConfigMapDefaultsToRenderedControlPlaneServiceNames(t *testing.T) {
 	}
 
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://controlplane:8080" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://controlplane:8080", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://controlplane.appliance.svc.cluster.local:8080" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://controlplane.appliance.svc.cluster.local:8080", got)
 	}
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://controlplane-internal:8081" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://controlplane-internal:8081", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://controlplane-internal.appliance.svc.cluster.local:8081" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://controlplane-internal.appliance.svc.cluster.local:8081", got)
 	}
 }
 
@@ -1001,6 +1001,77 @@ func roleRuleAllowsResource(rules []any, resource string, verbs ...string) bool 
 		}
 	}
 	return false
+}
+
+func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "namespace.name=ace-system",
+		"--set", "appsNamespace.name=ace-apps",
+		"--set", "hostAgent.enabled=true",
+		"--set", "hostAgent.image.reference=registry.local/host-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	)...)
+
+	assertNS := func(kind, name, wantNS string) {
+		t.Helper()
+		doc := findByKindAndName(docs, kind, name)
+		if doc == nil {
+			t.Fatalf("expected %s/%s", kind, name)
+		}
+		if got, _ := at(doc, "metadata", "namespace").(string); got != wantNS {
+			t.Fatalf("%s/%s namespace = %q, want %q", kind, name, got, wantNS)
+		}
+	}
+	assertNS("Deployment", controlPlaneDeploymentName, "ace-system")
+	assertNS("Service", controlPlaneServiceName, "ace-system")
+	assertNS("Deployment", controlPlaneUIName, "ace-apps")
+	assertNS("Service", controlPlaneUIName, "ace-apps")
+	assertNS("Deployment", "host-agent", "ace-apps")
+	assertNS("Deployment", automationRuntimeName, "ace-apps")
+
+	// Ingress stays in controlplane NS via ExternalName alias for ui-server.
+	alias := findByKindAndName(docs, "Service", controlPlaneUIName)
+	// findByKindAndName returns first match; Collect all ui-server Services.
+	var uiServices []map[string]any
+	for _, d := range findByKind(docs, "Service") {
+		if n, _ := at(d, "metadata", "name").(string); n == controlPlaneUIName {
+			uiServices = append(uiServices, d)
+		}
+	}
+	if len(uiServices) != 2 {
+		t.Fatalf("expected 2 ui-server Services (apps ClusterIP + system ExternalName), got %d", len(uiServices))
+	}
+	var foundExternal, foundCluster bool
+	for _, svc := range uiServices {
+		ns, _ := at(svc, "metadata", "namespace").(string)
+		typ, _ := at(svc, "spec", "type").(string)
+		switch {
+		case ns == "ace-system" && typ == "ExternalName":
+			foundExternal = true
+			if ext, _ := at(svc, "spec", "externalName").(string); ext != "ui-server.ace-apps.svc.cluster.local" {
+				t.Fatalf("ExternalName = %q", ext)
+			}
+		case ns == "ace-apps" && (typ == "" || typ == "ClusterIP"):
+			foundCluster = true
+		}
+	}
+	if !foundExternal || !foundCluster {
+		t.Fatalf("missing UI service pair external=%v cluster=%v", foundExternal, foundCluster)
+	}
+	_ = alias
+
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName)
+	if cm == nil {
+		t.Fatal("ui configmap missing")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://controlplane.ace-system.svc.cluster.local:8080" {
+		t.Fatalf("UI control plane URL = %q", got)
+	}
+	cpCM := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+	cpData, _ := at(cpCM, "data").(map[string]any)
+	if got, _ := cpData["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime.ace-apps.svc.cluster.local:8082" {
+		t.Fatalf("automation runtime URL = %q", got)
+	}
 }
 
 func containsString(values []any, want string) bool {

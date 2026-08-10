@@ -18,10 +18,47 @@ Create a fully qualified app name.
 {{- end -}}
 
 {{/*
-Namespace this release targets.
+Namespace for controlplane Deployment/Service/PVC/keys (Helm release namespace).
 */}}
 {{- define "appliance-control-plane.namespace" -}}
 {{- .Values.namespace.name | default .Release.Namespace -}}
+{{- end -}}
+
+{{/*
+Namespace for operator-facing apps co-packaged with the control-plane chart:
+ui-server, host-agent, automation-runtime. Defaults to co-locating with
+controlplane when appsNamespace.name is empty (single-namespace tests);
+production injects ace-apps via zonctl.
+*/}}
+{{- define "appliance-control-plane.appsNamespace" -}}
+{{- $apps := "" -}}
+{{- if .Values.appsNamespace -}}
+{{- $apps = .Values.appsNamespace.name | default "" -}}
+{{- end -}}
+{{- if $apps -}}
+{{- $apps -}}
+{{- else -}}
+{{- include "appliance-control-plane.namespace" . -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Whether apps are isolated in a namespace other than the controlplane.
+*/}}
+{{- define "appliance-control-plane.appsNamespaced" -}}
+{{- if ne (include "appliance-control-plane.appsNamespace" .) (include "appliance-control-plane.namespace" .) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+Cluster-local DNS name for a Service (optionally cross-namespace).
+Args: list name namespace
+*/}}
+{{- define "appliance-control-plane.serviceDNS" -}}
+{{- $name := index . 0 -}}
+{{- $ns := index . 1 -}}
+{{- printf "%s.%s.svc.cluster.local" $name $ns -}}
 {{- end -}}
 
 {{/*
@@ -92,7 +129,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-Selector labels for the automation runtime pod.
+Selector labels for the automation-runtime pod.
 */}}
 {{- define "appliance-control-plane.automationRuntimeSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.automationRuntimeName" . }}
@@ -130,7 +167,6 @@ Whether the control-plane ServiceAccount token must be mounted.
 {{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
 {{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
 {{- end -}}
-
 
 {{/*
 Fixed namespace for appliance-owned workflows in v1.
@@ -170,27 +206,32 @@ ui-server-* rather than controlplane-ui-*.
 {{- end -}}
 
 {{/*
-Default UI -> control-plane public base URL. Allows an explicit override, but
-keeps the common in-chart case aligned with the rendered Service name.
+Default UI -> control-plane public base URL (cluster DNS, works cross-namespace).
 */}}
 {{- define "appliance-control-plane.uiControlPlaneBaseURL" -}}
 {{- if .Values.ui.config.controlPlaneBaseURL -}}
 {{- .Values.ui.config.controlPlaneBaseURL -}}
 {{- else -}}
-{{- printf "http://%s:%d" (include "appliance-control-plane.fullname" .) (.Values.service.publicPort | int) -}}
+{{- printf "http://%s:%d" (include "appliance-control-plane.serviceDNS" (list (include "appliance-control-plane.fullname" .) (include "appliance-control-plane.namespace" .))) (.Values.service.publicPort | int) -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-Default UI -> control-plane internal base URL. Allows an explicit override, but
-keeps the common in-chart case aligned with the rendered internal Service name.
+Default UI -> control-plane internal base URL (cluster DNS, works cross-namespace).
 */}}
 {{- define "appliance-control-plane.uiControlPlaneInternalBaseURL" -}}
 {{- if .Values.ui.config.controlPlaneInternalBaseURL -}}
 {{- .Values.ui.config.controlPlaneInternalBaseURL -}}
 {{- else -}}
-{{- printf "http://%s-internal:%d" (include "appliance-control-plane.fullname" .) (.Values.service.internalPort | int) -}}
+{{- printf "http://%s:%d" (include "appliance-control-plane.serviceDNS" (list (printf "%s-internal" (include "appliance-control-plane.fullname" .)) (include "appliance-control-plane.namespace" .))) (.Values.service.internalPort | int) -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+controlplane -> automation-runtime base URL.
+*/}}
+{{- define "appliance-control-plane.automationRuntimeBaseURL" -}}
+{{- printf "http://%s:%d" (include "appliance-control-plane.serviceDNS" (list (include "appliance-control-plane.automationRuntimeName" .) (include "appliance-control-plane.appsNamespace" .))) (.Values.automationRuntime.service.port | int) -}}
 {{- end -}}
 
 {{/*

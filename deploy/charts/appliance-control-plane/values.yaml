@@ -49,6 +49,13 @@ namespace:
   create: true
   name: ""
 
+# ui-server, host-agent, and automation-runtime. Empty name co-locates with
+# controlplane (tests). zonctl injects name: ace-apps in production so
+# only controlplane stays in the Helm release namespace (ace-system).
+appsNamespace:
+  create: true
+  name: ""
+
 # Non-secret runtime configuration, rendered into a ConfigMap and consumed
 # as APPLIANCE_* environment variables by internal/config. Secrets (signing
 # keys, TLS, etc.) are never templated by this chart; the installer/lifecycle

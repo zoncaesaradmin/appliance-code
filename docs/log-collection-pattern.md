@@ -86,7 +86,7 @@ Useful target-host commands today:
 ```bash
 sudo kubectl get pods -A
 sudo kubectl -n ace-system logs deploy/controlplane
-sudo kubectl -n ace-system logs deploy/ui-server
+sudo kubectl -n ace-apps logs deploy/ui-server
 sudo kubectl -n workflows logs deploy/appliance-workflows
 sudo kubectl -n appliance-builds get pods
 sudo kubectl -n appliance-builds logs <pod-name>

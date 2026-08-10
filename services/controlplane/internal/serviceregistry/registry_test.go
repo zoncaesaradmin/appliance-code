@@ -24,7 +24,7 @@ func TestRegistryFromModulesConvertsHostAgentDescriptor(t *testing.T) {
 	if service.Capability != appliance.CapabilityHost {
 		t.Fatalf("service.Capability = %q, want %q", service.Capability, appliance.CapabilityHost)
 	}
-	if service.BaseURL != "http://host-agent.ace-system.svc.cluster.local:8080" {
+	if service.BaseURL != "http://host-agent.ace-apps.svc.cluster.local:8080" {
 		t.Fatalf("service.BaseURL = %q", service.BaseURL)
 	}
 	if len(service.Routes) != 7 {

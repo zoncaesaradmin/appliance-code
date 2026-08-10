@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "appliance-control-plane.hostAgentName" . }}
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.hostAgentLabels" . | nindent 4 }}
 spec:

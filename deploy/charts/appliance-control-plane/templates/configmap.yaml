@@ -38,14 +38,14 @@ data:
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}
   APPLIANCE_INTERNAL_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.internalPort | int) | quote }}
   APPLIANCE_DATA_DIR: {{ .Values.persistence.dataDir | quote }}
-  APPLIANCE_AUTOMATION_RUNTIME_BASE_URL: {{ printf "http://%s:%d" (include "appliance-control-plane.automationRuntimeName" .) (.Values.automationRuntime.service.port | int) | quote }}
+  APPLIANCE_AUTOMATION_RUNTIME_BASE_URL: {{ include "appliance-control-plane.automationRuntimeBaseURL" . | quote }}
 {{- if .Values.automationRuntime.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "appliance-control-plane.automationRuntimeName" . }}-config
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
 data:
@@ -67,7 +67,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "appliance-control-plane.uiServiceName" . }}-config
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.uiLabels" . | nindent 4 }}
 data:

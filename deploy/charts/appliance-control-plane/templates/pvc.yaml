@@ -22,7 +22,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "appliance-control-plane.automationRuntimeClaimName" . }}
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
 spec:

@@ -38,7 +38,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "appliance-control-plane.automationRuntimeName" . }}
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
 spec:
@@ -56,7 +56,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "appliance-control-plane.uiServiceName" . }}
-  namespace: {{ include "appliance-control-plane.namespace" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.uiLabels" . | nindent 4 }}
 spec:
@@ -67,4 +67,24 @@ spec:
     - name: http
       port: {{ .Values.ui.service.port }}
       targetPort: http
+{{- /* IngressRoute lives with controlplane; ExternalName aliases UI when split. */ -}}
+{{- if include "appliance-control-plane.appsNamespaced" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-control-plane.uiServiceName" . }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "appliance-control-plane.uiServiceName" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: ui-ingress-alias
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: ExternalName
+  externalName: {{ include "appliance-control-plane.serviceDNS" (list (include "appliance-control-plane.uiServiceName" .) (include "appliance-control-plane.appsNamespace" .)) }}
+  ports:
+    - name: http
+      port: {{ .Values.ui.service.port }}
+{{- end }}
 {{- end }}
