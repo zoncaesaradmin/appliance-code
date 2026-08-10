@@ -1127,6 +1127,23 @@ func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
 	}
 }
 
+func TestWorkflowsSupportCreatesBuildNamespace(t *testing.T) {
+	docs := renderChart(t,
+		"--set", "config.applianceProfile=builder",
+		"--set", "namespace.name=ace-system",
+		"--set", "appsNamespace.name=ace-apps",
+		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)
+	ns := findByKindAndName(docs, "Namespace", "appliance-builds")
+	if ns == nil {
+		t.Fatal("expected workflows-support slice to create appliance-builds namespace")
+	}
+	if got, _ := at(ns, "metadata", "labels", "pod-security.kubernetes.io/enforce").(string); got != "restricted" {
+		t.Fatalf("workflow build namespace enforce label = %q, want restricted", got)
+	}
+}
+
 func containsString(values []any, want string) bool {
 	for _, value := range values {
 		if got, _ := value.(string); got == want {

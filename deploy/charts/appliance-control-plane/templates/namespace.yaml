@@ -36,3 +36,16 @@ metadata:
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
 {{- end }}
+{{- if and (eq (include "appliance-control-plane.workflowsSupportEnabled" .) "true") (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "appliance-control-plane.workflowNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: workflows
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+{{- end }}
