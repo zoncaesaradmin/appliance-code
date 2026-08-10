@@ -1127,7 +1127,7 @@ func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
 	}
 }
 
-func TestWorkflowsSupportCreatesBuildNamespace(t *testing.T) {
+func TestWorkflowsBuildNamespaceIsInstallerOwned(t *testing.T) {
 	docs := renderChart(t,
 		"--set", "config.applianceProfile=builder",
 		"--set", "namespace.name=ace-system",
@@ -1136,11 +1136,8 @@ func TestWorkflowsSupportCreatesBuildNamespace(t *testing.T) {
 		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	)
 	ns := findByKindAndName(docs, "Namespace", "appliance-builds")
-	if ns == nil {
-		t.Fatal("expected workflows-support slice to create appliance-builds namespace")
-	}
-	if got, _ := at(ns, "metadata", "labels", "pod-security.kubernetes.io/enforce").(string); got != "restricted" {
-		t.Fatalf("workflow build namespace enforce label = %q, want restricted", got)
+	if ns != nil {
+		t.Fatal("workflows build namespace must be installer-owned, not Helm-owned")
 	}
 }
 
