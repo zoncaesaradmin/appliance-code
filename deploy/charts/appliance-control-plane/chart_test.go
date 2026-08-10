@@ -1028,36 +1028,46 @@ func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
 	assertNS("Deployment", "host-agent", "ace-apps")
 	assertNS("Deployment", automationRuntimeName, "ace-apps")
 
-	// Ingress stays in controlplane NS via ExternalName alias for ui-server.
-	alias := findByKindAndName(docs, "Service", controlPlaneUIName)
-	// findByKindAndName returns first match; Collect all ui-server Services.
+	// IngressRoute in controlplane NS must name the UI Service in ace-apps.
+	route := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName)
+	if route == nil {
+		t.Fatal("expected IngressRoute")
+	}
+	routes, _ := at(route, "spec", "routes").([]any)
+	var foundUICrossNS bool
+	for _, raw := range routes {
+		r, _ := raw.(map[string]any)
+		match, _ := r["match"].(string)
+		if !strings.Contains(match, "PathPrefix(`/`)") {
+			continue
+		}
+		svcs, _ := r["services"].([]any)
+		for _, sraw := range svcs {
+			s, _ := sraw.(map[string]any)
+			name, _ := s["name"].(string)
+			ns, _ := s["namespace"].(string)
+			if name == controlPlaneUIName && ns == "ace-apps" {
+				foundUICrossNS = true
+			}
+		}
+	}
+	if !foundUICrossNS {
+		t.Fatal("expected UI IngressRoute service to reference ui-server in ace-apps")
+	}
+
+	// Only the real ClusterIP Service in apps (no ExternalName alias).
 	var uiServices []map[string]any
 	for _, d := range findByKind(docs, "Service") {
 		if n, _ := at(d, "metadata", "name").(string); n == controlPlaneUIName {
 			uiServices = append(uiServices, d)
 		}
 	}
-	if len(uiServices) != 2 {
-		t.Fatalf("expected 2 ui-server Services (apps ClusterIP + system ExternalName), got %d", len(uiServices))
+	if len(uiServices) != 1 {
+		t.Fatalf("expected 1 ui-server Service, got %d", len(uiServices))
 	}
-	var foundExternal, foundCluster bool
-	for _, svc := range uiServices {
-		ns, _ := at(svc, "metadata", "namespace").(string)
-		typ, _ := at(svc, "spec", "type").(string)
-		switch {
-		case ns == "ace-system" && typ == "ExternalName":
-			foundExternal = true
-			if ext, _ := at(svc, "spec", "externalName").(string); ext != "ui-server.ace-apps.svc.cluster.local" {
-				t.Fatalf("ExternalName = %q", ext)
-			}
-		case ns == "ace-apps" && (typ == "" || typ == "ClusterIP"):
-			foundCluster = true
-		}
+	if ns, _ := at(uiServices[0], "metadata", "namespace").(string); ns != "ace-apps" {
+		t.Fatalf("ui-server Service namespace = %q", ns)
 	}
-	if !foundExternal || !foundCluster {
-		t.Fatalf("missing UI service pair external=%v cluster=%v", foundExternal, foundCluster)
-	}
-	_ = alias
 
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName)
 	if cm == nil {

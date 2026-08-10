@@ -27,11 +27,16 @@ spec:
     # Exclude API, MCP, inference, and registry paths from the UI catch-all.
     # /v2 is owned by the registry chart when artifact is enabled.
     # Authenticated file serving is /api/v1/files only (no Traefik /files).
+    # When appsNamespace differs, reference the real ClusterIP Service there
+    # (requires Traefik providers.kubernetesCRD.allowCrossNamespace).
     - match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/v2`)" $hostMatch }}
       kind: Rule
       priority: 1
       services:
         - name: {{ include "appliance-control-plane.uiServiceName" . }}
+          {{- if include "appliance-control-plane.appsNamespaced" . }}
+          namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+          {{- end }}
           port: {{ .Values.ui.service.port }}
     {{- end }}
   tls:
