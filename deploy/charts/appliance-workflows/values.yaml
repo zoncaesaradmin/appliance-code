@@ -11,6 +11,9 @@ fullnameOverride: "appliance-workflows"
 # Kept separate from fullnameOverride so SA/RBAC names stay stable.
 deploymentNameOverride: "workflow-controller"
 
+# Installer-injected LAN registry pull credentials (see zonctl image-pull).
+imagePullSecrets: []
+
 namespace:
   create: true
   workflows: workflows

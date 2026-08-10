@@ -19,6 +19,7 @@ spec:
         {{- include "appliance-control-plane.hostAgentSelectorLabels" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
       securityContext:
         {{- toYaml .Values.hostAgent.podSecurityContext | nindent 8 }}
       containers:

@@ -7,6 +7,9 @@ image:
   digest: ""
   pullPolicy: IfNotPresent
 
+# Installer-injected LAN registry pull credentials (see zonctl image-pull).
+imagePullSecrets: []
+
 namespace:
   # Default false: zonctl creates and PSA-labels the inference namespace before
   # Helm runs. Setting create=true is only for standalone helm installs

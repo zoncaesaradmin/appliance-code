@@ -6,6 +6,9 @@ image:
   digest: ""
   pullPolicy: IfNotPresent
 
+# Installer-injected LAN registry pull credentials (see zonctl image-pull).
+imagePullSecrets: []
+
 namespace:
   create: false
   name: artifacts

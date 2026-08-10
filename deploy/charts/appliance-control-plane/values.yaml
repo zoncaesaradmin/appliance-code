@@ -9,6 +9,12 @@ image:
   digest: "" # e.g. sha256:...; when set, takes precedence over tag
   pullPolicy: IfNotPresent
 
+# Installer-managed dockerconfig secret name(s) for private LAN registry
+# pulls. Empty for air-gap preload (IfNotPresent). When set (zonctl injects
+# appliance-image-pull), secrets must exist in both the controlplane namespace
+# and appsNamespace — kubelet does not cross namespaces for imagePullSecrets.
+imagePullSecrets: []
+
 ui:
   enabled: true
   image:

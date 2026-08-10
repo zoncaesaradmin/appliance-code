@@ -1,3 +1,10 @@
+{{- define "appliance-control-plane.imagePullSecrets" -}}
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
 {{/*
 Expand the name of the chart.
 */}}

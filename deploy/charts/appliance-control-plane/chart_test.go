@@ -1087,6 +1087,31 @@ func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
 	}
 }
 
+func TestImagePullSecretsRenderedOnControlplaneAndAppsDeployments(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "namespace.name=ace-system",
+		"--set", "appsNamespace.name=ace-apps",
+		"--set", "imagePullSecrets[0].name=appliance-image-pull",
+		"--set", "hostAgent.enabled=true",
+		"--set", "hostAgent.image.reference=registry.local/host-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	)...)
+
+	for _, name := range []string{controlPlaneDeploymentName, controlPlaneUIName, "host-agent", automationRuntimeName} {
+		doc := findByKindAndName(docs, "Deployment", name)
+		if doc == nil {
+			t.Fatalf("expected Deployment/%s", name)
+		}
+		ips, _ := at(doc, "spec", "template", "spec", "imagePullSecrets").([]any)
+		if len(ips) != 1 {
+			t.Fatalf("%s imagePullSecrets = %#v, want one entry", name, ips)
+		}
+		entry, _ := ips[0].(map[string]any)
+		if got, _ := entry["name"].(string); got != "appliance-image-pull" {
+			t.Fatalf("%s imagePullSecrets[0].name = %q", name, got)
+		}
+	}
+}
+
 func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
 	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps")
 	ns := findByKindAndName(docs, "Namespace", "apps")
