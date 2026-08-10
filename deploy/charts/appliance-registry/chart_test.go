@@ -45,7 +45,7 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"chmod 0644 /data/zon/logs/artifactserver/application.log",
 		"touch /data/zon/logs/artifactserver/application.log",
 		"kind: NetworkPolicy", "name: appliance-registry-default-deny",
-		"kubernetes.io/metadata.name: control",
+		"kubernetes.io/metadata.name: ace-apps",
 		"app.kubernetes.io/name: api-server",
 		"path: /data/zon/logs/artifactserver", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",

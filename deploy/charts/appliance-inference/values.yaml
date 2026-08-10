@@ -35,7 +35,7 @@ persistence:
 networkPolicy:
   enabled: true
   controlPlaneNamespaceLabel:
-    kubernetes.io/metadata.name: control
+    kubernetes.io/metadata.name: ace-apps
   controlPlanePodLabels:
     # Matches appliance-control-plane chart selectorLabels:
     # app.kubernetes.io/name=api-server.
