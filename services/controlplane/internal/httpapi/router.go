@@ -83,7 +83,7 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 
 	for _, route := range append(publicRoutes(), proxiedServiceRoutes(deps.ProxiedServices)...) {
 		if route.moduleName != "" {
-			if !appliance.ModuleEnabled(modules, route.moduleName) {
+			if !appliance.ModuleEnabled(modules, route.moduleName) || (route.capability != "" && !capabilities.Enabled(route.capability)) {
 				continue
 			}
 		} else if !capabilities.Enabled(route.capability) {
@@ -480,37 +480,37 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermDNSPublish, deps.LANDNSPublishH.Publish), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityArtifact, moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/token", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.RegistryH == nil {
 				return nil, fmt.Errorf("missing registry token handlers")
 			}
 			return http.HandlerFunc(deps.RegistryH.Token), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityArtifact, moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
 			return w.protect(roles.PermArtifactsGrantsRead, deps.RegistryGrantsH.List), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "POST /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityArtifact, moduleName: appliance.ModuleNameArtifactRegistry, pattern: "POST /api/v1/registry/grants", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
 			return w.protect(roles.PermArtifactsGrantsWrite, deps.RegistryGrantsH.Create), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "DELETE /api/v1/registry/grants/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityArtifact, moduleName: appliance.ModuleNameArtifactRegistry, pattern: "DELETE /api/v1/registry/grants/{id}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryGrantsH == nil {
 				return nil, fmt.Errorf("missing registry grant handlers")
 			}
 			return w.protect(roles.PermArtifactsGrantsWrite, deps.RegistryGrantsH.Delete), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/repositories", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityArtifact, moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/repositories", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryCatalogH == nil {
 				return nil, fmt.Errorf("missing registry catalog handlers")
 			}
 			return w.authenticatedOnly(deps.RegistryCatalogH.ListRepositories), nil
 		}},
-		{moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/repositories/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityArtifact, moduleName: appliance.ModuleNameArtifactRegistry, pattern: "GET /api/v1/registry/repositories/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.RegistryCatalogH == nil {
 				return nil, fmt.Errorf("missing registry catalog handlers")
 			}

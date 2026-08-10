@@ -307,6 +307,15 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 	}
 }
 
+func TestCoreProfileDoesNotExposeArtifactRoutes(t *testing.T) {
+	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	resp := ts.doJSON(t, "GET", "/api/v1/registry/repositories", "", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("core artifact route status = %d, want 404", resp.StatusCode)
+	}
+}
+
 func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 	ts := newTestServerWithProfile(t, appliance.ProfileCore)
 	ts.bootstrapAdmin(t, "admin", testPassword)
