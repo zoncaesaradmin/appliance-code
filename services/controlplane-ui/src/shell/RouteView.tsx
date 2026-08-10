@@ -1,13 +1,21 @@
 import type React from "react";
+import { useEffect } from "react";
 import { AccountPage } from "../pages/AccountPage";
 import { AdminPage } from "../pages/AdminPage";
 import { AnalyzePage } from "../pages/AnalyzePage";
 import { ArtifactsPage } from "../pages/ArtifactsPage";
 import { BuilderPage } from "../pages/BuilderPage";
-import { DNSPage } from "../pages/DNSPage";
 import { FilesPage } from "../pages/FilesPage";
 import { HomePage } from "../pages/HomePage";
+import { navigate } from "../lib/navigate";
 import type { Session } from "../types";
+
+function Redirect(props: { to: string }): React.JSX.Element | null {
+  useEffect(() => {
+    navigate(props.to, true);
+  }, [props.to]);
+  return null;
+}
 
 export function RouteView(props: {
   pathname: string;
@@ -27,8 +35,9 @@ export function RouteView(props: {
   if (props.pathname.startsWith("/manage/builder")) {
     return <BuilderPage pathname={props.pathname} />;
   }
-  if (props.pathname.startsWith("/manage/dns")) {
-    return <DNSPage />;
+  // Legacy Manage → DNS; now Admin → LAN Services.
+  if (props.pathname === "/manage/dns" || props.pathname.startsWith("/manage/dns/")) {
+    return <Redirect to="/admin/lan-services" />;
   }
   if (props.pathname.startsWith("/manage/files")) {
     return <FilesPage />;

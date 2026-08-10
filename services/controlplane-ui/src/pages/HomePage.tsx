@@ -151,7 +151,7 @@ export function HomePage(props: {
   const tabs = useMemo(() => {
     const next = [
       { label: "Overview", path: "/home" },
-      { label: "Topology", path: "/home/topology" }
+      { label: "Connectivity", path: "/home/connectivity" }
     ];
     if (showAudit) {
       next.push({ label: "Audit Logs", path: "/home/audit-logs" });
@@ -190,9 +190,9 @@ export function HomePage(props: {
             <EmptyState message="You do not have permission to read audit logs." />
           </Card>
         )
-      ) : props.pathname === "/home/topology" ? (
-        <Card title="Topology" subtitle="Connected appliance topology">
-          <EmptyState message="Topology details are not available yet. This view will show how appliances are connected for the current deployment." />
+      ) : props.pathname === "/home/connectivity" ? (
+        <Card title="Connectivity" subtitle="Connected appliance network and links">
+          <EmptyState message="Connectivity details are not available yet. This view will show how appliances are connected for the current deployment." />
         </Card>
       ) : (
         <div className="stack">
@@ -207,7 +207,7 @@ export function HomePage(props: {
           <div className="stats-grid">
             <StatCard label="Readiness" value={health} tone={health === "ready" ? "success" : "neutral"} />
             <StatCard label="Capabilities" value={String(props.capabilities.length)} />
-            <StatCard label="Appliance" value={identity?.applianceName || "Unknown"} />
+            <StatCard label="Appliance Name" value={identity?.applianceName || "Unknown"} />
             <StatCard label="Primary DNS zone" value={identity?.dnsZone || "Unavailable"} />
           </div>
           <div className="grid-two">

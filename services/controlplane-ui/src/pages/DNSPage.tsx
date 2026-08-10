@@ -4,6 +4,7 @@ import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
 import type { DNSRecord } from "../types";
 
+/** Admin → LAN Services → DNS: LAN DNS zone records for the appliance. */
 export function DNSPage(): React.JSX.Element {
   const [zone, setZone] = useState("appliance.internal");
   const [records, setRecords] = useState<DNSRecord[]>([]);
@@ -40,12 +41,12 @@ export function DNSPage(): React.JSX.Element {
 
   return (
     <PageFrame
-      title="DNS"
+      title="LAN Services"
       eyebrow=""
       description="Managed LAN DNS records for the appliance zone."
-      pathname="/manage/dns"
+      pathname="/admin/lan-services"
       onNavigate={navigate}
-      tabs={[{ label: "Records", path: "/manage/dns" }]}
+      tabs={[{ label: "DNS", path: "/admin/lan-services" }]}
     >
       {message ? <div className="message">{message}</div> : null}
       <div className="grid-two">

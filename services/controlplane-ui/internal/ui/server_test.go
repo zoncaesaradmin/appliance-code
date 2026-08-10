@@ -66,7 +66,7 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 	})
 
 	t.Run("spa path serves index", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/manage/dns", nil)
+		req := httptest.NewRequest(http.MethodGet, "/admin/lan-services", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
@@ -102,7 +102,7 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 	})
 
 	t.Run("non-get methods are rejected for spa routes", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/manage/dns", nil)
+		req := httptest.NewRequest(http.MethodPost, "/admin/lan-services", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusMethodNotAllowed {

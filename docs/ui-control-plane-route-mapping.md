@@ -65,7 +65,7 @@ Useful event names:
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard` |
 | `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |
 | `GET /home` | React `HomePage` Overview | `GET /version`, `GET /health/ready`, `GET /api/v1/appliance/identity`, `GET /api/v1/appliance/setup-state` | SPA page |
-| `GET /home/topology` | React `HomePage` Topology | Same overview fetches as `/home` | SPA page |
+| `GET /home/connectivity` | React `HomePage` Connectivity | Same overview fetches as `/home` | SPA page |
 | `GET /home/audit-logs` | React `HomePage` Audit Logs | Session must include `audit.read`; `GET /api/v1/audit/events?limit=10` with optional `cursor` for Next page | SPA page |
 | `GET /partials/status` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
 | `GET /partials/session` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
@@ -246,11 +246,15 @@ proxy). Notable Admin host configuration routes:
 
 | Browser route | UI surface | Downstream control-plane call(s) | Success behavior |
 | --- | --- | --- | --- |
-| `GET /admin/host-services` | `AdminHostServicesPage` Connectivity tab | `GET /api/v1/appliance/identity`; `GET /api/v1/host/info`; `GET /api/v1/host/health`; `GET /api/v1/host/wifi-ap` | Host network (primary LAN IPv4 + Ethernet/Wi-Fi/Wi-Fi AP status and per-link addresses from host-agent) + Wi-Fi AP card; independent loads |
+| `GET /admin/host-services` | `AdminHostServicesPage` Network tab | `GET /api/v1/appliance/identity`; `GET /api/v1/host/info`; `GET /api/v1/host/health`; `GET /api/v1/host/wifi-ap` | Host network (primary LAN IPv4 + Ethernet/Wi-Fi/Wi-Fi AP status and per-link addresses from host-agent) + Wi-Fi AP card; independent loads |
 | `GET /admin/host-services/mdns` | `AdminHostServicesPage` mDNS tab | `GET /api/v1/host/mdns` | mDNS status card |
 | Enable or Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | One action button from status (`desired`/`actual`); busy label while apply runs; card refresh |
 | Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Shown only when AP is off; single PSK field (no confirm) with show/hide toggle; busy “Enabling…”; opens as `https://manage.ap/` (fixed IP `https://10.42.0.1/`); soft reasons such as `packages_missing` |
 | Disable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:false}` | Shown only when AP is on; busy “Disabling…” then switches to enable control |
+| `GET /admin/lan-services` | React `DNSPage` (Admin → LAN Services → DNS tab) | `GET /api/v1/dns/records` | List zone records; page title LAN Services |
+| Add or update DNS record | `upsertDNSRecord` | `PUT /api/v1/dns/records/{name}` with `{ipv4,ttl}` | Refresh records list |
+| Delete DNS record | `deleteDNSRecord` | `DELETE /api/v1/dns/records/{name}` | Refresh records list |
+| `GET /manage/dns` (legacy) | SPA redirect | — | `replace` navigate to `/admin/lan-services` |
 | `GET /admin/licensing` | `AdminLicensingPage` | `GET /api/v1/licensing/status` | Status + accept/import forms |
 | Accept base entitlement | `acceptBase` + `withViewSync` | `POST /api/v1/licensing/base-entitlement/accept` | Local status update; button greys when `resolved`; `requestViewSync` for `shell.alerts` / `shell.bootstrap` / `page` (+ tags `licensing`, `setup`) so header alerts and home card clear without navigating away |
 | Import offline license | `importLicense` + `withViewSync` | `PUT /api/v1/licensing/license` | Same view-sync plan as accept; status refresh |

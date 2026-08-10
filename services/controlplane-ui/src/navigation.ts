@@ -64,12 +64,6 @@ export const MODES: Mode[] = [
         icon: "builder"
       },
       {
-        label: "DNS",
-        path: "/manage/dns",
-        description: "Manage LAN DNS records for the appliance zone",
-        icon: "dns"
-      },
-      {
         label: "Files",
         path: "/manage/files",
         description: "Upload and browse named appliance file spaces",
@@ -136,6 +130,12 @@ export const MODES: Mode[] = [
         path: "/admin/host-services",
         description: "Configure this host: mDNS and management Wi-Fi AP",
         icon: "status"
+      },
+      {
+        label: "LAN Services",
+        path: "/admin/lan-services",
+        description: "Manage LAN DNS records for the appliance zone",
+        icon: "dns"
       }
     ],
     visibleWhen: (context) => isSystemAdministrator(context.session)

@@ -19,7 +19,7 @@ APPLIANCE_UI_STATIC_DIR=/opt/appliance-ui/dist
 
 The Go host serves:
 
-- `/` and deep SPA routes such as `/manage/dns`
+- `/` and deep SPA routes such as `/admin/lan-services`
 - immutable files under `/assets/`
 - `/health/live`
 - `/health/ready`

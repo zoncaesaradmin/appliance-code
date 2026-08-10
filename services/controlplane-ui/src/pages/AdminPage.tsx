@@ -18,6 +18,7 @@ import type {
   ProfileValidationResult,
   Version
 } from "../types";
+import { DNSPage } from "./DNSPage";
 
 export function AdminPage(props: { pathname: string; capabilities: string[] }): React.JSX.Element {
   const isProfiles = props.pathname === "/admin/profiles" || props.pathname.startsWith("/admin/profiles/");
@@ -27,10 +28,12 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
     props.pathname === "/admin/licensing" || props.pathname.startsWith("/admin/licensing/");
   const isHostServices =
     props.pathname === "/admin/host-services" || props.pathname.startsWith("/admin/host-services/");
+  const isLANServices =
+    props.pathname === "/admin/lan-services" || props.pathname.startsWith("/admin/lan-services/");
   const isSystemStatus =
     props.pathname === "/admin/system-status" ||
     props.pathname.startsWith("/admin/system-status/") ||
-    (!isProfiles && !isLicensing && !isMetadata && !isHostServices);
+    (!isProfiles && !isLicensing && !isMetadata && !isHostServices && !isLANServices);
 
   if (isProfiles) {
     return <AdminProfilesPage />;
@@ -43,6 +46,9 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
   }
   if (isHostServices) {
     return <AdminHostServicesPage pathname={props.pathname} />;
+  }
+  if (isLANServices) {
+    return <DNSPage />;
   }
   return <AdminSystemStatusPage pathname={props.pathname} capabilities={props.capabilities} />;
 }
@@ -297,7 +303,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       pathname={props.pathname}
       onNavigate={navigate}
       tabs={[
-        { label: "Connectivity", path: "/admin/host-services" },
+        { label: "Network", path: "/admin/host-services" },
         { label: "mDNS", path: "/admin/host-services/mdns" }
       ]}
     >

@@ -21,7 +21,7 @@ export type IconName =
   | "search"
   | "session"
   | "status"
-  | "topology"
+  | "connectivity"
   | "user"
   | "workflows";
 
@@ -147,7 +147,7 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
           <path d="M4 13h4l2-6 4 10 2-4h4" />
         </svg>
       );
-    case "topology":
+    case "connectivity":
       return (
         <svg {...common}>
           <circle cx="6" cy="6" r="2.5" />

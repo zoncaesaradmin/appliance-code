@@ -27,7 +27,6 @@ describe("navigation model", () => {
   });
 
   it("maps nested paths to the owning mode", () => {
-    expect(currentMode("/manage/dns").id).toBe("manage");
     expect(currentMode("/manage/files").id).toBe("manage");
     expect(currentMode("/analyze/workflows").id).toBe("analyze");
     expect(currentMode("/admin/system-status").id).toBe("admin");
@@ -36,6 +35,17 @@ describe("navigation model", () => {
     expect(currentMode("/admin/licensing").id).toBe("admin");
     expect(currentMode("/admin/host-services").id).toBe("admin");
     expect(currentMode("/admin/host-services/mdns").id).toBe("admin");
+    expect(currentMode("/admin/lan-services").id).toBe("admin");
+  });
+
+  it("lists LAN Services under Admin and not under Manage", () => {
+    const manage = MODES.find((mode) => mode.id === "manage");
+    const admin = MODES.find((mode) => mode.id === "admin");
+    expect(manage?.features.some((feature) => feature.path.includes("dns"))).toBe(false);
+    expect(admin?.features.some((feature) => feature.path === "/admin/lan-services")).toBe(true);
+    expect(admin?.features.find((feature) => feature.path === "/admin/lan-services")?.label).toBe(
+      "LAN Services"
+    );
   });
 
   it("falls back to Home for unknown paths", () => {
