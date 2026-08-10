@@ -25,7 +25,7 @@ func render(t *testing.T, args ...string) string {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
 	}
-	command := append([]string{"template", "registry", chartDir(t), "--namespace", "ace-apps"}, args...)
+	command := append([]string{"template", "registry", chartDir(t), "--namespace", "ace-system"}, args...)
 	out, err := exec.Command("helm", command...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("helm template: %v\n%s", err, out)
@@ -45,8 +45,8 @@ func TestHardenedRegistryRender(t *testing.T) {
 		"chmod 0644 /data/zon/logs/artifactserver/application.log",
 		"touch /data/zon/logs/artifactserver/application.log",
 		"kind: NetworkPolicy", "name: appliance-registry-default-deny",
-		"kubernetes.io/metadata.name: ace-apps",
-		"app.kubernetes.io/name: api-server",
+		"kubernetes.io/metadata.name: ace-system",
+		"app.kubernetes.io/name: controlplane",
 		"path: /data/zon/logs/artifactserver", "type: DirectoryOrCreate",
 		"PathPrefix(`/v2`)", "registry-public.pem", "tcpSocket:",
 		"secretName: appliance-registry-verification-key",

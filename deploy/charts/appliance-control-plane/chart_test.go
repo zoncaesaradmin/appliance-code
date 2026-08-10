@@ -122,9 +122,9 @@ func defaultRenderArgs() []string {
 }
 
 const (
-	controlPlaneDeploymentName = "api-server"
-	controlPlaneConfigMapName  = "api-server-config"
-	controlPlaneServiceName    = "api-server"
+	controlPlaneDeploymentName = "controlplane"
+	controlPlaneConfigMapName  = "controlplane-config"
+	controlPlaneServiceName    = "controlplane"
 	automationRuntimeName      = "automation-runtime"
 	automationRuntimeConfig    = "automation-runtime-config"
 	controlPlaneUIName         = "ui-server"
@@ -249,7 +249,7 @@ func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
 		deployName string
 	}{
 		{
-			name:       "api-server",
+		name:       "controlplane",
 			deployName: controlPlaneDeploymentName,
 		},
 		{
@@ -452,11 +452,11 @@ func TestUIConfigMapDefaultsToRenderedControlPlaneServiceNames(t *testing.T) {
 	}
 
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://api-server:8080" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://api-server:8080", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_BASE_URL"].(string); got != "http://controlplane:8080" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_BASE_URL = %q, want http://controlplane:8080", got)
 	}
-	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://api-server-internal:8081" {
-		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://api-server-internal:8081", got)
+	if got, _ := data["APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL"].(string); got != "http://controlplane-internal:8081" {
+		t.Fatalf("APPLIANCE_CONTROL_PLANE_INTERNAL_BASE_URL = %q, want http://controlplane-internal:8081", got)
 	}
 }
 
@@ -879,13 +879,13 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if ns, _ := at(pvc, "metadata", "namespace").(string); ns != "appliance-builds" {
 		t.Fatalf("workspace PVC namespace = %q, want appliance-builds", ns)
 	}
-	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "api-server-workspaces" {
-		t.Fatalf("workspace PVC volumeName = %q, want api-server-workspaces", volumeName)
+	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "controlplane-workspaces" {
+		t.Fatalf("workspace PVC volumeName = %q, want controlplane-workspaces", volumeName)
 	}
 	jobs := findByKind(docs, "Job")
 	for _, job := range jobs {
 		name, _ := at(job, "metadata", "name").(string)
-		if strings.HasPrefix(name, "api-server-workspace-storage-prep-") {
+		if strings.HasPrefix(name, "controlplane-workspace-storage-prep-") {
 			t.Fatalf("workspace storage prep Job must be disabled by default (PSA restricted + helm --wait); got %q", name)
 		}
 	}
@@ -897,8 +897,8 @@ func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	if got, _ := data["APPLIANCE_WORKSPACE_ROOT_DIR"].(string); got != "/data/zon/workspaces" {
 		t.Fatalf("APPLIANCE_WORKSPACE_ROOT_DIR = %q, want /data/zon/workspaces", got)
 	}
-	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "api-server-workspaces" {
-		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want api-server-workspaces", got)
+	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "controlplane-workspaces" {
+		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want controlplane-workspaces", got)
 	}
 	if got, _ := data["APPLIANCE_WORKFLOW_INSTANCE_ID"].(string); got != "appliance" {
 		t.Fatalf("APPLIANCE_WORKFLOW_INSTANCE_ID = %q, want appliance", got)

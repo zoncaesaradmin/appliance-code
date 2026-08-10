@@ -49,7 +49,7 @@ func TestCreateProvisionsRegistryPushCredentials(t *testing.T) {
 	secrets := buildergit.NewMemorySecretManager()
 	svc := builds.NewService(db, sqlite.NewBuildStore(db), sqlite.NewIdempotencyStore(db), fake, recorder,
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
-		"/data/zon/workspaces", "api-server-workspaces", nil)
+		"/data/zon/workspaces", "controlplane-workspaces", nil)
 	if err := svc.ConfigureRegistryPush(builds.RegistryPushConfig{
 		Host:      "test-device-1.appliance.internal",
 		TLSVerify: "false",

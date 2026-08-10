@@ -49,11 +49,11 @@ networkPolicy:
   enabled: true
   traefikNamespaceLabel: {}
   controlPlaneNamespaceLabel:
-    kubernetes.io/metadata.name: ace-apps
+    kubernetes.io/metadata.name: ace-system
   controlPlanePodLabels:
     # Matches appliance-control-plane chart selectorLabels:
-    # app.kubernetes.io/name=api-server.
-    app.kubernetes.io/name: api-server
+    # app.kubernetes.io/name=controlplane.
+    app.kubernetes.io/name: controlplane
 
 podSecurityContext:
   runAsNonRoot: true

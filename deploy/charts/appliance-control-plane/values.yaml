@@ -250,7 +250,7 @@ containerSecurityContext:
 
 hostAgent:
   enabled: true
-  # K8s resource basename (Deployment/Service). Independent of api-server.
+  # K8s resource basename (Deployment/Service). Independent of controlplane.
   nameOverride: ""
   image:
     reference: registry.local/appliance-host-agent:dev

@@ -14,7 +14,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ace-apps
+              kubernetes.io/metadata.name: ace-system
       ports:
         - protocol: TCP
           port: {{ .Values.service.port }}

@@ -2,8 +2,8 @@
 Expand the name of the chart.
 */}}
 {{- define "appliance-control-plane.name" -}}
-{{- /* K8s resource basename: api-server (not the chart/image name appliance-control-plane). */ -}}
-{{- .Values.nameOverride | default "api-server" | trunc 63 | trimSuffix "-" -}}
+{{- /* K8s resource basename: controlplane (not the chart/image name appliance-control-plane). */ -}}
+{{- .Values.nameOverride | default "controlplane" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{/*
@@ -162,8 +162,8 @@ UI image reference, preferring an explicit digest pin over a tag.
 {{- end -}}
 
 {{/*
-UI Deployment/Service name. Independent of api-server fullname so pods are
-ui-server-* rather than api-server-ui-*.
+UI Deployment/Service name. Independent of controlplane fullname so pods are
+ui-server-* rather than controlplane-ui-*.
 */}}
 {{- define "appliance-control-plane.uiServiceName" -}}
 {{- .Values.ui.nameOverride | default "ui-server" | trunc 63 | trimSuffix "-" -}}
@@ -194,8 +194,8 @@ keeps the common in-chart case aligned with the rendered internal Service name.
 {{- end -}}
 
 {{/*
-Host agent Deployment/Service name. Independent of api-server fullname so
-pods are host-agent-* rather than api-server-host-agent-*.
+Host agent Deployment/Service name. Independent of controlplane fullname so
+pods are host-agent-* rather than controlplane-host-agent-*.
 */}}
 {{- define "appliance-control-plane.hostAgentName" -}}
 {{- .Values.hostAgent.nameOverride | default "host-agent" | trunc 63 | trimSuffix "-" -}}
