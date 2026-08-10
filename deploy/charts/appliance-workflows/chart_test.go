@@ -113,3 +113,10 @@ func TestWorkflowControllerDoesNotUseExternalHelperImages(t *testing.T) {
 	}
 	t.Fatal("expected appliance-logs hostPath volume")
 }
+
+func TestBuildNamespaceIsInstallerOwned(t *testing.T) {
+	docs := renderChart(t)
+	if ns := findByKindAndName(docs, "Namespace", "appliance-builds"); ns != nil {
+		t.Fatal("build namespace must be installer-owned, not Helm-owned")
+	}
+}
