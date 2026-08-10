@@ -13,6 +13,17 @@
       },
       "required": ["create", "workflows", "builds"]
     },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "image": {
       "type": "object",
       "additionalProperties": false,
