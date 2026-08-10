@@ -1,3 +1,4 @@
+{{- if eq (include "appliance-control-plane.aceSystemEnabled" .) "true" }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -105,3 +106,4 @@ spec:
             # The control-plane runs as non-root, so the mounted key files must
             # be group-readable to the pod fsGroup rather than owner-only.
             defaultMode: 0440
+{{- end }}

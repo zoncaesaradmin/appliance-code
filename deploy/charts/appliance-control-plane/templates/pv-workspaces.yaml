@@ -1,4 +1,4 @@
-{{- if and .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
+{{- if and (eq (include "appliance-control-plane.workflowsSupportEnabled" .) "true") .Values.workspaceStorage.enabled (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
 apiVersion: v1
 kind: PersistentVolume
 metadata:

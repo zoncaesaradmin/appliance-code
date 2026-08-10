@@ -1,4 +1,4 @@
-{{- if .Values.ingress.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.ingress.enabled }}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:

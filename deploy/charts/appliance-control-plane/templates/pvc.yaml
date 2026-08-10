@@ -1,4 +1,4 @@
-{{- if .Values.persistence.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") .Values.persistence.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -16,7 +16,7 @@ spec:
     requests:
       storage: {{ .Values.persistence.size }}
 {{- end }}
-{{- if and .Values.automationRuntime.enabled .Values.automationRuntime.persistence.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled .Values.automationRuntime.persistence.enabled }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

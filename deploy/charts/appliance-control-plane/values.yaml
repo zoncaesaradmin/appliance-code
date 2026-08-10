@@ -15,6 +15,21 @@ image:
 # and appsNamespace — kubelet does not cross namespaces for imagePullSecrets.
 imagePullSecrets: []
 
+rollout:
+  aceSystem:
+    enabled: true
+  aceApps:
+    enabled: true
+  applicationSupport:
+    enabled: true
+  dnsSupport:
+    enabled: true
+  workflowsSupport:
+    enabled: true
+
+identity:
+  instance: appliance
+
 ui:
   enabled: true
   image:

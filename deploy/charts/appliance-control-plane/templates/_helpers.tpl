@@ -32,6 +32,30 @@ Namespace for controlplane Deployment/Service/PVC/keys (Helm release namespace).
 {{- end -}}
 
 {{/*
+Rollout slice gates. zonctl reuses the same chart artifact for multiple
+releases, enabling only the set it is currently applying.
+*/}}
+{{- define "appliance-control-plane.aceSystemEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.aceSystem .Values.rollout.aceSystem.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.aceAppsEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.aceApps .Values.rollout.aceApps.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.applicationSupportEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.dnsSupportEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.dnsSupport .Values.rollout.dnsSupport.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.workflowsSupportEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.workflowsSupport .Values.rollout.workflowsSupport.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Namespace for operator-facing apps co-packaged with the control-plane chart:
 ui-server, host-agent, automation-runtime. Defaults to co-locating with
 controlplane when appsNamespace.name is empty (single-namespace tests);
@@ -121,9 +145,13 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels.
 */}}
+{{- define "appliance-control-plane.instanceLabel" -}}
+{{- .Values.identity.instance | default "appliance" -}}
+{{- end -}}
+
 {{- define "appliance-control-plane.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
 {{- end -}}
 
 {{/*
@@ -131,7 +159,7 @@ Selector labels for the UI pod.
 */}}
 {{- define "appliance-control-plane.uiSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.uiServiceName" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
 {{- end -}}
 
 {{/*
@@ -139,7 +167,7 @@ Selector labels for the host-agent pod.
 */}}
 {{- define "appliance-control-plane.hostAgentSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.hostAgentName" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
 {{- end -}}
 
 {{/*
@@ -147,7 +175,7 @@ Selector labels for the automation-runtime pod.
 */}}
 {{- define "appliance-control-plane.automationRuntimeSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.automationRuntimeName" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
 {{- end -}}
 
 {{/*

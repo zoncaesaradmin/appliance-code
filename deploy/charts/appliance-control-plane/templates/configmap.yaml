@@ -1,3 +1,4 @@
+{{- if eq (include "appliance-control-plane.aceSystemEnabled" .) "true" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -39,7 +40,8 @@ data:
   APPLIANCE_INTERNAL_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.internalPort | int) | quote }}
   APPLIANCE_DATA_DIR: {{ .Values.persistence.dataDir | quote }}
   APPLIANCE_AUTOMATION_RUNTIME_BASE_URL: {{ include "appliance-control-plane.automationRuntimeBaseURL" . | quote }}
-{{- if .Values.automationRuntime.enabled }}
+{{- end }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -61,7 +63,7 @@ data:
   AUTOMATION_RUNTIME_MAX_HEADER_BYTES: "16384"
   AUTOMATION_RUNTIME_AUDIT_RETENTION_DAYS: "365"
 {{- end }}
-{{- if .Values.ui.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.ui.enabled }}
 ---
 apiVersion: v1
 kind: ConfigMap

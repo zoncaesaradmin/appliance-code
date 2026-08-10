@@ -1,4 +1,4 @@
-{{- if .Values.hostAgent.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.hostAgent.enabled }}
 apiVersion: v1
 kind: Service
 metadata:

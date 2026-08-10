@@ -6,9 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"appliance-code/services/controlplane/internal/appliance"
@@ -34,48 +32,11 @@ type App struct {
 // readinessAdapter adapts storage.DB to httpapi.ReadinessChecker without
 // exposing the rest of the storage surface to the HTTP layer.
 type readinessAdapter struct {
-	db             storage.DB
-	artifactServer interface{ Health(context.Context) error }
-	dnsURL         string
-	client         *http.Client
+	db storage.DB
 }
 
 func (r readinessAdapter) Ready(ctx context.Context) error {
-	if err := r.db.Ping(ctx); err != nil {
-		return err
-	}
-	if r.artifactServer != nil {
-		if err := r.artifactServer.Health(ctx); err != nil {
-			return fmt.Errorf("artifact-server dependency: %w", err)
-		}
-	}
-	if url := strings.TrimSpace(r.dnsURL); url != "" {
-		if err := r.probeDNSReady(ctx, url); err != nil {
-			return fmt.Errorf("dns dependency: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r readinessAdapter) probeDNSReady(ctx context.Context, url string) error {
-	client := r.client
-	if client == nil {
-		client = &http.Client{Timeout: 3 * time.Second}
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s returned status %d", url, resp.StatusCode)
-	}
-	return nil
+	return r.db.Ping(ctx)
 }
 
 // New wires every service and builds the public and internal HTTP servers.
@@ -174,10 +135,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		services.DB.Close()
 		return nil, fmt.Errorf("building public mux: %w", err)
 	}
-	internalHandler := httpapi.NewInternalMux(logger, readinessAdapter{
-		db: services.DB, artifactServer: services.ArtifactServer, dnsURL: cfg.DNSReadyURL,
-		client: &http.Client{Timeout: 3 * time.Second},
-	}, startup)
+	internalHandler := httpapi.NewInternalMux(logger, readinessAdapter{db: services.DB}, startup)
 
 	public := &http.Server{
 		Addr:              cfg.PublicAddr,

@@ -1,4 +1,4 @@
-{{- if eq (include "appliance-control-plane.workflowsEnabled" .) "true" }}
+{{- if and (eq (include "appliance-control-plane.workflowsSupportEnabled" .) "true") (eq (include "appliance-control-plane.workflowsEnabled" .) "true") }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

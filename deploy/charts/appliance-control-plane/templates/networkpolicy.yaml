@@ -1,4 +1,4 @@
-{{- if .Values.networkPolicy.enabled }}
+{{- if and .Values.networkPolicy.enabled (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -11,21 +11,6 @@ spec:
   policyTypes:
     - Ingress
     - Egress
-{{- if include "appliance-control-plane.appsNamespaced" . }}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: {{ include "appliance-control-plane.fullname" . }}-apps-default-deny
-  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
-  labels:
-    {{- include "appliance-control-plane.labels" . | nindent 4 }}
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
-{{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -168,6 +153,23 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+{{- end }}
+{{- if and .Values.networkPolicy.enabled (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") }}
+{{- if include "appliance-control-plane.appsNamespaced" . }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.fullname" . }}-apps-default-deny
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+{{- end }}
 {{- if .Values.ui.enabled }}
 ---
 apiVersion: networking.k8s.io/v1

@@ -1,4 +1,4 @@
-{{- if .Values.automationRuntime.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
