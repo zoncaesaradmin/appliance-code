@@ -243,7 +243,7 @@ func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
 }
 
 func TestLoadAppliesApplianceCatalogJSON(t *testing.T) {
-	catalogJSON := `{"version":"appliance.catalog/v1alpha1","profiles":[{"name":"custom","capabilities":["base","host"]}],"modules":[{"name":"host-agent","kind":"platform","requiredCapabilities":["host"],"executionMode":"host-agent","entitlementKey":"host-agent","baseURL":"http://host-agent.control.svc.cluster.local:8080","securityClass":"host-privileged"}]}`
+	catalogJSON := `{"version":"appliance.catalog/v1alpha1","profiles":[{"name":"custom","capabilities":["base","host"]}],"modules":[{"name":"host-agent","kind":"platform","requiredCapabilities":["host"],"executionMode":"host-agent","entitlementKey":"host-agent","baseURL":"http://host-agent.ace-apps.svc.cluster.local:8080","securityClass":"host-privileged"}]}`
 	cfg, err := config.Load([]string{
 		"APPLIANCE_PROFILE=custom",
 		"APPLIANCE_CATALOG_JSON=" + catalogJSON,

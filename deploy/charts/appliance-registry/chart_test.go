@@ -25,7 +25,7 @@ func render(t *testing.T, args ...string) string {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
 	}
-	command := append([]string{"template", "registry", chartDir(t), "--namespace", "control"}, args...)
+	command := append([]string{"template", "registry", chartDir(t), "--namespace", "ace-apps"}, args...)
 	out, err := exec.Command("helm", command...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("helm template: %v\n%s", err, out)

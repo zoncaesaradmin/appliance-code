@@ -15,7 +15,7 @@ flowchart TD
             Traefik["Traefik pod<br/>HTTPS ingress"]
         end
 
-        subgraph AppNS["control namespace"]
+        subgraph AppNS["ace-apps namespace"]
             Control["Control-plane pod<br/>One Go server replica<br/>REST + MCP + auth + RBAC + orchestration"]
             UI["UI pod<br/>One Go static host replica<br/>React + TypeScript SPA assets"]
             ArtifactServer["Artifact Server pod<br/>One registry replica<br/>OCI data plane"]
