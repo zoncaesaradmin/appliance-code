@@ -27,14 +27,15 @@ const (
 type Capability string
 
 const (
-	CapabilityBase      Capability = "base"
-	CapabilityHost      Capability = "host"
-	CapabilityWorkflows Capability = "workflows"
-	CapabilityBuild     Capability = "build"
-	CapabilityFiles     Capability = "files"
-	CapabilityArtifact  Capability = "artifact"
-	CapabilityDNS       Capability = "dns"
-	CapabilityInference Capability = "inference"
+	CapabilityBase         Capability = "base"
+	CapabilityHost         Capability = "host"
+	CapabilityWorkflows    Capability = "workflows"
+	CapabilityBuild        Capability = "build"
+	CapabilityFiles        Capability = "files"
+	CapabilityArtifact     Capability = "artifact"
+	CapabilityDNS          Capability = "dns"
+	CapabilityInference    Capability = "inference"
+	CapabilityApplications Capability = "applications"
 )
 
 type capabilityDefinition struct {
@@ -42,14 +43,15 @@ type capabilityDefinition struct {
 }
 
 var capabilityCatalog = map[Capability]capabilityDefinition{
-	CapabilityBase:      {},
-	CapabilityHost:      {Dependencies: []Capability{CapabilityBase}},
-	CapabilityWorkflows: {Dependencies: []Capability{CapabilityBase}},
-	CapabilityBuild:     {Dependencies: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityArtifact}},
-	CapabilityFiles:     {Dependencies: []Capability{CapabilityBase}},
-	CapabilityArtifact:  {Dependencies: []Capability{CapabilityBase}},
-	CapabilityDNS:       {Dependencies: []Capability{CapabilityBase}},
-	CapabilityInference: {Dependencies: []Capability{CapabilityBase}},
+	CapabilityBase:         {},
+	CapabilityHost:         {Dependencies: []Capability{CapabilityBase}},
+	CapabilityWorkflows:    {Dependencies: []Capability{CapabilityBase}},
+	CapabilityBuild:        {Dependencies: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityArtifact}},
+	CapabilityFiles:        {Dependencies: []Capability{CapabilityBase}},
+	CapabilityArtifact:     {Dependencies: []Capability{CapabilityBase}},
+	CapabilityDNS:          {Dependencies: []Capability{CapabilityBase}},
+	CapabilityInference:    {Dependencies: []Capability{CapabilityBase}},
+	CapabilityApplications: {Dependencies: []Capability{CapabilityBase}},
 }
 
 type ProfileDefinition struct {
@@ -74,20 +76,20 @@ func (l StaticProfileCatalogLoader) LoadProfileCatalog() (ProfileCatalog, error)
 }
 
 var builtInProfileCatalog = ProfileCatalog{
-	ProfileCore:          {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows}},
-	ProfileBuilder:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact}},
-	ProfileStorage:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityArtifact}},
-	ProfileLANDNS:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityDNS}},
-	ProfileStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityArtifact, CapabilityDNS}},
+	ProfileCore:          {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityApplications}},
+	ProfileBuilder:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityApplications}},
+	ProfileStorage:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityArtifact, CapabilityApplications}},
+	ProfileLANDNS:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityDNS, CapabilityApplications}},
+	ProfileStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityArtifact, CapabilityDNS, CapabilityApplications}},
 	// builder ∪ landns (registry/artifact already comes with builder).
-	ProfileBuilderLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS}},
+	ProfileBuilderLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityApplications}},
 	// builder ∪ storage ∪ registry ∪ dns — same capability union as
 	// builder-landns (storage/registry add no capabilities beyond builder).
-	ProfileBuilderStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS}},
-	ProfileLANLLM:               {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityInference}},
-	ProfileBuilderLANLLM:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference}},
+	ProfileBuilderStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityApplications}},
+	ProfileLANLLM:               {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityInference, CapabilityApplications}},
+	ProfileBuilderLANLLM:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference, CapabilityApplications}},
 	// builder ∪ lanllm ∪ storage/registry ∪ landns — full capability union.
-	ProfileBuilderLANLLMStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityInference}},
+	ProfileBuilderLANLLMStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityInference, CapabilityApplications}},
 }
 
 func BuiltInProfileCatalog() ProfileCatalog {

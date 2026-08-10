@@ -160,6 +160,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		NotificationsH: &httpapi.NotificationHandlers{Notifications: services.Notifications, Audit: services.Audit},
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
+		ApplicationsH:  &httpapi.ApplicationHandlers{Applications: services.Applications},
 		AuditH: &httpapi.AuditHandlers{
 			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
 		},
@@ -277,13 +278,13 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		profile appliance.Profile
 		want    []string
 	}{
-		{appliance.ProfileCore, []string{"base", "files", "host", "workflows"}},
-		{appliance.ProfileBuilder, []string{"artifact", "base", "build", "files", "host", "workflows"}},
-		{appliance.ProfileStorage, []string{"artifact", "base", "files", "host"}},
-		{appliance.ProfileLANDNS, []string{"base", "dns", "files", "host"}},
-		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "files", "host"}},
-		{appliance.ProfileBuilderLANDNS, []string{"artifact", "base", "build", "dns", "files", "host", "workflows"}},
-		{appliance.ProfileBuilderStorageLANDNS, []string{"artifact", "base", "build", "dns", "files", "host", "workflows"}},
+		{appliance.ProfileCore, []string{"applications", "base", "files", "host", "workflows"}},
+		{appliance.ProfileBuilder, []string{"applications", "artifact", "base", "build", "files", "host", "workflows"}},
+		{appliance.ProfileStorage, []string{"applications", "artifact", "base", "files", "host"}},
+		{appliance.ProfileLANDNS, []string{"applications", "base", "dns", "files", "host"}},
+		{appliance.ProfileStorageLANDNS, []string{"applications", "artifact", "base", "dns", "files", "host"}},
+		{appliance.ProfileBuilderLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
+		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {

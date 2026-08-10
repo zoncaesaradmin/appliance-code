@@ -77,6 +77,40 @@ type OperationsStore interface {
 	UpdateStatus(ctx context.Context, id string, status OperationStatus, resultBody, problemBody []byte) error
 }
 
+// ApplicationDefinition is a validated, immutable application contract.
+type ApplicationDefinition struct {
+	Name      string
+	Version   string
+	Document  []byte
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// ApplicationInstance is durable desired and observed state for one
+// application installation.
+type ApplicationInstance struct {
+	Name              string
+	DefinitionName    string
+	DefinitionVersion string
+	DesiredState      string
+	ObservedState     string
+	Message           string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// ApplicationStore persists application definitions and instances. It is
+// intentionally separate from workflow and metadata-bundle storage.
+type ApplicationStore interface {
+	UpsertDefinition(ctx context.Context, definition ApplicationDefinition) error
+	GetDefinition(ctx context.Context, name, version string) (ApplicationDefinition, error)
+	ListDefinitions(ctx context.Context) ([]ApplicationDefinition, error)
+	UpsertInstance(ctx context.Context, instance ApplicationInstance) error
+	UpdateInstanceStatus(ctx context.Context, name, observedState, message string, updatedAt time.Time) error
+	GetInstance(ctx context.Context, name string) (ApplicationInstance, error)
+	ListInstances(ctx context.Context) ([]ApplicationInstance, error)
+}
+
 // IdempotencyRecord is a cached response for a previously seen idempotency
 // key, retained for the plan's accepted 24-hour idempotency window.
 type IdempotencyRecord struct {

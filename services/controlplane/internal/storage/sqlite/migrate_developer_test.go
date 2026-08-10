@@ -25,8 +25,8 @@ func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadMigrations: %v", err)
 	}
-	if len(migrations) != 7 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 || migrations[5].Version != 6 || migrations[6].Version != 7 {
-		t.Fatalf("loadMigrations = %+v, want baseline + dns_records + session_auth_domain + licensing_profiles + metadata_bundle + builder_catalog + build_registry_push migrations", migrations)
+	if len(migrations) != 8 || migrations[0].Version != 1 || migrations[1].Version != 2 || migrations[2].Version != 3 || migrations[3].Version != 4 || migrations[4].Version != 5 || migrations[5].Version != 6 || migrations[6].Version != 7 || migrations[7].Version != 8 {
+		t.Fatalf("loadMigrations = %+v, want baseline + dns_records + session_auth_domain + licensing_profiles + metadata_bundle + builder_catalog + build_registry_push + applications migrations", migrations)
 	}
 
 	now := time.Now().UTC()

@@ -249,7 +249,7 @@ func TestServiceLogDirectoriesAreOperatorReadable(t *testing.T) {
 		deployName string
 	}{
 		{
-		name:       "controlplane",
+			name:       "controlplane",
 			deployName: controlPlaneDeploymentName,
 		},
 		{
@@ -531,8 +531,11 @@ func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 
 func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "automationRuntime.persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
-	if len(findByKind(docs, "Namespace")) != 0 {
-		t.Error("namespace.create=false should omit the Namespace object")
+	if findByKindAndName(docs, "Namespace", "ace-system") != nil {
+		t.Error("namespace.create=false should omit the control-plane Namespace object")
+	}
+	if findByKindAndName(docs, "Namespace", "apps") == nil {
+		t.Error("permanent apps Namespace should remain present")
 	}
 	if len(findByKind(docs, "PersistentVolumeClaim")) != 0 {
 		t.Error("persistence.enabled=false should omit the PersistentVolumeClaim")
@@ -1081,6 +1084,25 @@ func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
 	cpData, _ := at(cpCM, "data").(map[string]any)
 	if got, _ := cpData["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime.ace-apps.svc.cluster.local:8082" {
 		t.Fatalf("automation runtime URL = %q", got)
+	}
+}
+
+func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
+	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps")
+	ns := findByKindAndName(docs, "Namespace", "apps")
+	if ns == nil {
+		t.Fatal("expected permanent apps namespace")
+	}
+	labels, _ := at(ns, "metadata", "labels").(map[string]any)
+	if got, _ := labels["app.kubernetes.io/component"].(string); got != "managed-applications" {
+		t.Fatalf("apps namespace component label = %q", got)
+	}
+	marker := findByKindAndName(docs, "ConfigMap", "appliance-application-management")
+	if marker == nil {
+		t.Fatal("expected application-management namespace marker")
+	}
+	if got, _ := at(marker, "metadata", "namespace").(string); got != "apps" {
+		t.Fatalf("application-management marker namespace = %q", got)
 	}
 }
 

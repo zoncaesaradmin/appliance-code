@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/applications"
 	"appliance-code/services/controlplane/internal/artifactserver"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/auditops"
@@ -60,6 +61,7 @@ type Services struct {
 	IdempotencyStore   storage.IdempotencyStore
 	WorkspaceStore     storage.WorkspaceStore
 	JobStore           storage.JobStore
+	ApplicationStore   storage.ApplicationStore
 
 	Users              *users.Service
 	Roles              *roles.Service
@@ -77,6 +79,8 @@ type Services struct {
 	Metadata           metadatabundle.Runtime
 	Profiles           *profiles.Service
 	Notifications      *notifications.Service
+	Applications       *applications.Service
+	ApplicationRuntime applications.ResourceManager
 
 	Keys     *keys.Material
 	Audit    *audit.Recorder
@@ -174,6 +178,17 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	idempotencyStore := sqlite.NewIdempotencyStore(db)
 	workspaceStore := sqlite.NewWorkspaceStore(db)
 	jobStore := sqlite.NewJobStore(db)
+	applicationStore := sqlite.NewApplicationStore(db)
+	applicationsSvc, err := applications.NewService(applicationStore)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("app: wiring application management: %w", err)
+	}
+	applicationRuntime, err := applications.NewInClusterManager()
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("app: wiring application resource manager: %w", err)
+	}
 	builderCatalogStore := sqlite.NewBuilderCatalogStore(db)
 	usersSvc := users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial)
 	tokensSvc := tokens.NewService(db, tokenStore, recorder, keyMaterial)
@@ -302,6 +317,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		IdempotencyStore:   idempotencyStore,
 		WorkspaceStore:     workspaceStore,
 		JobStore:           jobStore,
+		ApplicationStore:   applicationStore,
 		Users:              usersSvc,
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokensSvc,
@@ -318,6 +334,8 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Metadata:           metadataSvc,
 		Profiles:           profilesSvc,
 		Notifications:      notificationsSvc,
+		Applications:       applicationsSvc,
+		ApplicationRuntime: applicationRuntime,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 		AuditOps:           auditOps,

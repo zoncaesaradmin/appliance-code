@@ -56,6 +56,13 @@ appsNamespace:
   create: true
   name: ""
 
+# Permanent namespace for user-managed application workloads. This is separate
+# from appsNamespace, which contains co-packaged UI, host-agent, and
+# automation-runtime services.
+applicationNamespace:
+  create: true
+  name: apps
+
 # Non-secret runtime configuration, rendered into a ConfigMap and consumed
 # as APPLIANCE_* environment variables by internal/config. Secrets (signing
 # keys, TLS, etc.) are never templated by this chart; the installer/lifecycle

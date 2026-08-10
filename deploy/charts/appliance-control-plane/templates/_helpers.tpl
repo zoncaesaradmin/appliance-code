@@ -52,6 +52,13 @@ true
 {{- end -}}
 
 {{/*
+Permanent namespace for user-managed application workloads.
+*/}}
+{{- define "appliance-control-plane.applicationNamespace" -}}
+{{- .Values.applicationNamespace.name | default "apps" -}}
+{{- end -}}
+
+{{/*
 Cluster-local DNS name for a Service (optionally cross-namespace).
 Args: list name namespace
 */}}
