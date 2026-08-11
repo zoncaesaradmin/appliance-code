@@ -246,7 +246,9 @@ proxy). Notable Admin host configuration routes:
 
 | Browser route | UI surface | Downstream control-plane call(s) | Success behavior |
 | --- | --- | --- | --- |
-| `GET /admin/host-services` | `AdminHostServicesPage` Network tab | `GET /api/v1/appliance/identity`; `GET /api/v1/host/info`; `GET /api/v1/host/health`; `GET /api/v1/host/wifi-ap` | Host network (primary LAN IPv4 + Ethernet/Wi-Fi/Wi-Fi AP status and per-link addresses from host-agent) + Wi-Fi AP card; independent loads |
+| `GET /admin/host-services` | `AdminHostServicesPage` Network tab | `GET /api/v1/appliance/identity`; `GET /api/v1/host/info`; `GET /api/v1/host/health`; `GET /api/v1/host/wifi`; `GET /api/v1/host/wifi/scan`; `GET /api/v1/host/wifi-ap` | Host network (primary LAN IPv4 + Ethernet/Wi-Fi/Wi-Fi AP status and per-link addresses from host-agent) + client Wi-Fi card + Wi-Fi AP card; independent loads |
+| Scan Wi-Fi networks | `scanWifiNetworks` | `GET /api/v1/host/wifi/scan` | Refreshes scanned SSIDs, security labels, signal levels, and concurrent-mode detail |
+| Connect or Disconnect client Wi-Fi | `applyClientWifi` | `PUT /api/v1/host/wifi` with `{desired,ssid,psk,security}` | Connects appliance client Wi-Fi to the selected SSID or disconnects it; updates card state and connection message |
 | `GET /admin/host-services/mdns` | `AdminHostServicesPage` mDNS tab | `GET /api/v1/host/mdns` | mDNS status card, including advertised `hostname.local` when available |
 | Enable or Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | One action button from status (`desired`/`actual`); busy label while apply runs; card refresh with advertised `hostname.local` |
 | Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Shown only when AP is off; single PSK field (no confirm) with show/hide toggle; busy “Enabling…”; opens as `https://manage.ap/` (fixed IP `https://10.42.0.1/`); soft reasons such as `packages_missing` |

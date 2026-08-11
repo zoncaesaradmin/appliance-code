@@ -6,6 +6,6 @@ Expected layout after export (see `export-host-packages.sh`):
 - `ubuntu/24.04/amd64/*.deb`
 
 `build-full-bundle` always exports the complete capability set (`mdns` +
-`wifi-ap`) into appliance-code `.run/host-packages`. Release-input packaging
+`wifi-client` + `wifi-ap`) into appliance-code `.run/host-packages`. Release-input packaging
 then copies that tree as signed `host-packages/`. Install stages packages
 offline; enablement is day-2 only.

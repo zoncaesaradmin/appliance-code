@@ -14,6 +14,7 @@ import (
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/process"
 	"appliance-code/services/hostagent/internal/wifiap"
+	"appliance-code/services/hostagent/internal/wificlient"
 )
 
 const (
@@ -52,11 +53,13 @@ func main() {
 		_ = os.Remove(socketPath)
 	}()
 
+	wifiClientManager := wificlient.NewManager()
 	wifiManager := wifiap.NewManager()
 	mdnsManager := mdns.NewManager()
 	server := &http.Server{
 		Handler: httpapi.NewHandlerWithControllers(
-			bridge.Local{Root: "/", Wifi: wifiManager, MDNS: mdnsManager},
+			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager},
+			wifiClientManager,
 			wifiManager,
 			mdnsManager,
 		),

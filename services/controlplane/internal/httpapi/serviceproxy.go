@@ -166,6 +166,8 @@ func isMutatingProxyMethod(method string) bool {
 
 func proxiedMutationAudit(externalPath string) (action, targetType string) {
 	switch {
+	case strings.HasSuffix(externalPath, "/host/wifi"):
+		return "host.wifi.update", "host_wifi"
 	case strings.HasSuffix(externalPath, "/host/wifi-ap"):
 		return "host.wifi_ap.update", "host_wifi_ap"
 	case strings.HasSuffix(externalPath, "/host/mdns"):

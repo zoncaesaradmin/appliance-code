@@ -319,13 +319,13 @@ package-message-broker-image-archive:
 		$${MESSAGE_BROKER_SOURCE_IMAGE:+--source-image "$${MESSAGE_BROKER_SOURCE_IMAGE}"}
 
 ## package-host-packages: export the offline Ubuntu host package payload
-## for the complete product super-set (mDNS + wifi-ap). Install-time flags only
-## enable services; both capability closures are always packaged.
-## HOST_CAPABILITIES overrides the default: "mdns wifi-ap".
+## for the complete product super-set (mDNS + wifi-client + wifi-ap).
+## Install-time flags only enable services; all capability closures are packaged.
+## HOST_CAPABILITIES overrides the default: "mdns wifi-client wifi-ap".
 package-host-packages:
 	@out_dir="$${OUT_DIR:-$(CURDIR)/.run/host-packages}"; \
 	mkdir -p "$$(dirname "$$out_dir")"; \
-	caps="$${HOST_CAPABILITIES:-mdns wifi-ap}"; \
+	caps="$${HOST_CAPABILITIES:-mdns wifi-client wifi-ap}"; \
 	cap_args=(); \
 	for cap in $$caps; do cap_args+=(--capability "$$cap"); done; \
 	bash ./scripts/package/export-host-packages.sh \

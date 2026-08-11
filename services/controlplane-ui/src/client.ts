@@ -39,6 +39,9 @@ import type {
   MetadataBundleValidationResult,
   HostInfo,
   HostHealth,
+  HostWifiStatus,
+  HostWifiApplyRequest,
+  HostWifiScanResult,
   HostWifiAPStatus,
   HostWifiAPApplyRequest,
   HostMDNSStatus,
@@ -149,6 +152,9 @@ export interface ControlPlaneClient {
   rollbackMetadataBundle(): Promise<ApplianceMetadataBundleStatus>;
   getHostInfo(): Promise<HostInfo>;
   getHostHealth(): Promise<HostHealth>;
+  getHostWifi(): Promise<HostWifiStatus>;
+  scanHostWifi(): Promise<HostWifiScanResult>;
+  applyHostWifi(request: HostWifiApplyRequest): Promise<HostWifiStatus>;
   getHostWifiAP(): Promise<HostWifiAPStatus>;
   applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus>;
   getHostMDNS(): Promise<HostMDNSStatus>;
@@ -553,6 +559,18 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async getHostHealth(): Promise<HostHealth> {
     return this.request("/api/v1/host/health");
+  }
+
+  async getHostWifi(): Promise<HostWifiStatus> {
+    return this.request("/api/v1/host/wifi");
+  }
+
+  async scanHostWifi(): Promise<HostWifiScanResult> {
+    return this.request("/api/v1/host/wifi/scan");
+  }
+
+  async applyHostWifi(request: HostWifiApplyRequest): Promise<HostWifiStatus> {
+    return this.request("/api/v1/host/wifi", { method: "PUT", body: request });
   }
 
   async getHostWifiAP(): Promise<HostWifiAPStatus> {

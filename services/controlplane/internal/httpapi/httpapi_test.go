@@ -58,6 +58,28 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			_ = json.NewEncoder(w).Encode(map[string]any{"uptimeSeconds": 123.45, "logicalCpuCount": 8})
 		case "/internal/v1/host/health":
 			_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok", "hostRootAccessible": true})
+		case "/internal/v1/host/wifi":
+			if r.Method == http.MethodGet || r.Method == http.MethodPut {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"desired": false, "actual": "inactive", "reason": "desired_off",
+					"iface": "wlp2s0", "security": "open", "supportedCapable": true,
+					"supportsConcurrentAP": false,
+					"concurrentAPDetail":   "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance.",
+				})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		case "/internal/v1/host/wifi/scan":
+			if r.Method == http.MethodGet {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"iface": "wlp2s0", "supportedCapable": true,
+					"networks": []map[string]any{
+						{"ssid": "office", "security": "wpa2-psk", "requiresPassword": true, "signalDBM": -40},
+					},
+				})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		case "/internal/v1/host/wifi-ap":
 			if r.Method == http.MethodGet || r.Method == http.MethodPut {
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -322,7 +344,7 @@ func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	token := ts.login(t, "admin", testPassword)
 
-	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health", "/api/v1/host/wifi-ap", "/api/v1/host/mdns"} {
+	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health", "/api/v1/host/wifi", "/api/v1/host/wifi/scan", "/api/v1/host/wifi-ap", "/api/v1/host/mdns"} {
 		resp := ts.doJSON(t, http.MethodGet, path, token, "")
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)

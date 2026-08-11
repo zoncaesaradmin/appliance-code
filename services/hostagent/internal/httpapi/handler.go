@@ -8,38 +8,46 @@ import (
 	"appliance-code/services/hostagent/internal/bridge"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/wifiap"
+	"appliance-code/services/hostagent/internal/wificlient"
 )
 
 type Handler struct {
-	bridge bridge.Bridge
-	wifi   wifiap.Controller
-	mdns   mdns.Controller
+	bridge     bridge.Bridge
+	wifiClient wificlient.Controller
+	wifiAP     wifiap.Controller
+	mdns       mdns.Controller
 }
 
 // NewHandler returns the host-agent HTTP API with production wifi and mdns managers.
 func NewHandler(hostBridge bridge.Bridge) http.Handler {
-	return NewHandlerWithControllers(hostBridge, wifiap.NewManager(), mdns.NewManager())
+	return NewHandlerWithControllers(hostBridge, wificlient.NewManager(), wifiap.NewManager(), mdns.NewManager())
 }
 
 // NewHandlerWithWifi keeps older call sites working (mdns uses production manager).
 func NewHandlerWithWifi(hostBridge bridge.Bridge, wifi wifiap.Controller) http.Handler {
-	return NewHandlerWithControllers(hostBridge, wifi, mdns.NewManager())
+	return NewHandlerWithControllers(hostBridge, wificlient.NewManager(), wifi, mdns.NewManager())
 }
 
 // NewHandlerWithControllers allows tests and mains to inject controllers.
-func NewHandlerWithControllers(hostBridge bridge.Bridge, wifi wifiap.Controller, mdnsCtrl mdns.Controller) http.Handler {
-	if wifi == nil {
-		wifi = wifiap.NewManager()
+func NewHandlerWithControllers(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller) http.Handler {
+	if wifiClient == nil {
+		wifiClient = wificlient.NewManager()
+	}
+	if wifiAP == nil {
+		wifiAP = wifiap.NewManager()
 	}
 	if mdnsCtrl == nil {
 		mdnsCtrl = mdns.NewManager()
 	}
-	handler := &Handler{bridge: hostBridge, wifi: wifi, mdns: mdnsCtrl}
+	handler := &Handler{bridge: hostBridge, wifiClient: wifiClient, wifiAP: wifiAP, mdns: mdnsCtrl}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handler.healthz)
 	mux.HandleFunc("GET /internal/v1/host/info", handler.info)
 	mux.HandleFunc("GET /internal/v1/host/stats", handler.stats)
 	mux.HandleFunc("GET /internal/v1/host/health", handler.health)
+	mux.HandleFunc("GET /internal/v1/host/wifi", handler.wifiGet)
+	mux.HandleFunc("PUT /internal/v1/host/wifi", handler.wifiPut)
+	mux.HandleFunc("GET /internal/v1/host/wifi/scan", handler.wifiScan)
 	mux.HandleFunc("GET /internal/v1/host/wifi-ap", handler.wifiAPGet)
 	mux.HandleFunc("PUT /internal/v1/host/wifi-ap", handler.wifiAPPut)
 	mux.HandleFunc("GET /internal/v1/host/mdns", handler.mdnsGet)
@@ -89,8 +97,40 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, health)
 }
 
+func (h *Handler) wifiGet(w http.ResponseWriter, r *http.Request) {
+	status, err := h.wifiClient.Status(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) wifiPut(w http.ResponseWriter, r *http.Request) {
+	var req wificlient.ApplyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid wifi apply body")
+		return
+	}
+	status, err := h.wifiClient.Apply(r.Context(), req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) wifiScan(w http.ResponseWriter, r *http.Request) {
+	result, err := h.wifiClient.Scan(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *Handler) wifiAPGet(w http.ResponseWriter, r *http.Request) {
-	status, err := h.wifi.Status(r.Context())
+	status, err := h.wifiAP.Status(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -104,7 +144,7 @@ func (h *Handler) wifiAPPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid wifi-ap apply body")
 		return
 	}
-	status, err := h.wifi.Apply(r.Context(), req)
+	status, err := h.wifiAP.Apply(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

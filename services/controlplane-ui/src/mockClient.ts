@@ -37,6 +37,9 @@ import type {
   MetadataBundleValidationResult,
   HostInfo,
   HostHealth,
+  HostWifiStatus,
+  HostWifiApplyRequest,
+  HostWifiScanResult,
   HostWifiAPStatus,
   HostWifiAPApplyRequest,
   HostMDNSStatus,
@@ -77,6 +80,7 @@ type MockState = {
   entitledCapabilities: string[];
   profiles: ApplianceProfile[];
   acknowledgedNotifications: string[];
+  wifiClient: HostWifiStatus;
   wifiAP: HostWifiAPStatus;
   mdns: HostMDNSStatus;
 };
@@ -225,6 +229,17 @@ const mockState: MockState = {
     }
   ],
   acknowledgedNotifications: [],
+  wifiClient: {
+    desired: false,
+    actual: "inactive",
+    reason: "desired_off",
+    iface: "wlp2s0",
+    security: "unknown",
+    supportedCapable: true,
+    supportsConcurrentAP: false,
+    concurrentAPDetail: "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance.",
+    message: "client Wi-Fi is not desired"
+  },
   wifiAP: {
     desired: false,
     actual: "inactive",
@@ -854,6 +869,10 @@ export class MockControlPlaneClient {
   }
 
   async getHostInfo(): Promise<HostInfo> {
+    const wifiClientEnabled = mockState.wifiClient.desired || mockState.wifiClient.actual === "active";
+    const wifiClientAddresses = wifiClientEnabled ? mockState.wifiClient.ipv4Addresses || ["192.168.1.160"] : [];
+    const wifiClientInterfaces = [mockState.wifiClient.iface || "wlp2s0"];
+    const wifiAPEnabled = mockState.wifiAP.desired || mockState.wifiAP.actual === "active";
     return {
       hostname: "mock-host",
       operatingSystem: "Ubuntu 24.04 LTS",
@@ -871,15 +890,15 @@ export class MockControlPlaneClient {
         },
         wifi: {
           present: true,
-          enabled: false,
-          interfaces: ["wlp2s0"],
-          ipv4Addresses: []
+          enabled: wifiClientEnabled,
+          interfaces: wifiClientInterfaces,
+          ipv4Addresses: wifiClientAddresses
         },
         wifiAP: {
           present: true,
-          enabled: true,
-          interfaces: ["wlan0"],
-          ipv4Addresses: ["10.42.0.1"]
+          enabled: wifiAPEnabled,
+          interfaces: [mockState.wifiAP.iface || "wlan0"],
+          ipv4Addresses: wifiAPEnabled ? ["10.42.0.1"] : []
         },
         links: [
           {
@@ -890,11 +909,18 @@ export class MockControlPlaneClient {
             ipv4Addresses: ["192.168.1.151"]
           },
           {
-            name: "wlan0",
+            name: mockState.wifiClient.iface || "wlp2s0",
             kind: "wifi",
-            state: "up",
+            state: wifiClientEnabled ? "up" : "down",
+            role: "lan",
+            ipv4Addresses: wifiClientAddresses
+          },
+          {
+            name: mockState.wifiAP.iface || "wlan0",
+            kind: "wifi",
+            state: wifiAPEnabled ? "up" : "down",
             role: "management-ap",
-            ipv4Addresses: ["10.42.0.1"]
+            ipv4Addresses: wifiAPEnabled ? ["10.42.0.1"] : []
           }
         ]
       }
@@ -909,6 +935,83 @@ export class MockControlPlaneClient {
       hostnameReadable: true,
       osReleaseReadable: true
     };
+  }
+
+  async getHostWifi(): Promise<HostWifiStatus> {
+    return { ...mockState.wifiClient };
+  }
+
+  async scanHostWifi(): Promise<HostWifiScanResult> {
+    return {
+      iface: mockState.wifiClient.iface || "wlp2s0",
+      supportedCapable: true,
+      supportsConcurrentAP: mockState.wifiClient.supportsConcurrentAP,
+      concurrentAPDetail: mockState.wifiClient.concurrentAPDetail,
+      networks: [
+        { ssid: "office-lan", security: "wpa2-psk", requiresPassword: true, signalDBM: -38 },
+        { ssid: "guest", security: "open", requiresPassword: false, signalDBM: -61 }
+      ]
+    };
+  }
+
+  async applyHostWifi(request: HostWifiApplyRequest): Promise<HostWifiStatus> {
+    if (!request.desired) {
+      mockState.wifiClient = {
+        desired: false,
+        actual: "inactive",
+        reason: "desired_off",
+        iface: "wlp2s0",
+        security: "unknown",
+        supportedCapable: true,
+        supportsConcurrentAP: false,
+        concurrentAPDetail: "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance.",
+        message: "client Wi-Fi is not desired"
+      };
+      return { ...mockState.wifiClient };
+    }
+    const ssid = (request.ssid || "").trim();
+    if (!ssid) {
+      mockState.wifiClient = {
+        desired: true,
+        actual: "inactive",
+        reason: "ssid_missing",
+        iface: "wlp2s0",
+        security: request.security || "unknown",
+        supportedCapable: true,
+        supportsConcurrentAP: false,
+        concurrentAPDetail: "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance.",
+        message: "an SSID is required to enable client Wi-Fi"
+      };
+      return { ...mockState.wifiClient };
+    }
+    if ((request.security || "") !== "open" && (!request.psk || request.psk.trim().length < 8)) {
+      mockState.wifiClient = {
+        desired: true,
+        actual: "inactive",
+        reason: "connection_failed",
+        ssid,
+        iface: "wlp2s0",
+        security: request.security || "wpa2-psk",
+        supportedCapable: true,
+        supportsConcurrentAP: false,
+        concurrentAPDetail: "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance.",
+        message: "a passphrase is required to connect to this secured Wi-Fi network"
+      };
+      return { ...mockState.wifiClient };
+    }
+    mockState.wifiClient = {
+      desired: true,
+      actual: "active",
+      ssid,
+      iface: "wlp2s0",
+      ipv4Addresses: ["192.168.1.160"],
+      security: request.security || (request.psk ? "wpa2-psk" : "open"),
+      supportedCapable: true,
+      supportsConcurrentAP: false,
+      concurrentAPDetail: "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance.",
+      message: `client Wi-Fi is active on wlp2s0`
+    };
+    return { ...mockState.wifiClient };
   }
 
   async getHostWifiAP(): Promise<HostWifiAPStatus> {

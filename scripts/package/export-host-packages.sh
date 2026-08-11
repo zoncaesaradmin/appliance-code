@@ -6,7 +6,7 @@ usage() {
 usage: export-host-packages.sh --out-dir DIR [options]
 
 Stages the offline Ubuntu host package payload required by installer-owned
-host capabilities such as mDNS and management WiFi access point mode.
+host capabilities such as mDNS, client WiFi, and management WiFi access point mode.
 
 Options:
   --out-dir DIR                  Destination root. Required. Packages are
@@ -15,7 +15,7 @@ Options:
                                  current host/container VERSION_ID.
   --arch ARCH                    Debian architecture. Default: amd64.
   --capability NAME              Repeatable capability whose root packages
-                                 should be included. Supported: mdns, wifi-ap.
+                                 should be included. Supported: mdns, wifi-client, wifi-ap.
                                  When omitted, defaults to mdns (legacy).
   --package NAME                 Repeatable root package to include.
                                  Overrides --capability defaults when any
@@ -112,6 +112,9 @@ capability_packages() {
     mdns)
       printf '%s\n' avahi-daemon avahi-utils libnss-mdns
       ;;
+    wifi-client|wifi_client|wifi)
+      printf '%s\n' wpasupplicant isc-dhcp-client iw wireless-regdb
+      ;;
     wifi-ap|wifi_ap|wifap)
       # Ship binaries only. The full "dnsmasq" Debian package installs and
       # starts a stock unit on :53 which fights appliance-dns (hostNetwork).
@@ -119,7 +122,7 @@ capability_packages() {
       printf '%s\n' hostapd dnsmasq-base iw wireless-regdb
       ;;
     *)
-      echo "export-host-packages: unknown capability: $1 (supported: mdns, wifi-ap)" >&2
+      echo "export-host-packages: unknown capability: $1 (supported: mdns, wifi-client, wifi-ap)" >&2
       return 1
       ;;
   esac

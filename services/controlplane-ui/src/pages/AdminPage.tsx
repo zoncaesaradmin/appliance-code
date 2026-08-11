@@ -12,6 +12,10 @@ import type {
   HostHealth,
   HostInfo,
   HostMDNSStatus,
+  HostWifiApplyRequest,
+  HostWifiScanNetwork,
+  HostWifiScanResult,
+  HostWifiStatus,
   HostWifiAPStatus,
   LicensingStatus,
   MetadataBundleValidationResult,
@@ -156,22 +160,83 @@ function formatLinkAddresses(link: import("../types").HostNetworkLink): string {
   return addrs.join(", ");
 }
 
+function formatCombinationSupport(supported: boolean, detail: string): string {
+  return `${supported ? "Supported" : "Not supported"}${detail ? ` · ${detail}` : ""}`;
+}
+
+function describeEthernetWifiClient(
+  network: import("../types").HostNetworkStatus | undefined,
+  wifiClient: HostWifiStatus | null
+): string {
+  const hasEthernet = Boolean(network?.ethernet?.present);
+  const hasWifiClient = Boolean(wifiClient?.supportedCapable);
+  if (!hasEthernet) {
+    return formatCombinationSupport(false, "No Ethernet interface is present.");
+  }
+  if (!hasWifiClient) {
+    return formatCombinationSupport(false, "No client-capable Wi-Fi interface is available.");
+  }
+  return formatCombinationSupport(
+    true,
+    "Ethernet and client Wi-Fi can stay up together when both interfaces are available."
+  );
+}
+
+function describeEthernetWifiAP(
+  network: import("../types").HostNetworkStatus | undefined,
+  wifiAP: HostWifiAPStatus | null
+): string {
+  const hasEthernet = Boolean(network?.ethernet?.present);
+  const hasWifiAP = Boolean(wifiAP?.supportedCapable);
+  if (!hasEthernet) {
+    return formatCombinationSupport(false, "No Ethernet interface is present.");
+  }
+  if (!hasWifiAP) {
+    return formatCombinationSupport(false, "No AP-capable Wi-Fi interface is available.");
+  }
+  return formatCombinationSupport(
+    true,
+    "Ethernet and Wi-Fi AP can run together when the AP radio is available."
+  );
+}
+
+function describeWifiClientAP(wifiClient: HostWifiStatus | null): string {
+  if (!wifiClient) {
+    return "Unknown";
+  }
+  return formatCombinationSupport(
+    Boolean(wifiClient.supportsConcurrentAP),
+    wifiClient.concurrentAPDetail || "Hardware concurrency information is unavailable."
+  );
+}
+
 function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const isMDNS = props.pathname === "/admin/host-services/mdns";
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
   const [hostInfo, setHostInfo] = useState<HostInfo | null>(null);
   const [hostHealth, setHostHealth] = useState<HostHealth | null>(null);
+  const [wifiClient, setWifiClient] = useState<HostWifiStatus | null>(null);
+  const [wifiScan, setWifiScan] = useState<HostWifiScanResult | null>(null);
   const [wifi, setWifi] = useState<HostWifiAPStatus | null>(null);
   const [mdns, setMdns] = useState<HostMDNSStatus | null>(null);
   const [networkError, setNetworkError] = useState("");
+  const [wifiClientError, setWifiClientError] = useState("");
   const [wifiError, setWifiError] = useState("");
   const [mdnsError, setMdnsError] = useState("");
   const [message, setMessage] = useState("");
+  const [wifiClientSSID, setWifiClientSSID] = useState("");
+  const [wifiClientManualSSID, setWifiClientManualSSID] = useState("");
+  const [wifiClientPSK, setWifiClientPSK] = useState("");
+  const [showWifiClientPSK, setShowWifiClientPSK] = useState(false);
   const [psk, setPsk] = useState("");
   const [showPsk, setShowPsk] = useState(false);
+  const [wifiClientBusy, setWifiClientBusy] = useState(false);
+  const [wifiClientScanBusy, setWifiClientScanBusy] = useState(false);
   const [wifiBusy, setWifiBusy] = useState(false);
   const [mdnsBusy, setMdnsBusy] = useState(false);
   const [networkLoaded, setNetworkLoaded] = useState(false);
+  const [wifiClientLoaded, setWifiClientLoaded] = useState(false);
+  const [wifiClientScanLoaded, setWifiClientScanLoaded] = useState(false);
   const [wifiLoaded, setWifiLoaded] = useState(false);
   const [mdnsLoaded, setMdnsLoaded] = useState(false);
 
@@ -198,6 +263,33 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       setNetworkLoaded(true);
       if (nextInfo || nextIdentity) {
         setNetworkError("");
+      }
+    })();
+    void (async () => {
+      try {
+        const [nextWifiClient, nextWifiScan] = await Promise.all([
+          client.getHostWifi(),
+          client.scanHostWifi().catch(() => null)
+        ]);
+        if (!cancelled) {
+          setWifiClient(nextWifiClient);
+          setWifiClientError("");
+          if (nextWifiScan) {
+            setWifiScan(nextWifiScan);
+            if (!wifiClientSSID && (nextWifiScan.networks || []).length > 0) {
+              setWifiClientSSID(nextWifiScan.networks?.[0]?.ssid || "");
+            }
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setWifiClientError(err instanceof Error ? err.message : "Could not load client Wi-Fi status.");
+        }
+      } finally {
+        if (!cancelled) {
+          setWifiClientLoaded(true);
+          setWifiClientScanLoaded(true);
+        }
       }
     })();
     void (async () => {
@@ -238,6 +330,51 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       cancelled = true;
     };
   }, [props.pathname]);
+
+  async function scanWifiNetworks() {
+    setWifiClientScanBusy(true);
+    setWifiClientError("");
+    try {
+      const result = await client.scanHostWifi();
+      setWifiScan(result);
+      if ((result.networks || []).length > 0 && !wifiClientSSID) {
+        setWifiClientSSID(result.networks?.[0]?.ssid || "");
+      }
+      if (result.reason && result.reason !== "desired_off") {
+        setWifiClientError(result.message || result.reason);
+      }
+    } catch (err) {
+      setWifiClientError(err instanceof Error ? err.message : "Could not scan Wi-Fi networks.");
+    } finally {
+      setWifiClientScanBusy(false);
+      setWifiClientScanLoaded(true);
+    }
+  }
+
+  async function applyClientWifi(request: HostWifiApplyRequest) {
+    setWifiClientBusy(true);
+    setWifiClientError("");
+    setMessage("");
+    try {
+      const status = await client.applyHostWifi(request);
+      setWifiClient(status);
+      if (!request.desired) {
+        setMessage("Wi-Fi disconnected.");
+      } else if (status.actual === "active") {
+        setMessage(status.ssid ? `Wi-Fi connected to ${status.ssid}.` : "Wi-Fi connected.");
+        setWifiClientPSK("");
+        setShowWifiClientPSK(false);
+      } else if (status.reason && status.reason !== "not_configured") {
+        setWifiClientError(status.message || status.reason);
+      } else {
+        setMessage(status.message || "Wi-Fi connection requested.");
+      }
+    } catch (err) {
+      setWifiClientError(err instanceof Error ? err.message : "Could not update client Wi-Fi.");
+    } finally {
+      setWifiClientBusy(false);
+    }
+  }
 
   async function applyMDNS(desired: boolean) {
     setMdnsBusy(true);
@@ -298,9 +435,21 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   }
 
   // true → only Disable; false → only Enable; null → loading/unavailable.
+  const wifiClientOn: boolean | null = wifiClient ? wifiClient.desired || wifiClient.actual === "active" : null;
   const wifiOn: boolean | null = wifi ? wifi.desired || wifi.actual === "active" : null;
   const mdnsOn: boolean | null = mdns ? mdns.desired || mdns.actual === "active" : null;
-  const pageError = isMDNS ? mdnsError : [networkError, wifiError].filter(Boolean).join(" ");
+  const pageError = isMDNS ? mdnsError : [networkError, wifiClientError, wifiError].filter(Boolean).join(" ");
+  const scannedNetworks = wifiScan?.networks || [];
+  const selectedScannedNetwork: HostWifiScanNetwork | undefined =
+    scannedNetworks.find((network) => network.ssid === wifiClientSSID) || undefined;
+  const manualSSIDSelected = wifiClientSSID === "__manual__";
+  const wifiClientTargetSSID = manualSSIDSelected ? wifiClientManualSSID.trim() : wifiClientSSID.trim();
+  const wifiClientPasswordRequired = Boolean(selectedScannedNetwork?.requiresPassword);
+  const wifiClientSecurity = manualSSIDSelected
+    ? wifiClientPSK.trim()
+      ? "wpa2-psk"
+      : "open"
+    : selectedScannedNetwork?.security || "open";
 
   return (
     <PageFrame
@@ -387,7 +536,321 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
           </div>
         </Card>
       ) : (
-        <div className="grid-two">
+        <>
+          <div className="grid-two">
+            <Card title="Client Wi-Fi" subtitle="Connect this appliance to a LAN over Wi-Fi while Ethernet can remain connected.">
+              <div className={`host-service-panel${wifiClientBusy || wifiClientScanBusy ? " is-busy" : ""}`} aria-busy={wifiClientBusy || wifiClientScanBusy}>
+                {wifiClient ? (
+                  <div className="detail-list">
+                    <div>
+                      <span>Desired</span>
+                      <strong>{wifiClient.desired ? "On" : "Off"}</strong>
+                    </div>
+                    <div>
+                      <span>Actual</span>
+                      <strong>{wifiClient.actual}</strong>
+                    </div>
+                    <div>
+                      <span>SSID</span>
+                      <strong>{wifiClient.ssid || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Interface</span>
+                      <strong>{wifiClient.iface || wifiScan?.iface || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>IPv4</span>
+                      <strong>{(wifiClient.ipv4Addresses || []).join(", ") || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Security</span>
+                      <strong>{wifiClient.security || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Client Wi-Fi + Wi-Fi AP</span>
+                      <strong>{describeWifiClientAP(wifiClient)}</strong>
+                    </div>
+                    {wifiClient.reason ? (
+                      <div>
+                        <span>Reason</span>
+                        <strong>{wifiClient.reason}</strong>
+                      </div>
+                    ) : null}
+                    {wifiClient.message ? (
+                      <div>
+                        <span>Detail</span>
+                        <strong>{wifiClient.message}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <EmptyState
+                    message={
+                      wifiClientLoaded ? "Client Wi-Fi status is unavailable." : "Loading client Wi-Fi status..."
+                    }
+                  />
+                )}
+                <div className="host-service-panel__actions">
+                  {wifiClientOn === true ? (
+                    <div className="stack-form" style={{ width: "100%" }}>
+                      <button
+                        className="button button--ghost"
+                        type="button"
+                        disabled={wifiClientBusy}
+                        onClick={() => void applyClientWifi({ desired: false })}
+                      >
+                        {wifiClientBusy ? "Disconnecting Wi-Fi…" : "Disconnect Wi-Fi"}
+                      </button>
+                      <button
+                        className="button button--secondary"
+                        type="button"
+                        disabled={wifiClientScanBusy}
+                        onClick={() => void scanWifiNetworks()}
+                      >
+                        {wifiClientScanBusy ? "Scanning Wi-Fi…" : "Refresh Wi-Fi networks"}
+                      </button>
+                    </div>
+                  ) : null}
+                  {wifiClientOn === false ? (
+                    <form
+                      className="stack-form"
+                      style={{ width: "100%" }}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void applyClientWifi({
+                          desired: true,
+                          ssid: wifiClientTargetSSID,
+                          psk: wifiClientPSK.trim(),
+                          security: wifiClientSecurity
+                        });
+                      }}
+                    >
+                      <div className="field">
+                        <label htmlFor="wifi-client-network">Available Wi-Fi networks</label>
+                        <div className="stack-form">
+                          <select
+                            id="wifi-client-network"
+                            value={wifiClientSSID || (scannedNetworks.length > 0 ? scannedNetworks[0]?.ssid || "" : "__manual__")}
+                            onChange={(event) => setWifiClientSSID(event.target.value)}
+                            disabled={wifiClientBusy || wifiClientScanBusy}
+                          >
+                            {scannedNetworks.map((network) => (
+                              <option key={network.ssid} value={network.ssid}>
+                                {network.ssid} ({network.security}, {network.signalDBM} dBm)
+                              </option>
+                            ))}
+                            <option value="__manual__">Hidden or manual SSID</option>
+                          </select>
+                          <button
+                            className="button button--secondary"
+                            type="button"
+                            disabled={wifiClientScanBusy}
+                            onClick={() => void scanWifiNetworks()}
+                          >
+                            {wifiClientScanBusy ? "Scanning Wi-Fi…" : "Scan Wi-Fi"}
+                          </button>
+                        </div>
+                      </div>
+                      {manualSSIDSelected ? (
+                        <div className="field">
+                          <label htmlFor="wifi-client-manual-ssid">SSID</label>
+                          <input
+                            id="wifi-client-manual-ssid"
+                            type="text"
+                            value={wifiClientManualSSID}
+                            onChange={(event) => setWifiClientManualSSID(event.target.value)}
+                            placeholder="Enter network name"
+                            disabled={wifiClientBusy}
+                            spellCheck={false}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="field">
+                        <label htmlFor="wifi-client-psk">
+                          Password {wifiClientPasswordRequired ? "(required)" : "(leave empty for open networks)"}
+                        </label>
+                        <span className="password-field">
+                          <input
+                            id="wifi-client-psk"
+                            type={showWifiClientPSK ? "text" : "password"}
+                            autoComplete="new-password"
+                            value={wifiClientPSK}
+                            onChange={(event) => setWifiClientPSK(event.target.value)}
+                            placeholder={wifiClientPasswordRequired ? "8–63 characters" : "Optional"}
+                            disabled={wifiClientBusy}
+                            spellCheck={false}
+                          />
+                          <button
+                            className="password-field__toggle"
+                            type="button"
+                            disabled={wifiClientBusy}
+                            aria-label={showWifiClientPSK ? "Hide Wi-Fi password" : "Show Wi-Fi password"}
+                            aria-pressed={showWifiClientPSK}
+                            title={showWifiClientPSK ? "Hide Wi-Fi password" : "Show Wi-Fi password"}
+                            onClick={() => setShowWifiClientPSK((value) => !value)}
+                          >
+                            {showWifiClientPSK ? <EyeOffIcon /> : <EyeIcon />}
+                          </button>
+                        </span>
+                      </div>
+                      {wifiClientScanLoaded && scannedNetworks.length === 0 ? (
+                        <p className="muted">No scanned networks yet. Use manual SSID entry or scan again.</p>
+                      ) : null}
+                      <button
+                        className="button button--primary"
+                        type="submit"
+                        disabled={
+                          wifiClientBusy ||
+                          wifiClientTargetSSID.length === 0 ||
+                          (wifiClientPasswordRequired && wifiClientPSK.trim().length < 8)
+                        }
+                      >
+                        {wifiClientBusy ? "Connecting Wi-Fi…" : "Connect Wi-Fi"}
+                      </button>
+                    </form>
+                  ) : null}
+                  {wifiClientOn === null ? (
+                    <button className="button button--ghost" type="button" disabled>
+                      {wifiClientLoaded ? "Status unavailable" : "Loading…"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+
+            <Card title="Wi-Fi access point" subtitle="Management AP at https://manage.ap/ (also https://10.42.0.1/)">
+              <div className={`host-service-panel${wifiBusy ? " is-busy" : ""}`} aria-busy={wifiBusy}>
+                {wifi ? (
+                  <div className="detail-list">
+                    <div>
+                      <span>Desired</span>
+                      <strong>{wifi.desired ? "On" : "Off"}</strong>
+                    </div>
+                    <div>
+                      <span>Actual</span>
+                      <strong>{wifi.actual}</strong>
+                    </div>
+                    <div>
+                      <span>SSID</span>
+                      <strong>{wifi.ssid || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Interface</span>
+                      <strong>{wifi.iface || "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Management URL</span>
+                      <strong>
+                        {wifi.managementURL ||
+                          (wifi.managementHostname
+                            ? `https://${wifi.managementHostname}/`
+                            : `https://${wifi.managementAddress}/`)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Management IPv4</span>
+                      <strong>{wifi.managementAddress || "10.42.0.1"}</strong>
+                    </div>
+                    <div>
+                      <span>Local DNS for manage.ap</span>
+                      <strong>
+                        {wifi.localDNSServing === true
+                          ? "Yes (AP dnsmasq)"
+                          : wifi.localDNSServing === false
+                            ? "No (host DNS / CoreDNS)"
+                            : "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Security</span>
+                      <strong>{wifi.security}</strong>
+                    </div>
+                    {wifi.reason ? (
+                      <div>
+                        <span>Reason</span>
+                        <strong>{wifi.reason}</strong>
+                      </div>
+                    ) : null}
+                    {wifi.message ? (
+                      <div>
+                        <span>Detail</span>
+                        <strong>{wifi.message}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <EmptyState
+                    message={
+                      wifiLoaded ? "Wi-Fi AP status is unavailable." : "Loading Wi-Fi AP status..."
+                    }
+                  />
+                )}
+                <div className="host-service-panel__actions">
+                  {wifiOn === true ? (
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      disabled={wifiBusy}
+                      onClick={() => void applyWifi(false)}
+                    >
+                      {wifiBusy ? "Disabling Wi-Fi AP…" : "Disable Wi-Fi AP"}
+                    </button>
+                  ) : null}
+                  {wifiOn === false ? (
+                    <form
+                      className="stack-form"
+                      style={{ width: "100%" }}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void applyWifi(true);
+                      }}
+                    >
+                      <p className="muted">Each enable requires a new WPA2 passphrase for security.</p>
+                      <div className="field">
+                        <label htmlFor="wifi-ap-psk">WPA2 passphrase (required to enable)</label>
+                        <span className="password-field">
+                          <input
+                            id="wifi-ap-psk"
+                            type={showPsk ? "text" : "password"}
+                            autoComplete="new-password"
+                            value={psk}
+                            onChange={(event) => setPsk(event.target.value)}
+                            placeholder="8–63 characters"
+                            disabled={wifiBusy}
+                            spellCheck={false}
+                          />
+                          <button
+                            className="password-field__toggle"
+                            type="button"
+                            disabled={wifiBusy}
+                            aria-label={showPsk ? "Hide passphrase" : "Show passphrase"}
+                            aria-pressed={showPsk}
+                            title={showPsk ? "Hide passphrase" : "Show passphrase"}
+                            onClick={() => setShowPsk((v) => !v)}
+                          >
+                            {showPsk ? <EyeOffIcon /> : <EyeIcon />}
+                          </button>
+                        </span>
+                      </div>
+                      <button
+                        className="button button--primary"
+                        type="submit"
+                        disabled={wifiBusy || psk.trim().length < 8}
+                      >
+                        {wifiBusy ? "Enabling Wi-Fi AP…" : "Enable Wi-Fi AP"}
+                      </button>
+                    </form>
+                  ) : null}
+                  {wifiOn === null ? (
+                    <button className="button button--ghost" type="button" disabled>
+                      {wifiLoaded ? "Status unavailable" : "Loading…"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+          </div>
+
           <Card title="Host network" subtitle="Live host interfaces from host-agent (not install-time chart values)">
             {hostInfo || identity ? (
               <div className="detail-list">
@@ -418,6 +881,18 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                 <div>
                   <span>Wi-Fi AP (management)</span>
                   <strong>{formatMediaStatus(hostInfo?.network?.wifiAP, "Wi-Fi AP")}</strong>
+                </div>
+                <div>
+                  <span>Ethernet + client Wi-Fi</span>
+                  <strong>{describeEthernetWifiClient(hostInfo?.network, wifiClient)}</strong>
+                </div>
+                <div>
+                  <span>Ethernet + Wi-Fi AP</span>
+                  <strong>{describeEthernetWifiAP(hostInfo?.network, wifi)}</strong>
+                </div>
+                <div>
+                  <span>Client Wi-Fi + Wi-Fi AP</span>
+                  <strong>{describeWifiClientAP(wifiClient)}</strong>
                 </div>
                 {(hostInfo?.network?.links || []).map((link) => (
                   <div key={`${link.name}-${link.role}`}>
@@ -458,139 +933,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
               />
             )}
           </Card>
-
-          <Card title="Wi-Fi access point" subtitle="Management AP at https://manage.ap/ (also https://10.42.0.1/)">
-            <div className={`host-service-panel${wifiBusy ? " is-busy" : ""}`} aria-busy={wifiBusy}>
-              {wifi ? (
-                <div className="detail-list">
-                  <div>
-                    <span>Desired</span>
-                    <strong>{wifi.desired ? "On" : "Off"}</strong>
-                  </div>
-                  <div>
-                    <span>Actual</span>
-                    <strong>{wifi.actual}</strong>
-                  </div>
-                  <div>
-                    <span>SSID</span>
-                    <strong>{wifi.ssid || "—"}</strong>
-                  </div>
-                  <div>
-                    <span>Interface</span>
-                    <strong>{wifi.iface || "—"}</strong>
-                  </div>
-                  <div>
-                    <span>Management URL</span>
-                    <strong>
-                      {wifi.managementURL ||
-                        (wifi.managementHostname
-                          ? `https://${wifi.managementHostname}/`
-                          : `https://${wifi.managementAddress}/`)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Management IPv4</span>
-                    <strong>{wifi.managementAddress || "10.42.0.1"}</strong>
-                  </div>
-                  <div>
-                    <span>Local DNS for manage.ap</span>
-                    <strong>
-                      {wifi.localDNSServing === true
-                        ? "Yes (AP dnsmasq)"
-                        : wifi.localDNSServing === false
-                          ? "No (host DNS / CoreDNS)"
-                          : "—"}
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Security</span>
-                    <strong>{wifi.security}</strong>
-                  </div>
-                  {wifi.reason ? (
-                    <div>
-                      <span>Reason</span>
-                      <strong>{wifi.reason}</strong>
-                    </div>
-                  ) : null}
-                  {wifi.message ? (
-                    <div>
-                      <span>Detail</span>
-                      <strong>{wifi.message}</strong>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <EmptyState
-                  message={
-                    wifiLoaded ? "Wi-Fi AP status is unavailable." : "Loading Wi-Fi AP status..."
-                  }
-                />
-              )}
-              <div className="host-service-panel__actions">
-                {wifiOn === true ? (
-                  <button
-                    className="button button--ghost"
-                    type="button"
-                    disabled={wifiBusy}
-                    onClick={() => void applyWifi(false)}
-                  >
-                    {wifiBusy ? "Disabling Wi-Fi AP…" : "Disable Wi-Fi AP"}
-                  </button>
-                ) : null}
-                {wifiOn === false ? (
-                  <form
-                    className="stack-form"
-                    style={{ width: "100%" }}
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void applyWifi(true);
-                    }}
-                  >
-                    <p className="muted">Each enable requires a new WPA2 passphrase for security.</p>
-                    <div className="field">
-                      <label htmlFor="wifi-ap-psk">WPA2 passphrase (required to enable)</label>
-                      <span className="password-field">
-                        <input
-                          id="wifi-ap-psk"
-                          type={showPsk ? "text" : "password"}
-                          autoComplete="new-password"
-                          value={psk}
-                          onChange={(event) => setPsk(event.target.value)}
-                          placeholder="8–63 characters"
-                          disabled={wifiBusy}
-                          spellCheck={false}
-                        />
-                        <button
-                          className="password-field__toggle"
-                          type="button"
-                          disabled={wifiBusy}
-                          aria-label={showPsk ? "Hide passphrase" : "Show passphrase"}
-                          aria-pressed={showPsk}
-                          title={showPsk ? "Hide passphrase" : "Show passphrase"}
-                          onClick={() => setShowPsk((v) => !v)}
-                        >
-                          {showPsk ? <EyeOffIcon /> : <EyeIcon />}
-                        </button>
-                      </span>
-                    </div>
-                    <button
-                      className="button button--primary"
-                      type="submit"
-                      disabled={wifiBusy || psk.trim().length < 8}
-                    >
-                      {wifiBusy ? "Enabling Wi-Fi AP…" : "Enable Wi-Fi AP"}
-                    </button>
-                  </form>
-                ) : null}
-                {wifiOn === null ? (
-                  <button className="button button--ghost" type="button" disabled>
-                    {wifiLoaded ? "Status unavailable" : "Loading…"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </Card>
-        </div>
+        </>
       )}
     </PageFrame>
   );

@@ -79,6 +79,23 @@ describe("mock control-plane client", () => {
     }
   });
 
+  it("scans and connects client Wi-Fi networks", async () => {
+    const client = new MockControlPlaneClient();
+
+    const scan = await client.scanHostWifi();
+    expect(scan.networks?.length).toBeGreaterThan(0);
+
+    const status = await client.applyHostWifi({
+      desired: true,
+      ssid: "office-lan",
+      psk: "long-enough-secret",
+      security: "wpa2-psk"
+    });
+
+    expect(status.actual).toBe("active");
+    expect(status.ssid).toBe("office-lan");
+  });
+
   it("returns the advertised mdns hostname when enabled", async () => {
     const client = new MockControlPlaneClient();
 

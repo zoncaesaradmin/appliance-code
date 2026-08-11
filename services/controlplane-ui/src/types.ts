@@ -400,6 +400,44 @@ export interface HostWifiAPApplyRequest {
   psk?: string;
 }
 
+export interface HostWifiStatus {
+  desired: boolean;
+  actual: string;
+  reason?: string;
+  ssid?: string;
+  iface?: string;
+  ipv4Addresses?: string[];
+  security: string;
+  supportedCapable?: boolean;
+  supportsConcurrentAP?: boolean;
+  concurrentAPDetail?: string;
+  message?: string;
+}
+
+export interface HostWifiApplyRequest {
+  desired: boolean;
+  ssid?: string;
+  psk?: string;
+  security?: string;
+}
+
+export interface HostWifiScanNetwork {
+  ssid: string;
+  security: string;
+  requiresPassword: boolean;
+  signalDBM: number;
+}
+
+export interface HostWifiScanResult {
+  iface?: string;
+  supportedCapable?: boolean;
+  supportsConcurrentAP?: boolean;
+  concurrentAPDetail?: string;
+  reason?: string;
+  message?: string;
+  networks?: HostWifiScanNetwork[];
+}
+
 export interface HostMDNSStatus {
   desired: boolean;
   actual: string;

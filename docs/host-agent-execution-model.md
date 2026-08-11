@@ -37,7 +37,7 @@ This avoids a design that grows by adding more per-field file scraping inside th
 
 ## Preferred Design
 
-## Host execution model (wifi-ap and mDNS)
+## Host execution model (client Wi-Fi, wifi-ap, and mDNS)
 
 The management WiFi access point is applied only through `appliance-host-agentd`
 (`PUT /internal/v1/host/wifi-ap`). Install-time enablement with
@@ -45,13 +45,21 @@ Install stages offline host packages from the super-set bundle; day-2 Admin UI/A
 API over the host agent Unix socket. Control-plane routes mirror it:
 `GET|PUT /api/v1/host/wifi-ap` (permissions `host.read` / `host.write`).
 
+Client Wi-Fi is applied through the same host-agentd path:
+`GET|PUT /internal/v1/host/wifi`, with `GET /internal/v1/host/wifi/scan`
+for network discovery. Control-plane routes mirror those as
+`GET|PUT /api/v1/host/wifi` and `GET /api/v1/host/wifi/scan`.
+Host-agentd owns the host-side `wpa_supplicant` and `dhclient` processes so
+the Admin UI/API can connect the appliance to a LAN over Wi-Fi without manual
+host login.
+
 Host mDNS (`avahi-daemon`) is applied through the same host-agentd path:
 `GET|PUT /internal/v1/host/mdns`, mirrored as `GET|PUT /api/v1/host/mdns`.
 Enabling without offline mDNS packages yields soft status `packages_missing`.
 The status payload includes the advertised host mDNS name in `hostname.local`
 form so the Admin UI/API can show the exact browser/discovery name in use.
 Admin UI **Host Services** (`/admin/host-services`) is the day-2 configuration
-surface for both host features. Management AP browser access is
+surface for all three host features. Management AP browser access is
 `https://manage.ap/` (fixed A record `manage.ap` → `10.42.0.1` in CoreDNS when
 installed; AP-local dnsmasq serves the same name when host `:53` is free) or
 `https://10.42.0.1/`. Both names are install-time TLS SANs.

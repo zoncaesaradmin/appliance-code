@@ -14,6 +14,7 @@ import (
 	"appliance-code/services/hostagent/internal/host"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/wifiap"
+	"appliance-code/services/hostagent/internal/wificlient"
 )
 
 const dialTimeout = 5 * time.Second
@@ -23,6 +24,9 @@ type Bridge interface {
 	Info(ctx context.Context) (host.Info, error)
 	Stats(ctx context.Context) (host.Stats, error)
 	Health(ctx context.Context) (host.Health, error)
+	WifiStatus(ctx context.Context) (wificlient.Status, error)
+	WifiApply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error)
+	WifiScan(ctx context.Context) (wificlient.ScanResult, error)
 	WifiAPStatus(ctx context.Context) (wifiap.Status, error)
 	WifiAPApply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error)
 	MDNSStatus(ctx context.Context) (mdns.Status, error)
@@ -30,14 +34,23 @@ type Bridge interface {
 }
 
 type Local struct {
-	Root string
-	Wifi wifiap.Controller
-	MDNS mdns.Controller
+	Root       string
+	WifiClient wificlient.Controller
+	WifiAP     wifiap.Controller
+	MDNS       mdns.Controller
 }
 
-func (l Local) wifi() wifiap.Controller {
-	if l.Wifi != nil {
-		return l.Wifi
+func (l Local) wifiClient() wificlient.Controller {
+	if l.WifiClient != nil {
+		return l.WifiClient
+	}
+	manager := wificlient.NewManager()
+	return manager
+}
+
+func (l Local) wifiAP() wifiap.Controller {
+	if l.WifiAP != nil {
+		return l.WifiAP
 	}
 	return wifiap.NewManager()
 }
@@ -65,12 +78,24 @@ func (l Local) Health(context.Context) (host.Health, error) {
 	return host.CollectHealth(l.Root), nil
 }
 
+func (l Local) WifiStatus(ctx context.Context) (wificlient.Status, error) {
+	return l.wifiClient().Status(ctx)
+}
+
+func (l Local) WifiApply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
+	return l.wifiClient().Apply(ctx, req)
+}
+
+func (l Local) WifiScan(ctx context.Context) (wificlient.ScanResult, error) {
+	return l.wifiClient().Scan(ctx)
+}
+
 func (l Local) WifiAPStatus(ctx context.Context) (wifiap.Status, error) {
-	return l.wifi().Status(ctx)
+	return l.wifiAP().Status(ctx)
 }
 
 func (l Local) WifiAPApply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error) {
-	return l.wifi().Apply(ctx, req)
+	return l.wifiAP().Apply(ctx, req)
 }
 
 func (l Local) MDNSStatus(ctx context.Context) (mdns.Status, error) {
@@ -124,6 +149,24 @@ func (c *UnixSocketClient) Health(ctx context.Context) (host.Health, error) {
 	return health, err
 }
 
+func (c *UnixSocketClient) WifiStatus(ctx context.Context) (wificlient.Status, error) {
+	var status wificlient.Status
+	err := c.do(ctx, http.MethodGet, "/internal/v1/host/wifi", nil, &status)
+	return status, err
+}
+
+func (c *UnixSocketClient) WifiApply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
+	var status wificlient.Status
+	err := c.do(ctx, http.MethodPut, "/internal/v1/host/wifi", req, &status)
+	return status, err
+}
+
+func (c *UnixSocketClient) WifiScan(ctx context.Context) (wificlient.ScanResult, error) {
+	var result wificlient.ScanResult
+	err := c.do(ctx, http.MethodGet, "/internal/v1/host/wifi/scan", nil, &result)
+	return result, err
+}
+
 func (c *UnixSocketClient) WifiAPStatus(ctx context.Context) (wifiap.Status, error) {
 	var status wifiap.Status
 	err := c.do(ctx, http.MethodGet, "/internal/v1/host/wifi-ap", nil, &status)
@@ -168,6 +211,22 @@ func (a MDNSSocketAdapter) Status(ctx context.Context) (mdns.Status, error) {
 
 func (a MDNSSocketAdapter) Apply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error) {
 	return a.Client.MDNSApply(ctx, req)
+}
+
+type WifiSocketAdapter struct {
+	Client *UnixSocketClient
+}
+
+func (a WifiSocketAdapter) Status(ctx context.Context) (wificlient.Status, error) {
+	return a.Client.WifiStatus(ctx)
+}
+
+func (a WifiSocketAdapter) Apply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
+	return a.Client.WifiApply(ctx, req)
+}
+
+func (a WifiSocketAdapter) Scan(ctx context.Context) (wificlient.ScanResult, error) {
+	return a.Client.WifiScan(ctx)
 }
 
 func (c *UnixSocketClient) do(ctx context.Context, method, path string, body any, target any) error {
