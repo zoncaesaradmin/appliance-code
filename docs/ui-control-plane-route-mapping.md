@@ -247,8 +247,8 @@ proxy). Notable Admin host configuration routes:
 | Browser route | UI surface | Downstream control-plane call(s) | Success behavior |
 | --- | --- | --- | --- |
 | `GET /admin/host-services` | `AdminHostServicesPage` Network tab | `GET /api/v1/appliance/identity`; `GET /api/v1/host/info`; `GET /api/v1/host/health`; `GET /api/v1/host/wifi-ap` | Host network (primary LAN IPv4 + Ethernet/Wi-Fi/Wi-Fi AP status and per-link addresses from host-agent) + Wi-Fi AP card; independent loads |
-| `GET /admin/host-services/mdns` | `AdminHostServicesPage` mDNS tab | `GET /api/v1/host/mdns` | mDNS status card |
-| Enable or Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | One action button from status (`desired`/`actual`); busy label while apply runs; card refresh |
+| `GET /admin/host-services/mdns` | `AdminHostServicesPage` mDNS tab | `GET /api/v1/host/mdns` | mDNS status card, including advertised `hostname.local` when available |
+| Enable or Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | One action button from status (`desired`/`actual`); busy label while apply runs; card refresh with advertised `hostname.local` |
 | Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Shown only when AP is off; single PSK field (no confirm) with show/hide toggle; busy “Enabling…”; opens as `https://manage.ap/` (fixed IP `https://10.42.0.1/`); soft reasons such as `packages_missing` |
 | Disable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:false}` | Shown only when AP is on; busy “Disabling…” then switches to enable control |
 | `GET /admin/lan-services` | React `DNSPage` (Admin → LAN Services → DNS tab) | `GET /api/v1/dns/records` | List zone records; page title LAN Services |

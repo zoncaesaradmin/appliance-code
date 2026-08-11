@@ -48,6 +48,8 @@ API over the host agent Unix socket. Control-plane routes mirror it:
 Host mDNS (`avahi-daemon`) is applied through the same host-agentd path:
 `GET|PUT /internal/v1/host/mdns`, mirrored as `GET|PUT /api/v1/host/mdns`.
 Enabling without offline mDNS packages yields soft status `packages_missing`.
+The status payload includes the advertised host mDNS name in `hostname.local`
+form so the Admin UI/API can show the exact browser/discovery name in use.
 Admin UI **Host Services** (`/admin/host-services`) is the day-2 configuration
 surface for both host features. Management AP browser access is
 `https://manage.ap/` (fixed A record `manage.ap` → `10.42.0.1` in CoreDNS when

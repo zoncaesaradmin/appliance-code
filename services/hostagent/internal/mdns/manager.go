@@ -7,10 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"appliance-code/services/hostagent/internal/host"
 )
 
 // Manager owns apply/status for host mDNS (avahi-daemon).
 type Manager struct {
+	Root     string
 	StateDir string
 	Runner   Runner
 	Files    FileIO
@@ -31,6 +34,14 @@ func (m *Manager) stateDir() string {
 		return DefaultStateDir
 	}
 	return dir
+}
+
+func (m *Manager) root() string {
+	root := strings.TrimSpace(m.Root)
+	if root == "" {
+		return "/"
+	}
+	return root
 }
 
 func (m *Manager) runner() Runner {
@@ -58,9 +69,10 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	status := Status{
-		Desired: st.Desired,
-		Actual:  ActualInactive,
-		Service: ServiceName,
+		Desired:        st.Desired,
+		Actual:         ActualInactive,
+		Service:        ServiceName,
+		AdvertisedName: host.MDNSAdvertisedName(m.root()),
 	}
 	if !packagesPresent(m.runner()) {
 		status.SupportedCapable = false

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -72,7 +73,10 @@ func (m *memFiles) Remove(path string) error {
 }
 
 func TestApplyMissingPackages(t *testing.T) {
+	root := t.TempDir()
+	mustWriteHostFile(t, root, "proc/sys/kernel/hostname", "appliance-01\n")
 	m := &Manager{
+		Root:     root,
 		StateDir: "/state",
 		Runner:   &fakeRunner{paths: map[string]bool{}},
 		Files:    &memFiles{},
@@ -87,9 +91,14 @@ func TestApplyMissingPackages(t *testing.T) {
 	if !status.Desired {
 		t.Fatal("desired")
 	}
+	if status.AdvertisedName != "appliance-01.local" {
+		t.Fatalf("advertisedName=%q", status.AdvertisedName)
+	}
 }
 
 func TestApplyEnableStartsService(t *testing.T) {
+	root := t.TempDir()
+	mustWriteHostFile(t, root, "proc/sys/kernel/hostname", "Kitchen-Box.example.internal\n")
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
@@ -99,7 +108,12 @@ func TestApplyEnableStartsService(t *testing.T) {
 			"systemctl restart avahi-daemon.service":   "",
 		},
 	}
-	m := &Manager{StateDir: "/state", Runner: runner, Files: &memFiles{}}
+	m := &Manager{
+		Root:     root,
+		StateDir: "/state",
+		Runner:   runner,
+		Files:    &memFiles{},
+	}
 	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true})
 	if err != nil {
 		t.Fatal(err)
@@ -107,9 +121,14 @@ func TestApplyEnableStartsService(t *testing.T) {
 	if status.Actual != ActualActive {
 		t.Fatalf("actual=%q status=%+v", status.Actual, status)
 	}
+	if status.AdvertisedName != "Kitchen-Box.local" {
+		t.Fatalf("advertisedName=%q", status.AdvertisedName)
+	}
 }
 
 func TestApplyDisableStopsService(t *testing.T) {
+	root := t.TempDir()
+	mustWriteHostFile(t, root, "proc/sys/kernel/hostname", "appliance-01.local\n")
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
@@ -118,7 +137,12 @@ func TestApplyDisableStopsService(t *testing.T) {
 			"systemctl disable avahi-daemon.service":   "",
 		},
 	}
-	m := &Manager{StateDir: "/state", Runner: runner, Files: &memFiles{}}
+	m := &Manager{
+		Root:     root,
+		StateDir: "/state",
+		Runner:   runner,
+		Files:    &memFiles{},
+	}
 	status, err := m.Apply(context.Background(), ApplyRequest{Desired: false})
 	if err != nil {
 		t.Fatal(err)
@@ -128,5 +152,19 @@ func TestApplyDisableStopsService(t *testing.T) {
 	}
 	if status.Actual != ActualInactive {
 		t.Fatalf("actual=%q", status.Actual)
+	}
+	if status.AdvertisedName != "appliance-01.local" {
+		t.Fatalf("advertisedName=%q", status.AdvertisedName)
+	}
+}
+
+func mustWriteHostFile(t *testing.T, root, rel, content string) {
+	t.Helper()
+	path := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }

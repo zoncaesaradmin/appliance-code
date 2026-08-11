@@ -251,7 +251,14 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       } else if (status.actual === "failed") {
         setMdnsError(status.message || "mDNS apply failed.");
       } else {
-        setMessage(desired ? "mDNS enabled." : "mDNS disabled.");
+        const advertisedName = status.advertisedName?.trim();
+        setMessage(
+          desired
+            ? advertisedName
+              ? `mDNS enabled as ${advertisedName}.`
+              : "mDNS enabled."
+            : "mDNS disabled."
+        );
       }
     } catch (err) {
       setMdnsError(err instanceof Error ? err.message : "Could not update mDNS.");
@@ -322,6 +329,12 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                   <span>Actual</span>
                   <strong>{mdns.actual}</strong>
                 </div>
+                {mdnsOn === true && mdns.advertisedName ? (
+                  <div>
+                    <span>Advertised name</span>
+                    <strong>{mdns.advertisedName}</strong>
+                  </div>
+                ) : null}
                 <div>
                   <span>Service</span>
                   <strong>{mdns.service}</strong>

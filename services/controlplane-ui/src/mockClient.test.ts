@@ -78,4 +78,13 @@ describe("mock control-plane client", () => {
       vi.useRealTimers();
     }
   });
+
+  it("returns the advertised mdns hostname when enabled", async () => {
+    const client = new MockControlPlaneClient();
+
+    const status = await client.applyHostMDNS({ desired: true });
+
+    expect(status.actual).toBe("active");
+    expect(status.advertisedName).toBe("mock-host.local");
+  });
 });

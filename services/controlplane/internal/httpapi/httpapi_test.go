@@ -73,6 +73,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 				_ = json.NewEncoder(w).Encode(map[string]any{
 					"desired": false, "actual": "inactive", "reason": "desired_off",
 					"service": "avahi-daemon.service", "supportedCapable": true,
+					"advertisedName": "appliance-01.local",
 				})
 				return
 			}
@@ -327,6 +328,18 @@ func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)
 		}
 		resp.Body.Close()
+	}
+
+	resp := ts.doJSON(t, http.MethodGet, "/api/v1/host/mdns", token, "")
+	defer resp.Body.Close()
+	var mdns struct {
+		AdvertisedName string `json:"advertisedName"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&mdns); err != nil {
+		t.Fatalf("decode host mdns: %v", err)
+	}
+	if mdns.AdvertisedName != "appliance-01.local" {
+		t.Fatalf("advertisedName = %q, want appliance-01.local", mdns.AdvertisedName)
 	}
 }
 

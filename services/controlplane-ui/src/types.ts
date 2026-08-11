@@ -406,6 +406,7 @@ export interface HostMDNSStatus {
   reason?: string;
   service: string;
   supportedCapable?: boolean;
+  advertisedName?: string;
   message?: string;
 }
 

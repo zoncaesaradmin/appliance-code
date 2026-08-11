@@ -242,6 +242,7 @@ const mockState: MockState = {
     reason: "desired_off",
     service: "avahi-daemon.service",
     supportedCapable: true,
+    advertisedName: "mock-host.local",
     message: "mdns is not desired"
   }
 };
@@ -972,6 +973,7 @@ export class MockControlPlaneClient {
         reason: "desired_off",
         service: "avahi-daemon.service",
         supportedCapable: true,
+        advertisedName: "mock-host.local",
         message: "mdns is not desired"
       };
       return { ...mockState.mdns };
@@ -981,6 +983,7 @@ export class MockControlPlaneClient {
       actual: "active",
       service: "avahi-daemon.service",
       supportedCapable: true,
+      advertisedName: "mock-host.local",
       message: "mdns (avahi-daemon) is active"
     };
     return { ...mockState.mdns };

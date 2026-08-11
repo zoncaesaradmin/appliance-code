@@ -27,6 +27,7 @@ type Status struct {
 	Reason           string `json:"reason,omitempty"`
 	Service          string `json:"service"`
 	SupportedCapable bool   `json:"supportedCapable"`
+	AdvertisedName   string `json:"advertisedName,omitempty"`
 	Message          string `json:"message,omitempty"`
 }
 

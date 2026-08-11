@@ -42,7 +42,7 @@ type Health struct {
 }
 
 func CollectInfo(root string) (Info, error) {
-	hostname := hostHostname(root)
+	hostname := Hostname(root)
 	osName := operatingSystem(root)
 	kernelVersion := hostKernelVersion(root)
 	containerHostname, _ := os.Hostname()
@@ -54,6 +54,25 @@ func CollectInfo(root string) (Info, error) {
 		ContainerHostname: containerHostname,
 		Network:           CollectNetwork(root),
 	}, nil
+}
+
+func Hostname(root string) string {
+	return hostHostname(root)
+}
+
+func MDNSAdvertisedName(root string) string {
+	hostname := strings.TrimSpace(Hostname(root))
+	if hostname == "" {
+		return ""
+	}
+	if i := strings.Index(hostname, "."); i > 0 {
+		hostname = hostname[:i]
+	}
+	hostname = strings.TrimSpace(strings.TrimSuffix(hostname, ".local"))
+	if hostname == "" {
+		return ""
+	}
+	return hostname + ".local"
 }
 
 func hostHostname(root string) string {
