@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useState } from "react";
+import { ApiError } from "../client";
 import { Card, EmptyState, PageFrame } from "../components";
 import { client } from "../lib/api";
 import { formatTimestamp } from "../lib/format";
@@ -210,6 +211,9 @@ function describeWifiClientAP(wifiClient: HostWifiStatus | null): string {
   );
 }
 
+const wifiClientUnavailableMessage =
+  "Client Wi-Fi is not enabled or available on this appliance yet.";
+
 function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const isMDNS = props.pathname === "/admin/host-services/mdns";
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
@@ -217,6 +221,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const [hostHealth, setHostHealth] = useState<HostHealth | null>(null);
   const [wifiClient, setWifiClient] = useState<HostWifiStatus | null>(null);
   const [wifiScan, setWifiScan] = useState<HostWifiScanResult | null>(null);
+  const [wifiClientAvailable, setWifiClientAvailable] = useState(true);
+  const [wifiClientUnavailableDetail, setWifiClientUnavailableDetail] = useState("");
   const [wifi, setWifi] = useState<HostWifiAPStatus | null>(null);
   const [mdns, setMdns] = useState<HostMDNSStatus | null>(null);
   const [networkError, setNetworkError] = useState("");
@@ -267,28 +273,31 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     })();
     void (async () => {
       try {
-        const [nextWifiClient, nextWifiScan] = await Promise.all([
-          client.getHostWifi(),
-          client.scanHostWifi().catch(() => null)
-        ]);
+        const nextWifiClient = await client.getHostWifi();
         if (!cancelled) {
+          setWifiClientAvailable(true);
+          setWifiClientUnavailableDetail("");
           setWifiClient(nextWifiClient);
           setWifiClientError("");
-          if (nextWifiScan) {
-            setWifiScan(nextWifiScan);
-            if (!wifiClientSSID && (nextWifiScan.networks || []).length > 0) {
-              setWifiClientSSID(nextWifiScan.networks?.[0]?.ssid || "");
-            }
-          }
         }
       } catch (err) {
         if (!cancelled) {
-          setWifiClientError(err instanceof Error ? err.message : "Could not load client Wi-Fi status.");
+          if (err instanceof ApiError && err.status === 404) {
+            setWifiClientAvailable(false);
+            setWifiClientUnavailableDetail(wifiClientUnavailableMessage);
+            setWifiClient(null);
+            setWifiScan(null);
+            setWifiClientError("");
+          } else {
+            setWifiClientAvailable(true);
+            setWifiClientUnavailableDetail("");
+            setWifiClientError(err instanceof Error ? err.message : "Could not load client Wi-Fi status.");
+          }
         }
       } finally {
         if (!cancelled) {
           setWifiClientLoaded(true);
-          setWifiClientScanLoaded(true);
+          setWifiClientScanLoaded(false);
         }
       }
     })();
@@ -332,10 +341,15 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   }, [props.pathname]);
 
   async function scanWifiNetworks() {
+    if (!wifiClientAvailable) {
+      return;
+    }
     setWifiClientScanBusy(true);
     setWifiClientError("");
     try {
       const result = await client.scanHostWifi();
+      setWifiClientAvailable(true);
+      setWifiClientUnavailableDetail("");
       setWifiScan(result);
       if ((result.networks || []).length > 0 && !wifiClientSSID) {
         setWifiClientSSID(result.networks?.[0]?.ssid || "");
@@ -344,7 +358,18 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
         setWifiClientError(result.message || result.reason);
       }
     } catch (err) {
-      setWifiClientError(err instanceof Error ? err.message : "Could not scan Wi-Fi networks.");
+      if (err instanceof ApiError && err.status === 404) {
+        setWifiClientAvailable(false);
+        setWifiClientUnavailableDetail(wifiClientUnavailableMessage);
+        setWifiClient(null);
+        setWifiScan({
+          networks: [],
+          message: wifiClientUnavailableMessage
+        });
+        setWifiClientError("");
+      } else {
+        setWifiClientError(err instanceof Error ? err.message : "Could not scan Wi-Fi networks.");
+      }
     } finally {
       setWifiClientScanBusy(false);
       setWifiClientScanLoaded(true);
@@ -352,11 +377,16 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   }
 
   async function applyClientWifi(request: HostWifiApplyRequest) {
+    if (!wifiClientAvailable) {
+      return;
+    }
     setWifiClientBusy(true);
     setWifiClientError("");
     setMessage("");
     try {
       const status = await client.applyHostWifi(request);
+      setWifiClientAvailable(true);
+      setWifiClientUnavailableDetail("");
       setWifiClient(status);
       if (!request.desired) {
         setMessage("Wi-Fi disconnected.");
@@ -370,7 +400,15 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
         setMessage(status.message || "Wi-Fi connection requested.");
       }
     } catch (err) {
-      setWifiClientError(err instanceof Error ? err.message : "Could not update client Wi-Fi.");
+      if (err instanceof ApiError && err.status === 404) {
+        setWifiClientAvailable(false);
+        setWifiClientUnavailableDetail(wifiClientUnavailableMessage);
+        setWifiClient(null);
+        setWifiScan(null);
+        setWifiClientError("");
+      } else {
+        setWifiClientError(err instanceof Error ? err.message : "Could not update client Wi-Fi.");
+      }
     } finally {
       setWifiClientBusy(false);
     }
@@ -540,7 +578,9 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
           <div className="grid-two">
             <Card title="Client Wi-Fi" subtitle="Connect this appliance to a LAN over Wi-Fi while Ethernet can remain connected.">
               <div className={`host-service-panel${wifiClientBusy || wifiClientScanBusy ? " is-busy" : ""}`} aria-busy={wifiClientBusy || wifiClientScanBusy}>
-                {wifiClient ? (
+                {!wifiClientAvailable ? (
+                  <EmptyState message={wifiClientUnavailableDetail || wifiClientUnavailableMessage} />
+                ) : wifiClient ? (
                   <div className="detail-list">
                     <div>
                       <span>Desired</span>
@@ -591,7 +631,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                   />
                 )}
                 <div className="host-service-panel__actions">
-                  {wifiClientOn === true ? (
+                  {wifiClientAvailable && wifiClientOn === true ? (
                     <div className="stack-form" style={{ width: "100%" }}>
                       <button
                         className="button button--ghost"
@@ -611,7 +651,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       </button>
                     </div>
                   ) : null}
-                  {wifiClientOn === false ? (
+                  {wifiClientAvailable && wifiClientOn === false ? (
                     <form
                       className="stack-form"
                       style={{ width: "100%" }}
@@ -709,7 +749,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       </button>
                     </form>
                   ) : null}
-                  {wifiClientOn === null ? (
+                  {wifiClientAvailable && wifiClientOn === null ? (
                     <button className="button button--ghost" type="button" disabled>
                       {wifiClientLoaded ? "Status unavailable" : "Loading…"}
                     </button>
