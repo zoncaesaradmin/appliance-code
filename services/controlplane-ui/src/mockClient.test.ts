@@ -39,6 +39,13 @@ describe("mock control-plane client", () => {
 
     expect(token.token).toMatch(/^mock-/);
     expect(token.scopes).toEqual(["artifacts.read"]);
+
+    const listed = await client.listTokens();
+    expect(listed.some((item) => item.id === token.id)).toBe(true);
+
+    await client.deleteToken(token.id);
+    const afterRevoke = await client.listTokens();
+    expect(afterRevoke.some((item) => item.id === token.id)).toBe(false);
   });
 
   it("creates a workspace and makes it current", async () => {

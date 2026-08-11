@@ -130,7 +130,9 @@ func (s *TokenStore) Get(ctx context.Context, id string) (storage.APIToken, erro
 }
 
 func (s *TokenStore) ListByUser(ctx context.Context, userID string) ([]storage.APIToken, error) {
-	rows, err := s.db.q(ctx).QueryContext(ctx, `SELECT `+selectAPITokenColumns+` FROM api_tokens WHERE user_id = ? ORDER BY created_at ASC`, userID)
+	// Soft-revoked tokens remain in the table for audit, but operator-facing
+	// lists only return active tokens so revoke removes them from the UI.
+	rows, err := s.db.q(ctx).QueryContext(ctx, `SELECT `+selectAPITokenColumns+` FROM api_tokens WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at ASC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: listing api tokens for user %s: %w", userID, err)
 	}

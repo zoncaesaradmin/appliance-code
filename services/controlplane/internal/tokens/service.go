@@ -88,6 +88,7 @@ func (s *Service) Create(ctx context.Context, actor audit.Actor, ownerUserID, na
 	return raw, token, nil
 }
 
+// ListByUser returns the caller's active (non-revoked) API tokens.
 func (s *Service) ListByUser(ctx context.Context, userID string) ([]storage.APIToken, error) {
 	return s.tokens.ListByUser(ctx, userID)
 }

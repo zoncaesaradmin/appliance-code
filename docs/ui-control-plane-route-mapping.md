@@ -67,11 +67,11 @@ Useful event names:
 | `GET /home` | React `HomePage` Overview | `GET /version`, `GET /health/ready`, `GET /api/v1/appliance/identity`, `GET /api/v1/appliance/setup-state` | SPA page |
 | `GET /home/connectivity` | React `HomePage` Connectivity | Same overview fetches as `/home` | SPA page |
 | `GET /home/audit-logs` | React `HomePage` Audit Logs | Session must include `audit.read`; `GET /api/v1/audit/events?limit=10` with optional `cursor` for Next page | SPA page |
+| `GET /account/api-keys` | React `AccountPage` API Keys | `GET /api/v1/tokens`; create uses `POST /api/v1/tokens`; revoke uses `DELETE /api/v1/tokens/{id}` | SPA page; create shows the raw secret once; list shows active (non-revoked) tokens only |
+| `GET /manage/artifacts` | React `ArtifactsPage` Catalog | `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional referrers lookup | SPA page with link to Account → API Keys for registry client credentials |
+| `GET /manage/artifacts/grants` | React `ArtifactsPage` Grants | `GET /api/v1/registry/grants`; create `POST /api/v1/registry/grants`; delete `DELETE /api/v1/registry/grants/{id}` | SPA page |
 | `GET /partials/status` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
 | `GET /partials/session` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |
-| `GET /artifacts` | `artifactPageData` | Session refresh as needed; `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional `GET /api/v1/registry/repositories/{repository}/referrers?digest=...`; `GET /api/v1/registry/grants` when authorized | `200` full HTML registry browser and grant administration page |
-| `POST /artifacts/grants` | `createRegistryGrant` | Session refresh as needed; `POST /api/v1/registry/grants` | `303` redirect to `/artifacts` |
-| `POST /artifacts/grants/delete` | `deleteRegistryGrant` | Session refresh as needed; `DELETE /api/v1/registry/grants/{id}` | `303` redirect to `/artifacts` |
 | `GET /manage/builder` (legacy alias `/manage/builder/builds`) | React `BuilderPage` Build | Loads current workspace, build-targets, and `GET /api/v1/jobs` (build-type rows); row click opens details via `GET /api/v1/jobs/{jobId}` + steps; submit opens a dialog that `POST`s `/api/v1/current-workspace/builds` | SPA page |
 | `GET /manage/builder/workspaces` | React `BuilderPage` Workspaces | Loads work-profiles, workspaces, current-workspace | SPA page |
 | `GET /manage/builder/settings` (legacy alias `/manage/builder/git-access`) | React `BuilderPage` Settings | Loads catalog + git-access only; mutations refresh those two APIs | SPA page |

@@ -248,7 +248,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async listTokens(): Promise<APIToken[]> {
     const response = await this.request<{ items: APIToken[] }>("/api/v1/tokens");
-    return response.items;
+    return (response.items || []).filter((token) => !token.revokedAt);
   }
 
   async createToken(request: CreateTokenRequest): Promise<CreateTokenResponse> {

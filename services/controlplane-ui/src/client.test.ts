@@ -113,6 +113,21 @@ describe("remote control-plane client", () => {
     expect(error.status).toBe(503);
     expect(error.detail).toBe("plain failure");
   });
+
+  it("treats empty DELETE responses as success when revoking API tokens", async () => {
+    saveAuth({
+      accessToken: "access",
+      refreshToken: "refresh",
+      accessExpiresAt: "2026-08-03T02:00:00Z"
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 204, statusText: "No Content" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new RemoteControlPlaneClient("https://appliance.example/");
+    await expect(client.deleteToken("tok-1")).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://appliance.example/api/v1/tokens/tok-1");
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).method).toBe("DELETE");
+  });
 });
 
 function jsonResponse(body: unknown): Response {

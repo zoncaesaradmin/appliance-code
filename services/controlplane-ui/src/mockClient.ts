@@ -323,7 +323,7 @@ export class MockControlPlaneClient {
   }
 
   async listTokens(): Promise<APIToken[]> {
-    return mockState.tokens;
+    return mockState.tokens.filter((token) => !token.revokedAt);
   }
 
   async createToken(request: CreateTokenRequest): Promise<CreateTokenResponse> {

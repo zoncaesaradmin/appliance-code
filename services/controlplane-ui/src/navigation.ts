@@ -72,7 +72,7 @@ export const MODES: Mode[] = [
       {
         label: "Artifacts",
         path: "/manage/artifacts",
-        description: "Review artifact catalog and registry grants",
+        description: "Artifact catalog, registry grants, and API-token access",
         icon: "artifacts"
       }
     ],
