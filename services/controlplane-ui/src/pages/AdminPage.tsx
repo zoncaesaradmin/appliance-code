@@ -165,6 +165,18 @@ function formatCombinationSupport(supported: boolean, detail: string): string {
   return `${supported ? "Supported" : "Not supported"}${detail ? ` · ${detail}` : ""}`;
 }
 
+function shouldCloseWifiClientDialog(status: HostWifiStatus): boolean {
+  const blockingReasons = new Set([
+    "ssid_missing",
+    "packages_missing",
+    "no_capable_hardware",
+    "radio_in_use",
+    "connection_failed",
+    "dhcp_failed"
+  ]);
+  return status.desired && !blockingReasons.has((status.reason || "").trim());
+}
+
 function describeEthernetWifiClient(
   network: import("../types").HostNetworkStatus | undefined,
   wifiClient: HostWifiStatus | null
@@ -234,6 +246,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const [wifiClientManualSSID, setWifiClientManualSSID] = useState("");
   const [wifiClientPSK, setWifiClientPSK] = useState("");
   const [showWifiClientPSK, setShowWifiClientPSK] = useState(false);
+  const [showWifiClientDialog, setShowWifiClientDialog] = useState(false);
   const [psk, setPsk] = useState("");
   const [showPsk, setShowPsk] = useState(false);
   const [wifiClientBusy, setWifiClientBusy] = useState(false);
@@ -366,6 +379,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
           networks: [],
           message: wifiClientUnavailableMessage
         });
+        setShowWifiClientDialog(false);
         setWifiClientError("");
       } else {
         setWifiClientError(err instanceof Error ? err.message : "Could not scan Wi-Fi networks.");
@@ -376,9 +390,9 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     }
   }
 
-  async function applyClientWifi(request: HostWifiApplyRequest) {
+  async function applyClientWifi(request: HostWifiApplyRequest): Promise<HostWifiStatus | null> {
     if (!wifiClientAvailable) {
-      return;
+      return null;
     }
     setWifiClientBusy(true);
     setWifiClientError("");
@@ -399,18 +413,35 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       } else {
         setMessage(status.message || "Wi-Fi connection requested.");
       }
+      return status;
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setWifiClientAvailable(false);
         setWifiClientUnavailableDetail(wifiClientUnavailableMessage);
         setWifiClient(null);
         setWifiScan(null);
+        setShowWifiClientDialog(false);
         setWifiClientError("");
       } else {
         setWifiClientError(err instanceof Error ? err.message : "Could not update client Wi-Fi.");
       }
+      return null;
     } finally {
       setWifiClientBusy(false);
+    }
+  }
+
+  function closeWifiClientDialog() {
+    if (wifiClientBusy || wifiClientScanBusy) {
+      return;
+    }
+    setShowWifiClientDialog(false);
+  }
+
+  function openWifiClientDialog() {
+    setShowWifiClientDialog(true);
+    if (!wifiClientScanBusy && (!wifiClientScanLoaded || (wifiScan?.networks || []).length === 0)) {
+      void scanWifiNetworks();
     }
   }
 
@@ -480,7 +511,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const scannedNetworks = wifiScan?.networks || [];
   const selectedScannedNetwork: HostWifiScanNetwork | undefined =
     scannedNetworks.find((network) => network.ssid === wifiClientSSID) || undefined;
-  const manualSSIDSelected = wifiClientSSID === "__manual__";
+  const manualSSIDSelected =
+    wifiClientSSID === "__manual__" || (wifiClientSSID.trim().length === 0 && scannedNetworks.length === 0);
   const wifiClientTargetSSID = manualSSIDSelected ? wifiClientManualSSID.trim() : wifiClientSSID.trim();
   const wifiClientPasswordRequired = Boolean(selectedScannedNetwork?.requiresPassword);
   const wifiClientSecurity = manualSSIDSelected
@@ -488,6 +520,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       ? "wpa2-psk"
       : "open"
     : selectedScannedNetwork?.security || "open";
+  const wifiClientEnableSupported = wifiClient?.supportedCapable !== false;
 
   return (
     <PageFrame
@@ -632,122 +665,28 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                 )}
                 <div className="host-service-panel__actions">
                   {wifiClientAvailable && wifiClientOn === true ? (
-                    <div className="stack-form" style={{ width: "100%" }}>
-                      <button
-                        className="button button--ghost"
-                        type="button"
-                        disabled={wifiClientBusy}
-                        onClick={() => void applyClientWifi({ desired: false })}
-                      >
-                        {wifiClientBusy ? "Disconnecting Wi-Fi…" : "Disconnect Wi-Fi"}
-                      </button>
-                      <button
-                        className="button button--secondary"
-                        type="button"
-                        disabled={wifiClientScanBusy}
-                        onClick={() => void scanWifiNetworks()}
-                      >
-                        {wifiClientScanBusy ? "Scanning Wi-Fi…" : "Refresh Wi-Fi networks"}
-                      </button>
-                    </div>
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      disabled={wifiClientBusy}
+                      onClick={() => void applyClientWifi({ desired: false })}
+                    >
+                      {wifiClientBusy ? "Disabling Wi-Fi…" : "Disable Wi-Fi"}
+                    </button>
                   ) : null}
                   {wifiClientAvailable && wifiClientOn === false ? (
-                    <form
-                      className="stack-form"
-                      style={{ width: "100%" }}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        void applyClientWifi({
-                          desired: true,
-                          ssid: wifiClientTargetSSID,
-                          psk: wifiClientPSK.trim(),
-                          security: wifiClientSecurity
-                        });
-                      }}
+                    <button
+                      className="button button--primary"
+                      type="button"
+                      disabled={wifiClientBusy || !wifiClientEnableSupported}
+                      onClick={openWifiClientDialog}
                     >
-                      <div className="field">
-                        <label htmlFor="wifi-client-network">Available Wi-Fi networks</label>
-                        <div className="stack-form">
-                          <select
-                            id="wifi-client-network"
-                            value={wifiClientSSID || (scannedNetworks.length > 0 ? scannedNetworks[0]?.ssid || "" : "__manual__")}
-                            onChange={(event) => setWifiClientSSID(event.target.value)}
-                            disabled={wifiClientBusy || wifiClientScanBusy}
-                          >
-                            {scannedNetworks.map((network) => (
-                              <option key={network.ssid} value={network.ssid}>
-                                {network.ssid} ({network.security}, {network.signalDBM} dBm)
-                              </option>
-                            ))}
-                            <option value="__manual__">Hidden or manual SSID</option>
-                          </select>
-                          <button
-                            className="button button--secondary"
-                            type="button"
-                            disabled={wifiClientScanBusy}
-                            onClick={() => void scanWifiNetworks()}
-                          >
-                            {wifiClientScanBusy ? "Scanning Wi-Fi…" : "Scan Wi-Fi"}
-                          </button>
-                        </div>
-                      </div>
-                      {manualSSIDSelected ? (
-                        <div className="field">
-                          <label htmlFor="wifi-client-manual-ssid">SSID</label>
-                          <input
-                            id="wifi-client-manual-ssid"
-                            type="text"
-                            value={wifiClientManualSSID}
-                            onChange={(event) => setWifiClientManualSSID(event.target.value)}
-                            placeholder="Enter network name"
-                            disabled={wifiClientBusy}
-                            spellCheck={false}
-                          />
-                        </div>
-                      ) : null}
-                      <div className="field">
-                        <label htmlFor="wifi-client-psk">
-                          Password {wifiClientPasswordRequired ? "(required)" : "(leave empty for open networks)"}
-                        </label>
-                        <span className="password-field">
-                          <input
-                            id="wifi-client-psk"
-                            type={showWifiClientPSK ? "text" : "password"}
-                            autoComplete="new-password"
-                            value={wifiClientPSK}
-                            onChange={(event) => setWifiClientPSK(event.target.value)}
-                            placeholder={wifiClientPasswordRequired ? "8–63 characters" : "Optional"}
-                            disabled={wifiClientBusy}
-                            spellCheck={false}
-                          />
-                          <button
-                            className="password-field__toggle"
-                            type="button"
-                            disabled={wifiClientBusy}
-                            aria-label={showWifiClientPSK ? "Hide Wi-Fi password" : "Show Wi-Fi password"}
-                            aria-pressed={showWifiClientPSK}
-                            title={showWifiClientPSK ? "Hide Wi-Fi password" : "Show Wi-Fi password"}
-                            onClick={() => setShowWifiClientPSK((value) => !value)}
-                          >
-                            {showWifiClientPSK ? <EyeOffIcon /> : <EyeIcon />}
-                          </button>
-                        </span>
-                      </div>
-                      {wifiClientScanLoaded && scannedNetworks.length === 0 ? (
-                        <p className="muted">No scanned networks yet. Use manual SSID entry or scan again.</p>
-                      ) : null}
-                      <button
-                        className="button button--primary"
-                        type="submit"
-                        disabled={
-                          wifiClientBusy ||
-                          wifiClientTargetSSID.length === 0 ||
-                          (wifiClientPasswordRequired && wifiClientPSK.trim().length < 8)
-                        }
-                      >
-                        {wifiClientBusy ? "Connecting Wi-Fi…" : "Connect Wi-Fi"}
-                      </button>
-                    </form>
+                      {!wifiClientEnableSupported
+                        ? "Wi-Fi unavailable"
+                        : wifiClientBusy
+                          ? "Enabling Wi-Fi…"
+                          : "Enable Wi-Fi"}
+                    </button>
                   ) : null}
                   {wifiClientAvailable && wifiClientOn === null ? (
                     <button className="button button--ghost" type="button" disabled>
@@ -973,6 +912,141 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
               />
             )}
           </Card>
+
+          {showWifiClientDialog && wifiClientAvailable ? (
+            <div
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/45 p-4"
+              role="presentation"
+              onClick={closeWifiClientDialog}
+            >
+              <div
+                className="w-full max-w-lg rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/25"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="wifi-client-dialog-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2
+                  id="wifi-client-dialog-title"
+                  className="m-0 text-xl font-bold tracking-tight text-slate-950"
+                >
+                  Enable Wi-Fi
+                </h2>
+                <p className="mt-2 mb-4 text-sm text-slate-500">
+                  Choose a Wi-Fi network for this appliance, then enter the password if the network requires one.
+                </p>
+                <form
+                  className="stack-form"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const status = await applyClientWifi({
+                      desired: true,
+                      ssid: wifiClientTargetSSID,
+                      psk: wifiClientPSK.trim(),
+                      security: wifiClientSecurity
+                    });
+                    if (status && shouldCloseWifiClientDialog(status)) {
+                      setShowWifiClientDialog(false);
+                    }
+                  }}
+                >
+                  <div className="field">
+                    <label htmlFor="wifi-client-network-dialog">Available Wi-Fi networks</label>
+                    <div className="stack-form">
+                      <select
+                        id="wifi-client-network-dialog"
+                        value={wifiClientSSID || (scannedNetworks.length > 0 ? scannedNetworks[0]?.ssid || "" : "__manual__")}
+                        onChange={(event) => setWifiClientSSID(event.target.value)}
+                        disabled={wifiClientBusy || wifiClientScanBusy}
+                      >
+                        {scannedNetworks.map((network) => (
+                          <option key={network.ssid} value={network.ssid}>
+                            {network.ssid} ({network.security}, {network.signalDBM} dBm)
+                          </option>
+                        ))}
+                        <option value="__manual__">Hidden or manual SSID</option>
+                      </select>
+                      <button
+                        className="button button--secondary"
+                        type="button"
+                        disabled={wifiClientScanBusy || wifiClientBusy}
+                        onClick={() => void scanWifiNetworks()}
+                      >
+                        {wifiClientScanBusy ? "Scanning Wi-Fi…" : "Scan Wi-Fi"}
+                      </button>
+                    </div>
+                  </div>
+                  {manualSSIDSelected ? (
+                    <div className="field">
+                      <label htmlFor="wifi-client-manual-ssid-dialog">SSID</label>
+                      <input
+                        id="wifi-client-manual-ssid-dialog"
+                        type="text"
+                        value={wifiClientManualSSID}
+                        onChange={(event) => setWifiClientManualSSID(event.target.value)}
+                        placeholder="Enter network name"
+                        disabled={wifiClientBusy}
+                        spellCheck={false}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="field">
+                    <label htmlFor="wifi-client-psk-dialog">
+                      Password {wifiClientPasswordRequired ? "(required)" : "(leave empty for open networks)"}
+                    </label>
+                    <span className="password-field">
+                      <input
+                        id="wifi-client-psk-dialog"
+                        type={showWifiClientPSK ? "text" : "password"}
+                        autoComplete="new-password"
+                        value={wifiClientPSK}
+                        onChange={(event) => setWifiClientPSK(event.target.value)}
+                        placeholder={wifiClientPasswordRequired ? "8–63 characters" : "Optional"}
+                        disabled={wifiClientBusy}
+                        spellCheck={false}
+                      />
+                      <button
+                        className="password-field__toggle"
+                        type="button"
+                        disabled={wifiClientBusy}
+                        aria-label={showWifiClientPSK ? "Hide Wi-Fi password" : "Show Wi-Fi password"}
+                        aria-pressed={showWifiClientPSK}
+                        title={showWifiClientPSK ? "Hide Wi-Fi password" : "Show Wi-Fi password"}
+                        onClick={() => setShowWifiClientPSK((value) => !value)}
+                      >
+                        {showWifiClientPSK ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </span>
+                  </div>
+                  {wifiClientScanLoaded && scannedNetworks.length === 0 ? (
+                    <p className="muted">No scanned networks yet. Scan again or enter the SSID manually.</p>
+                  ) : null}
+                  {wifiClientUnavailableDetail ? <p className="muted">{wifiClientUnavailableDetail}</p> : null}
+                  <div className="button-row">
+                    <button
+                      className="button button--ghost"
+                      type="button"
+                      disabled={wifiClientBusy || wifiClientScanBusy}
+                      onClick={closeWifiClientDialog}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="button button--primary"
+                      type="submit"
+                      disabled={
+                        wifiClientBusy ||
+                        wifiClientTargetSSID.length === 0 ||
+                        (wifiClientPasswordRequired && wifiClientPSK.trim().length < 8)
+                      }
+                    >
+                      {wifiClientBusy ? "Enabling Wi-Fi…" : "Enable Wi-Fi"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </PageFrame>
