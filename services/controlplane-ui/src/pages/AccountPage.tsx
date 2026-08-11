@@ -51,10 +51,12 @@ export function AccountPage(props: {
     setCopied(false);
     setCreating(true);
     try {
+      // Omit scopes so the token inherits this user's full permissions.
+      // Artifact-only scopes break seed-build-deps: OCI needs artifacts.*,
+      // while /api/v1/files uploads need files.write.
       const response = await client.createToken({
         name,
-        lifetimeSeconds: 90 * 24 * 60 * 60,
-        scopes: ["artifacts.read", "artifacts.write"]
+        lifetimeSeconds: 90 * 24 * 60 * 60
       });
       setCreatedToken(response);
       setTokenName("");
@@ -156,18 +158,23 @@ export function AccountPage(props: {
             </div>
           </Card>
           <div className="grid-two">
-            <Card title="Create API token" subtitle="Shown once at creation; 90-day lifetime">
+            <Card title="Create API token" subtitle="Shown once at creation; 90-day lifetime; inherits your permissions">
               <form className="stack-form" onSubmit={(event) => void createToken(event)}>
                 <label className="field">
                   <span>Token name</span>
                   <input
                     value={tokenName}
                     onChange={(event) => setTokenName(event.target.value)}
-                    placeholder="e.g. laptop-skopeo"
+                    placeholder="e.g. build-host-seed"
                     required
                     autoComplete="off"
                   />
                 </label>
+                <p className="m-0 text-sm leading-6 text-slate-600">
+                  Use this token as <code>DEV_REGISTRY_TOKEN</code> for registry login and file API uploads
+                  (<code>make seed-build-deps</code>, publish). It covers both OCI (<code>/v2</code>) and files
+                  (<code>/api/v1/files</code>).
+                </p>
                 <button
                   className="button button--primary"
                   type="submit"
