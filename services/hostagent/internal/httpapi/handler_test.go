@@ -23,6 +23,11 @@ type wifiClientStub struct {
 
 func (s *wifiClientStub) Status(context.Context) (wificlient.Status, error) { return s.status, nil }
 
+func (s *wifiClientStub) Enable(context.Context) (wificlient.Status, error) {
+	s.status.RadioEnabled = true
+	return s.status, nil
+}
+
 func (s *wifiClientStub) Apply(_ context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
 	s.apply = req
 	return s.status, nil
@@ -115,6 +120,12 @@ func TestHandlerServesClientWifiWorkflowEndpoints(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/internal/v1/host/wifi/enable", nil))
+	if rec.Code != http.StatusOK || !wifi.status.RadioEnabled {
+		t.Fatalf("enable status = %d, radio enabled = %t", rec.Code, wifi.status.RadioEnabled)
+	}
+
+	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/internal/v1/host/wifi", strings.NewReader(`{"desired":true,"ssid":"office-lan","psk":"long-enough-secret","security":"wpa2-psk"}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT status = %d, want 200", rec.Code)

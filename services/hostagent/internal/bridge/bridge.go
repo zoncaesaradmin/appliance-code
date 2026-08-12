@@ -25,6 +25,7 @@ type Bridge interface {
 	Stats(ctx context.Context) (host.Stats, error)
 	Health(ctx context.Context) (host.Health, error)
 	WifiStatus(ctx context.Context) (wificlient.Status, error)
+	WifiEnable(ctx context.Context) (wificlient.Status, error)
 	WifiApply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error)
 	WifiScan(ctx context.Context) (wificlient.ScanResult, error)
 	WifiAPStatus(ctx context.Context) (wifiap.Status, error)
@@ -80,6 +81,10 @@ func (l Local) Health(context.Context) (host.Health, error) {
 
 func (l Local) WifiStatus(ctx context.Context) (wificlient.Status, error) {
 	return l.wifiClient().Status(ctx)
+}
+
+func (l Local) WifiEnable(ctx context.Context) (wificlient.Status, error) {
+	return l.wifiClient().Enable(ctx)
 }
 
 func (l Local) WifiApply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
@@ -155,6 +160,12 @@ func (c *UnixSocketClient) WifiStatus(ctx context.Context) (wificlient.Status, e
 	return status, err
 }
 
+func (c *UnixSocketClient) WifiEnable(ctx context.Context) (wificlient.Status, error) {
+	var status wificlient.Status
+	err := c.do(ctx, http.MethodPut, "/internal/v1/host/wifi/enable", nil, &status)
+	return status, err
+}
+
 func (c *UnixSocketClient) WifiApply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
 	var status wificlient.Status
 	err := c.do(ctx, http.MethodPut, "/internal/v1/host/wifi", req, &status)
@@ -219,6 +230,10 @@ type WifiSocketAdapter struct {
 
 func (a WifiSocketAdapter) Status(ctx context.Context) (wificlient.Status, error) {
 	return a.Client.WifiStatus(ctx)
+}
+
+func (a WifiSocketAdapter) Enable(ctx context.Context) (wificlient.Status, error) {
+	return a.Client.WifiEnable(ctx)
 }
 
 func (a WifiSocketAdapter) Apply(ctx context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {

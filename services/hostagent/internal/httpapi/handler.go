@@ -46,6 +46,7 @@ func NewHandlerWithControllers(hostBridge bridge.Bridge, wifiClient wificlient.C
 	mux.HandleFunc("GET /internal/v1/host/stats", handler.stats)
 	mux.HandleFunc("GET /internal/v1/host/health", handler.health)
 	mux.HandleFunc("GET /internal/v1/host/wifi", handler.wifiGet)
+	mux.HandleFunc("PUT /internal/v1/host/wifi/enable", handler.wifiEnable)
 	mux.HandleFunc("PUT /internal/v1/host/wifi", handler.wifiPut)
 	mux.HandleFunc("GET /internal/v1/host/wifi/scan", handler.wifiScan)
 	mux.HandleFunc("GET /internal/v1/host/wifi-ap", handler.wifiAPGet)
@@ -99,6 +100,15 @@ func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) wifiGet(w http.ResponseWriter, r *http.Request) {
 	status, err := h.wifiClient.Status(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) wifiEnable(w http.ResponseWriter, r *http.Request) {
+	status, err := h.wifiClient.Enable(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

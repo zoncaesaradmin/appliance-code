@@ -226,6 +226,7 @@ function fallbackWifiClientStatus(message = "Client Wi-Fi is currently off."): H
     reason: "desired_off",
     security: "unknown",
     supportedCapable: true,
+    radioEnabled: false,
     message
   };
 }
@@ -420,6 +421,34 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     }
   }
 
+  async function enableWifiAdapter() {
+    if (!wifiClientAvailable) {
+      return;
+    }
+    setWifiClientBusy(true);
+    setWifiClientError("");
+    setMessage("");
+    try {
+      const status = await client.enableHostWifi();
+      setWifiClient(status);
+      if (!status.radioEnabled || status.reason !== "desired_off") {
+        setWifiClientError(status.message || status.reason || "Could not enable the client Wi-Fi adapter.");
+        return;
+      }
+      setMessage(status.message || "Wi-Fi adapter enabled. Scanning for networks.");
+      setShowWifiClientDialog(true);
+      void scanWifiNetworks();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setWifiClientError("This appliance backend does not provide Wi-Fi adapter enablement yet.");
+      } else {
+        setWifiClientError(err instanceof Error ? err.message : "Could not enable the client Wi-Fi adapter.");
+      }
+    } finally {
+      setWifiClientBusy(false);
+    }
+  }
+
   async function applyClientWifi(request: HostWifiApplyRequest): Promise<HostWifiStatus | null> {
     if (!wifiClientAvailable) {
       return null;
@@ -472,6 +501,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   function openWifiClientDialog() {
     setShowWifiClientDialog(true);
     if (
+      wifiClient?.radioEnabled &&
       wifiClientScanSupported &&
       !wifiClientScanBusy &&
       (!wifiClientScanLoaded || (wifiScan?.networks || []).length === 0)
@@ -557,6 +587,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       : "open"
     : selectedScannedNetwork?.security || "open";
   const wifiClientEnableSupported = wifiClient?.supportedCapable !== false;
+  const wifiClientRadioEnabled = Boolean(wifiClient?.radioEnabled);
   const wifiClientConnecting = wifiClient?.actual === "connecting";
   const wifiClientConnected = wifiClient?.actual === "active";
 
@@ -670,6 +701,10 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       <strong>{wifiClient.iface || wifiScan?.iface || "—"}</strong>
                     </div>
                     <div>
+                      <span>Adapter</span>
+                      <strong>{wifiClient.radioEnabled ? "Enabled" : "Disabled"}</strong>
+                    </div>
+                    <div>
                       <span>IPv4</span>
                       <strong>{(wifiClient.ipv4Addresses || []).join(", ") || "—"}</strong>
                     </div>
@@ -727,13 +762,15 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       className="button button--primary"
                       type="button"
                       disabled={wifiClientBusy || !wifiClientEnableSupported}
-                      onClick={openWifiClientDialog}
+                      onClick={() => void enableWifiAdapter()}
                     >
                       {!wifiClientEnableSupported
                         ? "Wi-Fi unavailable"
                         : wifiClientBusy
                           ? "Enabling Wi-Fi…"
-                          : "Enable Wi-Fi"}
+                          : wifiClientRadioEnabled
+                            ? "Choose Wi-Fi network"
+                            : "Enable Wi-Fi"}
                     </button>
                   ) : null}
                   {wifiClientAvailable && wifiClientOn === null ? (

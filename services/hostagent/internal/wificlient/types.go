@@ -42,6 +42,7 @@ type Status struct {
 	Reason               string   `json:"reason,omitempty"`
 	SSID                 string   `json:"ssid,omitempty"`
 	Iface                string   `json:"iface,omitempty"`
+	RadioEnabled         bool     `json:"radioEnabled"`
 	IPv4Addresses        []string `json:"ipv4Addresses,omitempty"`
 	Security             string   `json:"security"`
 	SupportedCapable     bool     `json:"supportedCapable"`
@@ -78,13 +79,15 @@ type ScanResult struct {
 
 type Controller interface {
 	Status(ctx context.Context) (Status, error)
+	Enable(ctx context.Context) (Status, error)
 	Apply(ctx context.Context, req ApplyRequest) (Status, error)
 	Scan(ctx context.Context) (ScanResult, error)
 }
 
 type persistedState struct {
-	Desired  bool   `json:"desired"`
-	SSID     string `json:"ssid,omitempty"`
-	Iface    string `json:"iface,omitempty"`
-	Security string `json:"security,omitempty"`
+	Desired      bool   `json:"desired"`
+	RadioEnabled bool   `json:"radioEnabled"`
+	SSID         string `json:"ssid,omitempty"`
+	Iface        string `json:"iface,omitempty"`
+	Security     string `json:"security,omitempty"`
 }

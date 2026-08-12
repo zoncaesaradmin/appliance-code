@@ -74,6 +74,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		Actual:               ActualInactive,
 		SSID:                 st.SSID,
 		Iface:                st.Iface,
+		RadioEnabled:         st.RadioEnabled,
 		Security:             defaultSecurity(st.Security),
 		SupportedCapable:     inv.supportedCapable(),
 		SupportsConcurrentAP: supportsConcurrentAP,
@@ -149,6 +150,7 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	}
 	if !req.Desired {
 		st.Desired = false
+		st.RadioEnabled = false
 		if err := m.teardown(ctx); err != nil {
 			_ = m.saveState(st)
 			return Status{}, fmt.Errorf("wificlient: disable: %w", err)
@@ -186,6 +188,7 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		return m.validationFailure(ctx, reason, unavailableMessage(reason))
 	}
 	st.Desired = true
+	st.RadioEnabled = true
 	st.SSID = ssid
 	st.Iface = iface
 	st.Security = security
@@ -202,6 +205,55 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		return Status{}, err
 	}
 	return m.Status(ctx)
+}
+
+// Enable brings the client Wi-Fi adapter up without joining a network. The
+// selection and credential step is intentionally separate in Apply.
+func (m *Manager) Enable(ctx context.Context) (Status, error) {
+	configDir, stateDir, runtimeDir := m.paths()
+	if err := m.files().MkdirAll(configDir, 0o755); err != nil {
+		return Status{}, fmt.Errorf("wificlient: create config dir: %w", err)
+	}
+	if err := m.files().MkdirAll(stateDir, 0o700); err != nil {
+		return Status{}, fmt.Errorf("wificlient: create state dir: %w", err)
+	}
+	if err := m.files().MkdirAll(runtimeDir, 0o755); err != nil {
+		return Status{}, fmt.Errorf("wificlient: create runtime dir: %w", err)
+	}
+	if !packagesPresent(m.runner()) {
+		return m.validationFailure(ctx, ReasonPackagesMissing, "required packages (wpa_supplicant/dhclient/iw) are not installed")
+	}
+	inv, err := inspectRadios(ctx, m.runner())
+	if err != nil {
+		return Status{}, err
+	}
+	iface := inv.defaultManagedIface()
+	if iface == "" {
+		reason := inv.unavailableReason()
+		return m.validationFailure(ctx, reason, unavailableMessage(reason))
+	}
+	if err := m.prepareInterface(ctx, iface); err != nil {
+		return Status{}, err
+	}
+	st, err := m.loadState()
+	if err != nil {
+		return Status{}, err
+	}
+	st.RadioEnabled = true
+	st.Iface = iface
+	if err := m.saveState(st); err != nil {
+		return Status{}, err
+	}
+	status, err := m.Status(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	status.RadioEnabled = true
+	status.Iface = iface
+	if !status.Desired {
+		status.Message = "client Wi-Fi adapter is enabled and ready to scan"
+	}
+	return status, nil
 }
 
 func (m *Manager) validationFailure(ctx context.Context, reason, message string) (Status, error) {
@@ -237,9 +289,13 @@ func (m *Manager) Scan(ctx context.Context) (ScanResult, error) {
 		result.Message = unavailableMessage(result.Reason)
 		return result, nil
 	}
-	if err := m.prepareInterface(ctx, result.Iface); err != nil {
-		result.Reason = ReasonScanFailed
-		result.Message = err.Error()
+	st, err := m.loadState()
+	if err != nil {
+		return ScanResult{}, err
+	}
+	if !st.RadioEnabled {
+		result.Reason = ReasonNotConfigured
+		result.Message = "enable client Wi-Fi before scanning for networks"
 		return result, nil
 	}
 	networks, err := scanNetworks(ctx, m.runner(), result.Iface)

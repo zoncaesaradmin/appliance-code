@@ -406,6 +406,7 @@ export interface HostWifiStatus {
   reason?: string;
   ssid?: string;
   iface?: string;
+  radioEnabled?: boolean;
   ipv4Addresses?: string[];
   security: string;
   supportedCapable?: boolean;

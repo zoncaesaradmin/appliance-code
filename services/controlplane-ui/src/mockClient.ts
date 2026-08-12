@@ -941,6 +941,19 @@ export class MockControlPlaneClient {
     return { ...mockState.wifiClient };
   }
 
+  async enableHostWifi(): Promise<HostWifiStatus> {
+    mockState.wifiClient = {
+      ...mockState.wifiClient,
+      desired: false,
+      actual: "inactive",
+      reason: "desired_off",
+      radioEnabled: true,
+      iface: mockState.wifiClient.iface || "wlp2s0",
+      message: "client Wi-Fi adapter is enabled and ready to scan"
+    };
+    return { ...mockState.wifiClient };
+  }
+
   async scanHostWifi(): Promise<HostWifiScanResult> {
     return {
       iface: mockState.wifiClient.iface || "wlp2s0",

@@ -153,6 +153,7 @@ export interface ControlPlaneClient {
   getHostInfo(): Promise<HostInfo>;
   getHostHealth(): Promise<HostHealth>;
   getHostWifi(): Promise<HostWifiStatus>;
+  enableHostWifi(): Promise<HostWifiStatus>;
   scanHostWifi(): Promise<HostWifiScanResult>;
   applyHostWifi(request: HostWifiApplyRequest): Promise<HostWifiStatus>;
   getHostWifiAP(): Promise<HostWifiAPStatus>;
@@ -563,6 +564,10 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async getHostWifi(): Promise<HostWifiStatus> {
     return this.request("/api/v1/host/wifi");
+  }
+
+  async enableHostWifi(): Promise<HostWifiStatus> {
+    return this.request("/api/v1/host/wifi/enable", { method: "PUT" });
   }
 
   async scanHostWifi(): Promise<HostWifiScanResult> {

@@ -69,6 +69,15 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 				return
 			}
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		case "/internal/v1/host/wifi/enable":
+			if r.Method == http.MethodPut {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"desired": false, "actual": "inactive", "reason": "desired_off",
+					"radioEnabled": true, "iface": "wlp2s0", "security": "unknown", "supportedCapable": true,
+				})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		case "/internal/v1/host/wifi/scan":
 			if r.Method == http.MethodGet {
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -351,8 +360,13 @@ func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
+	resp := ts.doJSON(t, http.MethodPut, "/api/v1/host/wifi/enable", token, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("wifi enable status = %d, want 200", resp.StatusCode)
+	}
+	resp.Body.Close()
 
-	resp := ts.doJSON(t, http.MethodGet, "/api/v1/host/mdns", token, "")
+	resp = ts.doJSON(t, http.MethodGet, "/api/v1/host/mdns", token, "")
 	defer resp.Body.Close()
 	var mdns struct {
 		AdvertisedName string `json:"advertisedName"`

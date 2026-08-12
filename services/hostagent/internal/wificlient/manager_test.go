@@ -122,6 +122,31 @@ func TestApplyNeedsSSID(t *testing.T) {
 	}
 }
 
+func TestEnableBringsAdapterUpWithoutJoiningANetwork(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"iw": true, "ip": true, "wpa_supplicant": true, "dhclient": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+		},
+	}
+	m := &Manager{ConfigDir: "/cfg", StateDir: "/state", RuntimeDir: "/run", Runner: runner, Files: files}
+	status, err := m.Enable(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.RadioEnabled || status.Desired || status.Iface != "wlan0" {
+		t.Fatalf("status=%+v, want enabled adapter without a requested connection", status)
+	}
+	if strings.Contains(strings.Join(runner.calls, "\n"), "wpa_supplicant") {
+		t.Fatalf("adapter enable must not start a connection: %v", runner.calls)
+	}
+}
+
 func TestApplyRejectsInvalidPasswordWithoutChangingDesiredState(t *testing.T) {
 	files := newMemFile()
 	runner := &fakeRunner{
@@ -257,6 +282,9 @@ BSS ff:ee:dd:cc:bb:aa(on wlp2s0)
 		},
 	}
 	m := &Manager{ConfigDir: "/cfg", StateDir: "/state", RuntimeDir: "/run", Runner: runner, Files: files}
+	if _, err := m.Enable(context.Background()); err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
 	result, err := m.Scan(context.Background())
 	if err != nil {
 		t.Fatal(err)
