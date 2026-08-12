@@ -169,13 +169,40 @@ type CapabilityAssessment = {
 };
 
 function formatCapability(assessment: CapabilityAssessment): string {
-  const label = {
+  return {
     supported: "Supported",
-    unsupported: "Not supported by this hardware",
-    unknown: "Capability not detected",
-    limited: "Hardware capable, unavailable in this appliance"
+    unsupported: "Not supported",
+    unknown: "Unavailable",
+    limited: "Unavailable"
   }[assessment.state];
-  return `${label}${assessment.detail ? ` · ${assessment.detail}` : ""}`;
+}
+
+function formatModeCapability(
+  assessment: CapabilityAssessment,
+  active: boolean,
+  blockedBy?: string
+): string {
+  if (active) {
+    return "Supported and active";
+  }
+  if (blockedBy) {
+    return blockedBy;
+  }
+  return formatCapability(assessment);
+}
+
+function formatWiFiConflictCapability(
+  assessment: CapabilityAssessment,
+  clientWiFiOn: boolean,
+  wifiAPOn: boolean
+): string {
+  if (clientWiFiOn) {
+    return "Client Wi-Fi is on";
+  }
+  if (wifiAPOn) {
+    return "Wi-Fi AP is on";
+  }
+  return formatCapability(assessment);
 }
 
 function combineCapabilities(...assessments: CapabilityAssessment[]): CapabilityAssessment {
@@ -742,8 +769,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
         </Card>
       ) : (
         <>
-          <div className="grid-two">
-            <Card title="Client Wi-Fi" subtitle="Connect this appliance to a LAN over Wi-Fi while Ethernet can remain connected.">
+          <div className="host-services-stack">
+            <Card className="host-services-card host-services-card--client" title="Client Wi-Fi" subtitle="Connect this appliance to a LAN over Wi-Fi while Ethernet can remain connected.">
               <div className={`host-service-panel${wifiClientBusy || wifiClientScanBusy ? " is-busy" : ""}`} aria-busy={wifiClientBusy || wifiClientScanBusy}>
                 {!wifiClientAvailable ? (
                   <EmptyState message={wifiClientUnavailableDetail || wifiClientUnavailableMessage} />
@@ -779,7 +806,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                     </div>
                     <div>
                       <span>Client Wi-Fi + Wi-Fi AP</span>
-                      <strong>{formatCapability(wifiClientAPCapabilityState)}</strong>
+                      <strong>{formatWiFiConflictCapability(wifiClientAPCapabilityState, wifiClientOn === true, wifiOn === true)}</strong>
                     </div>
                     {wifiClient.reason ? (
                       <div>
@@ -850,7 +877,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
               </div>
             </Card>
 
-            <Card title="Wi-Fi access point" subtitle="Management AP at https://manage.ap/ (also https://10.42.0.1/)">
+            <Card className="host-services-card host-services-card--ap" title="Wi-Fi access point" subtitle="Management AP at https://manage.ap/ (also https://10.42.0.1/)">
               <div className={`host-service-panel${wifiBusy ? " is-busy" : ""}`} aria-busy={wifiBusy}>
                 {wifi ? (
                   <div className="detail-list">
@@ -987,9 +1014,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                 </div>
               </div>
             </Card>
-          </div>
-
-          <Card title="Host network" subtitle="Live host interfaces and hardware capability from host-agent (not install-time chart values)">
+            <Card className="host-services-card host-services-card--network" title="Host network" subtitle="Live host interfaces and hardware capability from host-agent (not install-time chart values)">
             {hostInfo || identity ? (
               <div className="detail-list">
                 <div>
@@ -1020,14 +1045,14 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                   <span>Wi-Fi AP (management)</span>
                   <strong>{formatMediaStatus(hostInfo?.network?.wifiAP, "Wi-Fi AP")}</strong>
                 </div>
-                <div><span>None (all network services off)</span><strong>{formatCapability({ state: "supported", detail: "All host network services can be disabled." })}</strong></div>
-                <div><span>Ethernet</span><strong>{formatCapability(ethernetCapabilityState)}</strong></div>
-                <div><span>Client Wi-Fi</span><strong>{formatCapability(wifiClientCapabilityState)}</strong></div>
-                <div><span>Wi-Fi AP</span><strong>{formatCapability(wifiAPCapabilityState)}</strong></div>
-                <div><span>Ethernet + client Wi-Fi</span><strong>{formatCapability(combineCapabilities(ethernetCapabilityState, wifiClientCapabilityState))}</strong></div>
-                <div><span>Ethernet + Wi-Fi AP</span><strong>{formatCapability(combineCapabilities(ethernetCapabilityState, wifiAPCapabilityState))}</strong></div>
-                <div><span>Client Wi-Fi + Wi-Fi AP</span><strong>{formatCapability(wifiClientAPCapabilityState)}</strong></div>
-                <div><span>Ethernet + client Wi-Fi + Wi-Fi AP</span><strong>{formatCapability(combineCapabilities(ethernetCapabilityState, wifiClientAPCapabilityState))}</strong></div>
+                <div><span>None (all network services off)</span><strong>Supported</strong></div>
+                <div><span>Ethernet</span><strong>{formatModeCapability(ethernetCapabilityState, hostInfo?.network?.ethernet?.enabled === true)}</strong></div>
+                <div><span>Client Wi-Fi</span><strong>{formatModeCapability(wifiClientCapabilityState, wifiClientOn === true, wifiOn === true ? "Wi-Fi AP is on" : undefined)}</strong></div>
+                <div><span>Wi-Fi AP</span><strong>{formatModeCapability(wifiAPCapabilityState, wifiOn === true, wifiClientOn === true ? "Client Wi-Fi is on" : undefined)}</strong></div>
+                <div><span>Ethernet + client Wi-Fi</span><strong>{formatModeCapability(combineCapabilities(ethernetCapabilityState, wifiClientCapabilityState), wifiClientOn === true, wifiOn === true ? "Wi-Fi AP is on" : undefined)}</strong></div>
+                <div><span>Ethernet + Wi-Fi AP</span><strong>{formatModeCapability(combineCapabilities(ethernetCapabilityState, wifiAPCapabilityState), wifiOn === true, wifiClientOn === true ? "Client Wi-Fi is on" : undefined)}</strong></div>
+                <div><span>Client Wi-Fi + Wi-Fi AP</span><strong>{formatWiFiConflictCapability(wifiClientAPCapabilityState, wifiClientOn === true, wifiOn === true)}</strong></div>
+                <div><span>Ethernet + client Wi-Fi + Wi-Fi AP</span><strong>{formatWiFiConflictCapability(combineCapabilities(ethernetCapabilityState, wifiClientAPCapabilityState), wifiClientOn === true, wifiOn === true)}</strong></div>
                 {(hostInfo?.network?.links || []).map((link) => (
                   <div key={`${link.name}-${link.role}`}>
                     <span>
@@ -1066,7 +1091,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                 }
               />
             )}
-          </Card>
+            </Card>
+          </div>
 
           {showWifiClientDialog && wifiClientAvailable ? (
             <div

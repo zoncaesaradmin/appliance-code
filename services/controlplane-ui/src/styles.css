@@ -645,6 +645,24 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.host-services-stack {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.host-services-card--ap {
+  order: 1;
+}
+
+.host-services-card--network {
+  order: 2;
+}
+
+.host-services-card--client {
+  order: 3;
+}
+
 .stats-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
