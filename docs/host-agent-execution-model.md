@@ -46,9 +46,10 @@ API over the host agent Unix socket. Control-plane routes mirror it:
 `GET|PUT /api/v1/host/wifi-ap` (permissions `host.read` / `host.write`).
 
 Client Wi-Fi is applied through the same host-agentd path:
-`GET|PUT /internal/v1/host/wifi`, with `GET /internal/v1/host/wifi/scan`
-for network discovery. Control-plane routes mirror those as
-`GET|PUT /api/v1/host/wifi` and `GET /api/v1/host/wifi/scan`.
+`GET|PUT /internal/v1/host/wifi`, with `PUT /internal/v1/host/wifi/enable`
+to prepare the adapter and `GET /internal/v1/host/wifi/scan` for network
+discovery. Control-plane routes mirror those as `GET|PUT /api/v1/host/wifi`,
+`PUT /api/v1/host/wifi/enable`, and `GET /api/v1/host/wifi/scan`.
 Host-agentd owns the host-side `wpa_supplicant` and `dhclient` processes so
 the Admin UI/API can connect the appliance to a LAN over Wi-Fi without manual
 host login.

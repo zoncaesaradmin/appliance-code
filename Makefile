@@ -380,7 +380,7 @@ package-release-input-tar:
 		$(MAKE) --no-print-directory package-host-packages \
 			OUT_DIR="$$host_packages_dir" \
 			OS_VERSION="$$host_packages_os_version" \
-			HOST_CAPABILITIES="$${HOST_CAPABILITIES:-mdns wifi-ap}"; \
+			HOST_CAPABILITIES="$${HOST_CAPABILITIES:-mdns wifi-client wifi-ap}"; \
 	fi; \
 	host_agent_image_ref="$$(tr -d '\r\n' < "$$host_agent_reference_file")"; \
 	if [ -n "$$workflows_version" ] && [ -z "$${WORKFLOW_CONTROLLER_IMAGE:-}" ]; then \
