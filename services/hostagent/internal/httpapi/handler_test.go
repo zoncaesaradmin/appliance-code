@@ -1,16 +1,34 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"appliance-code/services/hostagent/internal/bridge"
+	"appliance-code/services/hostagent/internal/wificlient"
 )
+
+type wifiClientStub struct {
+	status wificlient.Status
+	scan   wificlient.ScanResult
+	apply  wificlient.ApplyRequest
+}
+
+func (s *wifiClientStub) Status(context.Context) (wificlient.Status, error) { return s.status, nil }
+
+func (s *wifiClientStub) Apply(_ context.Context, req wificlient.ApplyRequest) (wificlient.Status, error) {
+	s.apply = req
+	return s.status, nil
+}
+
+func (s *wifiClientStub) Scan(context.Context) (wificlient.ScanResult, error) { return s.scan, nil }
 
 func TestHandlerServesHostEndpoints(t *testing.T) {
 	root := t.TempDir()
@@ -62,6 +80,47 @@ func TestHandlerServesHostEndpoints(t *testing.T) {
 	handler.ServeHTTP(healthRec, healthReq)
 	if healthRec.Code != http.StatusOK {
 		t.Fatalf("health status = %d, want 200", healthRec.Code)
+	}
+}
+
+func TestHandlerServesClientWifiWorkflowEndpoints(t *testing.T) {
+	wifi := &wifiClientStub{
+		status: wificlient.Status{
+			Desired:          false,
+			Actual:           wificlient.ActualInactive,
+			Reason:           wificlient.ReasonDesiredOff,
+			Security:         wificlient.SecurityUnknown,
+			SupportedCapable: true,
+		},
+		scan: wificlient.ScanResult{
+			Iface:            "wlan0",
+			SupportedCapable: true,
+			Networks: []wificlient.ScanNetwork{{
+				SSID:             "office-lan",
+				Security:         wificlient.SecurityWPA2PSK,
+				RequiresPassword: true,
+				Connectable:      true,
+				SignalDBM:        -42,
+			}},
+		},
+	}
+	handler := NewHandlerWithControllers(bridge.Local{}, wifi, nil, nil)
+
+	for _, path := range []string{"/internal/v1/host/wifi", "/internal/v1/host/wifi/scan"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, rec.Code)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/internal/v1/host/wifi", strings.NewReader(`{"desired":true,"ssid":"office-lan","psk":"long-enough-secret","security":"wpa2-psk"}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, want 200", rec.Code)
+	}
+	if !wifi.apply.Desired || wifi.apply.SSID != "office-lan" || wifi.apply.Security != wificlient.SecurityWPA2PSK {
+		t.Fatalf("apply request = %+v", wifi.apply)
 	}
 }
 

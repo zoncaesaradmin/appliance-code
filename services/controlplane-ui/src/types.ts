@@ -425,6 +425,8 @@ export interface HostWifiScanNetwork {
   ssid: string;
   security: string;
   requiresPassword: boolean;
+  connectable: boolean;
+  unsupportedDetail?: string;
   signalDBM: number;
 }
 

@@ -122,8 +122,9 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		return status, nil
 	}
 	if servicesRunning {
-		status.Reason = ReasonNotConfigured
-		status.Message = "client Wi-Fi connection is in progress or waiting for association"
+		status.Actual = ActualConnecting
+		status.Reason = ReasonConnectionPending
+		status.Message = "client Wi-Fi is connecting and waiting for an IPv4 address"
 		return status, nil
 	}
 	status.Reason = ReasonConnectionFailed
@@ -146,8 +147,8 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st.Desired = req.Desired
 	if !req.Desired {
+		st.Desired = false
 		if err := m.teardown(ctx); err != nil {
 			_ = m.saveState(st)
 			return Status{}, fmt.Errorf("wificlient: disable: %w", err)
@@ -166,20 +167,14 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	}
 	ssid := strings.TrimSpace(req.SSID)
 	if ssid == "" {
-		_ = m.saveState(st)
-		status, _ := m.Status(ctx)
-		status.Desired = true
-		status.Reason = ReasonSSIDMissing
-		status.Message = "an SSID is required to enable client Wi-Fi"
-		return status, nil
+		return m.validationFailure(ctx, ReasonSSIDMissing, "an SSID is required to enable client Wi-Fi")
+	}
+	security, validationReason, validationMessage := validateNetworkSecurity(req.Security, req.PSK)
+	if validationReason != "" {
+		return m.validationFailure(ctx, validationReason, validationMessage)
 	}
 	if !packagesPresent(m.runner()) {
-		_ = m.saveState(st)
-		status, _ := m.Status(ctx)
-		status.Desired = true
-		status.Reason = ReasonPackagesMissing
-		status.Message = "required packages (wpa_supplicant/dhclient/iw) are not installed"
-		return status, nil
+		return m.validationFailure(ctx, ReasonPackagesMissing, "required packages (wpa_supplicant/dhclient/iw) are not installed")
 	}
 	inv, err := inspectRadios(ctx, m.runner())
 	if err != nil {
@@ -187,16 +182,13 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	}
 	iface := inv.defaultManagedIface()
 	if iface == "" {
-		_ = m.saveState(st)
-		status, _ := m.Status(ctx)
-		status.Desired = true
-		status.Reason = inv.unavailableReason()
-		status.Message = unavailableMessage(status.Reason)
-		return status, nil
+		reason := inv.unavailableReason()
+		return m.validationFailure(ctx, reason, unavailableMessage(reason))
 	}
+	st.Desired = true
 	st.SSID = ssid
 	st.Iface = iface
-	st.Security = resolveSecurity(req.Security, req.PSK)
+	st.Security = security
 	if err := m.saveState(st); err != nil {
 		return Status{}, err
 	}
@@ -210,6 +202,16 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		return Status{}, err
 	}
 	return m.Status(ctx)
+}
+
+func (m *Manager) validationFailure(ctx context.Context, reason, message string) (Status, error) {
+	status, err := m.Status(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	status.Reason = reason
+	status.Message = message
+	return status, nil
 }
 
 func (m *Manager) Scan(ctx context.Context) (ScanResult, error) {
@@ -233,6 +235,11 @@ func (m *Manager) Scan(ctx context.Context) (ScanResult, error) {
 	if result.Iface == "" {
 		result.Reason = inv.unavailableReason()
 		result.Message = unavailableMessage(result.Reason)
+		return result, nil
+	}
+	if err := m.prepareInterface(ctx, result.Iface); err != nil {
+		result.Reason = ReasonScanFailed
+		result.Message = err.Error()
 		return result, nil
 	}
 	networks, err := scanNetworks(ctx, m.runner(), result.Iface)
@@ -312,9 +319,14 @@ func (m *Manager) writeConfig(st persistedState, psk string) error {
 	b.WriteString("update_config=0\n")
 	b.WriteString("network={\n")
 	b.WriteString("    ssid=" + quoteWPA(st.SSID) + "\n")
-	if strings.TrimSpace(psk) == "" {
+	switch st.Security {
+	case SecurityOpen:
 		b.WriteString("    key_mgmt=NONE\n")
-	} else {
+	case SecurityWPA3SAE:
+		b.WriteString("    key_mgmt=SAE\n")
+		b.WriteString("    ieee80211w=2\n")
+		b.WriteString("    sae_password=" + quoteWPA(psk) + "\n")
+	default:
 		b.WriteString("    psk=" + quoteWPA(psk) + "\n")
 	}
 	b.WriteString("}\n")
@@ -330,7 +342,7 @@ func (m *Manager) startServices(ctx context.Context, iface string) error {
 	if _, err := r.CombinedOutput(ctx, "wpa_supplicant", "-B", "-i", iface, "-c", m.confPath(), "-P", m.wpaPidPath()); err != nil {
 		return fmt.Errorf("wificlient: start wpa_supplicant: %w", err)
 	}
-	if _, err := r.CombinedOutput(ctx, "dhclient", "-pf", m.dhcpPidPath(), "-lf", m.dhcpLeasePath(), iface); err != nil {
+	if _, err := r.CombinedOutput(ctx, "dhclient", "-nw", "-pf", m.dhcpPidPath(), "-lf", m.dhcpLeasePath(), iface); err != nil {
 		return fmt.Errorf("wificlient: start dhclient: %w", err)
 	}
 	return nil
@@ -401,4 +413,48 @@ func unavailableMessage(reason string) string {
 	default:
 		return "client Wi-Fi is unavailable"
 	}
+}
+
+func validateNetworkSecurity(security, psk string) (string, string, string) {
+	security = strings.TrimSpace(strings.ToLower(security))
+	psk = strings.TrimSpace(psk)
+	if security == "" {
+		security = resolveSecurity("", psk)
+	}
+	switch security {
+	case SecurityOpen:
+		if psk != "" {
+			return "", ReasonInvalidSecurity, "an open Wi-Fi network must not include a password"
+		}
+		return security, "", ""
+	case SecurityWPAPSK, SecurityWPA2PSK, SecurityWPA3SAE:
+		if !validPSK(psk) {
+			return "", ReasonInvalidPSK, "Wi-Fi password must be 8-63 printable ASCII characters, or a 64-character hexadecimal key"
+		}
+		return security, "", ""
+	case SecuritySecured, SecurityEnterprise, SecurityUnknown:
+		return "", ReasonUnsupportedNetwork, "this Wi-Fi security type is not supported; choose an open or WPA/WPA2/WPA3 personal network"
+	default:
+		return "", ReasonInvalidSecurity, "unknown Wi-Fi security type"
+	}
+}
+
+func validPSK(psk string) bool {
+	if len(psk) == 64 {
+		for _, ch := range psk {
+			if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+				return false
+			}
+		}
+		return true
+	}
+	if len(psk) < 8 || len(psk) > 63 {
+		return false
+	}
+	for _, ch := range psk {
+		if ch < 32 || ch > 126 {
+			return false
+		}
+	}
+	return true
 }

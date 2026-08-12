@@ -117,6 +117,61 @@ func TestApplyNeedsSSID(t *testing.T) {
 	if status.Reason != ReasonSSIDMissing {
 		t.Fatalf("reason=%q", status.Reason)
 	}
+	if status.Desired {
+		t.Fatalf("invalid request must not enable Wi-Fi: %+v", status)
+	}
+}
+
+func TestApplyRejectsInvalidPasswordWithoutChangingDesiredState(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"iw": true, "ip": true, "wpa_supplicant": true, "dhclient": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+		},
+	}
+	m := &Manager{ConfigDir: "/cfg", StateDir: "/state", RuntimeDir: "/run", Runner: runner, Files: files}
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true, SSID: "office", PSK: "short", Security: SecurityWPA2PSK})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Reason != ReasonInvalidPSK || status.Desired {
+		t.Fatalf("status=%+v, want invalid password with desired off", status)
+	}
+	if _, ok := files.data["/cfg/wpa_supplicant.conf"]; ok {
+		t.Fatal("invalid request must not write Wi-Fi configuration")
+	}
+}
+
+func TestApplyReportsConnectingUntilAssociationAndDHCPComplete(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"iw": true, "ip": true, "wpa_supplicant": true, "dhclient": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+			"pgrep -f wpa_supplicant": "101",
+			"pgrep -f dhclient":       "102",
+		},
+	}
+	m := &Manager{ConfigDir: "/cfg", StateDir: "/state", RuntimeDir: "/run", Runner: runner, Files: files}
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true, SSID: "office", PSK: "long-enough-secret", Security: SecurityWPA2PSK})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Actual != ActualConnecting || status.Reason != ReasonConnectionPending {
+		t.Fatalf("status=%+v, want connecting", status)
+	}
+	if !strings.Contains(strings.Join(runner.calls, "\n"), "dhclient -nw") {
+		t.Fatalf("dhclient must start in the background: %v", runner.calls)
+	}
 }
 
 func TestApplyActivatesClientWifi(t *testing.T) {
@@ -214,5 +269,29 @@ BSS ff:ee:dd:cc:bb:aa(on wlp2s0)
 	}
 	if result.Networks[1].Security != SecurityOpen {
 		t.Fatalf("unexpected guest security: %+v", result.Networks[1])
+	}
+	if !result.Networks[0].Connectable || !result.Networks[1].Connectable {
+		t.Fatalf("expected scanned personal/open networks to be connectable: %+v", result.Networks)
+	}
+	if !strings.Contains(strings.Join(runner.calls, "\n"), "ip link set wlp2s0 up") {
+		t.Fatalf("scan must bring the Wi-Fi interface up: %v", runner.calls)
+	}
+}
+
+func TestScanMarksEnterpriseNetworksUnsupported(t *testing.T) {
+	result, err := scanNetworks(context.Background(), &fakeRunner{outputs: map[string]string{
+		"iw dev wlan0 scan": `BSS aa:bb:cc:dd:ee:ff(on wlan0)
+	signal: -42.00 dBm
+	SSID: office-enterprise
+	RSN:
+		Authentication suites:
+			* 00-0f-ac:1
+`,
+	}}, "wlan0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 || result[0].Connectable || result[0].Security != SecurityEnterprise {
+		t.Fatalf("enterprise scan result=%+v", result)
 	}
 }

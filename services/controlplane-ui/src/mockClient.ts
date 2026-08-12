@@ -948,8 +948,8 @@ export class MockControlPlaneClient {
       supportsConcurrentAP: mockState.wifiClient.supportsConcurrentAP,
       concurrentAPDetail: mockState.wifiClient.concurrentAPDetail,
       networks: [
-        { ssid: "office-lan", security: "wpa2-psk", requiresPassword: true, signalDBM: -38 },
-        { ssid: "guest", security: "open", requiresPassword: false, signalDBM: -61 }
+        { ssid: "office-lan", security: "wpa2-psk", requiresPassword: true, connectable: true, signalDBM: -38 },
+        { ssid: "guest", security: "open", requiresPassword: false, connectable: true, signalDBM: -61 }
       ]
     };
   }

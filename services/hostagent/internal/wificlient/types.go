@@ -3,27 +3,33 @@ package wificlient
 import "context"
 
 const (
-	ActualInactive = "inactive"
-	ActualActive   = "active"
-	ActualFailed   = "failed"
+	ActualInactive   = "inactive"
+	ActualConnecting = "connecting"
+	ActualActive     = "active"
+	ActualFailed     = "failed"
 
-	ReasonNone             = ""
-	ReasonNoHardware       = "no_capable_hardware"
-	ReasonRadioInUseByAP   = "radio_in_use_by_ap"
-	ReasonSSIDMissing      = "ssid_missing"
-	ReasonPackagesMissing  = "packages_missing"
-	ReasonConnectionFailed = "connection_failed"
-	ReasonDHCPFailed       = "dhcp_failed"
-	ReasonDesiredOff       = "desired_off"
-	ReasonNotConfigured    = "not_configured"
-	ReasonScanFailed       = "scan_failed"
+	ReasonNone               = ""
+	ReasonNoHardware         = "no_capable_hardware"
+	ReasonRadioInUseByAP     = "radio_in_use_by_ap"
+	ReasonSSIDMissing        = "ssid_missing"
+	ReasonPackagesMissing    = "packages_missing"
+	ReasonConnectionFailed   = "connection_failed"
+	ReasonConnectionPending  = "connection_pending"
+	ReasonDHCPFailed         = "dhcp_failed"
+	ReasonDesiredOff         = "desired_off"
+	ReasonNotConfigured      = "not_configured"
+	ReasonScanFailed         = "scan_failed"
+	ReasonInvalidSecurity    = "invalid_security"
+	ReasonInvalidPSK         = "invalid_psk"
+	ReasonUnsupportedNetwork = "unsupported_network"
 
-	SecurityUnknown = "unknown"
-	SecurityOpen    = "open"
-	SecuritySecured = "secured"
-	SecurityWPAPSK  = "wpa-psk"
-	SecurityWPA2PSK = "wpa2-psk"
-	SecurityWPA3SAE = "wpa3-sae"
+	SecurityUnknown    = "unknown"
+	SecurityOpen       = "open"
+	SecuritySecured    = "secured"
+	SecurityWPAPSK     = "wpa-psk"
+	SecurityWPA2PSK    = "wpa2-psk"
+	SecurityWPA3SAE    = "wpa3-sae"
+	SecurityEnterprise = "enterprise"
 
 	DefaultConfigDir  = "/etc/zon/wifi-client"
 	DefaultStateDir   = "/var/lib/zon/wifi-client"
@@ -52,10 +58,12 @@ type ApplyRequest struct {
 }
 
 type ScanNetwork struct {
-	SSID             string `json:"ssid"`
-	Security         string `json:"security"`
-	RequiresPassword bool   `json:"requiresPassword"`
-	SignalDBM        int    `json:"signalDBM"`
+	SSID              string `json:"ssid"`
+	Security          string `json:"security"`
+	RequiresPassword  bool   `json:"requiresPassword"`
+	Connectable       bool   `json:"connectable"`
+	UnsupportedDetail string `json:"unsupportedDetail,omitempty"`
+	SignalDBM         int    `json:"signalDBM"`
 }
 
 type ScanResult struct {

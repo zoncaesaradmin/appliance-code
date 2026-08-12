@@ -211,10 +211,11 @@ func scanNetworks(ctx context.Context, runner wifiap.Runner, iface string) ([]Sc
 		return nil, fmt.Errorf("scan failed: %w", err)
 	}
 	type partial struct {
-		ssid     string
-		security string
-		requires bool
-		signal   int
+		ssid       string
+		security   string
+		requires   bool
+		signal     int
+		authSuites bool
 	}
 	best := map[string]partial{}
 	var current partial
@@ -243,22 +244,45 @@ func scanNetworks(ctx context.Context, runner wifiap.Runner, iface string) ([]Sc
 			if f, err := strconv.ParseFloat(strings.Fields(value)[0], 64); err == nil {
 				current.signal = int(f)
 			}
+		case strings.HasPrefix(trimmed, "Authentication suites:"):
+			current.authSuites = true
+			if strings.Contains(trimmed, ":1") {
+				current.security = SecurityEnterprise
+				current.requires = true
+			}
+		case current.authSuites && strings.HasPrefix(trimmed, "*"):
+			if strings.Contains(trimmed, ":1") {
+				current.security = SecurityEnterprise
+				current.requires = true
+			} else if strings.Contains(trimmed, ":8") && current.security != SecurityEnterprise {
+				current.security = SecurityWPA3SAE
+				current.requires = true
+			} else if strings.Contains(trimmed, ":2") && current.security != SecurityEnterprise {
+				current.security = SecurityWPA2PSK
+				current.requires = true
+			}
 		case strings.HasPrefix(trimmed, "RSN:"):
+			current.authSuites = false
 			current.security = SecurityWPA2PSK
 			current.requires = true
 		case strings.HasPrefix(trimmed, "WPA:"):
+			current.authSuites = false
 			if current.security == "" {
 				current.security = SecurityWPAPSK
 			}
 			current.requires = true
 		case strings.Contains(trimmed, "SAE"):
+			current.authSuites = false
 			current.security = SecurityWPA3SAE
 			current.requires = true
 		case strings.HasPrefix(trimmed, "capability:") && strings.Contains(trimmed, "Privacy"):
+			current.authSuites = false
 			if current.security == "" {
 				current.security = SecuritySecured
 			}
 			current.requires = true
+		default:
+			current.authSuites = false
 		}
 	}
 	commit()
@@ -268,11 +292,18 @@ func scanNetworks(ctx context.Context, runner wifiap.Runner, iface string) ([]Sc
 		if security == "" {
 			security = SecurityOpen
 		}
+		connectable := security != SecurityEnterprise && security != SecuritySecured && security != SecurityUnknown
+		unsupportedDetail := ""
+		if !connectable {
+			unsupportedDetail = "This appliance supports open and WPA/WPA2/WPA3 personal Wi-Fi networks."
+		}
 		networks = append(networks, ScanNetwork{
-			SSID:             item.ssid,
-			Security:         security,
-			RequiresPassword: item.requires,
-			SignalDBM:        item.signal,
+			SSID:              item.ssid,
+			Security:          security,
+			RequiresPassword:  item.requires,
+			Connectable:       connectable,
+			UnsupportedDetail: unsupportedDetail,
+			SignalDBM:         item.signal,
 		})
 	}
 	sort.Slice(networks, func(i, j int) bool {
