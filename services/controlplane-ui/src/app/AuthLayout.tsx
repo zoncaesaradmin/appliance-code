@@ -64,7 +64,7 @@ export function AuthLayout(props: {
       <section className="auth-visual">
         <div className="auth-visual__panel">
           <span className="eyebrow">Zon Appliance</span>
-          <h1>Sleek infrastructure operations, built for an appliance surface.</h1>
+          <h1>Sleek infrastructure operations, built for simplicity.</h1>
           <p>
             A focused control-plane workspace for management, analysis, and administration without
             losing the appliance-grade clarity operators expect.
