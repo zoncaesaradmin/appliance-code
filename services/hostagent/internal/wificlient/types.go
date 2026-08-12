@@ -1,6 +1,9 @@
 package wificlient
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 const (
 	ActualInactive   = "inactive"
@@ -15,6 +18,7 @@ const (
 	ReasonPackagesMissing    = "packages_missing"
 	ReasonConnectionFailed   = "connection_failed"
 	ReasonConnectionPending  = "connection_pending"
+	ReasonConnectionTimeout  = "connection_timeout"
 	ReasonDHCPFailed         = "dhcp_failed"
 	ReasonDesiredOff         = "desired_off"
 	ReasonNotConfigured      = "not_configured"
@@ -22,6 +26,11 @@ const (
 	ReasonInvalidSecurity    = "invalid_security"
 	ReasonInvalidPSK         = "invalid_psk"
 	ReasonUnsupportedNetwork = "unsupported_network"
+
+	CapabilitySupported   = "supported"
+	CapabilityUnsupported = "unsupported"
+	CapabilityUnknown     = "unknown"
+	CapabilityLimited     = "limited"
 
 	SecurityUnknown    = "unknown"
 	SecurityOpen       = "open"
@@ -46,7 +55,10 @@ type Status struct {
 	IPv4Addresses        []string `json:"ipv4Addresses,omitempty"`
 	Security             string   `json:"security"`
 	SupportedCapable     bool     `json:"supportedCapable"`
+	CapabilityState      string   `json:"capabilityState"`
+	CapabilityDetail     string   `json:"capabilityDetail,omitempty"`
 	SupportsConcurrentAP bool     `json:"supportsConcurrentAP"`
+	ConcurrentAPState    string   `json:"concurrentAPState"`
 	ConcurrentAPDetail   string   `json:"concurrentAPDetail,omitempty"`
 	Message              string   `json:"message,omitempty"`
 }
@@ -70,7 +82,10 @@ type ScanNetwork struct {
 type ScanResult struct {
 	Iface                string        `json:"iface,omitempty"`
 	SupportedCapable     bool          `json:"supportedCapable"`
+	CapabilityState      string        `json:"capabilityState"`
+	CapabilityDetail     string        `json:"capabilityDetail,omitempty"`
 	SupportsConcurrentAP bool          `json:"supportsConcurrentAP"`
+	ConcurrentAPState    string        `json:"concurrentAPState"`
 	ConcurrentAPDetail   string        `json:"concurrentAPDetail,omitempty"`
 	Reason               string        `json:"reason,omitempty"`
 	Message              string        `json:"message,omitempty"`
@@ -85,9 +100,10 @@ type Controller interface {
 }
 
 type persistedState struct {
-	Desired      bool   `json:"desired"`
-	RadioEnabled bool   `json:"radioEnabled"`
-	SSID         string `json:"ssid,omitempty"`
-	Iface        string `json:"iface,omitempty"`
-	Security     string `json:"security,omitempty"`
+	Desired         bool      `json:"desired"`
+	RadioEnabled    bool      `json:"radioEnabled"`
+	SSID            string    `json:"ssid,omitempty"`
+	Iface           string    `json:"iface,omitempty"`
+	Security        string    `json:"security,omitempty"`
+	ConnectingSince time.Time `json:"connectingSince,omitempty"`
 }

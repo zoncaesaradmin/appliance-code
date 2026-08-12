@@ -199,6 +199,39 @@ func TestApplyReportsConnectingUntilAssociationAndDHCPComplete(t *testing.T) {
 	}
 }
 
+func TestStatusFailsAndStopsAConnectionThatExceedsTheDeadline(t *testing.T) {
+	files := newMemFile()
+	now := time.Date(2026, time.August, 12, 10, 0, 0, 0, time.UTC)
+	runner := &fakeRunner{
+		paths: map[string]bool{"iw": true, "ip": true, "wpa_supplicant": true, "dhclient": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+			"pgrep -f wpa_supplicant": "101",
+			"pgrep -f dhclient":       "102",
+		},
+	}
+	m := &Manager{ConfigDir: "/cfg", StateDir: "/state", RuntimeDir: "/run", Runner: runner, Files: files, Now: func() time.Time { return now }}
+	if _, err := m.Apply(context.Background(), ApplyRequest{Desired: true, SSID: "office", PSK: "long-enough-secret", Security: SecurityWPA2PSK}); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(clientWiFiConnectionTimeout + time.Second)
+	status, err := m.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Actual != ActualFailed || status.Reason != ReasonConnectionTimeout {
+		t.Fatalf("status=%+v, want timed out failure", status)
+	}
+	joinedCalls := strings.Join(runner.calls, "\n")
+	if !strings.Contains(joinedCalls, "pkill -f wpa_supplicant") || !strings.Contains(joinedCalls, "pkill -f dhclient") {
+		t.Fatalf("timed out connection must stop managed processes: %v", runner.calls)
+	}
+}
+
 func TestApplyActivatesClientWifi(t *testing.T) {
 	files := newMemFile()
 	runner := &fakeRunner{
@@ -253,6 +286,56 @@ Wiphy phy1
 	}
 	if !strings.Contains(conf, `psk="long-enough-secret"`) {
 		t.Fatalf("config missing psk: %s", conf)
+	}
+}
+
+func TestConcurrentAPCapabilityDistinguishesHardwareAndImplementationLimits(t *testing.T) {
+	ctx := context.Background()
+	runner := &fakeRunner{paths: map[string]bool{"iw": true}}
+	runner.outputs = map[string]string{
+		"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+		"iw list": `Wiphy phy0
+	Supported interface modes:
+		 * managed
+		 * AP
+	valid interface combinations:
+		 * #{ managed, AP } <= 2, #channels <= 1
+`,
+	}
+	inv, err := inspectRadios(ctx, runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, supported, _ := inv.concurrentAPSupport()
+	if state != CapabilityLimited || supported {
+		t.Fatalf("single-radio concurrent hardware status = (%q, %t), want limited/false", state, supported)
+	}
+
+	runner.outputs["iw list"] = `Wiphy phy0
+	Supported interface modes:
+		 * managed
+`
+	inv, err = inspectRadios(ctx, runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, supported, _ = inv.concurrentAPSupport()
+	if state != CapabilityUnsupported || supported {
+		t.Fatalf("no AP mode status = (%q, %t), want unsupported/false", state, supported)
+	}
+
+	runner.errors = map[string]error{"iw list": os.ErrPermission}
+	inv, err = inspectRadios(ctx, runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, supported, _ = inv.concurrentAPSupport()
+	if state != CapabilityUnknown || supported {
+		t.Fatalf("unreadable capability status = (%q, %t), want unknown/false", state, supported)
 	}
 }
 

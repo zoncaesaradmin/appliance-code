@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -108,6 +109,10 @@ func (h *Handler) wifiGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) wifiEnable(w http.ResponseWriter, r *http.Request) {
+	if h.wifiAPEnabled(r.Context()) {
+		h.writeWifiClientAPConflict(w, r)
+		return
+	}
 	status, err := h.wifiClient.Enable(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -120,6 +125,10 @@ func (h *Handler) wifiPut(w http.ResponseWriter, r *http.Request) {
 	var req wificlient.ApplyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid wifi apply body")
+		return
+	}
+	if req.Desired && h.wifiAPEnabled(r.Context()) {
+		h.writeWifiClientAPConflict(w, r)
 		return
 	}
 	status, err := h.wifiClient.Apply(r.Context(), req)
@@ -154,11 +163,47 @@ func (h *Handler) wifiAPPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid wifi-ap apply body")
 		return
 	}
+	if req.Desired && h.wifiClientEnabled(r.Context()) {
+		h.writeWifiAPClientConflict(w, r)
+		return
+	}
 	status, err := h.wifiAP.Apply(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) wifiAPEnabled(ctx context.Context) bool {
+	status, err := h.wifiAP.Status(ctx)
+	return err == nil && (status.Desired || status.Actual == wifiap.ActualActive)
+}
+
+func (h *Handler) wifiClientEnabled(ctx context.Context) bool {
+	status, err := h.wifiClient.Status(ctx)
+	return err == nil && (status.Desired || status.Actual == wificlient.ActualActive || status.Actual == wificlient.ActualConnecting)
+}
+
+func (h *Handler) writeWifiClientAPConflict(w http.ResponseWriter, r *http.Request) {
+	status, err := h.wifiClient.Status(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	status.Reason = wificlient.ReasonRadioInUseByAP
+	status.Message = "client Wi-Fi cannot be enabled because Wi-Fi AP is already enabled. Disable Wi-Fi AP first."
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) writeWifiAPClientConflict(w http.ResponseWriter, r *http.Request) {
+	status, err := h.wifiAP.Status(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	status.Reason = wifiap.ReasonRadioInUse
+	status.Message = "Wi-Fi AP cannot be enabled because client Wi-Fi is already enabled. Disable client Wi-Fi first."
 	writeJSON(w, http.StatusOK, status)
 }
 

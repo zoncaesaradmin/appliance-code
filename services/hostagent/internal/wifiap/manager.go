@@ -82,6 +82,8 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	}
 	if !packagesPresent(m.runner()) {
 		status.SupportedCapable = false
+		status.CapabilityState = "unknown"
+		status.CapabilityDetail = "AP hardware capability cannot be assessed because the required host packages are not installed."
 		if st.Desired {
 			status.Reason = ReasonPackagesMissing
 			status.Message = formatProbeError(ReasonPackagesMissing)
@@ -96,6 +98,17 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	status.SupportedCapable = reason != ReasonNoHardware && reason != ReasonPackagesMissing
+	switch reason {
+	case ReasonNoHardware:
+		status.CapabilityState = "unsupported"
+		status.CapabilityDetail = "The host did not detect an AP-capable Wi-Fi interface."
+	case ReasonPackagesMissing:
+		status.CapabilityState = "unknown"
+		status.CapabilityDetail = "AP hardware capability cannot be assessed because the required host packages are not installed."
+	default:
+		status.CapabilityState = "supported"
+		status.CapabilityDetail = "An AP-capable Wi-Fi interface is detected."
+	}
 	if st.Iface == "" && iface != "" {
 		status.Iface = iface
 	}

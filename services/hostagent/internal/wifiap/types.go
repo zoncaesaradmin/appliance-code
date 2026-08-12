@@ -72,6 +72,8 @@ type Status struct {
 	LocalDNSServing  *bool  `json:"localDNSServing,omitempty"`
 	Security         string `json:"security"`
 	SupportedCapable bool   `json:"supportedCapable"`
+	CapabilityState  string `json:"capabilityState"`
+	CapabilityDetail string `json:"capabilityDetail,omitempty"`
 	Message          string `json:"message,omitempty"`
 }
 

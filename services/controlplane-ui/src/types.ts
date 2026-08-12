@@ -392,6 +392,8 @@ export interface HostWifiAPStatus {
   localDNSServing?: boolean;
   security: string;
   supportedCapable?: boolean;
+  capabilityState?: "supported" | "unsupported" | "unknown" | "limited";
+  capabilityDetail?: string;
   message?: string;
 }
 
@@ -410,7 +412,10 @@ export interface HostWifiStatus {
   ipv4Addresses?: string[];
   security: string;
   supportedCapable?: boolean;
+  capabilityState?: "supported" | "unsupported" | "unknown" | "limited";
+  capabilityDetail?: string;
   supportsConcurrentAP?: boolean;
+  concurrentAPState?: "supported" | "unsupported" | "unknown" | "limited";
   concurrentAPDetail?: string;
   message?: string;
 }
@@ -434,7 +439,10 @@ export interface HostWifiScanNetwork {
 export interface HostWifiScanResult {
   iface?: string;
   supportedCapable?: boolean;
+  capabilityState?: "supported" | "unsupported" | "unknown" | "limited";
+  capabilityDetail?: string;
   supportsConcurrentAP?: boolean;
+  concurrentAPState?: "supported" | "unsupported" | "unknown" | "limited";
   concurrentAPDetail?: string;
   reason?: string;
   message?: string;

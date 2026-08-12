@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "../client";
 import { Card, EmptyState, PageFrame } from "../components";
 import { client } from "../lib/api";
@@ -161,58 +161,85 @@ function formatLinkAddresses(link: import("../types").HostNetworkLink): string {
   return addrs.join(", ");
 }
 
-function formatCombinationSupport(supported: boolean, detail: string): string {
-  return `${supported ? "Supported" : "Not supported"}${detail ? ` · ${detail}` : ""}`;
+type CapabilityState = "supported" | "unsupported" | "unknown" | "limited";
+
+type CapabilityAssessment = {
+  state: CapabilityState;
+  detail: string;
+};
+
+function formatCapability(assessment: CapabilityAssessment): string {
+  const label = {
+    supported: "Supported",
+    unsupported: "Not supported by this hardware",
+    unknown: "Capability not detected",
+    limited: "Hardware capable, unavailable in this appliance"
+  }[assessment.state];
+  return `${label}${assessment.detail ? ` · ${assessment.detail}` : ""}`;
+}
+
+function combineCapabilities(...assessments: CapabilityAssessment[]): CapabilityAssessment {
+  const blocked = assessments.find((assessment) => assessment.state === "unsupported");
+  if (blocked) {
+    return blocked;
+  }
+  const limited = assessments.find((assessment) => assessment.state === "limited");
+  if (limited) {
+    return limited;
+  }
+  const unknown = assessments.find((assessment) => assessment.state === "unknown");
+  if (unknown) {
+    return unknown;
+  }
+  return { state: "supported", detail: "All required interfaces and modes are available." };
 }
 
 function shouldCloseWifiClientDialog(status: HostWifiStatus): boolean {
   return status.actual === "active" && !status.reason;
 }
 
-function describeEthernetWifiClient(
-  network: import("../types").HostNetworkStatus | undefined,
-  wifiClient: HostWifiStatus | null
-): string {
-  const hasEthernet = Boolean(network?.ethernet?.present);
-  const hasWifiClient = Boolean(wifiClient?.supportedCapable);
-  if (!hasEthernet) {
-    return formatCombinationSupport(false, "No Ethernet interface is present.");
+const wifiConnectionPollIntervalMs = 2_000;
+const wifiConnectionPollTimeoutMs = 75_000;
+
+function ethernetCapability(network: import("../types").HostNetworkStatus | undefined): CapabilityAssessment {
+  if (!network) {
+    return { state: "unknown", detail: "Ethernet inventory has not been returned by the host." };
   }
-  if (!hasWifiClient) {
-    return formatCombinationSupport(false, "No client-capable Wi-Fi interface is available.");
-  }
-  return formatCombinationSupport(
-    true,
-    "Ethernet and client Wi-Fi can stay up together when both interfaces are available."
-  );
+  return network.ethernet?.present
+    ? { state: "supported", detail: "An Ethernet interface is detected." }
+    : { state: "unsupported", detail: "The host did not detect an Ethernet interface." };
 }
 
-function describeEthernetWifiAP(
-  network: import("../types").HostNetworkStatus | undefined,
-  wifiAP: HostWifiAPStatus | null
-): string {
-  const hasEthernet = Boolean(network?.ethernet?.present);
-  const hasWifiAP = Boolean(wifiAP?.supportedCapable);
-  if (!hasEthernet) {
-    return formatCombinationSupport(false, "No Ethernet interface is present.");
-  }
-  if (!hasWifiAP) {
-    return formatCombinationSupport(false, "No AP-capable Wi-Fi interface is available.");
-  }
-  return formatCombinationSupport(
-    true,
-    "Ethernet and Wi-Fi AP can run together when the AP radio is available."
-  );
-}
-
-function describeWifiClientAP(wifiClient: HostWifiStatus | null): string {
+function wifiClientCapability(wifiClient: HostWifiStatus | null): CapabilityAssessment {
   if (!wifiClient) {
-    return "Unknown";
+    return { state: "unknown", detail: "Client Wi-Fi capability has not been returned by the host." };
   }
-  return formatCombinationSupport(
-    Boolean(wifiClient.supportsConcurrentAP),
-    wifiClient.concurrentAPDetail || "Hardware concurrency information is unavailable."
-  );
+  return {
+    state: wifiClient.capabilityState || (wifiClient.supportedCapable === false ? "unsupported" : "supported"),
+    detail: wifiClient.capabilityDetail || wifiClient.message || "Client Wi-Fi capability was returned without a detail."
+  };
+}
+
+function wifiAPCapability(wifiAP: HostWifiAPStatus | null): CapabilityAssessment {
+  if (!wifiAP) {
+    return { state: "unknown", detail: "Wi-Fi AP capability has not been returned by the host." };
+  }
+  return {
+    state: wifiAP.capabilityState || (wifiAP.supportedCapable === false ? "unsupported" : "supported"),
+    detail: wifiAP.capabilityDetail || wifiAP.message || "Wi-Fi AP capability was returned without a detail."
+  };
+}
+
+function wifiClientAPCapability(wifiClient: HostWifiStatus | null): CapabilityAssessment {
+  if (!wifiClient) {
+    return { state: "unknown", detail: "Simultaneous client Wi-Fi and AP capability has not been returned by the host." };
+  }
+  return {
+    state:
+      wifiClient.concurrentAPState ||
+      (wifiClient.supportsConcurrentAP ? "supported" : "unknown"),
+    detail: wifiClient.concurrentAPDetail || "The host did not return simultaneous client Wi-Fi and AP detail."
+  };
 }
 
 const wifiClientUnavailableMessage = "Client Wi-Fi is not available from the installed host-agent backend.";
@@ -257,6 +284,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const [showPsk, setShowPsk] = useState(false);
   const [wifiClientBusy, setWifiClientBusy] = useState(false);
   const [wifiClientScanBusy, setWifiClientScanBusy] = useState(false);
+  const [wifiClientConnectionTimedOut, setWifiClientConnectionTimedOut] = useState(false);
+  const wifiConnectionStartedAt = useRef<number | null>(null);
   const [wifiBusy, setWifiBusy] = useState(false);
   const [mdnsBusy, setMdnsBusy] = useState(false);
   const [networkLoaded, setNetworkLoaded] = useState(false);
@@ -362,30 +391,58 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   }, [props.pathname]);
 
   useEffect(() => {
-    if (wifiClient?.actual !== "connecting") {
+    if (wifiClient?.actual !== "connecting" || wifiClientConnectionTimedOut) {
+      if (wifiClient?.actual !== "connecting") {
+        wifiConnectionStartedAt.current = null;
+        setWifiClientConnectionTimedOut(false);
+      }
       return;
     }
-    const timer = window.setTimeout(() => {
-      void client
-        .getHostWifi()
-        .then((status) => {
-          setWifiClient(status);
-          if (status.actual === "active") {
-            setWifiClientError("");
-            setMessage(status.ssid ? `Wi-Fi connected to ${status.ssid}.` : "Wi-Fi connected.");
-            setWifiClientPSK("");
-            setShowWifiClientPSK(false);
-            setShowWifiClientDialog(false);
-          } else if (status.actual === "failed") {
-            setWifiClientError(status.message || "Wi-Fi could not connect.");
-          }
-        })
-        .catch((err: unknown) => {
+    const startedAt = wifiConnectionStartedAt.current ?? Date.now();
+    wifiConnectionStartedAt.current = startedAt;
+    let cancelled = false;
+    let requestInFlight = false;
+
+    const refresh = async () => {
+      if (cancelled || requestInFlight) {
+        return;
+      }
+      if (Date.now() - startedAt >= wifiConnectionPollTimeoutMs) {
+        setWifiClientConnectionTimedOut(true);
+        setWifiClientError("Wi-Fi is still connecting after 75 seconds. Retry or disconnect to recover.");
+        return;
+      }
+      requestInFlight = true;
+      try {
+        const status = await client.getHostWifi();
+        if (cancelled) {
+          return;
+        }
+        setWifiClient(status);
+        if (status.actual === "active") {
+          setWifiClientError("");
+          setMessage(status.ssid ? `Wi-Fi connected to ${status.ssid}.` : "Wi-Fi connected.");
+          setWifiClientPSK("");
+          setShowWifiClientPSK(false);
+        } else if (status.actual === "failed") {
+          setWifiClientError(status.message || "Wi-Fi could not connect.");
+        }
+      } catch (err) {
+        if (!cancelled) {
           setWifiClientError(err instanceof Error ? err.message : "Could not refresh client Wi-Fi status.");
-        });
-    }, 2_000);
-    return () => window.clearTimeout(timer);
-  }, [wifiClient?.actual]);
+        }
+      } finally {
+        requestInFlight = false;
+      }
+    };
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), wifiConnectionPollIntervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [wifiClient?.actual, wifiClientConnectionTimedOut]);
 
   async function scanWifiNetworks() {
     if (!wifiClientAvailable || !wifiClientScanSupported) {
@@ -454,6 +511,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       return null;
     }
     setWifiClientBusy(true);
+    setWifiClientConnectionTimedOut(false);
+    wifiConnectionStartedAt.current = request.desired ? Date.now() : null;
     setWifiClientError("");
     setMessage("");
     try {
@@ -571,6 +630,8 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   // true → only Disable; false → only Enable; null → loading/unavailable.
   const wifiClientOn: boolean | null = wifiClient ? wifiClient.desired || wifiClient.actual === "active" : null;
   const wifiOn: boolean | null = wifi ? wifi.desired || wifi.actual === "active" : null;
+  const wifiClientBlockedByAP = wifiClientOn === false && wifiOn === true;
+  const wifiAPBlockedByClient = wifiOn === false && wifiClientOn === true;
   const mdnsOn: boolean | null = mdns ? mdns.desired || mdns.actual === "active" : null;
   const pageError = isMDNS ? mdnsError : [networkError, wifiClientError, wifiError].filter(Boolean).join(" ");
   const scannedNetworks = wifiScan?.networks || [];
@@ -590,6 +651,10 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const wifiClientRadioEnabled = Boolean(wifiClient?.radioEnabled);
   const wifiClientConnecting = wifiClient?.actual === "connecting";
   const wifiClientConnected = wifiClient?.actual === "active";
+  const ethernetCapabilityState = ethernetCapability(hostInfo?.network);
+  const wifiClientCapabilityState = wifiClientCapability(wifiClient);
+  const wifiAPCapabilityState = wifiAPCapability(wifi);
+  const wifiClientAPCapabilityState = wifiClientAPCapability(wifiClient);
 
   return (
     <PageFrame
@@ -714,7 +779,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                     </div>
                     <div>
                       <span>Client Wi-Fi + Wi-Fi AP</span>
-                      <strong>{describeWifiClientAP(wifiClient)}</strong>
+                      <strong>{formatCapability(wifiClientAPCapabilityState)}</strong>
                     </div>
                     {wifiClient.reason ? (
                       <div>
@@ -741,7 +806,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                     <button
                       className="button button--primary"
                       type="button"
-                      disabled={wifiClientBusy || !wifiClientEnableSupported || wifiClientConnecting}
+                      disabled={wifiClientBusy || !wifiClientEnableSupported || (wifiClientConnecting && !wifiClientConnectionTimedOut)}
                       onClick={openWifiClientDialog}
                     >
                       {wifiClientConnecting ? "Connecting Wi-Fi…" : "Retry or change Wi-Fi"}
@@ -761,11 +826,13 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                     <button
                       className="button button--primary"
                       type="button"
-                      disabled={wifiClientBusy || !wifiClientEnableSupported}
+                      disabled={wifiClientBusy || !wifiClientEnableSupported || wifiClientBlockedByAP}
                       onClick={() => void enableWifiAdapter()}
                     >
                       {!wifiClientEnableSupported
                         ? "Wi-Fi unavailable"
+                        : wifiClientBlockedByAP
+                          ? "Disable Wi-Fi AP first"
                         : wifiClientBusy
                           ? "Enabling Wi-Fi…"
                           : wifiClientRadioEnabled
@@ -773,6 +840,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                             : "Enable Wi-Fi"}
                     </button>
                   ) : null}
+                  {wifiClientBlockedByAP ? <p className="muted">Wi-Fi AP is enabled. Disable Wi-Fi AP before enabling client Wi-Fi.</p> : null}
                   {wifiClientAvailable && wifiClientOn === null ? (
                     <button className="button button--ghost" type="button" disabled>
                       {wifiClientLoaded ? "Status unavailable" : "Loading…"}
@@ -866,10 +934,16 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       style={{ width: "100%" }}
                       onSubmit={(event) => {
                         event.preventDefault();
-                        void applyWifi(true);
+                        if (!wifiAPBlockedByClient) {
+                          void applyWifi(true);
+                        }
                       }}
                     >
-                      <p className="muted">Each enable requires a new WPA2 passphrase for security.</p>
+                      {wifiAPBlockedByClient ? (
+                        <p className="muted">Client Wi-Fi is enabled. Disable client Wi-Fi before enabling Wi-Fi AP.</p>
+                      ) : (
+                        <p className="muted">Each enable requires a new WPA2 passphrase for security.</p>
+                      )}
                       <div className="field">
                         <label htmlFor="wifi-ap-psk">WPA2 passphrase (required to enable)</label>
                         <span className="password-field">
@@ -880,13 +954,13 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                             value={psk}
                             onChange={(event) => setPsk(event.target.value)}
                             placeholder="8–63 characters"
-                            disabled={wifiBusy}
+                            disabled={wifiBusy || wifiAPBlockedByClient}
                             spellCheck={false}
                           />
                           <button
                             className="password-field__toggle"
                             type="button"
-                            disabled={wifiBusy}
+                            disabled={wifiBusy || wifiAPBlockedByClient}
                             aria-label={showPsk ? "Hide passphrase" : "Show passphrase"}
                             aria-pressed={showPsk}
                             title={showPsk ? "Hide passphrase" : "Show passphrase"}
@@ -899,9 +973,9 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       <button
                         className="button button--primary"
                         type="submit"
-                        disabled={wifiBusy || psk.trim().length < 8}
+                        disabled={wifiBusy || wifiAPBlockedByClient || psk.trim().length < 8}
                       >
-                        {wifiBusy ? "Enabling Wi-Fi AP…" : "Enable Wi-Fi AP"}
+                        {wifiBusy ? "Enabling Wi-Fi AP…" : wifiAPBlockedByClient ? "Disable client Wi-Fi first" : "Enable Wi-Fi AP"}
                       </button>
                     </form>
                   ) : null}
@@ -915,7 +989,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
             </Card>
           </div>
 
-          <Card title="Host network" subtitle="Live host interfaces from host-agent (not install-time chart values)">
+          <Card title="Host network" subtitle="Live host interfaces and hardware capability from host-agent (not install-time chart values)">
             {hostInfo || identity ? (
               <div className="detail-list">
                 <div>
@@ -946,18 +1020,14 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                   <span>Wi-Fi AP (management)</span>
                   <strong>{formatMediaStatus(hostInfo?.network?.wifiAP, "Wi-Fi AP")}</strong>
                 </div>
-                <div>
-                  <span>Ethernet + client Wi-Fi</span>
-                  <strong>{describeEthernetWifiClient(hostInfo?.network, wifiClient)}</strong>
-                </div>
-                <div>
-                  <span>Ethernet + Wi-Fi AP</span>
-                  <strong>{describeEthernetWifiAP(hostInfo?.network, wifi)}</strong>
-                </div>
-                <div>
-                  <span>Client Wi-Fi + Wi-Fi AP</span>
-                  <strong>{describeWifiClientAP(wifiClient)}</strong>
-                </div>
+                <div><span>None (all network services off)</span><strong>{formatCapability({ state: "supported", detail: "All host network services can be disabled." })}</strong></div>
+                <div><span>Ethernet</span><strong>{formatCapability(ethernetCapabilityState)}</strong></div>
+                <div><span>Client Wi-Fi</span><strong>{formatCapability(wifiClientCapabilityState)}</strong></div>
+                <div><span>Wi-Fi AP</span><strong>{formatCapability(wifiAPCapabilityState)}</strong></div>
+                <div><span>Ethernet + client Wi-Fi</span><strong>{formatCapability(combineCapabilities(ethernetCapabilityState, wifiClientCapabilityState))}</strong></div>
+                <div><span>Ethernet + Wi-Fi AP</span><strong>{formatCapability(combineCapabilities(ethernetCapabilityState, wifiAPCapabilityState))}</strong></div>
+                <div><span>Client Wi-Fi + Wi-Fi AP</span><strong>{formatCapability(wifiClientAPCapabilityState)}</strong></div>
+                <div><span>Ethernet + client Wi-Fi + Wi-Fi AP</span><strong>{formatCapability(combineCapabilities(ethernetCapabilityState, wifiClientAPCapabilityState))}</strong></div>
                 {(hostInfo?.network?.links || []).map((link) => (
                   <div key={`${link.name}-${link.role}`}>
                     <span>
@@ -1121,7 +1191,11 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                     </p>
                   ) : null}
                   {wifiClientConnecting ? (
-                    <p className="muted">Connecting to {wifiClient?.ssid || wifiClientTargetSSID}. This status refreshes automatically.</p>
+                    <p className="muted">
+                      {wifiClientConnectionTimedOut
+                        ? "The connection check timed out. You can retry this network or disconnect."
+                        : `Connecting to ${wifiClient?.ssid || wifiClientTargetSSID}. This status refreshes automatically.`}
+                    </p>
                   ) : null}
                   {!wifiClientScanSupported ? (
                     <p className="muted">
@@ -1143,7 +1217,7 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                       type="submit"
                       disabled={
                         wifiClientBusy ||
-                        wifiClientConnecting ||
+                        (wifiClientConnecting && !wifiClientConnectionTimedOut) ||
                         wifiClientTargetSSID.length === 0 ||
                         !wifiClientNetworkConnectable ||
                         (wifiClientPasswordRequired && wifiClientPSK.trim().length < 8)

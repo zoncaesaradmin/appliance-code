@@ -12,10 +12,12 @@ import (
 )
 
 var (
-	ifaceLineRE = regexp.MustCompile(`(?m)^\s*Interface\s+(\S+)`)
-	typeLineRE  = regexp.MustCompile(`(?m)^\s*type\s+(\S+)`)
-	phyLineRE   = regexp.MustCompile(`(?m)^Wiphy\s+(\S+)`)
-	apCapRE     = regexp.MustCompile(`(?m)^\s*\*\s+AP\b`)
+	ifaceLineRE     = regexp.MustCompile(`(?m)^\s*Interface\s+(\S+)`)
+	typeLineRE      = regexp.MustCompile(`(?m)^\s*type\s+(\S+)`)
+	phyLineRE       = regexp.MustCompile(`(?m)^Wiphy\s+(\S+)`)
+	apCapRE         = regexp.MustCompile(`(?m)^\s*\*\s+AP\b`)
+	apWordRE        = regexp.MustCompile(`(?i)\bap\b`)
+	maxInterfacesRE = regexp.MustCompile(`<=\s*([0-9]+)`)
 )
 
 type radioCandidate struct {
@@ -29,6 +31,14 @@ type radioInventory struct {
 	candidates []radioCandidate
 	managed    []radioCandidate
 	apActive   []radioCandidate
+	probeKnown bool
+	phyCaps    map[string]phyCapability
+}
+
+type phyCapability struct {
+	AP                  bool
+	ConcurrentKnown     bool
+	ConcurrentManagedAP bool
 }
 
 func inspectRadios(ctx context.Context, runner wifiap.Runner) (radioInventory, error) {
@@ -39,17 +49,19 @@ func inspectRadios(ctx context.Context, runner wifiap.Runner) (radioInventory, e
 	if err != nil {
 		return radioInventory{}, nil
 	}
-	inv := radioInventory{candidates: parseIWDev(devs)}
+	inv := radioInventory{candidates: parseIWDev(devs), probeKnown: true}
 	if len(inv.candidates) == 0 {
 		return inv, nil
 	}
-	listOut, _ := runner.CombinedOutput(ctx, "iw", "list")
-	apPhys := physWithAP(listOut)
+	listOut, listErr := runner.CombinedOutput(ctx, "iw", "list")
+	if listErr == nil && strings.TrimSpace(listOut) != "" {
+		inv.phyCaps = parsePHYCapabilities(listOut)
+	}
 	for i := range inv.candidates {
-		if len(apPhys) == 0 {
+		if len(inv.phyCaps) == 0 {
 			inv.candidates[i].APCapable = true
 		} else if inv.candidates[i].Phy != "" {
-			inv.candidates[i].APCapable = apPhys[inv.candidates[i].Phy]
+			inv.candidates[i].APCapable = inv.phyCaps[inv.candidates[i].Phy].AP
 		}
 		switch inv.candidates[i].Type {
 		case "managed":
@@ -72,6 +84,19 @@ func (inv radioInventory) supportedCapable() bool {
 	return len(inv.managed) > 0
 }
 
+func (inv radioInventory) clientCapability() (state, detail string) {
+	if !inv.probeKnown {
+		return CapabilityUnknown, "The wireless driver did not return a client interface inventory."
+	}
+	if len(inv.managed) > 0 {
+		return CapabilitySupported, "A client-capable Wi-Fi interface is detected."
+	}
+	if len(inv.apActive) > 0 {
+		return CapabilityLimited, "The detected Wi-Fi interface is currently in AP mode; no client interface is available to this appliance."
+	}
+	return CapabilityUnsupported, "The host did not detect a client-capable Wi-Fi interface."
+}
+
 func (inv radioInventory) unavailableReason() string {
 	if len(inv.apActive) > 0 {
 		return ReasonRadioInUseByAP
@@ -79,25 +104,41 @@ func (inv radioInventory) unavailableReason() string {
 	return ReasonNoHardware
 }
 
-func (inv radioInventory) concurrentAPSupport() (bool, string) {
-	if len(inv.managed) == 0 {
-		return false, "No client-capable Wi-Fi interface is available."
+func (inv radioInventory) concurrentAPSupport() (state string, supported bool, detail string) {
+	if !inv.probeKnown {
+		return CapabilityUnknown, false, "The wireless driver did not return an interface inventory, so simultaneous client Wi-Fi and AP capability cannot be assessed."
 	}
-	apCapableIfaces := map[string]bool{}
-	allIfaces := map[string]bool{}
+	if len(inv.managed) == 0 {
+		return CapabilityUnsupported, false, "No client-capable Wi-Fi interface is currently detected."
+	}
+	if len(inv.phyCaps) == 0 {
+		return CapabilityUnknown, false, "The driver did not expose AP-mode capability details, so simultaneous client Wi-Fi and AP capability cannot be assessed."
+	}
+	clientPHY := inv.managed[0].Phy
+	clientCaps, clientKnown := inv.phyCaps[clientPHY]
+	if !clientKnown {
+		return CapabilityUnknown, false, "The driver did not map the client interface to an AP capability record."
+	}
 	for _, candidate := range inv.candidates {
-		allIfaces[candidate.Iface] = true
-		if candidate.APCapable {
-			apCapableIfaces[candidate.Iface] = true
+		if candidate.Iface != inv.managed[0].Iface && candidate.APCapable {
+			return CapabilitySupported, true, "Separate usable Wi-Fi interfaces are detected for client Wi-Fi and Wi-Fi AP."
 		}
 	}
-	if len(apCapableIfaces) == 0 {
-		return false, "No AP-capable Wi-Fi interface is available."
+	if !clientCaps.AP {
+		for phy, caps := range inv.phyCaps {
+			if phy != clientPHY && caps.AP {
+				return CapabilityLimited, false, "An AP-capable radio exists, but the appliance does not currently have a separate usable interface for it."
+			}
+		}
+		return CapabilityUnsupported, false, "The client Wi-Fi radio does not report AP mode, and no separate AP-capable radio is detected."
 	}
-	if len(allIfaces) < 2 {
-		return false, "Client Wi-Fi and Wi-Fi AP need separate wireless interfaces on this appliance."
+	if !clientCaps.ConcurrentKnown {
+		return CapabilityUnknown, false, "The driver reports client and AP modes but does not expose their simultaneous-mode limit."
 	}
-	return true, "Separate wireless interfaces are available for client Wi-Fi and Wi-Fi AP at the same time."
+	if clientCaps.ConcurrentManagedAP {
+		return CapabilityLimited, false, "Hardware reports simultaneous client and AP mode on one radio, but this appliance requires a separate usable interface to enable both at once."
+	}
+	return CapabilityUnsupported, false, "The wireless driver reports client and AP modes but no simultaneous client-plus-AP combination."
 }
 
 func parseIWDev(out string) []radioCandidate {
@@ -141,18 +182,42 @@ func parseIWDev(out string) []radioCandidate {
 
 func physWithAP(iwList string) map[string]bool {
 	result := map[string]bool{}
+	for phy, caps := range parsePHYCapabilities(iwList) {
+		result[phy] = caps.AP
+	}
+	return result
+}
+
+func parsePHYCapabilities(iwList string) map[string]phyCapability {
+	result := map[string]phyCapability{}
 	var current string
+	inCombinations := false
 	for _, line := range strings.Split(iwList, "\n") {
 		if m := phyLineRE.FindStringSubmatch(line); len(m) == 2 {
 			current = m[1]
+			inCombinations = false
 			continue
 		}
 		if current == "" {
 			continue
 		}
+		caps := result[current]
 		if apCapRE.MatchString(line) {
-			result[current] = true
+			caps.AP = true
 		}
+		if strings.EqualFold(strings.TrimSpace(line), "valid interface combinations:") {
+			caps.ConcurrentKnown = true
+			inCombinations = true
+		}
+		if inCombinations {
+			lower := strings.ToLower(line)
+			if strings.Contains(lower, "managed") && apWordRE.MatchString(line) {
+				if match := maxInterfacesRE.FindStringSubmatch(line); len(match) == 2 && match[1] != "0" && match[1] != "1" {
+					caps.ConcurrentManagedAP = true
+				}
+			}
+		}
+		result[current] = caps
 	}
 	return result
 }

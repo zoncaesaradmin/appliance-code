@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"appliance-code/services/hostagent/internal/wifiap"
 )
@@ -17,7 +18,10 @@ type Manager struct {
 	RuntimeDir string
 	Runner     wifiap.Runner
 	Files      wifiap.FileIO
+	Now        func() time.Time
 }
+
+const clientWiFiConnectionTimeout = 60 * time.Second
 
 func NewManager() *Manager {
 	return &Manager{
@@ -59,6 +63,13 @@ func (m *Manager) files() wifiap.FileIO {
 	return wifiap.OSFileIO{}
 }
 
+func (m *Manager) now() time.Time {
+	if m.Now != nil {
+		return m.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
 func (m *Manager) Status(ctx context.Context) (Status, error) {
 	st, err := m.loadState()
 	if err != nil {
@@ -68,7 +79,8 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	supportsConcurrentAP, concurrentAPDetail := inv.concurrentAPSupport()
+	capabilityState, capabilityDetail := inv.clientCapability()
+	concurrentAPState, supportsConcurrentAP, concurrentAPDetail := inv.concurrentAPSupport()
 	status := Status{
 		Desired:              st.Desired,
 		Actual:               ActualInactive,
@@ -77,7 +89,10 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		RadioEnabled:         st.RadioEnabled,
 		Security:             defaultSecurity(st.Security),
 		SupportedCapable:     inv.supportedCapable(),
+		CapabilityState:      capabilityState,
+		CapabilityDetail:     capabilityDetail,
 		SupportsConcurrentAP: supportsConcurrentAP,
+		ConcurrentAPState:    concurrentAPState,
 		ConcurrentAPDetail:   concurrentAPDetail,
 	}
 	if status.Iface == "" {
@@ -110,6 +125,12 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	}
 	status.IPv4Addresses, _ = ipv4Addresses(ctx, m.runner(), status.Iface)
 	if connected && len(status.IPv4Addresses) > 0 {
+		if !st.ConnectingSince.IsZero() {
+			st.ConnectingSince = time.Time{}
+			if err := m.saveState(st); err != nil {
+				return Status{}, err
+			}
+		}
 		status.Actual = ActualActive
 		status.Reason = ReasonNone
 		status.Message = fmt.Sprintf("client Wi-Fi is active on %s", status.Iface)
@@ -123,6 +144,25 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		return status, nil
 	}
 	if servicesRunning {
+		if !st.ConnectingSince.IsZero() && m.now().Sub(st.ConnectingSince) >= clientWiFiConnectionTimeout {
+			if err := m.teardown(ctx); err != nil {
+				return Status{}, fmt.Errorf("wificlient: stop timed out connection: %w", err)
+			}
+			st.ConnectingSince = time.Time{}
+			if err := m.saveState(st); err != nil {
+				return Status{}, err
+			}
+			status.Actual = ActualFailed
+			status.Reason = ReasonConnectionTimeout
+			status.Message = "client Wi-Fi connection timed out after 60 seconds; check the password or signal and retry"
+			return status, nil
+		}
+		if st.ConnectingSince.IsZero() {
+			st.ConnectingSince = m.now()
+			if err := m.saveState(st); err != nil {
+				return Status{}, err
+			}
+		}
 		status.Actual = ActualConnecting
 		status.Reason = ReasonConnectionPending
 		status.Message = "client Wi-Fi is connecting and waiting for an IPv4 address"
@@ -158,6 +198,7 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		st.SSID = ""
 		st.Iface = ""
 		st.Security = ""
+		st.ConnectingSince = time.Time{}
 		if err := m.saveState(st); err != nil {
 			return Status{}, err
 		}
@@ -192,6 +233,7 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	st.SSID = ssid
 	st.Iface = iface
 	st.Security = security
+	st.ConnectingSince = m.now()
 	if err := m.saveState(st); err != nil {
 		return Status{}, err
 	}
@@ -271,11 +313,15 @@ func (m *Manager) Scan(ctx context.Context) (ScanResult, error) {
 	if err != nil {
 		return ScanResult{}, err
 	}
-	supportsConcurrentAP, concurrentAPDetail := inv.concurrentAPSupport()
+	capabilityState, capabilityDetail := inv.clientCapability()
+	concurrentAPState, supportsConcurrentAP, concurrentAPDetail := inv.concurrentAPSupport()
 	result := ScanResult{
 		Iface:                inv.defaultManagedIface(),
 		SupportedCapable:     inv.supportedCapable(),
+		CapabilityState:      capabilityState,
+		CapabilityDetail:     capabilityDetail,
 		SupportsConcurrentAP: supportsConcurrentAP,
+		ConcurrentAPState:    concurrentAPState,
 		ConcurrentAPDetail:   concurrentAPDetail,
 	}
 	if !packagesPresent(m.runner()) {
