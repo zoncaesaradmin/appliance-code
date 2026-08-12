@@ -217,6 +217,19 @@ function describeWifiClientAP(wifiClient: HostWifiStatus | null): string {
 
 const wifiClientUnavailableMessage = "Client Wi-Fi is not available from the installed host-agent backend.";
 
+// Older host agents can return 404 before they expose the status route. Keep
+// the client Wi-Fi workflow visible rather than hiding the only enable action.
+function fallbackWifiClientStatus(message = "Client Wi-Fi is currently off."): HostWifiStatus {
+  return {
+    desired: false,
+    actual: "inactive",
+    reason: "desired_off",
+    security: "unknown",
+    supportedCapable: true,
+    message
+  };
+}
+
 function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
   const isMDNS = props.pathname === "/admin/host-services/mdns";
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
@@ -289,10 +302,10 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       } catch (err) {
         if (!cancelled) {
           if (err instanceof ApiError && err.status === 404) {
-            setWifiClientAvailable(false);
-            setWifiClientUnavailableDetail("This appliance backend does not provide client Wi-Fi yet. Update the complete appliance bundle (UI, control plane, and host agent) together.");
+            setWifiClientAvailable(true);
+            setWifiClientUnavailableDetail("");
             setWifiClientScanSupported(false);
-            setWifiClient(null);
+            setWifiClient(fallbackWifiClientStatus());
             setWifiScan(null);
             setWifiClientError("");
           } else {
@@ -435,11 +448,11 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       return status;
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        setWifiClientAvailable(false);
-        setWifiClientUnavailableDetail("This appliance backend does not provide client Wi-Fi enablement. Update the complete appliance bundle (UI, control plane, and host agent) together.");
+        setWifiClientAvailable(true);
+        setWifiClientUnavailableDetail("");
         setWifiClientScanSupported(false);
-        setWifiClient(null);
-        setWifiClientError("");
+        setWifiClient((current) => current || fallbackWifiClientStatus());
+        setWifiClientError("Client Wi-Fi enablement is not available from this appliance backend yet.");
       } else {
         setWifiClientError(err instanceof Error ? err.message : "Could not update client Wi-Fi.");
       }
