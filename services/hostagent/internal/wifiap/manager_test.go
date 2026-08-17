@@ -372,3 +372,143 @@ func TestApplyRejectsSoftWhenRadioInUse(t *testing.T) {
 		t.Fatalf("actual = %q", status.Actual)
 	}
 }
+
+func TestReconcileRestartsFromStoredPSK(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"hostapd": true, "dnsmasq": true, "iw": true, "ip": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+			"iw list": `Wiphy phy0
+	Supported interface modes:
+		 * managed
+		 * AP
+`,
+			"iw dev wlan0 link": "Not connected.",
+		},
+	}
+	m := &Manager{
+		ConfigDir:  "/cfg",
+		StateDir:   "/state",
+		RuntimeDir: "/run",
+		Runner:     &matchingRunner{inner: runner},
+		Files:      files,
+		PortBinder: FixedPortBinder{Allow: true},
+	}
+	if _, err := m.Apply(context.Background(), ApplyRequest{
+		Desired:  true,
+		PSK:      "long-enough-secret",
+		SSIDBase: "kitchen",
+	}); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	// Simulate reboot: processes gone, desired + PSK remain, generated conf removed.
+	delete(files.data, "/cfg/hostapd.conf")
+	delete(files.data, "/cfg/dnsmasq.conf")
+	dead := &fakeRunner{
+		paths:   runner.paths,
+		outputs: runner.outputs,
+	}
+	m.Runner = dead
+
+	status, err := m.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if !status.Desired {
+		t.Fatal("desired should remain true")
+	}
+	if _, ok := files.data["/cfg/hostapd.conf"]; !ok {
+		t.Fatal("reconcile must rewrite hostapd.conf from stored PSK")
+	}
+	if !strings.Contains(string(files.data["/cfg/hostapd.conf"]), "wpa_passphrase=long-enough-secret") {
+		t.Fatalf("hostapd conf missing passphrase:\n%s", files.data["/cfg/hostapd.conf"])
+	}
+	startedHostapd := false
+	for _, call := range dead.calls {
+		if strings.HasPrefix(call, "hostapd -B") {
+			startedHostapd = true
+			break
+		}
+	}
+	if !startedHostapd {
+		t.Fatalf("reconcile must start hostapd; calls=%v", dead.calls)
+	}
+}
+
+func TestApplyReusesStoredPSKWhenRequestOmitsIt(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"hostapd": true, "dnsmasq": true, "iw": true, "ip": true, "pkill": true, "pgrep": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+			"iw list": `Wiphy phy0
+	Supported interface modes:
+		 * managed
+		 * AP
+`,
+			"iw dev wlan0 link": "Not connected.",
+		},
+	}
+	m := &Manager{
+		ConfigDir:  "/cfg",
+		StateDir:   "/state",
+		RuntimeDir: "/run",
+		Runner:     &matchingRunner{inner: runner},
+		Files:      files,
+		PortBinder: FixedPortBinder{Allow: true},
+	}
+	if _, err := m.Apply(context.Background(), ApplyRequest{
+		Desired:  true,
+		PSK:      "long-enough-secret",
+		SSIDBase: "kitchen",
+	}); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true, SSIDBase: "kitchen"})
+	if err != nil {
+		t.Fatalf("re-apply without PSK: %v", err)
+	}
+	if status.Reason == ReasonPSKMissing {
+		t.Fatal("empty PSK must reuse stored secret when present")
+	}
+	if !status.Desired {
+		t.Fatal("desired")
+	}
+}
+
+func TestApplyWithoutPSKFailsWhenSecretMissing(t *testing.T) {
+	files := newMemFile()
+	runner := &fakeRunner{
+		paths: map[string]bool{"hostapd": true, "dnsmasq": true, "iw": true},
+		outputs: map[string]string{
+			"iw dev": `phy#0
+	Interface wlan0
+		type managed
+		wiphy 0
+`,
+			"iw list": `Wiphy phy0
+	Supported interface modes:
+		 * managed
+		 * AP
+`,
+			"iw dev wlan0 link": "Not connected.",
+		},
+	}
+	m := &Manager{ConfigDir: "/cfg", StateDir: "/state", RuntimeDir: "/run", Runner: runner, Files: files}
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true, SSIDBase: "kitchen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Reason != ReasonPSKMissing {
+		t.Fatalf("reason = %q, want psk_missing", status.Reason)
+	}
+}

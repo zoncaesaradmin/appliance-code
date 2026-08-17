@@ -208,7 +208,15 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	}
 
 	psk := strings.TrimSpace(req.PSK)
-	// Every enable requires an explicit PSK (do not reuse stored secret).
+	if psk == "" {
+		// Reuse the stored passphrase only when re-activating an already-configured
+		// AP (boot reconcile / operator retry). Fresh enable still requires an
+		// explicit PSK; disable wipes the stored secret.
+		stored, loadErr := m.loadPSK()
+		if loadErr == nil {
+			psk = strings.TrimSpace(stored)
+		}
+	}
 	if err := ValidatePSK(psk); err != nil {
 		_ = m.saveState(st)
 		status, _ := m.Status(ctx)
@@ -220,7 +228,30 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	if err := m.savePSK(psk); err != nil {
 		return Status{}, err
 	}
+	return m.bringUp(ctx, st, psk)
+}
 
+// Reconcile restores the management AP when desired state survived a reboot but
+// hostapd/dnsmasq did not. No-op when desired is off or services are already active.
+func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
+	st, err := m.loadState()
+	if err != nil {
+		return Status{}, err
+	}
+	if !st.Desired {
+		return m.Status(ctx)
+	}
+	status, err := m.Status(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	if status.Actual == ActualActive {
+		return status, nil
+	}
+	return m.Apply(ctx, ApplyRequest{Desired: true, SSIDBase: st.SSIDBase})
+}
+
+func (m *Manager) bringUp(ctx context.Context, st persistedState, psk string) (Status, error) {
 	iface, reason, err := selectInterface(ctx, m.runner())
 	if err != nil {
 		return Status{}, err

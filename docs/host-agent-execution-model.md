@@ -45,6 +45,13 @@ Install stages offline host packages from the super-set bundle; day-2 Admin UI/A
 API over the host agent Unix socket. Control-plane routes mirror it:
 `GET|PUT /api/v1/host/wifi-ap` (permissions `host.read` / `host.write`).
 
+On `appliance-host-agentd` startup, the daemon reconciles persisted day-2 desired
+state for Wi-Fi AP, client Wi-Fi, and mDNS. Desired flags and secrets live under
+`/var/lib/zon/…`; `hostapd` / `dnsmasq` / `wpa_supplicant` are process-backed, so
+reboot alone would leave Desired On / Actual inactive without this reconcile.
+Admin **Restart Wi-Fi AP** reuses the stored passphrase the same way when Actual
+is inactive while Desired remains on.
+
 Client Wi-Fi is applied through the same host-agentd path:
 `GET|PUT /internal/v1/host/wifi`, with `PUT /internal/v1/host/wifi/enable`
 to prepare the adapter and `GET /internal/v1/host/wifi/scan` for network

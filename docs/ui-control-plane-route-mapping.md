@@ -253,6 +253,7 @@ proxy). Notable Admin host configuration routes:
 | `GET /admin/host-services/mdns` | `AdminHostServicesPage` mDNS tab | `GET /api/v1/host/mdns` | mDNS status card, including advertised `hostname.local` when available |
 | Enable or Disable mDNS | `applyHostMDNS` | `PUT /api/v1/host/mdns` with `{desired}` | One action button from status (`desired`/`actual`); busy label while apply runs; card refresh with advertised `hostname.local` |
 | Enable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true,psk}` (PSK never logged) | Shown only when AP is off; single PSK field (no confirm) with show/hide toggle; busy “Enabling…”; opens as `https://manage.ap/` (fixed IP `https://10.42.0.1/`); soft reasons such as `packages_missing` |
+| Restart Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:true}` (omit PSK; host-agentd reuses stored secret) | Shown when Desired is on but Actual is not active (typical after reboot before/without auto-reconcile); busy “Restarting…” |
 | Disable Wi-Fi AP | `applyHostWifiAP` | `PUT /api/v1/host/wifi-ap` with `{desired:false}` | Shown only when AP is on; busy “Disabling…” then switches to enable control |
 | `GET /admin/lan-services` | React `DNSPage` (Admin → LAN Services → DNS tab) | `GET /api/v1/dns/records` | List zone records; page title LAN Services |
 | Add or update DNS record | `upsertDNSRecord` | `PUT /api/v1/dns/records/{name}` with `{ipv4,ttl}` | Refresh records list |

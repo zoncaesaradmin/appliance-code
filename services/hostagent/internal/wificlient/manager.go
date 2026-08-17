@@ -249,6 +249,56 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	return m.Status(ctx)
 }
 
+// Reconcile restores client Wi-Fi after reboot when desired state and the
+// wpa_supplicant config survived but processes did not. No-op when desired is
+// off, already connecting/active, or the config file is missing.
+func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
+	st, err := m.loadState()
+	if err != nil {
+		return Status{}, err
+	}
+	if !st.Desired {
+		return m.Status(ctx)
+	}
+	status, err := m.Status(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	if status.Actual == ActualActive || status.Actual == ActualConnecting {
+		return status, nil
+	}
+	if _, err := m.files().Stat(m.confPath()); err != nil {
+		return status, nil
+	}
+	if !packagesPresent(m.runner()) {
+		return status, nil
+	}
+	inv, err := inspectRadios(ctx, m.runner())
+	if err != nil {
+		return Status{}, err
+	}
+	iface := st.Iface
+	if iface == "" {
+		iface = inv.defaultManagedIface()
+	}
+	if iface == "" {
+		return status, nil
+	}
+	st.Iface = iface
+	st.RadioEnabled = true
+	st.ConnectingSince = m.now()
+	if err := m.saveState(st); err != nil {
+		return Status{}, err
+	}
+	if err := m.prepareInterface(ctx, iface); err != nil {
+		return Status{}, err
+	}
+	if err := m.startServices(ctx, iface); err != nil {
+		return Status{}, err
+	}
+	return m.Status(ctx)
+}
+
 // Enable brings the client Wi-Fi adapter up without joining a network. The
 // selection and credential step is intentionally separate in Apply.
 func (m *Manager) Enable(ctx context.Context) (Status, error) {

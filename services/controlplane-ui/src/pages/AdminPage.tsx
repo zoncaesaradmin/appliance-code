@@ -624,17 +624,17 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     }
   }
 
-  async function applyWifi(desired: boolean) {
+  async function applyWifi(desired: boolean, options?: { reuseStoredPsk?: boolean }) {
     setWifiBusy(true);
     setWifiError("");
     setMessage("");
     try {
       const status = await client.applyHostWifiAP({
         desired,
-        psk: desired ? psk : undefined
+        psk: desired && !options?.reuseStoredPsk ? psk : undefined
       });
       setWifi(status);
-      if (desired) {
+      if (desired && !options?.reuseStoredPsk) {
         setPsk("");
         setShowPsk(false);
       }
@@ -645,7 +645,13 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
       } else if (status.reason === "no_capable_hardware" || status.reason === "radio_in_use") {
         setWifiError(status.message || status.reason);
       } else {
-        setMessage(desired ? "Wi-Fi access point enabled." : "Wi-Fi access point disabled.");
+        setMessage(
+          desired
+            ? options?.reuseStoredPsk
+              ? "Wi-Fi access point restarted."
+              : "Wi-Fi access point enabled."
+            : "Wi-Fi access point disabled."
+        );
       }
     } catch (err) {
       setWifiError(err instanceof Error ? err.message : "Could not update Wi-Fi access point.");
@@ -654,9 +660,10 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
     }
   }
 
-  // true → only Disable; false → only Enable; null → loading/unavailable.
+  // true → Disable (+ Restart when inactive); false → Enable; null → loading/unavailable.
   const wifiClientOn: boolean | null = wifiClient ? wifiClient.desired || wifiClient.actual === "active" : null;
   const wifiOn: boolean | null = wifi ? wifi.desired || wifi.actual === "active" : null;
+  const wifiAPNeedsRestart = Boolean(wifi?.desired && wifi.actual !== "active");
   const wifiClientBlockedByAP = wifiClientOn === false && wifiOn === true;
   const wifiAPBlockedByClient = wifiOn === false && wifiClientOn === true;
   const mdnsOn: boolean | null = mdns ? mdns.desired || mdns.actual === "active" : null;
@@ -946,14 +953,32 @@ function AdminHostServicesPage(props: { pathname: string }): React.JSX.Element {
                 )}
                 <div className="host-service-panel__actions">
                   {wifiOn === true ? (
-                    <button
-                      className="button button--ghost"
-                      type="button"
-                      disabled={wifiBusy}
-                      onClick={() => void applyWifi(false)}
-                    >
-                      {wifiBusy ? "Disabling Wi-Fi AP…" : "Disable Wi-Fi AP"}
-                    </button>
+                    <>
+                      {wifiAPNeedsRestart ? (
+                        <p className="muted">
+                          Desired is on but the access point is not active (common after reboot). Restart
+                          reuses the stored passphrase without disabling first.
+                        </p>
+                      ) : null}
+                      {wifiAPNeedsRestart ? (
+                        <button
+                          className="button button--primary"
+                          type="button"
+                          disabled={wifiBusy}
+                          onClick={() => void applyWifi(true, { reuseStoredPsk: true })}
+                        >
+                          {wifiBusy ? "Restarting Wi-Fi AP…" : "Restart Wi-Fi AP"}
+                        </button>
+                      ) : null}
+                      <button
+                        className="button button--ghost"
+                        type="button"
+                        disabled={wifiBusy}
+                        onClick={() => void applyWifi(false)}
+                      >
+                        {wifiBusy ? "Disabling Wi-Fi AP…" : "Disable Wi-Fi AP"}
+                      </button>
+                    </>
                   ) : null}
                   {wifiOn === false ? (
                     <form

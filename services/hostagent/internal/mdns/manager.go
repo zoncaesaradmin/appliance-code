@@ -151,6 +151,26 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	return m.Status(ctx)
 }
 
+// Reconcile restores avahi-daemon when desired state survived a reboot but the
+// unit is not active. Prefer systemd enablement from Apply; this covers drift.
+func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
+	st, err := m.loadState()
+	if err != nil {
+		return Status{}, err
+	}
+	if !st.Desired {
+		return m.Status(ctx)
+	}
+	status, err := m.Status(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	if status.Actual == ActualActive {
+		return status, nil
+	}
+	return m.Apply(ctx, ApplyRequest{Desired: true})
+}
+
 func packagesPresent(r Runner) bool {
 	if _, err := r.LookPath("avahi-daemon"); err != nil {
 		return false
