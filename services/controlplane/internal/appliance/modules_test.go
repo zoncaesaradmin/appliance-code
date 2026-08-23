@@ -55,6 +55,30 @@ func TestResolveModulesIncludesDNSWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestResolveModulesIncludesVideoRuntimeWhenEnabled(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("training")
+	if err != nil {
+		t.Fatalf("ResolveProfile(training): %v", err)
+	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameVideoRuntime) {
+		t.Fatal("training modules should include video-runtime")
+	}
+	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
+		t.Fatal("training modules should include files")
+	}
+	if appliance.ModuleEnabled(modules, appliance.ModuleNameBuild) {
+		t.Fatal("training profile should not include build")
+	}
+	if appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime) {
+		t.Fatal("training profile should not include inference-runtime")
+	}
+	module, _ := appliance.ModuleNamed(modules, appliance.ModuleNameVideoRuntime)
+	if module.PrimaryCapability() != appliance.CapabilityVideo {
+		t.Fatalf("PrimaryCapability = %q, want %q", module.PrimaryCapability(), appliance.CapabilityVideo)
+	}
+}
+
 func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {
 	resolved, err := appliance.ResolveProfile("core")
 	if err != nil {

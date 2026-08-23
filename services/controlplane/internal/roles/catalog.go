@@ -95,6 +95,11 @@ const (
 	PermInferenceModelsRead = "inference.models.read"
 	PermInferenceAdmin      = "inference.admin"
 
+	PermVideoLibraryRead  = "video.library.read"
+	PermVideoLibraryWrite = "video.library.write"
+	PermVideoPlay         = "video.play"
+	PermVideoAdmin        = "video.admin"
+
 	PermMCPInvoke = "mcp.invoke"
 
 	PermSystemRead    = "system.read"
@@ -177,6 +182,11 @@ var AllPermissions = []storage.Permission{
 	{Name: PermInferenceModelsRead, Description: "List available inference models"},
 	{Name: PermInferenceAdmin, Description: "Manage inference runtime and model packs"},
 
+	{Name: PermVideoLibraryRead, Description: "Browse the training video library"},
+	{Name: PermVideoLibraryWrite, Description: "Upload or manage training video library content"},
+	{Name: PermVideoPlay, Description: "Stream and play training video library items"},
+	{Name: PermVideoAdmin, Description: "Administer the video runtime"},
+
 	{Name: PermMCPInvoke, Description: "Invoke MCP tools"},
 
 	{Name: PermSystemRead, Description: "Read system status and version"},
@@ -231,6 +241,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermFilesRead, PermFilesWrite,
 			PermHostRead, PermOperationsReadSelf,
 			PermInferenceUse, PermInferenceModelsRead,
+			PermVideoLibraryRead, PermVideoLibraryWrite, PermVideoPlay,
 			PermMCPInvoke,
 		},
 	},
@@ -244,6 +255,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermOperationsReadSelf,
 			PermDNSRecordsRead,
 			PermInferenceModelsRead,
+			PermVideoLibraryRead, PermVideoPlay,
 			PermNotificationsRead,
 			PermLicensingRead,
 		},
@@ -260,6 +272,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermDNSRecordsRegister,
 			PermDNSPublish,
 			PermInferenceUse, PermInferenceModelsRead,
+			PermVideoLibraryRead, PermVideoLibraryWrite, PermVideoPlay,
 		},
 	},
 }

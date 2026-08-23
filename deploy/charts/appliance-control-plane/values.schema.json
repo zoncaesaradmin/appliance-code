@@ -326,6 +326,25 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "applianceProfile": {
+                "enum": ["training"]
+              }
+            },
+            "required": ["applianceProfile"]
+          },
+          "then": {
+            "required": ["videoGatewayBaseURL"],
+            "properties": {
+              "videoGatewayBaseURL": {
+                "type": "string",
+                "pattern": "^https?://[^/]+$"
+              }
+            }
+          }
         }
       ],
       "properties": {
@@ -341,7 +360,8 @@
             "builder-storage-landns",
             "lanllm",
             "builder-lanllm",
-            "builder-lanllm-storage-landns"
+            "builder-lanllm-storage-landns",
+            "training"
           ]
         },
         "applianceName": {
@@ -394,6 +414,9 @@
           "type": "string"
         },
         "inferenceGatewayBaseURL": {
+          "type": "string"
+        },
+        "videoGatewayBaseURL": {
           "type": "string"
         },
         "dnsZoneName": {

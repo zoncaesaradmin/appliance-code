@@ -58,6 +58,13 @@ Options:
                                    platform-manifest reference.
   --inference-version VERSION      Inference compatibility version. Defaults to
                                    the appliance-inference chart appVersion.
+  --video-runtime-image PATH       Pinned video-runtime linux/amd64 OCI archive.
+  --video-runtime-image-reference REF
+                                   Canonical
+                                   registry.local/video-runtime@sha256:...
+                                   platform-manifest reference.
+  --video-version VERSION          Video compatibility version. Defaults to
+                                   the appliance-video chart appVersion.
   --extra-oci-image PATH           Repeatable additional OCI image archive to
                                    include in release-input, for example a
                                    builder task image required by a profile.
@@ -101,6 +108,7 @@ WORKFLOWS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-workflows"
 ARTIFACT_SERVER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
 DNS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-dns"
 INFERENCE_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-inference"
+VIDEO_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-video"
 VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
@@ -125,6 +133,9 @@ DNS_VERSION=""
 INFERENCE_RUNTIME_IMAGE=""
 INFERENCE_RUNTIME_IMAGE_REFERENCE=""
 INFERENCE_VERSION=""
+VIDEO_RUNTIME_IMAGE=""
+VIDEO_RUNTIME_IMAGE_REFERENCE=""
+VIDEO_VERSION=""
 WORKFLOWS_VERSION=""
 WORKFLOW_CONTROLLER_IMAGE=""
 WORKFLOW_CONTROLLER_IMAGE_REFERENCE=""
@@ -232,6 +243,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --inference-version)
       INFERENCE_VERSION="${2:-}"
+      shift 2
+      ;;
+    --video-runtime-image)
+      VIDEO_RUNTIME_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --video-runtime-image-reference)
+      VIDEO_RUNTIME_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --video-version)
+      VIDEO_VERSION="${2:-}"
       shift 2
       ;;
     --extra-oci-image)
@@ -576,6 +599,67 @@ fi
 if [[ -z "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   INFERENCE_VERSION=""
 fi
+if [[ -n "${VIDEO_RUNTIME_IMAGE}" && ! -f "${VIDEO_RUNTIME_IMAGE}" ]]; then
+  echo "archive-release-input: video-runtime image not found: ${VIDEO_RUNTIME_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${VIDEO_RUNTIME_IMAGE}" || -n "${VIDEO_RUNTIME_IMAGE_REFERENCE}" || -n "${VIDEO_VERSION}" ]]; then
+  if [[ -z "${VIDEO_RUNTIME_IMAGE}" || -z "${VIDEO_RUNTIME_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: --video-runtime-image and --video-runtime-image-reference must be provided together" >&2
+    exit 2
+  fi
+  if [[ ! "${VIDEO_RUNTIME_IMAGE_REFERENCE}" =~ ^registry\.local/video-runtime@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --video-runtime-image-reference must be registry.local/video-runtime@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  if [[ ! -d "${VIDEO_CHART_DIR}" ]]; then
+    echo "archive-release-input: missing appliance-video chart: ${VIDEO_CHART_DIR}" >&2
+    exit 1
+  fi
+  if [[ -z "${VIDEO_VERSION}" ]]; then
+    VIDEO_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${VIDEO_CHART_DIR}/Chart.yaml")"
+  fi
+  # compatibility.videoVersion is unprefixed; Chart.yaml appVersion may be v10.10.7.
+  VIDEO_VERSION="${VIDEO_VERSION#v}"
+  if [[ -z "${VIDEO_VERSION}" ]]; then
+    echo "archive-release-input: unable to derive videoVersion from ${VIDEO_CHART_DIR}/Chart.yaml" >&2
+    exit 1
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "archive-release-input: python3 is required to validate the video-runtime OCI archive contract" >&2
+    exit 1
+  fi
+  python3 - "${VIDEO_RUNTIME_IMAGE}" "${VIDEO_RUNTIME_IMAGE_REFERENCE}" <<'PY'
+import json
+import sys
+import tarfile
+
+archive, reference = sys.argv[1:]
+with tarfile.open(archive, "r:*") as tf:
+    member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
+    if member is None:
+        raise SystemExit("archive-release-input: video-runtime OCI archive has no index.json")
+    stream = tf.extractfile(member)
+    if stream is None:
+        raise SystemExit("archive-release-input: video-runtime OCI index.json is not a regular file")
+    index = json.load(stream)
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"archive-release-input: video-runtime OCI index must contain one platform manifest, found {len(manifests)}")
+descriptor = manifests[0]
+annotation = descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name")
+if annotation != "registry.local/video-runtime:bundled":
+    raise SystemExit(f"archive-release-input: video-runtime OCI annotation is {annotation!r}, want 'registry.local/video-runtime:bundled'")
+digest = descriptor.get("digest", "")
+if reference != "registry.local/video-runtime@" + digest:
+    raise SystemExit(f"archive-release-input: video-runtime image reference {reference!r} does not match index digest {digest!r}")
+PY
+fi
+# Pack-selective builds may omit video inputs (video pack not selected).
+# Never ship videoVersion/chart without the runtime image.
+if [[ -z "${VIDEO_RUNTIME_IMAGE}" ]]; then
+  VIDEO_VERSION=""
+fi
 if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" && ! -f "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
   echo "archive-release-input: workflow controller image not found: ${WORKFLOW_CONTROLLER_IMAGE}" >&2
   exit 1
@@ -719,12 +803,14 @@ HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
 ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 INFERENCE_RUNTIME_BASENAME=""
+VIDEO_RUNTIME_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 MESSAGE_BROKER_CHART_ARCHIVE="appliance-message-broker-${CODE_VERSION}.tgz"
 WORKFLOWS_CHART_ARCHIVE="workflows-chart-${CODE_VERSION}.tgz"
 ARTIFACT_SERVER_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
 DNS_CHART_ARCHIVE="appliance-dns-chart-${CODE_VERSION}.tgz"
 INFERENCE_CHART_ARCHIVE="appliance-inference-chart-${CODE_VERSION}.tgz"
+VIDEO_CHART_ARCHIVE="appliance-video-chart-${CODE_VERSION}.tgz"
 CONFIG_SCHEMA_BASENAME="configuration.schema.json"
 COMPATIBILITY_BASENAME="compatibility.json"
 CHECKSUMS_BASENAME="checksums.txt"
@@ -762,6 +848,10 @@ fi
 if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   INFERENCE_RUNTIME_BASENAME="$(basename "${INFERENCE_RUNTIME_IMAGE}")"
   cp "${INFERENCE_RUNTIME_IMAGE}" "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}"
+fi
+if [[ -n "${VIDEO_RUNTIME_IMAGE}" ]]; then
+  VIDEO_RUNTIME_BASENAME="$(basename "${VIDEO_RUNTIME_IMAGE}")"
+  cp "${VIDEO_RUNTIME_IMAGE}" "${RELEASE_INPUT_DIR}/${VIDEO_RUNTIME_BASENAME}"
 fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
@@ -808,6 +898,14 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   INFERENCE_CHART_BASENAME="${INFERENCE_CHART_ARCHIVE}"
 fi
 
+VIDEO_CHART_BASENAME=""
+if [[ -n "${VIDEO_RUNTIME_IMAGE}" ]]; then
+  mkdir -p "${TMP_DIR}/appliance-video-chart"
+  cp -R "${VIDEO_CHART_DIR}/." "${TMP_DIR}/appliance-video-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${VIDEO_CHART_ARCHIVE}" appliance-video-chart
+  VIDEO_CHART_BASENAME="${VIDEO_CHART_ARCHIVE}"
+fi
+
 if [[ -n "${WORKFLOWS_CRDS_DIR}" && -d "${WORKFLOWS_CHART_DIR}" ]]; then
   mkdir -p "${TMP_DIR}/workflows-chart"
   cp -R "${WORKFLOWS_CHART_DIR}/." "${TMP_DIR}/workflows-chart/"
@@ -823,6 +921,9 @@ fi
   printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
   if [[ -n "${INFERENCE_VERSION}" ]]; then
     printf ',\n  "inferenceVersion": "%s"' "${INFERENCE_VERSION}"
+  fi
+  if [[ -n "${VIDEO_VERSION}" ]]; then
+    printf ',\n  "videoVersion": "%s"' "${VIDEO_VERSION}"
   fi
   if [[ -n "${WORKFLOWS_VERSION}" ]]; then
     printf ',\n  "workflowsVersion": "%s"' "${WORKFLOWS_VERSION}"
@@ -876,6 +977,12 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   fi
   if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}" | sed 's/^sha256://')" "${INFERENCE_RUNTIME_BASENAME}"
+  fi
+  if [[ -n "${VIDEO_CHART_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${VIDEO_CHART_BASENAME}" | sed 's/^sha256://')" "${VIDEO_CHART_BASENAME}"
+  fi
+  if [[ -n "${VIDEO_RUNTIME_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${VIDEO_RUNTIME_BASENAME}" | sed 's/^sha256://')" "${VIDEO_RUNTIME_BASENAME}"
   fi
   if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_CONTROLLER_BASENAME}"
@@ -934,6 +1041,10 @@ INFERENCE_COMPATIBILITY_JSON=""
 if [[ -n "${INFERENCE_VERSION}" ]]; then
   INFERENCE_COMPATIBILITY_JSON=', "inferenceVersion": "'"${INFERENCE_VERSION}"'"'
 fi
+VIDEO_COMPATIBILITY_JSON=""
+if [[ -n "${VIDEO_VERSION}" ]]; then
+  VIDEO_COMPATIBILITY_JSON=', "videoVersion": "'"${VIDEO_VERSION}"'"'
+fi
 
 OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=""
 if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
@@ -954,6 +1065,16 @@ if [[ -n "${INFERENCE_CHART_BASENAME}" ]]; then
   if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
     OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
     "inferenceRuntimeImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}" "${INFERENCE_RUNTIME_BASENAME}" "${INFERENCE_RUNTIME_IMAGE_REFERENCE}")"
+  fi
+fi
+
+OPTIONAL_VIDEO_ARTIFACTS_JSON=""
+if [[ -n "${VIDEO_CHART_BASENAME}" ]]; then
+  OPTIONAL_VIDEO_ARTIFACTS_JSON=',
+    "videoChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${VIDEO_CHART_BASENAME}" "${VIDEO_CHART_BASENAME}")"
+  if [[ -n "${VIDEO_RUNTIME_BASENAME}" ]]; then
+    OPTIONAL_VIDEO_ARTIFACTS_JSON+=',
+    "videoRuntimeImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${VIDEO_RUNTIME_BASENAME}" "${VIDEO_RUNTIME_BASENAME}" "${VIDEO_RUNTIME_IMAGE_REFERENCE}")"
   fi
 fi
 
@@ -1007,7 +1128,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "messageBrokerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" "${MESSAGE_BROKER_CHART_ARCHIVE}"),
     "artifactServerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" "${ARTIFACT_SERVER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON},
-    "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
+    "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON}${OPTIONAL_VIDEO_ARTIFACTS_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
 $(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": %s,\n' "$(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_IMAGE_REFERENCE}")"; fi)
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
@@ -1020,7 +1141,7 @@ $(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": 
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${INFERENCE_COMPATIBILITY_JSON}${WORKFLOWS_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${INFERENCE_COMPATIBILITY_JSON}${VIDEO_COMPATIBILITY_JSON}${WORKFLOWS_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

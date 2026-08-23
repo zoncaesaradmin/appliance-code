@@ -483,12 +483,12 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		name, _ := svc["name"].(string)
 		priority, _ := route["priority"].(int)
 		switch {
-		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/inference/v1`))" && name == controlPlaneServiceName:
+		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/inference/v1`) || PathPrefix(`/video/v1`))" && name == controlPlaneServiceName:
 			if priority != 100 {
 				t.Errorf("API route priority = %v, want 100", route["priority"])
 			}
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
 			if priority != 1 {
 				t.Errorf("UI route priority = %v, want 1", route["priority"])
 			}
@@ -496,10 +496,10 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		}
 	}
 	if !apiRouteOK {
-		t.Error("expected /api/v1, /mcp, and /inference/v1 route to target control-plane service")
+		t.Error("expected /api/v1, /mcp, /inference/v1, and /video/v1 route to target control-plane service")
 	}
 	if !uiRouteOK {
-		t.Error("expected / route to target UI service with API/MCP/inference/registry exclusions")
+		t.Error("expected / route to target UI service with API/MCP/inference/video/registry exclusions")
 	}
 }
 

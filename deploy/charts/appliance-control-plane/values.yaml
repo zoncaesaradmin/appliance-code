@@ -135,6 +135,11 @@ config:
   # OpenAI-compatible inference gateway base URL (no path). Inference
   # profiles (lanllm, builder-lanllm, builder-lanllm-storage-landns) fail closed when empty.
   inferenceGatewayBaseURL: ""
+  # Jellyfin-compatible video gateway base URL (no path). The training
+  # profile fails closed at control-plane startup when this is empty so
+  # the appliance never reports video-capable while the video release is
+  # missing.
+  videoGatewayBaseURL: ""
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.
@@ -342,6 +347,11 @@ networkPolicy:
   inferenceNamespaceLabel: {}
   inferencePodLabels: {}
   inferencePort: 8080
+  # Populated by zonctl for video-capable profiles (training) so CP can
+  # proxy library/play traffic to the video gateway. Left empty when off.
+  videoNamespaceLabel: {}
+  videoPodLabels: {}
+  videoPort: 8096
   hostAgentPort: 8080
   automationRuntimePort: 8082
 

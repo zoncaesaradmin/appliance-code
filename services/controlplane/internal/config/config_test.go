@@ -199,6 +199,19 @@ func TestInferenceProfilesRequireInferenceGatewayBaseURL(t *testing.T) {
 	}
 }
 
+func TestTrainingProfileRequiresVideoGatewayBaseURL(t *testing.T) {
+	cfg := config.Default()
+	cfg.ApplianceProfile = "training"
+	cfg.VideoGatewayBaseURL = ""
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "videoGatewayBaseURL") {
+		t.Fatalf("Validate without video gateway URL = %v, want videoGatewayBaseURL error", err)
+	}
+	cfg.VideoGatewayBaseURL = "http://video-gateway.video.svc.cluster.local:8096"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate with video gateway URL: %v", err)
+	}
+}
+
 func TestArtifactProfileAllowsExplicitFakeArtifactServerForLocalTests(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "storage"

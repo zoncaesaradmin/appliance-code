@@ -17,6 +17,7 @@ stable across releases.
 | Host agent | 10005 | 10005 | In-cluster host-agent pod |
 | Inference runtime | 10006 | 10006 | appliance-inference chart |
 | Automation runtime | 10007 | 10007 | Metadata bundle + DSL execution |
+| Video runtime | 10008 | 10008 | appliance-video chart |
 | Workflow controller wrapper | 65532 | 65532 | Upstream non-root controller identity |
 | Builder/workspace workflow pods | 10010 | 10010 | Appliance-generated workflow workloads |
 | Shared appliance filesystem group | n/a | 20000 | Supplemental group for shared writable storage |
@@ -29,9 +30,10 @@ the registry. Never reuse a service UID across components.
 ## Storage Rules
 
 - Give each service its own PVC unless the storage is genuinely shared.
-- Keep writable host paths rare and documented. `/data/zon/logs` and the
-  host-visible workspace root `/data/zon/workspaces` are intentional product
-  interfaces, not generic scratch space.
+- Keep writable host paths rare and documented. `/data/zon/logs`, the
+  host-visible workspace root `/data/zon/workspaces`, and the training video
+  library `/data/zon/video/library` are intentional product interfaces, not
+  generic scratch space.
 - Use setgid directories and group-writable modes such as `2770` for shared
   writable paths.
 - Runtime service log directories under `/data/zon/logs/<service>` are an

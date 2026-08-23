@@ -48,6 +48,7 @@ type Config struct {
 	DNSBootstrapIPv4         string                    `json:"dnsBootstrapIPv4"`
 	DNSAllowFakeZoneSync     bool                      `json:"dnsAllowFakeZoneSync"`
 	InferenceGatewayBaseURL  string                    `json:"inferenceGatewayBaseURL"`
+	VideoGatewayBaseURL      string                    `json:"videoGatewayBaseURL"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -186,6 +187,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DNS_BOOTSTRAP_HOSTNAME", &cfg.DNSBootstrapHostname)
 	str("DNS_BOOTSTRAP_IPV4", &cfg.DNSBootstrapIPv4)
 	str("INFERENCE_GATEWAY_BASE_URL", &cfg.InferenceGatewayBaseURL)
+	str("VIDEO_GATEWAY_BASE_URL", &cfg.VideoGatewayBaseURL)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
@@ -305,6 +307,7 @@ func (c Config) Validate() error {
 	artifactEnabled := false
 	dnsEnabled := false
 	inferenceEnabled := false
+	videoEnabled := false
 	if profileErr != nil {
 		errs = append(errs, fmt.Sprintf("applianceProfile %q is invalid: %v", c.ApplianceProfile, profileErr))
 	} else {
@@ -317,6 +320,7 @@ func (c Config) Validate() error {
 		artifactEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry)
 		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
 		inferenceEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime)
+		videoEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameVideoRuntime)
 	}
 	if profileErr == nil && buildEnabled {
 		if !c.BuildCatalog.Empty() {
@@ -404,6 +408,13 @@ func (c Config) Validate() error {
 			errs = append(errs, "inferenceGatewayBaseURL must not be empty when the inference capability is enabled")
 		} else if u, err := url.Parse(c.InferenceGatewayBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "inferenceGatewayBaseURL must be an absolute http(s) URL with no path")
+		}
+	}
+	if profileErr == nil && videoEnabled {
+		if strings.TrimSpace(c.VideoGatewayBaseURL) == "" {
+			errs = append(errs, "videoGatewayBaseURL must not be empty when the video capability is enabled")
+		} else if u, err := url.Parse(c.VideoGatewayBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "videoGatewayBaseURL must be an absolute http(s) URL with no path")
 		}
 	}
 

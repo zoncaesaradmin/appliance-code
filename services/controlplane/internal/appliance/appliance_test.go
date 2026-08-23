@@ -142,6 +142,31 @@ func TestResolveProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("training", func(t *testing.T) {
+		resolved, err := appliance.ResolveProfile("training")
+		if err != nil {
+			t.Fatalf("ResolveProfile(training): %v", err)
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
+			t.Fatal("training should enable base")
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
+			t.Fatal("training should enable files")
+		}
+		if !resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
+			t.Fatal("training should enable video")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
+			t.Fatal("training should not enable build")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
+			t.Fatal("training should not enable artifact")
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityInference) {
+			t.Fatal("training should not enable inference")
+		}
+	})
+
 	t.Run("builder-lanllm", func(t *testing.T) {
 		resolved, err := appliance.ResolveProfile("builder-lanllm")
 		if err != nil {

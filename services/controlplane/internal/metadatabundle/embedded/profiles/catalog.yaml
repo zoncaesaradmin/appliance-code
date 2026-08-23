@@ -1,6 +1,6 @@
 profiles:
   core:
-    displayName: "Base (core)"
+    displayName: core
     description: "Default base appliance profile."
     capabilities: [base, host, files]
   builder:
@@ -39,3 +39,7 @@ profiles:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
     capabilities: [base, host, files, workflows, build, artifact, dns, inference]
+  training:
+    displayName: Training
+    description: "Core appliance plus training video library and playback."
+    capabilities: [base, host, files, video]

@@ -63,3 +63,11 @@ capabilities:
       requiredEntitlement: zon.capabilities.inference
     artifacts:
       required: [inference-runtime-image, appliance-inference-chart]
+  video:
+    displayName: Video
+    requires: [base, host]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.video
+    artifacts:
+      required: [video-runtime-image, appliance-video-chart]

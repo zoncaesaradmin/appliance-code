@@ -20,6 +20,7 @@ const (
 	ProfileLANLLM                     Profile = "lanllm"
 	ProfileBuilderLANLLM              Profile = "builder-lanllm"
 	ProfileBuilderLANLLMStorageLANDNS Profile = "builder-lanllm-storage-landns"
+	ProfileTraining                   Profile = "training"
 )
 
 // Capability is the implementation-facing appliance capability name resolved
@@ -35,6 +36,7 @@ const (
 	CapabilityArtifact     Capability = "artifact"
 	CapabilityDNS          Capability = "dns"
 	CapabilityInference    Capability = "inference"
+	CapabilityVideo        Capability = "video"
 	CapabilityApplications Capability = "applications"
 )
 
@@ -51,6 +53,7 @@ var capabilityCatalog = map[Capability]capabilityDefinition{
 	CapabilityArtifact:     {Dependencies: []Capability{CapabilityBase}},
 	CapabilityDNS:          {Dependencies: []Capability{CapabilityBase}},
 	CapabilityInference:    {Dependencies: []Capability{CapabilityBase}},
+	CapabilityVideo:        {Dependencies: []Capability{CapabilityBase}},
 	CapabilityApplications: {Dependencies: []Capability{CapabilityBase}},
 }
 
@@ -90,6 +93,8 @@ var builtInProfileCatalog = ProfileCatalog{
 	ProfileBuilderLANLLM:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference, CapabilityApplications}},
 	// builder ∪ lanllm ∪ storage/registry ∪ landns — full capability union.
 	ProfileBuilderLANLLMStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityInference, CapabilityApplications}},
+	// core ∪ video — training library/player surface (Slice A wiring; runtime Slice B).
+	ProfileTraining: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityApplications, CapabilityVideo}},
 }
 
 func BuiltInProfileCatalog() ProfileCatalog {
