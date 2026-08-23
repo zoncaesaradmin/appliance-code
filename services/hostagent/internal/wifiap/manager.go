@@ -228,11 +228,16 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	if err := m.savePSK(psk); err != nil {
 		return Status{}, err
 	}
-	return m.bringUp(ctx, st, psk)
+	return m.bringUp(ctx, st, psk, bringUpOpts{})
 }
 
 // Reconcile restores the management AP when desired state survived a reboot but
 // hostapd/dnsmasq did not. No-op when desired is off or services are already active.
+//
+// Boot restore always uses DHCP-only dnsmasq (port=0). A free-port probe right
+// after reboot would often succeed before product CoreDNS (hostNetwork :53) is
+// up, and AP dnsmasq on 10.42.0.1:53 would then block CoreDNS from binding *:53.
+// manage.ap stays on CoreDNS when present; otherwise use https://10.42.0.1/.
 func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
 	st, err := m.loadState()
 	if err != nil {
@@ -248,10 +253,26 @@ func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
 	if status.Actual == ActualActive {
 		return status, nil
 	}
-	return m.Apply(ctx, ApplyRequest{Desired: true, SSIDBase: st.SSIDBase})
+	psk, err := m.loadPSK()
+	if err != nil || ValidatePSK(strings.TrimSpace(psk)) != nil {
+		return status, nil
+	}
+	psk = strings.TrimSpace(psk)
+	if st.SSID == "" {
+		ssid, derr := DeriveSSID(st.SSIDBase)
+		if derr != nil {
+			return Status{}, derr
+		}
+		st.SSID = ssid
+	}
+	return m.bringUp(ctx, st, psk, bringUpOpts{forceDHCPOnly: true})
 }
 
-func (m *Manager) bringUp(ctx context.Context, st persistedState, psk string) (Status, error) {
+type bringUpOpts struct {
+	forceDHCPOnly bool
+}
+
+func (m *Manager) bringUp(ctx context.Context, st persistedState, psk string, opts bringUpOpts) (Status, error) {
 	iface, reason, err := selectInterface(ctx, m.runner())
 	if err != nil {
 		return Status{}, err
@@ -281,7 +302,12 @@ func (m *Manager) bringUp(ctx context.Context, st persistedState, psk string) (S
 	}
 	// Socket ownership only (not "is CoreDNS installed?"): free → dnsmasq DNS;
 	// busy → DHCP-only and rely on host DNS that holds manage.ap (CoreDNS).
-	st.LocalDNSServing = m.portBinder().CanBindManagementDNS()
+	// Boot reconcile forces DHCP-only so we never race product CoreDNS.
+	if opts.forceDHCPOnly {
+		st.LocalDNSServing = false
+	} else {
+		st.LocalDNSServing = m.portBinder().CanBindManagementDNS()
+	}
 	if err := m.saveState(st); err != nil {
 		return Status{}, err
 	}

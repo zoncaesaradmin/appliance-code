@@ -406,6 +406,9 @@ func TestReconcileRestartsFromStoredPSK(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("enable: %v", err)
 	}
+	if conf := string(files.data["/cfg/dnsmasq.conf"]); !strings.Contains(conf, "listen-address=") {
+		t.Fatalf("operator enable with free :53 should serve DNS:\n%s", conf)
+	}
 	// Simulate reboot: processes gone, desired + PSK remain, generated conf removed.
 	delete(files.data, "/cfg/hostapd.conf")
 	delete(files.data, "/cfg/dnsmasq.conf")
@@ -414,6 +417,8 @@ func TestReconcileRestartsFromStoredPSK(t *testing.T) {
 		outputs: runner.outputs,
 	}
 	m.Runner = dead
+	// Probe would say free, but reconcile must still force DHCP-only.
+	m.PortBinder = FixedPortBinder{Allow: true}
 
 	status, err := m.Reconcile(context.Background())
 	if err != nil {
@@ -427,6 +432,10 @@ func TestReconcileRestartsFromStoredPSK(t *testing.T) {
 	}
 	if !strings.Contains(string(files.data["/cfg/hostapd.conf"]), "wpa_passphrase=long-enough-secret") {
 		t.Fatalf("hostapd conf missing passphrase:\n%s", files.data["/cfg/hostapd.conf"])
+	}
+	conf := string(files.data["/cfg/dnsmasq.conf"])
+	if !strings.Contains(conf, "port=0") {
+		t.Fatalf("boot reconcile must not steal :53 from CoreDNS; want port=0:\n%s", conf)
 	}
 	startedHostapd := false
 	for _, call := range dead.calls {

@@ -49,8 +49,11 @@ On `appliance-host-agentd` startup, the daemon reconciles persisted day-2 desire
 state for Wi-Fi AP, client Wi-Fi, and mDNS. Desired flags and secrets live under
 `/var/lib/zon/…`; `hostapd` / `dnsmasq` / `wpa_supplicant` are process-backed, so
 reboot alone would leave Desired On / Actual inactive without this reconcile.
-Admin **Restart Wi-Fi AP** reuses the stored passphrase the same way when Actual
-is inactive while Desired remains on.
+Boot AP reconcile always starts dnsmasq in DHCP-only mode (`port=0`) so it cannot
+race product CoreDNS for host `:53` before the `dns-server` pod is up. Admin
+**Restart Wi-Fi AP** reuses the stored passphrase the same way when Actual is
+inactive while Desired remains on (operator enable may still serve AP-local DNS
+when `:53` is free at that moment).
 
 Client Wi-Fi is applied through the same host-agentd path:
 `GET|PUT /internal/v1/host/wifi`, with `PUT /internal/v1/host/wifi/enable`
