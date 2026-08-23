@@ -93,8 +93,8 @@ var builtInProfileCatalog = ProfileCatalog{
 	ProfileBuilderLANLLM:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference, CapabilityApplications}},
 	// builder ∪ lanllm ∪ storage/registry ∪ landns — full capability union.
 	ProfileBuilderLANLLMStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityInference, CapabilityApplications}},
-	// core ∪ video — training library/player surface (Slice A wiring; runtime Slice B).
-	ProfileTraining: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityApplications, CapabilityVideo}},
+	// core ∪ video — matches metadata-bundle profiles/catalog.yaml.
+	ProfileTraining: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityVideo}},
 }
 
 func BuiltInProfileCatalog() ProfileCatalog {

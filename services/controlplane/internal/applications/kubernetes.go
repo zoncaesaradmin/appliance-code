@@ -29,8 +29,14 @@ func NewInClusterManager() (*KubernetesManager, error) {
 	if host == "" || port == "" {
 		return nil, nil
 	}
+	// Profiles without workflows/DNS (core, storage, lanllm, training, …) do not
+	// automount a ServiceAccount token. Application reconcile already no-ops when
+	// the manager is nil; fail closed only when a token is present but unreadable.
 	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("applications: read service account token: %w", err)
 	}
 	pool := x509.NewCertPool()

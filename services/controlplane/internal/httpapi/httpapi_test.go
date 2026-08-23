@@ -336,7 +336,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		{appliance.ProfileStorageLANDNS, []string{"applications", "artifact", "base", "dns", "files", "host"}},
 		{appliance.ProfileBuilderLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
 		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
-		{appliance.ProfileTraining, []string{"applications", "base", "files", "host", "video", "workflows"}},
+		{appliance.ProfileTraining, []string{"base", "files", "host", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
