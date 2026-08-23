@@ -118,6 +118,18 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			Audit:           services.Audit,
 		}
 	}
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameVideoRuntime) {
+		deps.VideoLibraryH = &httpapi.FileHandlers{
+			RootDir:           cfg.VideoLibraryRootDir,
+			MaxUploadBytes:    cfg.VideoMaxUploadBytes,
+			TransferTimeout:   cfg.VideoTransferTimeout,
+			Audit:             services.Audit,
+			AuditWriteAction:  "video.library.write",
+			AuditDeleteAction: "video.library.delete",
+			RootConfigName:    "videoLibraryRootDir",
+			InlineContent:     true,
+		}
+	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger, Audit: services.Audit}

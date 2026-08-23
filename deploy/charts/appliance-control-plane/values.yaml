@@ -167,6 +167,15 @@ files:
   maxUploadBytes: "21474836480"
   transferTimeout: 30m
 
+videoLibrary:
+  # Shared host library for the video capability (/api/v1/video/library).
+  # Same path the appliance-video chart mounts into the video-runtime pod.
+  # Always mounted into the control plane (DirectoryOrCreate); routes are
+  # capability-gated so non-training profiles never expose the API.
+  rootDir: /data/zon/video/library
+  maxUploadBytes: "21474836480"
+  transferTimeout: 30m
+
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects
   # (session_ed25519_private.key, registry_ed25519_private.key,

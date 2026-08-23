@@ -12,6 +12,7 @@ import {
   currentMode,
   isSystemAdministrator,
   modeUsesFeatureSelector,
+  visibleFeatures,
   visibleModes,
   type Mode
 } from "../navigation";
@@ -26,7 +27,10 @@ export function Shell(props: {
   onLogout: () => Promise<void>;
   onSignedOut: () => void;
 }): React.JSX.Element {
-  const navigationModes = visibleModes({ session: props.session });
+  const navigationModes = visibleModes({
+    session: props.session,
+    capabilities: props.capabilities
+  });
   const mode = currentMode(props.pathname, navigationModes);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
@@ -36,9 +40,29 @@ export function Shell(props: {
   const [notifications, setNotifications] = useState<
     Array<{ id: string; title: string; body: string; actionUrl?: string }>
   >([]);
+  const [activeProfile, setActiveProfile] = useState("");
   // Re-fetch header alerts after any successful mutation that invalidates
   // shell.alerts (pathname change remains a secondary refresh trigger).
   const alertsSync = useViewSyncGeneration("shell.alerts");
+
+  useEffect(() => {
+    let cancelled = false;
+    void client
+      .getApplianceSetupState()
+      .then((state) => {
+        if (!cancelled) {
+          setActiveProfile(state.activeProfile || "");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setActiveProfile("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.pathname, props.capabilities]);
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +279,17 @@ export function Shell(props: {
               </div>
             ) : null}
           </div>
+          {activeProfile ? (
+            <div
+              className="hidden items-center rounded-[1.15rem] border border-slate-200 bg-slate-50 px-3 py-2 sm:flex"
+              title="Install-time appliance profile (runtime)"
+            >
+              <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                Profile
+              </span>
+              <strong className="ml-2 text-sm font-bold text-slate-950">{activeProfile}</strong>
+            </div>
+          ) : null}
           <div className="relative">
             <button
               className="flex h-12 items-center gap-3 rounded-[1.15rem] bg-white px-2 text-left transition hover:bg-slate-100"
@@ -328,7 +363,7 @@ export function Shell(props: {
                 <strong className="block text-sm text-slate-950">Select feature</strong>
               </div>
               <nav className="grid gap-1">
-                {featureMenuMode.features.map((feature) => (
+                {visibleFeatures(featureMenuMode, props.capabilities).map((feature) => (
                   <button
                     key={feature.path}
                     className={cn(

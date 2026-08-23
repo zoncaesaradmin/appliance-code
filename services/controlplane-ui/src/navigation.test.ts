@@ -4,6 +4,7 @@ import {
   currentMode,
   isSystemAdministrator,
   modeUsesFeatureSelector,
+  visibleFeatures,
   visibleModes
 } from "./navigation";
 
@@ -28,6 +29,7 @@ describe("navigation model", () => {
 
   it("maps nested paths to the owning mode", () => {
     expect(currentMode("/manage/files").id).toBe("manage");
+    expect(currentMode("/manage/videos").id).toBe("manage");
     expect(currentMode("/analyze/workflows").id).toBe("analyze");
     expect(currentMode("/admin/system-status").id).toBe("admin");
     expect(currentMode("/admin/system-status/resources").id).toBe("admin");
@@ -36,6 +38,17 @@ describe("navigation model", () => {
     expect(currentMode("/admin/host-services").id).toBe("admin");
     expect(currentMode("/admin/host-services/mdns").id).toBe("admin");
     expect(currentMode("/admin/lan-services").id).toBe("admin");
+  });
+
+  it("lists Videos under Manage only when the video capability is enabled", () => {
+    const manage = MODES.find((mode) => mode.id === "manage");
+    expect(manage?.features.some((feature) => feature.path === "/manage/videos")).toBe(true);
+    expect(visibleFeatures(manage!, []).some((feature) => feature.path === "/manage/videos")).toBe(
+      false
+    );
+    expect(
+      visibleFeatures(manage!, ["video"]).some((feature) => feature.path === "/manage/videos")
+    ).toBe(true);
   });
 
   it("lists LAN Services under Admin and not under Manage", () => {

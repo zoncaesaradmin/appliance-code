@@ -1271,6 +1271,104 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/video/library:
+    get:
+      summary: List training video library root
+      description: >
+        Lists entries under the shared host video library
+        (`/data/zon/video/library`). Requires the video capability and
+        `video.library.read` or `video.play`.
+      operationId: listVideoLibraryRoot
+      responses:
+        "200":
+          description: Directory listing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoLibraryListResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/video/library/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Relative path within the video library (may include slashes).
+    get:
+      summary: List or stream a video library path
+      description: >
+        When the path is a directory, returns a listing. When it is a file,
+        streams the content with Range support for HTML5 playback.
+      operationId: getVideoLibraryPath
+      responses:
+        "200":
+          description: Directory listing or file bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoLibraryListResult"
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      summary: Upload a video library file
+      description: >
+        Writes octet-stream body to the given relative path under the shared
+        host library. Requires `video.library.write`.
+      operationId: uploadVideoLibraryFile
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Existing file overwritten.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoLibraryUploadResult"
+        "201":
+          description: File created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoLibraryUploadResult"
+        "400":
+          $ref: "#/components/responses/ValidationProblem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: Payload too large.
+    delete:
+      summary: Delete a video library path
+      operationId: deleteVideoLibraryPath
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     bearerAuth:
@@ -1346,6 +1444,44 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    VideoLibraryEntry:
+      type: object
+      required: [name, path, type, sizeBytes, modifiedAt]
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [file, directory]
+        sizeBytes:
+          type: integer
+          format: int64
+        modifiedAt:
+          type: string
+          format: date-time
+    VideoLibraryListResult:
+      type: object
+      required: [path, items]
+      properties:
+        path:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/VideoLibraryEntry"
+    VideoLibraryUploadResult:
+      type: object
+      required: [path, size, overwritten]
+      properties:
+        path:
+          type: string
+        size:
+          type: integer
+          format: int64
+        overwritten:
+          type: boolean
     LicensingStatus:
       type: object
       required: [state, resolved, profileActivationAvailable, entitledCapabilities]

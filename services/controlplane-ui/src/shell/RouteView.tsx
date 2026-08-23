@@ -6,6 +6,7 @@ import { AnalyzePage } from "../pages/AnalyzePage";
 import { ArtifactsPage } from "../pages/ArtifactsPage";
 import { BuilderPage } from "../pages/BuilderPage";
 import { FilesPage } from "../pages/FilesPage";
+import { VideosPage } from "../pages/VideosPage";
 import { HomePage } from "../pages/HomePage";
 import { navigate } from "../lib/navigate";
 import type { Session } from "../types";
@@ -41,6 +42,9 @@ export function RouteView(props: {
   }
   if (props.pathname.startsWith("/manage/files")) {
     return <FilesPage />;
+  }
+  if (props.pathname.startsWith("/manage/videos")) {
+    return <VideosPage />;
   }
   if (props.pathname.startsWith("/manage/artifacts")) {
     return <ArtifactsPage pathname={props.pathname} />;

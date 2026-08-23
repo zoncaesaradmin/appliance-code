@@ -63,6 +63,18 @@ function encodeApplianceFilePath(path: string): string {
     .join("/")}`;
 }
 
+function encodeVideoLibraryPath(path: string): string {
+  const trimmed = path.trim().replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!trimmed) {
+    return "/api/v1/video/library";
+  }
+  return `/api/v1/video/library/${trimmed
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
+}
+
 export class ApiError extends Error {
   status: number;
   detail: string;
@@ -135,6 +147,10 @@ export interface ControlPlaneClient {
   uploadApplianceFile(path: string, file: File): Promise<ApplianceFileUploadResult>;
   downloadApplianceFile(path: string): Promise<Blob>;
   deleteApplianceFile(path: string): Promise<void>;
+  listVideoLibrary(path?: string): Promise<ApplianceFileListResult>;
+  uploadVideoLibraryFile(path: string, file: File): Promise<ApplianceFileUploadResult>;
+  downloadVideoLibraryFile(path: string): Promise<Blob>;
+  deleteVideoLibraryFile(path: string): Promise<void>;
   getLicensingStatus(): Promise<LicensingStatus>;
   getLicensingEntitlements(): Promise<string[]>;
   acceptBaseEntitlement(): Promise<LicensingStatus>;
@@ -477,6 +493,52 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async deleteApplianceFile(path: string): Promise<void> {
     await this.request(encodeApplianceFilePath(path), { method: "DELETE" });
+  }
+
+  async listVideoLibrary(path = ""): Promise<ApplianceFileListResult> {
+    return this.request(encodeVideoLibraryPath(path));
+  }
+
+  async uploadVideoLibraryFile(path: string, file: File): Promise<ApplianceFileUploadResult> {
+    const auth = loadAuth();
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/octet-stream"
+    };
+    if (auth?.accessToken) {
+      headers.Authorization = `Bearer ${auth.accessToken}`;
+    }
+    const response = await fetch(`${this.baseUrl}${encodeVideoLibraryPath(path)}`, {
+      method: "POST",
+      headers,
+      body: file
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return (await response.json()) as ApplianceFileUploadResult;
+  }
+
+  async downloadVideoLibraryFile(path: string): Promise<Blob> {
+    const auth = loadAuth();
+    const headers: Record<string, string> = {
+      Accept: "application/octet-stream"
+    };
+    if (auth?.accessToken) {
+      headers.Authorization = `Bearer ${auth.accessToken}`;
+    }
+    const response = await fetch(`${this.baseUrl}${encodeVideoLibraryPath(path)}`, {
+      method: "GET",
+      headers
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.blob();
+  }
+
+  async deleteVideoLibraryFile(path: string): Promise<void> {
+    await this.request(encodeVideoLibraryPath(path), { method: "DELETE" });
   }
 
   async getLicensingStatus(): Promise<LicensingStatus> {

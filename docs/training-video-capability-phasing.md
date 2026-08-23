@@ -3,8 +3,8 @@
 This note captures the rollout split for the optional training video library
 capability. Implementation naming uses `video` for capability, module, API
 paths, and permissions. The product-facing profile is `training` (core plus
-video). Jellyfin is the planned first backend behind `video-runtime`; it is
-not part of the capability name.
+video). Jellyfin is the first backend behind `video-runtime`; it is not part
+of the capability name.
 
 ## Decisions (Slice A)
 
@@ -13,8 +13,8 @@ not part of the capability name.
 - **Profile:** `training` = core capabilities + `video` (no builder/DNS
   unions in Slice A)
 - **Images:** a separate future capability; do not overload `video`
-- **Backend:** Jellyfin planned for Slice B; product names stay
-  runtime-agnostic behind `video-gateway`
+- **Backend:** Jellyfin for Slice B; product names stay runtime-agnostic
+  behind `video-gateway`
 
 ## Naming
 
@@ -24,8 +24,28 @@ not part of the capability name.
 | Module | `video-runtime` | Cluster service: gateway + media runtime |
 | Profile | `training` | Core appliance + video library/player |
 | Stable in-cluster URL | `http://video-gateway.video.svc.cluster.local:8096` | Swap backends without changing the control plane |
-| Public API (stub) | `/video/v1/*` | External clients; appliance Bearer / session |
+| Operator library API | `/api/v1/video/library` | Manage UI upload/list/stream (CP, files-like) |
+| Gateway stubs | `/video/v1/*` | Reserved module-proxy paths (not Manage UI) |
 | Permissions | `video.library.read`, `video.library.write`, `video.play`, `video.admin` | Browse; upload/manage; stream; administer runtime |
+
+## Admin profile activate vs install-time pod
+
+Selecting **training** under Admin → Profiles does **not** deploy the video
+workload. Activation only records a desired profile and may report
+`requiresRestart`. The `video` namespace pod appears only when:
+
+1. The signed **`video` pack** is present (OCI `video-runtime` +
+   `appliance-video` chart), and
+2. **`zonctl install` / `upgrade`** runs with **profile `training`** so the
+   installer preloads the image, owns `/data/zon/video/library`, and Helms
+   `appliance-video`.
+
+Until that release/install path runs, the UI can show capability metadata
+from the catalog while no `video-gateway` pod exists.
+
+The top-right header chip is the **login session** (username / auth method),
+not the appliance profile. The appliance profile is shown separately once
+Slice C UI is installed.
 
 ## Slice A — Capability / profile wiring (no workload yet)
 
@@ -54,13 +74,30 @@ Slice A does **not** require a running video pod, chart, OCI image, or pack.
   Traefik `/video/v1` via CP; UI catch-all excludes `/video`; CP egress to
   video ns:8096
 
-**Follow-on (UX):** proxied Jellyfin web UI for browse/play; library upload
-+ scan trigger; thin Admin Training library page (v1.1).
+## Slice C — Operator UX + library APIs (implemented)
 
-## Explicit non-goals (Slice A)
+- Control-plane **files-like** library at `/api/v1/video/library` on the
+  shared host path `/data/zon/video/library` (mounted into CP when video is
+  on). HTML5 playback uses authenticated stream URLs with Range support.
+- Manage → **Videos** page (capability-gated): upload, list, delete, play.
+- Header shows **Profile: `<id>`** distinct from the login session chip.
+- Jellyfin remains the runtime pod; Manage UX does not depend on Jellyfin’s
+  own auth for v1 browse/upload/play.
 
-- Running Jellyfin or any video pod
-- Upload/play UI
-- New signed pack or foundation size change
+### How to use end-to-end
+
+1. Build and publish a release that includes pack `video` (from the local
+   Slice B/C trees).
+2. Install or upgrade with profile **`training`** so zonctl installs
+   `appliance-video`.
+3. Confirm the pod: `kubectl -n video get pods,svc`.
+4. Open the UI: header shows `Profile: training`; Manage → Videos to upload
+   and play. Library files land under `/data/zon/video/library` on the host.
+
+## Explicit non-goals (still deferred)
+
+- Day-2 auto-install of the video Helm release when Admin activates
+  `training`
+- Full proxied Jellyfin web UI / transcoding-dependent playback
 - `builder-training` / DNS unions
 - Image gallery capability

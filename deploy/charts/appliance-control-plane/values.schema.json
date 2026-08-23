@@ -616,6 +616,29 @@
           "additionalProperties": false
         }
       }
+    },
+    "videoLibrary": {
+      "type": "object",
+      "required": [
+        "rootDir",
+        "maxUploadBytes",
+        "transferTimeout"
+      ],
+      "properties": {
+        "rootDir": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/.+"
+        },
+        "maxUploadBytes": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "transferTimeout": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   },
   "$defs": {

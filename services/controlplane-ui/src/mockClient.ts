@@ -76,6 +76,7 @@ type MockState = {
   repositories: string[];
   grants: RegistryGrant[];
   files: Record<string, { sizeBytes: number; modifiedAt: string; content: Uint8Array }>;
+  videos: Record<string, { sizeBytes: number; modifiedAt: string; content: Uint8Array }>;
   licensingState: "unresolved" | "base_free" | "licensed";
   entitledCapabilities: string[];
   profiles: ApplianceProfile[];
@@ -216,6 +217,7 @@ const mockState: MockState = {
     }
   ],
   files: {},
+  videos: {},
   licensingState: "unresolved",
   entitledCapabilities: [],
   profiles: [
@@ -725,6 +727,96 @@ export class MockControlPlaneClient {
     }
     if (!removed) {
       throw new Error("File not found");
+    }
+  }
+
+  async listVideoLibrary(path = ""): Promise<ApplianceFileListResult> {
+    const prefix = path.trim().replace(/^\/+|\/+$/g, "");
+    const itemsByName = new Map<string, ApplianceFileEntry>();
+    for (const filePath of Object.keys(mockState.videos)) {
+      if (prefix) {
+        if (filePath === prefix) {
+          continue;
+        }
+        if (!filePath.startsWith(prefix + "/")) {
+          continue;
+        }
+      }
+      const remainder = prefix ? filePath.slice(prefix.length + 1) : filePath;
+      const [name, ...rest] = remainder.split("/");
+      if (!name) {
+        continue;
+      }
+      if (rest.length > 0) {
+        if (!itemsByName.has(name)) {
+          itemsByName.set(name, {
+            name,
+            path: prefix ? `${prefix}/${name}` : name,
+            type: "directory",
+            sizeBytes: 0,
+            modifiedAt: now()
+          });
+        }
+        continue;
+      }
+      const stored = mockState.videos[filePath];
+      itemsByName.set(name, {
+        name,
+        path: filePath,
+        type: "file",
+        sizeBytes: stored.sizeBytes,
+        modifiedAt: stored.modifiedAt
+      });
+    }
+    return {
+      path: prefix,
+      items: [...itemsByName.values()].sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      })
+    };
+  }
+
+  async uploadVideoLibraryFile(path: string, file: File): Promise<ApplianceFileUploadResult> {
+    const cleaned = path.trim().replace(/^\/+/, "");
+    const overwritten = Boolean(mockState.videos[cleaned]);
+    const content = new Uint8Array(await file.arrayBuffer());
+    mockState.videos[cleaned] = {
+      sizeBytes: content.byteLength,
+      modifiedAt: now(),
+      content
+    };
+    return { path: cleaned, size: content.byteLength, overwritten };
+  }
+
+  async downloadVideoLibraryFile(path: string): Promise<Blob> {
+    const cleaned = path.trim().replace(/^\/+/, "");
+    const stored = mockState.videos[cleaned];
+    if (!stored) {
+      throw new Error("Video not found");
+    }
+    return new Blob([Uint8Array.from(stored.content)]);
+  }
+
+  async deleteVideoLibraryFile(path: string): Promise<void> {
+    const cleaned = path.trim().replace(/^\/+|\/+$/g, "");
+    const exact = mockState.videos[cleaned];
+    if (exact) {
+      delete mockState.videos[cleaned];
+      return;
+    }
+    const prefix = cleaned + "/";
+    let removed = false;
+    for (const key of Object.keys(mockState.videos)) {
+      if (key === cleaned || key.startsWith(prefix)) {
+        delete mockState.videos[key];
+        removed = true;
+      }
+    }
+    if (!removed) {
+      throw new Error("Video not found");
     }
   }
 

@@ -22,6 +22,11 @@ type FileHandlers struct {
 	MaxUploadBytes  int64
 	TransferTimeout time.Duration
 	Audit           *audit.Recorder
+	// Optional overrides (defaults preserve the files capability contract).
+	AuditWriteAction  string // default "files.write"
+	AuditDeleteAction string // default "files.delete"
+	RootConfigName    string // default "filesRootDir" (error messages)
+	InlineContent     bool   // when true, ServeContent uses Content-Disposition: inline
 }
 
 type fileResponse struct {
@@ -78,7 +83,11 @@ func (h *FileHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", path.Base(fullPath)))
+	disposition := "attachment"
+	if h.InlineContent {
+		disposition = "inline"
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, path.Base(fullPath)))
 	if contentType := mime.TypeByExtension(filepath.Ext(fullPath)); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
@@ -198,7 +207,7 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 	if h.Audit != nil {
 		principal, _ := PrincipalFromContext(r.Context())
 		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
-			Action: "files.write", TargetType: "file", TargetID: relativePath,
+			Action: h.writeAction(), TargetType: "file", TargetID: relativePath,
 			Outcome: storage.AuditOutcomeSuccess,
 			Details: map[string]any{"size": written, "overwritten": overwritten},
 		}); err != nil {
@@ -245,7 +254,7 @@ func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	if h.Audit != nil {
 		principal, _ := PrincipalFromContext(r.Context())
 		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
-			Action: "files.delete", TargetType: "file", TargetID: relativePath,
+			Action: h.deleteAction(), TargetType: "file", TargetID: relativePath,
 			Outcome: storage.AuditOutcomeSuccess,
 			Details: map[string]any{"directory": info.IsDir()},
 		}); err != nil {
@@ -282,13 +291,34 @@ func (h *FileHandlers) resolvePath(raw string) (string, string, error) {
 	return relative, full, nil
 }
 
+func (h *FileHandlers) writeAction() string {
+	if action := strings.TrimSpace(h.AuditWriteAction); action != "" {
+		return action
+	}
+	return "files.write"
+}
+
+func (h *FileHandlers) deleteAction() string {
+	if action := strings.TrimSpace(h.AuditDeleteAction); action != "" {
+		return action
+	}
+	return "files.delete"
+}
+
+func (h *FileHandlers) rootConfigName() string {
+	if name := strings.TrimSpace(h.RootConfigName); name != "" {
+		return name
+	}
+	return "filesRootDir"
+}
+
 func (h *FileHandlers) resolvePathAllowRoot(raw string) (string, string, error) {
 	root := strings.TrimSpace(h.RootDir)
 	if root == "" {
-		return "", "", fmt.Errorf("filesRootDir is not configured")
+		return "", "", fmt.Errorf("%s is not configured", h.rootConfigName())
 	}
 	if !strings.HasPrefix(root, "/") {
-		return "", "", fmt.Errorf("filesRootDir must be an absolute path")
+		return "", "", fmt.Errorf("%s must be an absolute path", h.rootConfigName())
 	}
 
 	trimmed := strings.TrimSpace(raw)

@@ -29,6 +29,7 @@ type Deps struct {
 	RegistryGrantsH  *RegistryGrantHandlers
 	RegistryCatalogH *RegistryCatalogHandlers
 	FilesH           *FileHandlers
+	VideoLibraryH    *FileHandlers
 	DNSH             *DNSHandlers
 	LANDNSPublishH   *LANDNSPublishHandlers
 	BuildsH          *BuildHandlers
@@ -539,6 +540,30 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing file handlers")
 			}
 			return w.protect(roles.PermFilesWrite, deps.FilesH.Delete), nil
+		}},
+		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "GET /api/v1/video/library", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.VideoLibraryH == nil {
+				return nil, fmt.Errorf("missing video library handlers")
+			}
+			return w.protectAny(deps.VideoLibraryH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
+		}},
+		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "GET /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.VideoLibraryH == nil {
+				return nil, fmt.Errorf("missing video library handlers")
+			}
+			return w.protectAny(deps.VideoLibraryH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
+		}},
+		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "POST /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.VideoLibraryH == nil {
+				return nil, fmt.Errorf("missing video library handlers")
+			}
+			return w.protect(roles.PermVideoLibraryWrite, deps.VideoLibraryH.Upload), nil
+		}},
+		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "DELETE /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.VideoLibraryH == nil {
+				return nil, fmt.Errorf("missing video library handlers")
+			}
+			return w.protect(roles.PermVideoLibraryWrite, deps.VideoLibraryH.Delete), nil
 		}},
 		{moduleName: appliance.ModuleNameLANDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {

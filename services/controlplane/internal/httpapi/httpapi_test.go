@@ -33,8 +33,9 @@ func testBuildCatalog() devflows.Catalog {
 
 type testServer struct {
 	*httptest.Server
-	services  *app.Services
-	filesRoot string
+	services         *app.Services
+	filesRoot        string
+	videoLibraryRoot string
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -131,9 +132,15 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
 	var filesRoot string
+	var videoLibraryRoot string
 	if resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
 		filesRoot = t.TempDir()
 		cfg.FilesRootDir = filesRoot
+	}
+	if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
+		cfg.VideoGatewayBaseURL = "http://video-gateway.video.svc.cluster.local:8096"
+		videoLibraryRoot = t.TempDir()
+		cfg.VideoLibraryRootDir = videoLibraryRoot
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
@@ -219,6 +226,18 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			Audit:           services.Audit,
 		}
 	}
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameVideoRuntime) {
+		deps.VideoLibraryH = &httpapi.FileHandlers{
+			RootDir:           cfg.VideoLibraryRootDir,
+			MaxUploadBytes:    cfg.VideoMaxUploadBytes,
+			TransferTimeout:   cfg.VideoTransferTimeout,
+			Audit:             services.Audit,
+			AuditWriteAction:  "video.library.write",
+			AuditDeleteAction: "video.library.delete",
+			RootConfigName:    "videoLibraryRootDir",
+			InlineContent:     true,
+		}
+	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger, Audit: services.Audit}
@@ -233,7 +252,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testServer{Server: srv, services: services, filesRoot: filesRoot}
+	return &testServer{Server: srv, services: services, filesRoot: filesRoot, videoLibraryRoot: videoLibraryRoot}
 }
 
 // bootstrapAdmin creates the first administrator directly through the
@@ -317,6 +336,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		{appliance.ProfileStorageLANDNS, []string{"applications", "artifact", "base", "dns", "files", "host"}},
 		{appliance.ProfileBuilderLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
 		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
+		{appliance.ProfileTraining, []string{"applications", "base", "files", "host", "video", "workflows"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {

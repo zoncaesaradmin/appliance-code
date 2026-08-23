@@ -206,6 +206,7 @@ export function HomePage(props: {
           ) : null}
           <div className="stats-grid">
             <StatCard label="Readiness" value={health} tone={health === "ready" ? "success" : "neutral"} />
+            <StatCard label="Profile" value={setupState?.activeProfile || "Unknown"} />
             <StatCard label="Capabilities" value={String(props.capabilities.length)} />
             <StatCard label="Appliance Name" value={identity?.applianceName || "Unknown"} />
             <StatCard label="Primary DNS zone" value={identity?.dnsZone || "Unavailable"} />

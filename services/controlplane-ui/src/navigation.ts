@@ -1,18 +1,28 @@
 import type { IconName } from "./components";
 import type { Session } from "./types";
 
+export type ModeFeature = {
+  label: string;
+  path: string;
+  description: string;
+  icon: IconName;
+  /** When set, the feature is shown only if this capability is enabled. */
+  requiredCapability?: string;
+};
+
 export type Mode = {
   id: string;
   label: string;
   shortLabel: string;
   icon: IconName;
   defaultPath: string;
-  features: Array<{ label: string; path: string; description: string; icon: IconName }>;
+  features: ModeFeature[];
   visibleWhen: (context: NavigationContext) => boolean;
 };
 
 export type NavigationContext = {
   session: Pick<Session, "permissions" | "username">;
+  capabilities?: string[];
 };
 
 const ADMIN_USERNAMES = new Set(["admin", "administrator"]);
@@ -68,6 +78,13 @@ export const MODES: Mode[] = [
         path: "/manage/files",
         description: "Upload and browse named appliance file spaces",
         icon: "files"
+      },
+      {
+        label: "Videos",
+        path: "/manage/videos",
+        description: "Upload, browse, and play the training video library",
+        icon: "video",
+        requiredCapability: "video"
       },
       {
         label: "Artifacts",
@@ -144,6 +161,13 @@ export const MODES: Mode[] = [
 
 export function visibleModes(context: NavigationContext): Mode[] {
   return MODES.filter((mode) => mode.visibleWhen(context));
+}
+
+export function visibleFeatures(mode: Mode, capabilities: string[] = []): ModeFeature[] {
+  return mode.features.filter(
+    (feature) =>
+      !feature.requiredCapability || capabilities.includes(feature.requiredCapability)
+  );
 }
 
 export function currentMode(pathname: string, modes: Mode[] = MODES): Mode {

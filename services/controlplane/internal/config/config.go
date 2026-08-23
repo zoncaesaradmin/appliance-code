@@ -49,6 +49,9 @@ type Config struct {
 	DNSAllowFakeZoneSync     bool                      `json:"dnsAllowFakeZoneSync"`
 	InferenceGatewayBaseURL  string                    `json:"inferenceGatewayBaseURL"`
 	VideoGatewayBaseURL      string                    `json:"videoGatewayBaseURL"`
+	VideoLibraryRootDir      string                    `json:"videoLibraryRootDir"`
+	VideoTransferTimeout     time.Duration             `json:"videoTransferTimeout"`
+	VideoMaxUploadBytes      int64                     `json:"videoMaxUploadBytes"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -86,6 +89,9 @@ func Default() Config {
 		FilesRootDir:             "/data/zon/files",
 		FilesTransferTimeout:     30 * time.Minute,
 		FilesMaxUploadBytes:      20 * 1024 * 1024 * 1024,
+		VideoLibraryRootDir:      "/data/zon/video/library",
+		VideoTransferTimeout:     30 * time.Minute,
+		VideoMaxUploadBytes:      20 * 1024 * 1024 * 1024,
 		DNSZoneName:              "appliance.internal",
 		DNSConfigMapNamespace:    "dns",
 		DNSConfigMapName:         "dns-server-config",
@@ -188,6 +194,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DNS_BOOTSTRAP_IPV4", &cfg.DNSBootstrapIPv4)
 	str("INFERENCE_GATEWAY_BASE_URL", &cfg.InferenceGatewayBaseURL)
 	str("VIDEO_GATEWAY_BASE_URL", &cfg.VideoGatewayBaseURL)
+	str("VIDEO_LIBRARY_ROOT_DIR", &cfg.VideoLibraryRootDir)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
@@ -243,6 +250,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		{"SHUTDOWN_TIMEOUT", &cfg.ShutdownTimeout},
 		{"BUILD_DEFAULT_DEADLINE", &cfg.BuildDefaultDeadline},
 		{"FILES_TRANSFER_TIMEOUT", &cfg.FilesTransferTimeout},
+		{"VIDEO_TRANSFER_TIMEOUT", &cfg.VideoTransferTimeout},
 	}
 	for _, d := range durs {
 		if v, ok := env[envPrefix+d.key]; ok {
@@ -262,6 +270,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		{"MAX_HEADER_BYTES", &cfg.MaxHeaderBytes},
 		{"MAX_BODY_BYTES", &cfg.MaxBodyBytes},
 		{"FILES_MAX_UPLOAD_BYTES", &cfg.FilesMaxUploadBytes},
+		{"VIDEO_MAX_UPLOAD_BYTES", &cfg.VideoMaxUploadBytes},
 	}
 	for _, i := range ints {
 		if v, ok := env[envPrefix+i.key]; ok {
@@ -415,6 +424,17 @@ func (c Config) Validate() error {
 			errs = append(errs, "videoGatewayBaseURL must not be empty when the video capability is enabled")
 		} else if u, err := url.Parse(c.VideoGatewayBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "videoGatewayBaseURL must be an absolute http(s) URL with no path")
+		}
+		if strings.TrimSpace(c.VideoLibraryRootDir) == "" {
+			errs = append(errs, "videoLibraryRootDir must not be empty when the video capability is enabled")
+		} else if !strings.HasPrefix(c.VideoLibraryRootDir, "/") {
+			errs = append(errs, "videoLibraryRootDir must be an absolute path")
+		}
+		if c.VideoTransferTimeout <= 0 {
+			errs = append(errs, "videoTransferTimeout must be positive when the video capability is enabled")
+		}
+		if c.VideoMaxUploadBytes <= 0 {
+			errs = append(errs, "videoMaxUploadBytes must be positive when the video capability is enabled")
 		}
 	}
 

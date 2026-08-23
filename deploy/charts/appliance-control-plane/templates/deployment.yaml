@@ -71,6 +71,8 @@ spec:
               mountPath: /data/zon/logs
             - name: appliance-files
               mountPath: {{ .Values.files.rootDir }}
+            - name: appliance-video-library
+              mountPath: {{ .Values.videoLibrary.rootDir }}
             {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.dataDir }}
@@ -90,6 +92,10 @@ spec:
         - name: appliance-files
           hostPath:
             path: {{ .Values.files.rootDir }}
+            type: DirectoryOrCreate
+        - name: appliance-video-library
+          hostPath:
+            path: {{ .Values.videoLibrary.rootDir }}
             type: DirectoryOrCreate
         {{- if .Values.persistence.enabled }}
         - name: data
