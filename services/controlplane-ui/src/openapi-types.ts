@@ -947,6 +947,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/video/playback-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prepare browser video playback
+         * @description Establishes a short-lived, HttpOnly, same-site cookie scoped only to the video stream route. The caller must use an interactive session bearer token with video playback permission. The cookie is never used for general API requests or mutations.
+         */
+        post: operations["prepareVideoPlayback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/video/stream/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Relative MP4 path within the video library. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Stream a video with byte-range support
+         * @description Streams a ready-to-play video/mp4 using the HttpOnly playback cookie. Native browser video controls use Range requests to start playback before the full file is downloaded and to seek without conversion.
+         */
+        get: operations["streamVideoLibraryFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/video/library/{path}": {
         parameters: {
             query?: never;
@@ -959,13 +1002,13 @@ export interface paths {
         };
         /**
          * List or stream a video library path
-         * @description When the path is a directory, returns a listing. When it is a file, streams the content with Range support for HTML5 playback.
+         * @description When the path is a directory, returns a listing. When it is a file, streams a ready-to-play `video/mp4` with Range support for HTML5 playback.
          */
         get: operations["getVideoLibraryPath"];
         put?: never;
         /**
          * Upload a video library file
-         * @description Writes octet-stream body to the given relative path under the shared host library. Requires `video.library.write`.
+         * @description Synchronously validates and writes an H.264 MP4, with optional AAC audio, to the given relative path under the shared host library. No conversion is performed. Requires `video.library.write`.
          */
         post: operations["uploadVideoLibraryFile"];
         /** Delete a video library path */
@@ -988,6 +1031,11 @@ export interface components {
             sizeBytes: number;
             /** Format: date-time */
             modifiedAt: string;
+            /**
+             * @description Present for video files once the synchronous validation and atomic commit complete.
+             * @enum {string}
+             */
+            status?: "ready";
         };
         VideoLibraryListResult: {
             path: string;
@@ -998,6 +1046,11 @@ export interface components {
             /** Format: int64 */
             size: number;
             overwritten: boolean;
+            /**
+             * @description The file is ready for playback when this response is returned.
+             * @enum {string}
+             */
+            status?: "ready";
         };
         LicensingStatus: {
             /** @enum {string} */
@@ -2956,6 +3009,61 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    prepareVideoPlayback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Playback cookie established. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    streamVideoLibraryFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Relative MP4 path within the video library. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whole file when no Range header is supplied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            /** @description Requested byte range. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     getVideoLibraryPath: {
         parameters: {
             query?: never;
@@ -2975,7 +3083,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VideoLibraryListResult"];
-                    "application/octet-stream": string;
+                    "video/mp4": string;
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2995,7 +3103,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/octet-stream": string;
+                "video/mp4": string;
             };
         };
         responses: {

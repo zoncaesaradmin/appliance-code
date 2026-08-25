@@ -57,6 +57,7 @@ type wrappers struct {
 	protect           func(permission string, h http.HandlerFunc) http.Handler
 	protectAny        func(h http.HandlerFunc, permissions ...string) http.Handler
 	authenticatedOnly func(h http.HandlerFunc) http.Handler
+	playback          func(h http.HandlerFunc) http.Handler
 }
 
 // NewPublicMux builds the mux for the public-facing listener: the Phase 2
@@ -70,6 +71,7 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 	mux := http.NewServeMux()
 
 	authRequired := RequireAuth(deps.Auth)
+	playbackRequired := RequireVideoPlaybackCookie(deps.Auth)
 	w := wrappers{
 		protect: func(permission string, h http.HandlerFunc) http.Handler {
 			return authRequired(RequirePermission(permission)(h))
@@ -79,6 +81,9 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 		},
 		authenticatedOnly: func(h http.HandlerFunc) http.Handler {
 			return authRequired(h)
+		},
+		playback: func(h http.HandlerFunc) http.Handler {
+			return playbackRequired(RequireAnyPermission(roles.PermVideoLibraryRead, roles.PermVideoPlay)(h))
 		},
 	}
 
@@ -552,6 +557,18 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing video library handlers")
 			}
 			return w.protectAny(deps.VideoLibraryH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
+		}},
+		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "POST /api/v1/video/playback-session", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return w.protectAny(deps.AuthH.PrepareVideoPlayback, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
+		}},
+		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "GET /api/v1/video/stream/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.VideoLibraryH == nil {
+				return nil, fmt.Errorf("missing video library handlers")
+			}
+			return w.playback(deps.VideoLibraryH.Get), nil
 		}},
 		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "POST /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.VideoLibraryH == nil {

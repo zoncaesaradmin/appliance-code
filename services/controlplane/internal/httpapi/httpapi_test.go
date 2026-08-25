@@ -236,6 +236,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			AuditDeleteAction: "video.library.delete",
 			RootConfigName:    "videoLibraryRootDir",
 			InlineContent:     true,
+			VideoMP4Only:      true,
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {

@@ -78,7 +78,12 @@ Slice A does **not** require a running video pod, chart, OCI image, or pack.
 ## Slice C — Operator UX + library APIs (implemented)
 
 - Control-plane **files-like** library at `/api/v1/video/library` when video is
-  on. HTML5 playback uses authenticated stream URLs with Range support.
+  on. Uploads synchronously validate an MP4 container with H.264 video and
+  optional AAC audio, then atomically store one ready-to-play copy. HTML5
+  playback streams it as `video/mp4` with Range support; native browser
+  playback uses a short-lived HttpOnly cookie scoped only to the stream path,
+  so no bearer token appears in a media URL. No playback-time conversion or
+  alternate resolutions are used.
 - Manage → **Videos** page (capability-gated): upload, list, delete, play.
   Operator UI does not expose host filesystem paths.
 - Header shows **Profile: `<id>`** distinct from the login session chip.

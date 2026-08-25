@@ -128,6 +128,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			AuditDeleteAction: "video.library.delete",
 			RootConfigName:    "videoLibraryRootDir",
 			InlineContent:     true,
+			VideoMP4Only:      true,
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {

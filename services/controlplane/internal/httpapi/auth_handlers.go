@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/authn"
+	"appliance-code/services/controlplane/internal/reqauth"
 	"appliance-code/services/controlplane/internal/users"
 )
 
@@ -61,6 +62,7 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setVideoPlaybackCookie(w, r, result.AccessToken, result.AccessExpiresAt)
 	writeJSON(w, http.StatusOK, loginResponse{
 		AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, AccessExpiresAt: result.AccessExpiresAt,
 	})
@@ -87,9 +89,28 @@ func (h *AuthHandlers) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setVideoPlaybackCookie(w, r, result.AccessToken, result.AccessExpiresAt)
 	writeJSON(w, http.StatusOK, loginResponse{
 		AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, AccessExpiresAt: result.AccessExpiresAt,
 	})
+}
+
+// PrepareVideoPlayback refreshes the read-only playback cookie from the
+// browser's current bearer token. This lets existing SPA sessions stream after
+// an upgrade without exposing their token in a media URL.
+func (h *AuthHandlers) PrepareVideoPlayback(w http.ResponseWriter, r *http.Request) {
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok || principal.AuthMethod != "session" {
+		WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+		return
+	}
+	raw, ok := reqauth.BearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+		return
+	}
+	setVideoPlaybackCookie(w, r, raw, time.Now().Add(authn.SessionAccessLifetime))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +124,7 @@ func (h *AuthHandlers) Logout(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
+	clearVideoPlaybackCookie(w, r)
 	w.WriteHeader(http.StatusNoContent)
 }
 

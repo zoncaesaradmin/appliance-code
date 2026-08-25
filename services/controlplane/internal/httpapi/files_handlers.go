@@ -15,6 +15,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/storage"
+	"appliance-code/services/controlplane/internal/videomedia"
 )
 
 type FileHandlers struct {
@@ -27,12 +28,14 @@ type FileHandlers struct {
 	AuditDeleteAction string // default "files.delete"
 	RootConfigName    string // default "filesRootDir" (error messages)
 	InlineContent     bool   // when true, ServeContent uses Content-Disposition: inline
+	VideoMP4Only      bool   // when true, accept browser-compatible MP4 video only
 }
 
 type fileResponse struct {
 	Path        string `json:"path"`
 	Size        int64  `json:"size"`
 	Overwritten bool   `json:"overwritten"`
+	Status      string `json:"status,omitempty"`
 }
 
 type fileEntry struct {
@@ -41,6 +44,7 @@ type fileEntry struct {
 	Type       string `json:"type"` // "file" or "directory"
 	Size       int64  `json:"sizeBytes"`
 	ModifiedAt string `json:"modifiedAt"`
+	Status     string `json:"status,omitempty"`
 }
 
 type fileListResponse struct {
@@ -88,7 +92,9 @@ func (h *FileHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		disposition = "inline"
 	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, path.Base(fullPath)))
-	if contentType := mime.TypeByExtension(filepath.Ext(fullPath)); contentType != "" {
+	if h.VideoMP4Only {
+		w.Header().Set("Content-Type", "video/mp4")
+	} else if contentType := mime.TypeByExtension(filepath.Ext(fullPath)); contentType != "" {
 		w.Header().Set("Content-Type", contentType)
 	}
 	http.ServeContent(w, r, path.Base(fullPath), info.ModTime(), file)
@@ -118,9 +124,12 @@ func (h *FileHandlers) writeList(w http.ResponseWriter, r *http.Request, relativ
 		}
 		kind := "file"
 		size := info.Size()
+		status := ""
 		if entry.IsDir() {
 			kind = "directory"
 			size = 0
+		} else if h.VideoMP4Only {
+			status = "ready"
 		}
 		items = append(items, fileEntry{
 			Name:       name,
@@ -128,6 +137,7 @@ func (h *FileHandlers) writeList(w http.ResponseWriter, r *http.Request, relativ
 			Type:       kind,
 			Size:       size,
 			ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
+			Status:     status,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -149,8 +159,12 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
+	if h.VideoMP4Only && !strings.EqualFold(filepath.Ext(relativePath), ".mp4") {
+		WriteValidationProblem(w, r, "video library uploads must use a .mp4 destination path", nil)
+		return
+	}
 
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o2775); err != nil {
+	if err := os.MkdirAll(h.RootDir, 0o2775); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
@@ -164,7 +178,7 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	tmpFile, err := os.CreateTemp(filepath.Dir(fullPath), ".upload-*")
+	tmpFile, err := os.CreateTemp(h.RootDir, ".upload-*")
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
@@ -190,6 +204,16 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := tmpFile.Close(); err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	if h.VideoMP4Only {
+		if err := videomedia.ValidateBrowserMP4(tmpPath); err != nil {
+			WriteValidationProblem(w, r, err.Error(), nil)
+			return
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o2775); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
@@ -224,7 +248,15 @@ func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		Path:        relativePath,
 		Size:        written,
 		Overwritten: overwritten,
+		Status:      h.videoStatus(),
 	})
+}
+
+func (h *FileHandlers) videoStatus() string {
+	if h.VideoMP4Only {
+		return "ready"
+	}
+	return ""
 }
 
 func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {

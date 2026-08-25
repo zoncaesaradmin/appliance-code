@@ -675,7 +675,8 @@ export class MockControlPlaneClient {
         path: filePath,
         type: "file",
         sizeBytes: stored.sizeBytes,
-        modifiedAt: stored.modifiedAt
+        modifiedAt: stored.modifiedAt,
+        status: "ready"
       });
     }
     return {
@@ -698,7 +699,7 @@ export class MockControlPlaneClient {
       modifiedAt: now(),
       content
     };
-    return { path: cleaned, size: content.byteLength, overwritten };
+    return { path: cleaned, size: content.byteLength, overwritten, status: "ready" };
   }
 
   async downloadApplianceFile(path: string): Promise<Blob> {
@@ -798,6 +799,13 @@ export class MockControlPlaneClient {
       throw new Error("Video not found");
     }
     return new Blob([Uint8Array.from(stored.content)]);
+  }
+
+  async prepareVideoPlayback(): Promise<void> {}
+
+  videoStreamURL(path: string): string {
+    const cleaned = path.trim().replace(/^\/+|\/+$/g, "");
+    return `/api/v1/video/stream/${cleaned.split("/").map((part) => encodeURIComponent(part)).join("/")}`;
   }
 
   async deleteVideoLibraryFile(path: string): Promise<void> {

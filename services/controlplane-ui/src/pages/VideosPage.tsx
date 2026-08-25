@@ -82,7 +82,7 @@ function describeDestinationPath(destination: string, selectedFile: File | null)
 }
 
 function isPlayableVideo(name: string): boolean {
-  return /\.(mp4|webm|ogg|mov|m4v)$/i.test(name);
+  return /\.mp4$/i.test(name);
 }
 
 async function collectVideoTree(path = "", depth = 0): Promise<VideoTreeRow[]> {
@@ -136,14 +136,6 @@ export function VideosPage(): React.JSX.Element {
     void refresh();
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (playURL) {
-        URL.revokeObjectURL(playURL);
-      }
-    };
-  }, [playURL]);
-
   function openUploadDialog() {
     setLogicalName("");
     setSelectedFile(null);
@@ -169,6 +161,10 @@ export function VideosPage(): React.JSX.Element {
       setError("Enter a destination path for the video.");
       return;
     }
+    if (!selectedFile.name.toLowerCase().endsWith(".mp4") || !destination.toLowerCase().endsWith(".mp4")) {
+      setError("Videos must be uploaded as MP4 files. Use an .mp4 file and destination path.");
+      return;
+    }
     setUploading(true);
     setError("");
     setUploadState({
@@ -182,7 +178,7 @@ export function VideosPage(): React.JSX.Element {
       setUploadState({
         tone: "success",
         title: result.overwritten ? "Video updated" : "Video uploaded",
-        detail: `${result.path} is now available in the library tree (${formatBytes(result.size)}).`
+        detail: `${result.path} is ${result.status === "ready" ? "ready to play" : "available"} in the library tree (${formatBytes(result.size)}).`
       });
       setShowUploadDialog(false);
       await refresh();
@@ -209,12 +205,7 @@ export function VideosPage(): React.JSX.Element {
       await client.deleteVideoLibraryFile(entry.path);
       if (playing?.path === entry.path) {
         setPlaying(null);
-        setPlayURL((current) => {
-          if (current) {
-            URL.revokeObjectURL(current);
-          }
-          return "";
-        });
+        setPlayURL("");
       }
       setMessage(`Deleted ${entry.path}.`);
       await refresh();
@@ -230,21 +221,11 @@ export function VideosPage(): React.JSX.Element {
     setPlayError("");
     setPlaying(entry);
     try {
-      const blob = await client.downloadVideoLibraryFile(entry.path);
-      setPlayURL((current) => {
-        if (current) {
-          URL.revokeObjectURL(current);
-        }
-        return URL.createObjectURL(blob);
-      });
+      await client.prepareVideoPlayback();
+      setPlayURL(client.videoStreamURL(entry.path));
     } catch (err) {
       setPlaying(null);
-      setPlayURL((current) => {
-        if (current) {
-          URL.revokeObjectURL(current);
-        }
-        return "";
-      });
+      setPlayURL("");
       setPlayError(
         err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not load video."
       );
@@ -270,8 +251,12 @@ export function VideosPage(): React.JSX.Element {
             key={playURL}
             className="w-full max-h-[28rem] rounded-2xl bg-slate-950"
             controls
+            controlsList="nodownload"
+            playsInline
+            preload="metadata"
             autoPlay
             src={playURL}
+            onError={() => setPlayError("This video could not be played. Upload an MP4 with H.264 video and AAC audio.")}
           >
             Your browser does not support HTML5 video.
           </video>
@@ -365,7 +350,13 @@ export function VideosPage(): React.JSX.Element {
                     </div>
                   </div>
                   <div className="video-tree__meta">
-                    <span>{entry.type === "directory" ? "Directory" : formatBytes(entry.sizeBytes)}</span>
+                    <span>
+                      {entry.type === "directory"
+                        ? "Directory"
+                        : entry.status === "ready"
+                          ? `Ready | ${formatBytes(entry.sizeBytes)}`
+                          : formatBytes(entry.sizeBytes)}
+                    </span>
                     <span>{formatModifiedAt(entry.modifiedAt)}</span>
                   </div>
                   <div
@@ -402,7 +393,7 @@ export function VideosPage(): React.JSX.Element {
               Upload video
             </h2>
             <p className="mt-2 mb-4 text-sm text-slate-500">
-              Pick a relative destination path and a video file from this computer. Add a trailing slash to upload into a directory.
+              Upload a single browser-compatible MP4 file. It is validated synchronously for H.264 video and AAC audio before it is added to the library. Add a trailing slash to upload into a directory.
             </p>
             <form className="stack-form" onSubmit={submitUpload}>
               <label className="field">
@@ -418,13 +409,13 @@ export function VideosPage(): React.JSX.Element {
                 <span>Video from this computer</span>
                 <input
                   type="file"
-                  accept="video/*,.mp4,.webm,.ogg,.mov,.m4v"
+                  accept="video/mp4,.mp4"
                   onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
                   disabled={uploading}
                 />
               </label>
               <p className="text-sm text-slate-500" style={{ margin: 0 }}>
-                Stored as <strong>{destinationPreview}</strong> relative to the video library root.
+              One ready-to-play MP4 copy is stored as <strong>{destinationPreview}</strong> relative to the video library root. No playback-time conversion or alternate resolutions are created.
               </p>
               <div className="button-row">
                 <button className="button button--ghost" type="button" onClick={closeUploadDialog} disabled={uploading}>

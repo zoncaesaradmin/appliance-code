@@ -112,6 +112,7 @@ export interface ApplianceFileEntry {
   type: "file" | "directory";
   sizeBytes: number;
   modifiedAt: string;
+	status?: "ready";
 }
 
 export interface ApplianceFileListResult {
@@ -123,6 +124,7 @@ export interface ApplianceFileUploadResult {
   path: string;
   size: number;
   overwritten: boolean;
+	status?: "ready";
 }
 
 export interface UpsertDNSRecordRequest {

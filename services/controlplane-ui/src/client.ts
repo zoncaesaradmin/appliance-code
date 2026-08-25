@@ -75,6 +75,15 @@ function encodeVideoLibraryPath(path: string): string {
     .join("/")}`;
 }
 
+function encodeVideoStreamPath(path: string): string {
+  const trimmed = path.trim().replace(/^\/+/, "").replace(/\/+$/, "");
+  return `/api/v1/video/stream/${trimmed
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")}`;
+}
+
 export class ApiError extends Error {
   status: number;
   detail: string;
@@ -150,6 +159,8 @@ export interface ControlPlaneClient {
   listVideoLibrary(path?: string): Promise<ApplianceFileListResult>;
   uploadVideoLibraryFile(path: string, file: File): Promise<ApplianceFileUploadResult>;
   downloadVideoLibraryFile(path: string): Promise<Blob>;
+  prepareVideoPlayback(): Promise<void>;
+  videoStreamURL(path: string): string;
   deleteVideoLibraryFile(path: string): Promise<void>;
   getLicensingStatus(): Promise<LicensingStatus>;
   getLicensingEntitlements(): Promise<string[]>;
@@ -503,7 +514,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     const auth = loadAuth();
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "Content-Type": "application/octet-stream"
+      "Content-Type": "video/mp4"
     };
     if (auth?.accessToken) {
       headers.Authorization = `Bearer ${auth.accessToken}`;
@@ -522,7 +533,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
   async downloadVideoLibraryFile(path: string): Promise<Blob> {
     const auth = loadAuth();
     const headers: Record<string, string> = {
-      Accept: "application/octet-stream"
+      Accept: "video/mp4"
     };
     if (auth?.accessToken) {
       headers.Authorization = `Bearer ${auth.accessToken}`;
@@ -535,6 +546,14 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
       throw await ApiError.fromResponse(response);
     }
     return response.blob();
+  }
+
+  async prepareVideoPlayback(): Promise<void> {
+    await this.request("/api/v1/video/playback-session", { method: "POST" });
+  }
+
+  videoStreamURL(path: string): string {
+    return `${this.baseUrl}${encodeVideoStreamPath(path)}`;
   }
 
   async deleteVideoLibraryFile(path: string): Promise<void> {

@@ -49,6 +49,36 @@ func RequireAuth(deps AuthDeps) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireVideoPlaybackCookie authenticates the narrowly scoped, HttpOnly
+// playback cookie used by native browser media requests. It is intentionally
+// separate from RequireAuth so cookies never authorize general API mutations.
+func RequireVideoPlaybackCookie(deps AuthDeps) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie(videoPlaybackCookieName)
+			if err != nil || cookie.Value == "" {
+				WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+				return
+			}
+			principal, err := reqauth.Authenticate(r.Context(), deps, cookie.Value)
+			if err != nil {
+				if !errors.Is(err, reqauth.ErrUnauthenticated) && !errors.Is(err, reqauth.ErrInvalidCredential) {
+					WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+					return
+				}
+				WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+				return
+			}
+			if principal.AuthMethod != "session" {
+				WriteProblem(w, r, http.StatusUnauthorized, "unauthorized", "Authentication required", "")
+				return
+			}
+			ctx := context.WithValue(r.Context(), principalCtxKey{}, principal)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
 // RequirePermission denies the request with 403 unless the authenticated
 // Principal (stored by RequireAuth, which must run first) holds permission.
 func RequirePermission(permission string) func(http.Handler) http.Handler {
