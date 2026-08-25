@@ -1,5 +1,5 @@
-import React, { FormEvent, useEffect, useState } from "react";
-import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow } from "../components";
+import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import { Card, EmptyState, PageFrame, RowActionsMenu, type RowAction } from "../components";
 import { ApiError } from "../client";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
@@ -35,6 +35,17 @@ function formatModifiedAt(value: string): string {
   });
 }
 
+type VideoTreeRow = {
+  entry: ApplianceFileEntry;
+  depth: number;
+};
+
+type UploadState = {
+  tone: "info" | "success" | "error";
+  title: string;
+  detail: string;
+};
+
 function joinFilePath(prefix: string, name: string): string {
   const cleanPrefix = prefix.trim().replace(/^\/+|\/+$/g, "");
   const cleanName = name.trim().replace(/^\/+/, "");
@@ -44,19 +55,50 @@ function joinFilePath(prefix: string, name: string): string {
   return `${cleanPrefix}/${cleanName}`;
 }
 
-function parentPath(path: string): string {
-  const parts = path.trim().replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
-  parts.pop();
-  return parts.join("/");
+function normalizeRelativePath(path: string): string {
+  return path.trim().replace(/^\/+/, "");
+}
+
+function resolveDestinationPath(destination: string, selectedFile: File): string {
+  const cleaned = normalizeRelativePath(destination);
+  if (!cleaned) {
+    return selectedFile.name;
+  }
+  if (cleaned.endsWith("/")) {
+    return joinFilePath(cleaned, selectedFile.name);
+  }
+  return cleaned.replace(/\/+$/g, "");
+}
+
+function describeDestinationPath(destination: string, selectedFile: File | null): string {
+  const cleaned = normalizeRelativePath(destination);
+  if (!cleaned) {
+    return selectedFile ? selectedFile.name : "folder/video.mp4";
+  }
+  if (cleaned.endsWith("/")) {
+    return `${cleaned}${selectedFile?.name || "…"}`;
+  }
+  return cleaned;
 }
 
 function isPlayableVideo(name: string): boolean {
   return /\.(mp4|webm|ogg|mov|m4v)$/i.test(name);
 }
 
+async function collectVideoTree(path = "", depth = 0): Promise<VideoTreeRow[]> {
+  const result = await client.listVideoLibrary(path);
+  const rows: VideoTreeRow[] = [];
+  for (const entry of result.items) {
+    rows.push({ entry, depth });
+    if (entry.type === "directory") {
+      rows.push(...(await collectVideoTree(entry.path, depth + 1)));
+    }
+  }
+  return rows;
+}
+
 export function VideosPage(): React.JSX.Element {
-  const [currentPath, setCurrentPath] = useState("");
-  const [items, setItems] = useState<ApplianceFileEntry[]>([]);
+  const [items, setItems] = useState<VideoTreeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -64,17 +106,24 @@ export function VideosPage(): React.JSX.Element {
   const [logicalName, setLogicalName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadState, setUploadState] = useState<UploadState | null>(null);
   const [playing, setPlaying] = useState<ApplianceFileEntry | null>(null);
   const [playURL, setPlayURL] = useState("");
   const [playError, setPlayError] = useState("");
 
-  async function refresh(path = currentPath) {
+  const destinationPreview = useMemo(
+    () => describeDestinationPath(logicalName, selectedFile),
+    [logicalName, selectedFile]
+  );
+
+  const videoCount = items.filter((row) => row.entry.type === "file").length;
+  const directoryCount = items.filter((row) => row.entry.type === "directory").length;
+
+  async function refresh() {
     setLoading(true);
     setError("");
     try {
-      const result = await client.listVideoLibrary(path);
-      setCurrentPath(result.path || "");
-      setItems(result.items);
+      setItems(await collectVideoTree(""));
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not list videos.");
       setItems([]);
@@ -84,7 +133,7 @@ export function VideosPage(): React.JSX.Element {
   }
 
   useEffect(() => {
-    void refresh("");
+    void refresh();
   }, []);
 
   useEffect(() => {
@@ -96,7 +145,7 @@ export function VideosPage(): React.JSX.Element {
   }, [playURL]);
 
   function openUploadDialog() {
-    setLogicalName(currentPath ? `${currentPath}/` : "");
+    setLogicalName("");
     setSelectedFile(null);
     setError("");
     setShowUploadDialog(true);
@@ -115,25 +164,36 @@ export function VideosPage(): React.JSX.Element {
       setError("Choose a video file to upload.");
       return;
     }
-    const destination =
-      logicalName.trim().replace(/^\/+|\/+$/g, "") || joinFilePath(currentPath, selectedFile.name);
+    const destination = resolveDestinationPath(logicalName, selectedFile);
     if (!destination) {
       setError("Enter a destination path for the video.");
       return;
     }
     setUploading(true);
     setError("");
+    setUploadState({
+      tone: "info",
+      title: "Uploading video",
+      detail: `Uploading ${destination} (${formatBytes(selectedFile.size)}) into the library root hierarchy.`
+    });
     try {
       const result = await client.uploadVideoLibraryFile(destination, selectedFile);
-      setMessage(
-        result.overwritten
-          ? `Updated ${result.path} (${formatBytes(result.size)}).`
-          : `Uploaded ${result.path} (${formatBytes(result.size)}).`
-      );
+      setMessage(result.overwritten ? `Updated ${result.path}.` : `Uploaded ${result.path}.`);
+      setUploadState({
+        tone: "success",
+        title: result.overwritten ? "Video updated" : "Video uploaded",
+        detail: `${result.path} is now available in the library tree (${formatBytes(result.size)}).`
+      });
       setShowUploadDialog(false);
-      await refresh(parentPath(result.path));
+      await refresh();
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Upload failed.");
+      const detail = err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Upload failed.";
+      setError(detail);
+      setUploadState({
+        tone: "error",
+        title: "Upload failed",
+        detail: `${destination}: ${detail}`
+      });
     } finally {
       setUploading(false);
     }
@@ -157,7 +217,7 @@ export function VideosPage(): React.JSX.Element {
         });
       }
       setMessage(`Deleted ${entry.path}.`);
-      await refresh(currentPath);
+      await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Delete failed.");
     }
@@ -218,77 +278,107 @@ export function VideosPage(): React.JSX.Element {
         </Card>
       ) : null}
 
-      <Card title="Video library" subtitle="Upload clips and play them from this appliance">
+      <Card
+        title="Video library"
+        subtitle={`Current videos and directories shown from the library root (${videoCount} videos, ${directoryCount} directories)`}
+      >
         <div className="button-row" style={{ marginBottom: "1rem" }}>
           <button className="button button--primary" type="button" onClick={openUploadDialog}>
             + Upload video
           </button>
-          {currentPath ? (
-            <button className="button button--ghost" type="button" onClick={() => void refresh(parentPath(currentPath))}>
-              Up
-            </button>
-          ) : null}
+          <button className="button button--ghost" type="button" onClick={() => void refresh()} disabled={loading}>
+            Refresh
+          </button>
         </div>
+        <p className="text-sm text-slate-500" style={{ marginTop: 0, marginBottom: "1rem" }}>
+          Paths below are relative to the video library root. The appliance base path stays hidden.
+        </p>
+        {uploadState ? (
+          <div
+            className={
+              uploadState.tone === "error"
+                ? "status-box status-box--danger video-tree__status"
+                : uploadState.tone === "success"
+                  ? "status-box status-box--success video-tree__status"
+                  : "status-box video-tree__status"
+            }
+          >
+            <strong>{uploadState.title}</strong>
+            <span>{uploadState.detail}</span>
+          </div>
+        ) : null}
 
         {loading ? (
           <EmptyState message="Loading video library…" />
         ) : items.length === 0 ? (
           <EmptyState message="No videos here yet. Use Upload video to add a file from this machine." />
         ) : (
-          <ResourceList>
-            {items.map((entry) => (
-              <ResourceListRow
-                key={entry.path}
-                ariaLabel={
-                  entry.type === "directory"
-                    ? `Open directory ${entry.name}`
-                    : `Video ${entry.name}`
+          <div className="video-tree">
+            {items.map(({ entry, depth }) => {
+              const rowActions: RowAction[] = [
+                ...(entry.type === "file" && isPlayableVideo(entry.name)
+                  ? [
+                      {
+                        id: "play",
+                        label: "Play",
+                        onSelect: () => void playEntry(entry)
+                      }
+                    ]
+                  : []),
+                {
+                  id: "delete",
+                  label: "Delete",
+                  danger: true,
+                  onSelect: () => void deleteEntry(entry)
                 }
-                onClick={
-                  entry.type === "directory"
-                    ? () => void refresh(entry.path)
-                    : isPlayableVideo(entry.name)
-                      ? () => void playEntry(entry)
-                      : undefined
-                }
-                actionsLabel={`Actions for ${entry.name}`}
-                columns={[
-                  {
-                    key: "name",
-                    label: "Name",
-                    value: entry.type === "directory" ? `${entry.name}/` : entry.name
-                  },
-                  {
-                    key: "size",
-                    label: "Size",
-                    value: entry.type === "directory" ? "—" : formatBytes(entry.sizeBytes)
-                  },
-                  {
-                    key: "modified",
-                    label: "Modified",
-                    value: formatModifiedAt(entry.modifiedAt)
-                  }
-                ]}
-                actions={[
-                  ...(entry.type === "file" && isPlayableVideo(entry.name)
-                    ? [
-                        {
-                          id: "play",
-                          label: "Play",
-                          onSelect: () => void playEntry(entry)
+              ];
+              const clickable = entry.type === "file" && isPlayableVideo(entry.name);
+              const pathLabel = entry.type === "directory" ? `${entry.path}/` : entry.path;
+              return (
+                <div
+                  key={entry.path}
+                  className={clickable ? "video-tree__row video-tree__row--clickable" : "video-tree__row"}
+                  role={clickable ? "button" : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  aria-label={entry.type === "directory" ? `Directory ${pathLabel}` : `Video ${pathLabel}`}
+                  onClick={clickable ? () => void playEntry(entry) : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            void playEntry(entry);
+                          }
                         }
-                      ]
-                    : []),
-                  {
-                    id: "delete",
-                    label: "Delete",
-                    danger: true,
-                    onSelect: () => void deleteEntry(entry)
+                      : undefined
                   }
-                ]}
-              />
-            ))}
-          </ResourceList>
+                >
+                  <div className="video-tree__primary" style={{ paddingLeft: `${depth * 1.25}rem` }}>
+                    <span className="video-tree__glyph" aria-hidden="true">
+                      {entry.type === "directory" ? "▸" : "•"}
+                    </span>
+                    <div className="video-tree__text">
+                      <strong className="video-tree__name">
+                        {entry.type === "directory" ? `${entry.name}/` : entry.name}
+                      </strong>
+                      <code className="video-tree__path">{pathLabel}</code>
+                    </div>
+                  </div>
+                  <div className="video-tree__meta">
+                    <span>{entry.type === "directory" ? "Directory" : formatBytes(entry.sizeBytes)}</span>
+                    <span>{formatModifiedAt(entry.modifiedAt)}</span>
+                  </div>
+                  <div
+                    className="video-tree__actions"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <RowActionsMenu label={`Actions for ${entry.name}`} actions={rowActions} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </Card>
 
@@ -312,14 +402,14 @@ export function VideosPage(): React.JSX.Element {
               Upload video
             </h2>
             <p className="mt-2 mb-4 text-sm text-slate-500">
-              Pick a destination path and a video file from this computer.
+              Pick a relative destination path and a video file from this computer. Add a trailing slash to upload into a directory.
             </p>
             <form className="stack-form" onSubmit={submitUpload}>
               <label className="field">
                 <span>Destination path</span>
                 <input
                   value={logicalName}
-                  placeholder="clips/intro.mp4"
+                  placeholder="clips/intro.mp4 or clips/"
                   onChange={(event) => setLogicalName(event.target.value)}
                   disabled={uploading}
                 />
@@ -333,6 +423,9 @@ export function VideosPage(): React.JSX.Element {
                   disabled={uploading}
                 />
               </label>
+              <p className="text-sm text-slate-500" style={{ margin: 0 }}>
+                Stored as <strong>{destinationPreview}</strong> relative to the video library root.
+              </p>
               <div className="button-row">
                 <button className="button button--ghost" type="button" onClick={closeUploadDialog} disabled={uploading}>
                   Cancel

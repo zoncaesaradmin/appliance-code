@@ -847,6 +847,122 @@ button {
   color: var(--danger);
 }
 
+.video-tree {
+  display: grid;
+  gap: 0;
+}
+
+.video-tree__status {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 1rem;
+}
+
+.video-tree__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.video-tree__row:last-child {
+  border-bottom: 0;
+}
+
+.video-tree__row--clickable {
+  cursor: pointer;
+  border-radius: 14px;
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.video-tree__row--clickable:hover,
+.video-tree__row--clickable:focus-visible {
+  background: rgba(18, 51, 91, 0.06);
+  outline: none;
+}
+
+.video-tree__primary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.video-tree__glyph {
+  min-width: 1rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.video-tree__text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.video-tree__name {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.video-tree__path {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  color: var(--muted);
+  background: var(--panel-strong);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.video-tree__meta {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: right;
+}
+
+.video-tree__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .video-tree__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .video-tree__meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .video-tree__actions {
+    grid-column: 2;
+    align-self: start;
+  }
+}
+
+@media (max-width: 640px) {
+  .video-tree__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .video-tree__meta,
+  .video-tree__actions {
+    grid-column: 1;
+  }
+}
+
 .status-box,
 .secret-panel {
   background: var(--panel-strong);
