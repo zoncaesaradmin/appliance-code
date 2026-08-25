@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow } from "../components";
 import { ApiError } from "../client";
 import { client } from "../lib/api";
@@ -67,17 +67,6 @@ export function VideosPage(): React.JSX.Element {
   const [playing, setPlaying] = useState<ApplianceFileEntry | null>(null);
   const [playURL, setPlayURL] = useState("");
   const [playError, setPlayError] = useState("");
-
-  const destinationPreview = useMemo(() => {
-    const name = logicalName.trim().replace(/^\/+/, "");
-    if (name) {
-      return name;
-    }
-    if (selectedFile) {
-      return joinFilePath(currentPath, selectedFile.name);
-    }
-    return currentPath ? `${currentPath}/…` : "…";
-  }, [logicalName, selectedFile, currentPath]);
 
   async function refresh(path = currentPath) {
     setLoading(true);
@@ -206,7 +195,7 @@ export function VideosPage(): React.JSX.Element {
     <PageFrame
       title="Videos"
       eyebrow=""
-      description="Training video library on this appliance."
+      description="Upload, browse, and play videos on this appliance."
       pathname="/manage/videos"
       onNavigate={navigate}
       tabs={[{ label: "Library", path: "/manage/videos" }]}
@@ -229,7 +218,7 @@ export function VideosPage(): React.JSX.Element {
         </Card>
       ) : null}
 
-      <Card title="Video library" subtitle="Upload clips and play them from the shared host library">
+      <Card title="Video library" subtitle="Upload clips and play them from this appliance">
         <div className="button-row" style={{ marginBottom: "1rem" }}>
           <button className="button button--primary" type="button" onClick={openUploadDialog}>
             + Upload video
@@ -323,8 +312,7 @@ export function VideosPage(): React.JSX.Element {
               Upload video
             </h2>
             <p className="mt-2 mb-4 text-sm text-slate-500">
-              Files are stored under <code>/data/zon/video/library</code> on the appliance host and
-              shared with the video-runtime pod.
+              Pick a destination path and a video file from this computer.
             </p>
             <form className="stack-form" onSubmit={submitUpload}>
               <label className="field">
@@ -345,9 +333,6 @@ export function VideosPage(): React.JSX.Element {
                   disabled={uploading}
                 />
               </label>
-              <p className="text-sm text-slate-500" style={{ margin: 0 }}>
-                Stored as <strong>{destinationPreview}</strong> in the training video library.
-              </p>
               <div className="button-row">
                 <button className="button button--ghost" type="button" onClick={closeUploadDialog} disabled={uploading}>
                   Cancel

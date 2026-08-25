@@ -935,8 +935,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List training video library root
-         * @description Lists entries under the shared host video library (`/data/zon/video/library`). Requires the video capability and `video.library.read` or `video.play`.
+         * List video library root
+         * @description Lists entries under the appliance video library. Requires the video capability and `video.library.read` or `video.play`.
          */
         get: operations["listVideoLibraryRoot"];
         put?: never;

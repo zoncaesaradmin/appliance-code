@@ -62,7 +62,7 @@ The initial v1 appliance capabilities are:
 | `artifact` | OCI registry APIs and module behavior: registry-token, grant, repository, and catalog flows backed by Artifact Server |
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
 | `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns`) readiness |
-| `video` | Training video library storage and streaming; `training` profile installs pack `video` (`video-runtime` + `appliance-video`) |
+| `video` | Video library storage and streaming; any video-capable profile installs pack `video` (`video-runtime` + `appliance-video`). The shipped `training` profile enables this capability. |
 
 Notes:
 
@@ -113,7 +113,8 @@ Notes:
   (same naming pattern as `landns` for `dns`). `builder-lanllm` is builder ∪
   lanllm. `builder-lanllm-storage-landns` is the full union: builder ∪
   storage/registry ∪ landns ∪ lanllm.
-- `training` is core ∪ `video` for a LAN training video library and player.
+- `training` is the first product profile that enables `video` (core ∪ `video`)
+  for a LAN video library and player. Other profiles may enable `video` later.
   See [training-video-capability-phasing.md](training-video-capability-phasing.md).
 - The mapping from appliance profiles to appliance capabilities is not a
   permanent public truth table. It is the v1 mapping and may evolve in later

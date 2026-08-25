@@ -1,17 +1,17 @@
-# Training Video Capability Phasing
+# Video Capability Phasing
 
-This note captures the rollout split for the optional training video library
-capability. Implementation naming uses `video` for capability, module, API
-paths, and permissions. The product-facing profile is `training` (core plus
-video). Jellyfin is the first backend behind `video-runtime`; it is not part
-of the capability name.
+This note captures the rollout split for the optional **video** capability.
+Implementation naming uses `video` for capability, module, API paths, and
+permissions. The first product-facing profile that enables it is `training`
+(core plus video); other profiles may enable `video` later. Jellyfin is the
+first backend behind `video-runtime`; it is not part of the capability name.
 
 ## Decisions (Slice A)
 
 - **Surface:** video library browse/upload and playback APIs gated by
   capability `video`
 - **Profile:** `training` = core capabilities + `video` (no builder/DNS
-  unions in Slice A)
+  unions in Slice A). Video is not training-exclusive.
 - **Images:** a separate future capability; do not overload `video`
 - **Backend:** Jellyfin for Slice B; product names stay runtime-agnostic
   behind `video-gateway`
@@ -20,9 +20,9 @@ of the capability name.
 
 | Layer | Name | Meaning |
 |---|---|---|
-| Capability | `video` | Store and stream training video on this appliance |
+| Capability | `video` | Store and stream video on this appliance |
 | Module | `video-runtime` | Cluster service: gateway + media runtime |
-| Profile | `training` | Core appliance + video library/player |
+| Profile | `training` | First shipped profile that enables `video` |
 | Stable in-cluster URL | `http://video-gateway.video.svc.cluster.local:8096` | Swap backends without changing the control plane |
 | Operator library API | `/api/v1/video/library` | Manage UI upload/list/stream (CP, files-like) |
 | Gateway stubs | `/video/v1/*` | Reserved module-proxy paths (not Manage UI) |
@@ -30,14 +30,15 @@ of the capability name.
 
 ## Admin profile activate vs install-time pod
 
-Selecting **training** under Admin → Profiles does **not** deploy the video
-workload. Activation only records a desired profile and may report
-`requiresRestart`. The `video` namespace pod appears only when:
+Selecting a video-capable profile (for example **training**) under
+Admin → Profiles does **not** deploy the video workload. Activation only
+records a desired profile and may report `requiresRestart`. The `video`
+namespace pod appears only when:
 
 1. The signed **`video` pack** is present (OCI `video-runtime` +
    `appliance-video` chart), and
-2. **`zonctl install` / `upgrade`** runs with **profile `training`** so the
-   installer preloads the image, owns `/data/zon/video/library`, and Helms
+2. **`zonctl install` / `upgrade`** runs with a **video-capable profile** so
+   the installer preloads the image, prepares the host library path, and Helms
    `appliance-video`.
 
 Until that release/install path runs, the UI can show capability metadata
@@ -65,9 +66,9 @@ Slice A does **not** require a running video pod, chart, OCI image, or pack.
 ## Slice B — Jellyfin chart + install gates + proxy (implemented)
 
 - Pack `video`: OCI `registry.local/video-runtime` + `appliance-video` chart
-- `RequiredPacks(training) → video`
-- Chart in namespace `video` (Service `video-gateway:8096`, library
-  `/data/zon/video/library`, UID **10008**, fsGroup **20000**)
+- `RequiredPacks` for video-capable profiles → `video` (today: `training`)
+- Chart in namespace `video` (Service `video-gateway:8096`, library host path,
+  UID **10008**, fsGroup **20000**)
 - zonctl install/upgrade: capability-gated preload/Helm, gateway URL +
   NetworkPolicy inject, refuse in-place video → non-video upgrades
 - Control plane: fail-closed `videoGatewayBaseURL` when video is on;
@@ -76,28 +77,26 @@ Slice A does **not** require a running video pod, chart, OCI image, or pack.
 
 ## Slice C — Operator UX + library APIs (implemented)
 
-- Control-plane **files-like** library at `/api/v1/video/library` on the
-  shared host path `/data/zon/video/library` (mounted into CP when video is
-  on). HTML5 playback uses authenticated stream URLs with Range support.
+- Control-plane **files-like** library at `/api/v1/video/library` when video is
+  on. HTML5 playback uses authenticated stream URLs with Range support.
 - Manage → **Videos** page (capability-gated): upload, list, delete, play.
+  Operator UI does not expose host filesystem paths.
 - Header shows **Profile: `<id>`** distinct from the login session chip.
 - Jellyfin remains the runtime pod; Manage UX does not depend on Jellyfin’s
   own auth for v1 browse/upload/play.
 
 ### How to use end-to-end
 
-1. Build and publish a release that includes pack `video` (from the local
-   Slice B/C trees).
-2. Install or upgrade with profile **`training`** so zonctl installs
-   `appliance-video`.
+1. Build and publish a release that includes pack `video`.
+2. Install or upgrade with a **video-capable** profile (today: **`training`**)
+   so zonctl installs `appliance-video`.
 3. Confirm the pod: `kubectl -n video get pods,svc`.
-4. Open the UI: header shows `Profile: training`; Manage → Videos to upload
-   and play. Library files land under `/data/zon/video/library` on the host.
+4. Open the UI: Manage → Videos to upload and play.
 
 ## Explicit non-goals (still deferred)
 
-- Day-2 auto-install of the video Helm release when Admin activates
-  `training`
+- Day-2 auto-install of the video Helm release when Admin activates a
+  video-capable profile
 - Full proxied Jellyfin web UI / transcoding-dependent playback
-- `builder-training` / DNS unions
+- Additional profiles beyond `training` that also enable `video`
 - Image gallery capability

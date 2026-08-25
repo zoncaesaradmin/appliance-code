@@ -109,7 +109,7 @@ spec:
     {{- end }}
     {{- $videoNS := index .Values.networkPolicy.videoNamespaceLabel "kubernetes.io/metadata.name" | default "" }}
     {{- if $videoNS }}
-    # Video gateway proxy for training (video-capable) profiles.
+    # Video gateway proxy for video-capable profiles.
     - to:
         - namespaceSelector:
             matchLabels:

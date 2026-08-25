@@ -41,5 +41,5 @@ profiles:
     capabilities: [base, host, files, workflows, build, artifact, dns, inference]
   training:
     displayName: training
-    description: "Core appliance plus training video library and playback."
+    description: "Core appliance plus video library and playback."
     capabilities: [base, host, files, video]

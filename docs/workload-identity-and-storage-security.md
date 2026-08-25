@@ -31,7 +31,7 @@ the registry. Never reuse a service UID across components.
 
 - Give each service its own PVC unless the storage is genuinely shared.
 - Keep writable host paths rare and documented. `/data/zon/logs`, the
-  host-visible workspace root `/data/zon/workspaces`, and the training video
+  host-visible workspace root `/data/zon/workspaces`, and the video
   library `/data/zon/video/library` are intentional product interfaces, not
   generic scratch space.
 - Use setgid directories and group-writable modes such as `2770` for shared

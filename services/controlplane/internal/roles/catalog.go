@@ -182,9 +182,9 @@ var AllPermissions = []storage.Permission{
 	{Name: PermInferenceModelsRead, Description: "List available inference models"},
 	{Name: PermInferenceAdmin, Description: "Manage inference runtime and model packs"},
 
-	{Name: PermVideoLibraryRead, Description: "Browse the training video library"},
-	{Name: PermVideoLibraryWrite, Description: "Upload or manage training video library content"},
-	{Name: PermVideoPlay, Description: "Stream and play training video library items"},
+	{Name: PermVideoLibraryRead, Description: "Browse the video library"},
+	{Name: PermVideoLibraryWrite, Description: "Upload or manage video library content"},
+	{Name: PermVideoPlay, Description: "Stream and play video library items"},
 	{Name: PermVideoAdmin, Description: "Administer the video runtime"},
 
 	{Name: PermMCPInvoke, Description: "Invoke MCP tools"},

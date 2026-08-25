@@ -82,7 +82,7 @@ export const MODES: Mode[] = [
       {
         label: "Videos",
         path: "/manage/videos",
-        description: "Upload, browse, and play the training video library",
+        description: "Upload, browse, and play videos on this appliance",
         icon: "video",
         requiredCapability: "video"
       },

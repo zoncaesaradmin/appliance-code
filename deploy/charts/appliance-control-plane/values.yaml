@@ -135,8 +135,8 @@ config:
   # OpenAI-compatible inference gateway base URL (no path). Inference
   # profiles (lanllm, builder-lanllm, builder-lanllm-storage-landns) fail closed when empty.
   inferenceGatewayBaseURL: ""
-  # Jellyfin-compatible video gateway base URL (no path). The training
-  # profile fails closed at control-plane startup when this is empty so
+  # Jellyfin-compatible video gateway base URL (no path). Video-capable
+  # profiles fail closed at control-plane startup when this is empty so
   # the appliance never reports video-capable while the video release is
   # missing.
   videoGatewayBaseURL: ""
@@ -171,7 +171,7 @@ videoLibrary:
   # Shared host library for the video capability (/api/v1/video/library).
   # Same path the appliance-video chart mounts into the video-runtime pod.
   # Always mounted into the control plane (DirectoryOrCreate); routes are
-  # capability-gated so non-training profiles never expose the API.
+  # capability-gated so profiles without video never expose the API.
   rootDir: /data/zon/video/library
   maxUploadBytes: "21474836480"
   transferTimeout: 30m
@@ -356,7 +356,7 @@ networkPolicy:
   inferenceNamespaceLabel: {}
   inferencePodLabels: {}
   inferencePort: 8080
-  # Populated by zonctl for video-capable profiles (training) so CP can
+  # Populated by zonctl for video-capable profiles so CP can
   # proxy library/play traffic to the video gateway. Left empty when off.
   videoNamespaceLabel: {}
   videoPodLabels: {}

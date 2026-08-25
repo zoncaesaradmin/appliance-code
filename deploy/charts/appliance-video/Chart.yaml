@@ -1,6 +1,6 @@
 apiVersion: v2
 name: appliance-video
-description: Hardened local video library runtime (Jellyfin-compatible) for the Zon appliance training profile.
+description: Hardened local video library runtime (Jellyfin-compatible) for the Zon appliance video capability.
 type: application
 version: 0.1.0
 appVersion: "10.10.7"
