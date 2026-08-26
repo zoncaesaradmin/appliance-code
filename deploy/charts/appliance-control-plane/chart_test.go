@@ -596,8 +596,16 @@ func TestBlobStorageBelongsToAceSystemRolloutOnly(t *testing.T) {
 	if findByKindAndName(aceSystemDocs, "Namespace", "blob-storage") == nil {
 		t.Fatal("ace-system rollout must render blob-storage Namespace")
 	}
-	if findByKindAndName(aceSystemDocs, "Deployment", "blob-storage") == nil {
+	blobDeploy := findByKindAndName(aceSystemDocs, "Deployment", "blob-storage")
+	if blobDeploy == nil {
 		t.Fatal("ace-system rollout must render blob-storage Deployment")
+	}
+	if initContainers, _ := at(blobDeploy, "spec", "template", "spec", "initContainers").([]any); len(initContainers) != 0 {
+		t.Fatalf("blob-storage must not use a root init container under restricted PSA, got %v", initContainers)
+	}
+	ns := findByKindAndName(aceSystemDocs, "Namespace", "blob-storage")
+	if enforce, _ := at(ns, "metadata", "labels", "pod-security.kubernetes.io/enforce").(string); enforce != "restricted" {
+		t.Fatalf("blob-storage namespace PSA enforce = %q, want restricted", enforce)
 	}
 }
 
