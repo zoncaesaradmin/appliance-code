@@ -56,7 +56,7 @@ The initial v1 appliance capabilities are:
 | Capability | Purpose |
 | --- | --- |
 | `base` | Mandatory control-plane baseline: server startup, health/version surface, authentication/session shell, user/role/token administration, internal forward-auth checks, and the minimum API contract required for any appliance profile |
-| `files` | Named appliance file spaces with authenticated upload/download under `/api/v1/files/*`; present on every v1 profile and gated by RBAC (`files.read` / `files.write`) |
+| `files` | Named appliance file spaces with authenticated upload/download under `/api/v1/files/*`, backed by foundation blob-storage; present on every v1 profile and gated by RBAC (`files.read` / `files.write`) |
 | `workflows` | Workflow substrate awareness and workflow-dependent module activation for v1 and future expansion |
 | `build` | Build APIs and build service/module behavior |
 | `artifact` | OCI registry APIs and module behavior: registry-token, grant, repository, and catalog flows backed by Artifact Server |
@@ -210,10 +210,10 @@ accept, track, and manage build requests.
 - `POST /api/v1/files/{rest...}` (upload / overwrite a file)
 - `DELETE /api/v1/files/{rest...}` (delete a file or directory tree)
 
-Permissions: `files.read`, `files.write`. The control plane stores content under
-the configured `files.rootDir` host path (default `/data/zon/files`). Every v1
-profile enables `files`; who may upload or download is controlled by RBAC.
-The Manage UI exposes this as **Files** at `/manage/files`.
+Permissions: `files.read`, `files.write`. The control plane stores content in
+foundation blob-storage under the configured `files.objectPrefix` (default
+`files`). Every v1 profile enables `files`; who may upload or download is
+controlled by RBAC. The Manage UI exposes this as **Files** at `/manage/files`.
 
 ### `artifact`
 

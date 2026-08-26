@@ -34,10 +34,9 @@ func testBuildCatalog() devflows.Catalog {
 
 type testServer struct {
 	*httptest.Server
-	services         *app.Services
-	filesRoot        string
-	videoLibraryRoot string
-	videoStore       *fakeS3
+	services   *app.Services
+	blobStore  *fakeS3
+	videoStore *fakeS3 // alias of blobStore for video tests
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -133,15 +132,10 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
-	var filesRoot string
-	var videoStore *fakeS3
-	if resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
-		filesRoot = t.TempDir()
-		cfg.FilesRootDir = filesRoot
-	}
-	if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
-		videoStore = newFakeS3(t)
-		cfg.BlobStorageEndpoint = videoStore.URL
+	var blobStore *fakeS3
+	if resolved.Capabilities.Enabled(appliance.CapabilityFiles) || resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
+		blobStore = newFakeS3(t)
+		cfg.BlobStorageEndpoint = blobStore.URL
 		cfg.BlobStorageBucket = "appliance"
 		cfg.BlobStorageAccessKey = "test-access-key"
 		cfg.BlobStorageSecretKey = "test-secret-key"
@@ -222,25 +216,28 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
 	}
-	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) {
-		deps.FilesH = &httpapi.FileHandlers{
-			RootDir:         cfg.FilesRootDir,
-			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
-			TransferTimeout: cfg.FilesTransferTimeout,
-			Audit:           services.Audit,
-		}
-	}
-	if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) || resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
 		blobClient, err := blobstore.New(cfg.BlobStorageEndpoint, cfg.BlobStorageBucket, cfg.BlobStorageAccessKey, cfg.BlobStorageSecretKey, cfg.BlobStorageRegion)
 		if err != nil {
 			t.Fatalf("blobstore.New: %v", err)
 		}
-		deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
-			Store:           blobClient,
-			ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
-			MaxUploadBytes:  cfg.VideoMaxUploadBytes,
-			TransferTimeout: cfg.VideoTransferTimeout,
-			Audit:           services.Audit,
+		if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) {
+			deps.FilesH = &httpapi.FileHandlers{
+				Store:           blobClient,
+				ObjectPrefix:    cfg.FilesObjectPrefix,
+				MaxUploadBytes:  cfg.FilesMaxUploadBytes,
+				TransferTimeout: cfg.FilesTransferTimeout,
+				Audit:           services.Audit,
+			}
+		}
+		if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
+			deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
+				Store:           blobClient,
+				ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
+				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
+				TransferTimeout: cfg.VideoTransferTimeout,
+				Audit:           services.Audit,
+			}
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
@@ -257,7 +254,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testServer{Server: srv, services: services, filesRoot: filesRoot, videoStore: videoStore}
+	return &testServer{Server: srv, services: services, blobStore: blobStore, videoStore: blobStore}
 }
 
 // bootstrapAdmin creates the first administrator directly through the

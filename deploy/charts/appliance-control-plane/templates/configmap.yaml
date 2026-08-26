@@ -23,7 +23,7 @@ data:
   APPLIANCE_ARTIFACT_SERVER_BASE_URL: {{ .Values.config.artifactServerBaseURL | quote }}
   APPLIANCE_ARTIFACT_SERVER_ALLOW_FAKE: {{ .Values.config.artifactServerAllowFake | quote }}
   APPLIANCE_SERVICE_REGISTRY_JSON: {{ .Values.config.serviceRegistry | default dict | toJson | quote }}
-  APPLIANCE_FILES_ROOT_DIR: {{ .Values.files.rootDir | quote }}
+  APPLIANCE_FILES_OBJECT_PREFIX: {{ .Values.files.objectPrefix | quote }}
   APPLIANCE_FILES_MAX_UPLOAD_BYTES: {{ printf "%s" .Values.files.maxUploadBytes | quote }}
   APPLIANCE_FILES_TRANSFER_TIMEOUT: {{ .Values.files.transferTimeout | quote }}
   APPLIANCE_DNS_READY_URL: {{ .Values.config.dnsReadyURL | quote }}

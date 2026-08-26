@@ -29,7 +29,7 @@ type VideoLibraryHandlers struct {
 }
 
 func (h *VideoLibraryHandlers) Get(w http.ResponseWriter, r *http.Request) {
-	relativePath, err := videoLibraryPath(r.PathValue("rest"), false)
+	relativePath, err := blobRelativePath(r.PathValue("rest"), false)
 	if err != nil {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
@@ -91,7 +91,7 @@ func (h *VideoLibraryHandlers) stream(w http.ResponseWriter, r *http.Request, re
 }
 
 func (h *VideoLibraryHandlers) Upload(w http.ResponseWriter, r *http.Request) {
-	relativePath, err := videoLibraryPath(r.PathValue("rest"), true)
+	relativePath, err := blobRelativePath(r.PathValue("rest"), true)
 	if err != nil {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
@@ -165,7 +165,7 @@ func (h *VideoLibraryHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *VideoLibraryHandlers) Delete(w http.ResponseWriter, r *http.Request) {
-	relativePath, err := videoLibraryPath(r.PathValue("rest"), true)
+	relativePath, err := blobRelativePath(r.PathValue("rest"), true)
 	if err != nil {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
@@ -277,18 +277,4 @@ func (h *VideoLibraryHandlers) extendTransferDeadlines(w http.ResponseWriter) er
 }
 func (h *VideoLibraryHandlers) writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	WriteProblem(w, r, http.StatusInternalServerError, "blob_storage_unavailable", "Blob storage is unavailable", "")
-}
-func videoLibraryPath(raw string, required bool) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || trimmed == "." || trimmed == "/" {
-		if required {
-			return "", fmt.Errorf("file path is required")
-		}
-		return "", nil
-	}
-	cleaned := strings.TrimPrefix(path.Clean("/"+trimmed), "/")
-	if cleaned == "" || cleaned == "." || strings.HasPrefix(cleaned, "../") {
-		return "", fmt.Errorf("invalid file path")
-	}
-	return cleaned, nil
 }

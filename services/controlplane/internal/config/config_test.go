@@ -21,7 +21,7 @@ func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 		"APPLIANCE_PUBLIC_ADDR=0.0.0.0:9000",
 		"APPLIANCE_LOG_LEVEL=debug",
 		"APPLIANCE_CANONICAL_ORIGIN=https://appliance.example.internal",
-		"APPLIANCE_FILES_ROOT_DIR=/srv/appliance/files",
+		"APPLIANCE_FILES_OBJECT_PREFIX=operator-files",
 	}
 	cfg, err := config.Load(environ)
 	if err != nil {
@@ -39,8 +39,8 @@ func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 	if cfg.CanonicalOrigin != "https://appliance.example.internal" {
 		t.Errorf("CanonicalOrigin = %q, want https://appliance.example.internal", cfg.CanonicalOrigin)
 	}
-	if cfg.FilesRootDir != "/srv/appliance/files" {
-		t.Errorf("FilesRootDir = %q, want /srv/appliance/files", cfg.FilesRootDir)
+	if cfg.FilesObjectPrefix != "operator-files" {
+		t.Errorf("FilesObjectPrefix = %q, want operator-files", cfg.FilesObjectPrefix)
 	}
 }
 
@@ -224,12 +224,18 @@ func TestArtifactProfileAllowsExplicitFakeArtifactServerForLocalTests(t *testing
 	}
 }
 
-func TestFilesProfilesRequireAbsoluteFilesRootDir(t *testing.T) {
+func TestFilesProfilesRequireObjectPrefixAndBlob(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "core"
-	cfg.FilesRootDir = "relative/files"
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "filesRootDir") {
-		t.Fatalf("Validate with relative filesRootDir = %v, want filesRootDir error", err)
+	cfg.FilesObjectPrefix = "   "
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "filesObjectPrefix") {
+		t.Fatalf("Validate with empty filesObjectPrefix = %v, want filesObjectPrefix error", err)
+	}
+	cfg = config.Default()
+	cfg.ApplianceProfile = "core"
+	cfg.BlobStorageAccessKey = ""
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "blob storage") {
+		t.Fatalf("Validate without blob credentials = %v, want blob storage error", err)
 	}
 }
 

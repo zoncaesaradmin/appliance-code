@@ -507,10 +507,17 @@ func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	cms := findByKind(docs, "ConfigMap")
 	var found bool
+	var foundPrefix bool
 	for _, doc := range cms {
 		data, _ := at(doc, "data").(map[string]any)
 		if data == nil {
 			continue
+		}
+		if raw, ok := data["APPLIANCE_FILES_OBJECT_PREFIX"].(string); ok {
+			foundPrefix = true
+			if raw != "files" {
+				t.Fatalf("APPLIANCE_FILES_OBJECT_PREFIX = %q, want files", raw)
+			}
 		}
 		raw, ok := data["APPLIANCE_FILES_MAX_UPLOAD_BYTES"].(string)
 		if !ok {
@@ -527,6 +534,9 @@ func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 	if !found {
 		t.Fatal("expected APPLIANCE_FILES_MAX_UPLOAD_BYTES in control-plane ConfigMap")
 	}
+	if !foundPrefix {
+		t.Fatal("expected APPLIANCE_FILES_OBJECT_PREFIX in control-plane ConfigMap")
+	}
 }
 
 func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
@@ -537,8 +547,13 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	if findByKindAndName(docs, "Namespace", "apps") != nil {
 		t.Error("application namespace must be provisioned by the installer, not rendered by Helm")
 	}
-	if len(findByKind(docs, "PersistentVolumeClaim")) != 0 {
-		t.Error("persistence.enabled=false should omit the PersistentVolumeClaim")
+	// Control-plane and automation-runtime PVCs honor persistence.enabled.
+	// Foundation blob-storage always renders its own claim (hostPath-backed).
+	if findByKindAndName(docs, "PersistentVolumeClaim", controlPlaneDeploymentName+"-data") != nil {
+		t.Error("persistence.enabled=false should omit the control-plane PersistentVolumeClaim")
+	}
+	if findByKindAndName(docs, "PersistentVolumeClaim", automationRuntimeName+"-data") != nil {
+		t.Error("automationRuntime.persistence.enabled=false should omit the automation-runtime PersistentVolumeClaim")
 	}
 	if len(findByKind(docs, "IngressRoute")) != 0 {
 		t.Error("ingress.enabled=false should omit the IngressRoute")

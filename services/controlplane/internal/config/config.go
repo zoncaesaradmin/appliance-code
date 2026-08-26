@@ -37,7 +37,7 @@ type Config struct {
 	ArtifactServerBaseURL    string                    `json:"artifactServerBaseURL"`
 	ArtifactServerAllowFake  bool                      `json:"artifactServerAllowFake"`
 	ServiceRegistry          serviceregistry.Registry  `json:"serviceRegistry"`
-	FilesRootDir             string                    `json:"filesRootDir"`
+	FilesObjectPrefix        string                    `json:"filesObjectPrefix"`
 	FilesTransferTimeout     time.Duration             `json:"filesTransferTimeout"`
 	FilesMaxUploadBytes      int64                     `json:"filesMaxUploadBytes"`
 	DNSReadyURL              string                    `json:"dnsReadyURL"`
@@ -90,11 +90,13 @@ func Default() Config {
 		TrustedProxyCount:        0,
 		AutomationRuntimeBaseURL: "",
 		ArtifactServerAllowFake:  true,
-		FilesRootDir:             "/data/zon/files",
+		FilesObjectPrefix:        "files",
 		FilesTransferTimeout:     30 * time.Minute,
 		FilesMaxUploadBytes:      20 * 1024 * 1024 * 1024,
 		BlobStorageEndpoint:      "http://blob-storage.blob-storage.svc.cluster.local:9000",
 		BlobStorageBucket:        "appliance",
+		BlobStorageAccessKey:     "local-dev",
+		BlobStorageSecretKey:     "local-dev-secret",
 		BlobStorageRegion:        "us-east-1",
 		VideoLibraryObjectPrefix: "video/library",
 		VideoTransferTimeout:     30 * time.Minute,
@@ -192,7 +194,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("AUTOMATION_RUNTIME_BASE_URL", &cfg.AutomationRuntimeBaseURL)
 	str("ARTIFACT_SERVER_BASE_URL", &cfg.ArtifactServerBaseURL)
-	str("FILES_ROOT_DIR", &cfg.FilesRootDir)
+	str("FILES_OBJECT_PREFIX", &cfg.FilesObjectPrefix)
 	str("DNS_READY_URL", &cfg.DNSReadyURL)
 	str("DNS_ZONE_NAME", &cfg.DNSZoneName)
 	str("DNS_CONFIGMAP_NAMESPACE", &cfg.DNSConfigMapNamespace)
@@ -395,10 +397,14 @@ func (c Config) Validate() error {
 		}
 	}
 	if profileErr == nil && filesEnabled {
-		if strings.TrimSpace(c.FilesRootDir) == "" {
-			errs = append(errs, "filesRootDir must not be empty when the files capability is enabled")
-		} else if !strings.HasPrefix(c.FilesRootDir, "/") {
-			errs = append(errs, "filesRootDir must be an absolute path")
+		if u, err := url.Parse(c.BlobStorageEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "blobStorageEndpoint must be an absolute http(s) URL with no path when the files capability is enabled")
+		}
+		if strings.TrimSpace(c.BlobStorageBucket) == "" || strings.TrimSpace(c.BlobStorageAccessKey) == "" || strings.TrimSpace(c.BlobStorageSecretKey) == "" {
+			errs = append(errs, "blob storage bucket and credentials must be configured when the files capability is enabled")
+		}
+		if strings.Trim(strings.TrimSpace(c.FilesObjectPrefix), "/") == "" {
+			errs = append(errs, "filesObjectPrefix must not be empty when the files capability is enabled")
 		}
 		if c.FilesTransferTimeout <= 0 {
 			errs = append(errs, "filesTransferTimeout must be positive when the files capability is enabled")

@@ -153,9 +153,10 @@ config:
   dnsAllowFakeZoneSync: false
 
 files:
-  # Backing store for the files capability (/api/v1/files). Present on every
-  # v1 profile; who may upload/download is controlled by files.read/files.write.
-  rootDir: /data/zon/files
+  # Logical object prefix for the files capability (/api/v1/files). Content
+  # is stored in foundation blob-storage; physical paths stay private.
+  # Who may upload/download is controlled by files.read/files.write.
+  objectPrefix: files
   # Keep as a quoted decimal string. Bare YAML integers above 2^31 can be
   # loaded as float64 and | quote then emits scientific notation that Go's
   # strconv.ParseInt rejects (e.g. "2.147483648e+10").

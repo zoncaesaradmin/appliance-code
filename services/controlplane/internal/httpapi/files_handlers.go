@@ -14,23 +14,297 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/videomedia"
 )
 
+// FileHandlers serves the files capability over a blob-storage object prefix.
+// Physical backing paths never become part of the public API.
 type FileHandlers struct {
-	RootDir         string
+	Store           *blobstore.Client
+	ObjectPrefix    string
 	MaxUploadBytes  int64
 	TransferTimeout time.Duration
 	Audit           *audit.Recorder
-	// Optional overrides (defaults preserve the files capability contract).
-	AuditWriteAction  string // default "files.write"
-	AuditDeleteAction string // default "files.delete"
-	RootConfigName    string // default "filesRootDir" (error messages)
-	InlineContent     bool   // when true, ServeContent uses Content-Disposition: inline
-	VideoMP4Only      bool   // when true, accept browser-compatible MP4 video only
 }
 
+// Get serves a file download, or a directory listing when the path is empty
+// or refers to a virtual directory prefix.
+func (h *FileHandlers) Get(w http.ResponseWriter, r *http.Request) {
+	relativePath, err := blobRelativePath(r.PathValue("rest"), false)
+	if err != nil {
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	if relativePath == "" {
+		h.writeList(w, r, "")
+		return
+	}
+	object, err := h.Store.Stat(r.Context(), h.objectKey(relativePath))
+	if errors.Is(err, blobstore.ErrNotFound) {
+		list, listErr := h.Store.List(r.Context(), h.directoryPrefix(relativePath))
+		if listErr != nil {
+			h.writeStoreError(w, r, listErr)
+			return
+		}
+		if len(list.Objects) == 0 && len(list.CommonPrefixes) == 0 {
+			WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
+			return
+		}
+		h.writeListResult(w, relativePath, list)
+		return
+	}
+	if err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	h.stream(w, r, relativePath, object)
+}
+
+// Download keeps the previous handler name for older call sites/tests.
+func (h *FileHandlers) Download(w http.ResponseWriter, r *http.Request) {
+	h.Get(w, r)
+}
+
+func (h *FileHandlers) stream(w http.ResponseWriter, r *http.Request, relativePath string, object blobstore.Object) {
+	if err := h.extendTransferDeadlines(w); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	response, got, err := h.Store.Get(r.Context(), h.objectKey(relativePath), r.Header.Get("Range"))
+	if errors.Is(err, blobstore.ErrNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
+		return
+	}
+	if err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	defer response.Body.Close()
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", path.Base(relativePath)))
+	contentType := strings.TrimSpace(object.ContentType)
+	if contentType == "" {
+		contentType = strings.TrimSpace(got.ContentType)
+	}
+	if contentType == "" {
+		contentType = mime.TypeByExtension(filepath.Ext(relativePath))
+	}
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	for _, header := range []string{"Content-Length", "Content-Range", "Last-Modified", "ETag"} {
+		if value := response.Header.Get(header); value != "" {
+			w.Header().Set(header, value)
+		}
+	}
+	if got.Size >= 0 && w.Header().Get("Content-Length") == "" {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", got.Size))
+	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = io.Copy(w, response.Body)
+}
+
+func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
+	relativePath, err := blobRelativePath(r.PathValue("rest"), true)
+	if err != nil {
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	if h.MaxUploadBytes <= 0 {
+		h.writeStoreError(w, r, fmt.Errorf("files upload limit is not configured"))
+		return
+	}
+	if err := h.extendTransferDeadlines(w); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	temporary, err := os.CreateTemp("", "files-upload-*")
+	if err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = temporary.Close(); _ = os.Remove(temporaryPath) }()
+	written, err := io.Copy(temporary, io.LimitReader(r.Body, h.MaxUploadBytes+1))
+	if err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "invalid_body", "Request body could not be read", "")
+		return
+	}
+	if written > h.MaxUploadBytes {
+		WriteProblem(w, r, http.StatusRequestEntityTooLarge, "payload_too_large", "File exceeds the configured upload limit", "")
+		return
+	}
+	if err := temporary.Sync(); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	if err := temporary.Close(); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	if err := h.Store.EnsureBucket(r.Context()); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	_, statErr := h.Store.Stat(r.Context(), h.objectKey(relativePath))
+	overwritten := statErr == nil
+	if statErr != nil && !errors.Is(statErr, blobstore.ErrNotFound) {
+		h.writeStoreError(w, r, statErr)
+		return
+	}
+	input, err := os.Open(temporaryPath)
+	if err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	defer input.Close()
+	contentType := mime.TypeByExtension(filepath.Ext(relativePath))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if _, err := h.Store.Put(r.Context(), h.objectKey(relativePath), input, written, contentType); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	h.record(r, "files.write", relativePath, map[string]any{"size": written, "overwritten": overwritten})
+	status := http.StatusCreated
+	if overwritten {
+		status = http.StatusOK
+	}
+	writeJSON(w, status, fileResponse{Path: relativePath, Size: written, Overwritten: overwritten})
+}
+
+func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {
+	relativePath, err := blobRelativePath(r.PathValue("rest"), true)
+	if err != nil {
+		WriteValidationProblem(w, r, err.Error(), nil)
+		return
+	}
+	key := h.objectKey(relativePath)
+	_, statErr := h.Store.Stat(r.Context(), key)
+	directory := false
+	if errors.Is(statErr, blobstore.ErrNotFound) {
+		directory = true
+		items, err := h.Store.ListAll(r.Context(), h.directoryPrefix(relativePath))
+		if err != nil {
+			h.writeStoreError(w, r, err)
+			return
+		}
+		if len(items.Objects) == 0 {
+			WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
+			return
+		}
+		for _, item := range items.Objects {
+			if err := h.Store.Delete(r.Context(), item.Key); err != nil {
+				h.writeStoreError(w, r, err)
+				return
+			}
+		}
+	} else if statErr != nil {
+		h.writeStoreError(w, r, statErr)
+		return
+	} else if err := h.Store.Delete(r.Context(), key); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	h.record(r, "files.delete", relativePath, map[string]any{"directory": directory})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *FileHandlers) writeList(w http.ResponseWriter, r *http.Request, relativePath string) {
+	result, err := h.Store.List(r.Context(), h.directoryPrefix(relativePath))
+	if err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
+	h.writeListResult(w, relativePath, result)
+}
+
+func (h *FileHandlers) writeListResult(w http.ResponseWriter, relativePath string, result blobstore.ListResult) {
+	items := make([]fileEntry, 0, len(result.Objects)+len(result.CommonPrefixes))
+	prefix := h.directoryPrefix(relativePath)
+	for _, commonPrefix := range result.CommonPrefixes {
+		name := strings.TrimSuffix(strings.TrimPrefix(commonPrefix, prefix), "/")
+		if name == "" {
+			continue
+		}
+		itemPath := name
+		if relativePath != "" {
+			itemPath = path.Join(relativePath, name)
+		}
+		items = append(items, fileEntry{Name: name, Path: itemPath, Type: "directory", ModifiedAt: ""})
+	}
+	for _, object := range result.Objects {
+		name := strings.TrimPrefix(object.Key, prefix)
+		if name == "" || strings.Contains(name, "/") {
+			continue
+		}
+		itemPath := name
+		if relativePath != "" {
+			itemPath = path.Join(relativePath, name)
+		}
+		items = append(items, fileEntry{
+			Name:       name,
+			Path:       itemPath,
+			Type:       "file",
+			Size:       object.Size,
+			ModifiedAt: object.ModifiedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Type != items[j].Type {
+			return items[i].Type == "directory"
+		}
+		return items[i].Name < items[j].Name
+	})
+	writeJSON(w, http.StatusOK, fileListResponse{Path: relativePath, Items: items})
+}
+
+func (h *FileHandlers) objectKey(relativePath string) string {
+	return strings.Trim(h.ObjectPrefix, "/") + "/" + relativePath
+}
+
+func (h *FileHandlers) directoryPrefix(relativePath string) string {
+	prefix := strings.Trim(h.ObjectPrefix, "/") + "/"
+	if relativePath != "" {
+		prefix += strings.Trim(relativePath, "/") + "/"
+	}
+	return prefix
+}
+
+func (h *FileHandlers) record(r *http.Request, action, target string, details map[string]any) {
+	if h.Audit == nil {
+		return
+	}
+	principal, _ := PrincipalFromContext(r.Context())
+	_ = h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
+		Action: action, TargetType: "file", TargetID: target, Outcome: storage.AuditOutcomeSuccess, Details: details,
+	})
+}
+
+func (h *FileHandlers) extendTransferDeadlines(w http.ResponseWriter) error {
+	if h.TransferTimeout <= 0 {
+		return nil
+	}
+	controller := http.NewResponseController(w)
+	deadline := time.Now().Add(h.TransferTimeout)
+	if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return err
+	}
+	if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		return err
+	}
+	return nil
+}
+
+func (h *FileHandlers) writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
+	WriteProblem(w, r, http.StatusInternalServerError, "blob_storage_unavailable", "Blob storage is unavailable", "")
+}
+
+// Shared response types used by files and video library handlers.
 type fileResponse struct {
 	Path        string `json:"path"`
 	Size        int64  `json:"size"`
@@ -50,325 +324,4 @@ type fileEntry struct {
 type fileListResponse struct {
 	Path  string      `json:"path"`
 	Items []fileEntry `json:"items"`
-}
-
-// Get serves a file download, or a directory listing when the path is empty
-// or refers to a directory.
-func (h *FileHandlers) Get(w http.ResponseWriter, r *http.Request) {
-	relativePath, fullPath, err := h.resolvePathAllowRoot(r.PathValue("rest"))
-	if err != nil {
-		WriteValidationProblem(w, r, err.Error(), nil)
-		return
-	}
-
-	info, err := os.Stat(fullPath)
-	if errors.Is(err, os.ErrNotExist) {
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
-		return
-	}
-	if err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if info.IsDir() {
-		h.writeList(w, r, relativePath, fullPath)
-		return
-	}
-
-	file, err := os.Open(fullPath)
-	if err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	defer file.Close()
-
-	if err := h.extendTransferDeadlines(w); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	disposition := "attachment"
-	if h.InlineContent {
-		disposition = "inline"
-	}
-	w.Header().Set("Content-Disposition", fmt.Sprintf("%s; filename=%q", disposition, path.Base(fullPath)))
-	if h.VideoMP4Only {
-		w.Header().Set("Content-Type", "video/mp4")
-	} else if contentType := mime.TypeByExtension(filepath.Ext(fullPath)); contentType != "" {
-		w.Header().Set("Content-Type", contentType)
-	}
-	http.ServeContent(w, r, path.Base(fullPath), info.ModTime(), file)
-}
-
-// Download keeps the previous handler name for older call sites/tests.
-func (h *FileHandlers) Download(w http.ResponseWriter, r *http.Request) {
-	h.Get(w, r)
-}
-
-func (h *FileHandlers) writeList(w http.ResponseWriter, r *http.Request, relativePath, fullPath string) {
-	entries, err := os.ReadDir(fullPath)
-	if err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	items := make([]fileEntry, 0, len(entries))
-	for _, entry := range entries {
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		name := entry.Name()
-		childPath := name
-		if relativePath != "" {
-			childPath = path.Join(relativePath, name)
-		}
-		kind := "file"
-		size := info.Size()
-		status := ""
-		if entry.IsDir() {
-			kind = "directory"
-			size = 0
-		} else if h.VideoMP4Only {
-			status = "ready"
-		}
-		items = append(items, fileEntry{
-			Name:       name,
-			Path:       childPath,
-			Type:       kind,
-			Size:       size,
-			ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
-			Status:     status,
-		})
-	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Type != items[j].Type {
-			return items[i].Type == "directory"
-		}
-		return items[i].Name < items[j].Name
-	})
-	writeJSON(w, http.StatusOK, fileListResponse{Path: relativePath, Items: items})
-}
-
-func (h *FileHandlers) Upload(w http.ResponseWriter, r *http.Request) {
-	relativePath, fullPath, err := h.resolvePath(r.PathValue("rest"))
-	if err != nil {
-		WriteValidationProblem(w, r, err.Error(), nil)
-		return
-	}
-	if h.MaxUploadBytes <= 0 {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if h.VideoMP4Only && !strings.EqualFold(filepath.Ext(relativePath), ".mp4") {
-		WriteValidationProblem(w, r, "video library uploads must use a .mp4 destination path", nil)
-		return
-	}
-
-	if err := os.MkdirAll(h.RootDir, 0o2775); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-
-	overwritten := false
-	if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
-		overwritten = true
-	}
-
-	if err := h.extendTransferDeadlines(w); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	tmpFile, err := os.CreateTemp(h.RootDir, ".upload-*")
-	if err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	tmpPath := tmpFile.Name()
-	defer func() {
-		tmpFile.Close()
-		_ = os.Remove(tmpPath)
-	}()
-
-	limitedReader := io.LimitReader(r.Body, h.MaxUploadBytes+1)
-	written, err := io.Copy(tmpFile, limitedReader)
-	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "invalid_body", "Request body could not be read", "")
-		return
-	}
-	if written > h.MaxUploadBytes {
-		WriteProblem(w, r, http.StatusRequestEntityTooLarge, "payload_too_large", "File exceeds the configured upload limit", "")
-		return
-	}
-	if err := tmpFile.Sync(); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if err := tmpFile.Close(); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if h.VideoMP4Only {
-		if err := videomedia.ValidateBrowserMP4(tmpPath); err != nil {
-			WriteValidationProblem(w, r, err.Error(), nil)
-			return
-		}
-	}
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o2775); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	// CreateTemp uses 0600; widen so host operators can read uploads
-	// (dirs under /data/zon/files are 2775 with shared fsGroup 20000).
-	if err := os.Chmod(tmpPath, 0o644); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if err := os.Rename(tmpPath, fullPath); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-
-	if h.Audit != nil {
-		principal, _ := PrincipalFromContext(r.Context())
-		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
-			Action: h.writeAction(), TargetType: "file", TargetID: relativePath,
-			Outcome: storage.AuditOutcomeSuccess,
-			Details: map[string]any{"size": written, "overwritten": overwritten},
-		}); err != nil {
-			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-			return
-		}
-	}
-
-	status := http.StatusCreated
-	if overwritten {
-		status = http.StatusOK
-	}
-	writeJSON(w, status, fileResponse{
-		Path:        relativePath,
-		Size:        written,
-		Overwritten: overwritten,
-		Status:      h.videoStatus(),
-	})
-}
-
-func (h *FileHandlers) videoStatus() string {
-	if h.VideoMP4Only {
-		return "ready"
-	}
-	return ""
-}
-
-func (h *FileHandlers) Delete(w http.ResponseWriter, r *http.Request) {
-	relativePath, fullPath, err := h.resolvePath(r.PathValue("rest"))
-	if err != nil {
-		WriteValidationProblem(w, r, err.Error(), nil)
-		return
-	}
-	info, err := os.Stat(fullPath)
-	if errors.Is(err, os.ErrNotExist) {
-		WriteProblem(w, r, http.StatusNotFound, "not_found", "File not found", "")
-		return
-	}
-	if err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if info.IsDir() {
-		if err := os.RemoveAll(fullPath); err != nil {
-			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-			return
-		}
-	} else if err := os.Remove(fullPath); err != nil {
-		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-		return
-	}
-	if h.Audit != nil {
-		principal, _ := PrincipalFromContext(r.Context())
-		if err := h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
-			Action: h.deleteAction(), TargetType: "file", TargetID: relativePath,
-			Outcome: storage.AuditOutcomeSuccess,
-			Details: map[string]any{"directory": info.IsDir()},
-		}); err != nil {
-			WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
-			return
-		}
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *FileHandlers) extendTransferDeadlines(w http.ResponseWriter) error {
-	if h.TransferTimeout <= 0 {
-		return nil
-	}
-	controller := http.NewResponseController(w)
-	deadline := time.Now().Add(h.TransferTimeout)
-	if err := controller.SetReadDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
-		return fmt.Errorf("set read deadline: %w", err)
-	}
-	if err := controller.SetWriteDeadline(deadline); err != nil && !errors.Is(err, http.ErrNotSupported) {
-		return fmt.Errorf("set write deadline: %w", err)
-	}
-	return nil
-}
-
-func (h *FileHandlers) resolvePath(raw string) (string, string, error) {
-	relative, full, err := h.resolvePathAllowRoot(raw)
-	if err != nil {
-		return "", "", err
-	}
-	if relative == "" {
-		return "", "", fmt.Errorf("file path is required")
-	}
-	return relative, full, nil
-}
-
-func (h *FileHandlers) writeAction() string {
-	if action := strings.TrimSpace(h.AuditWriteAction); action != "" {
-		return action
-	}
-	return "files.write"
-}
-
-func (h *FileHandlers) deleteAction() string {
-	if action := strings.TrimSpace(h.AuditDeleteAction); action != "" {
-		return action
-	}
-	return "files.delete"
-}
-
-func (h *FileHandlers) rootConfigName() string {
-	if name := strings.TrimSpace(h.RootConfigName); name != "" {
-		return name
-	}
-	return "filesRootDir"
-}
-
-func (h *FileHandlers) resolvePathAllowRoot(raw string) (string, string, error) {
-	root := strings.TrimSpace(h.RootDir)
-	if root == "" {
-		return "", "", fmt.Errorf("%s is not configured", h.rootConfigName())
-	}
-	if !strings.HasPrefix(root, "/") {
-		return "", "", fmt.Errorf("%s must be an absolute path", h.rootConfigName())
-	}
-
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" || trimmed == "." || trimmed == "/" {
-		return "", root, nil
-	}
-	cleaned := strings.TrimPrefix(path.Clean("/"+trimmed), "/")
-	if cleaned == "" || cleaned == "." {
-		return "", root, nil
-	}
-
-	fullPath := filepath.Join(root, filepath.FromSlash(cleaned))
-	relative, err := filepath.Rel(root, fullPath)
-	if err != nil {
-		return "", "", fmt.Errorf("invalid file path")
-	}
-	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
-		return "", "", fmt.Errorf("invalid file path")
-	}
-	return filepath.ToSlash(relative), fullPath, nil
 }

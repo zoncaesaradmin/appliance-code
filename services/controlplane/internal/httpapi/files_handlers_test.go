@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,13 +45,8 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 		t.Fatalf("upload status = %d, want 201", uploadResp.StatusCode)
 	}
 
-	uploadedPath := filepath.Join(ts.filesRoot, "releases", "v1", "bundle.txt")
-	info, err := os.Stat(uploadedPath)
-	if err != nil {
-		t.Fatalf("stat uploaded file: %v", err)
-	}
-	if info.Mode().Perm() != 0o644 {
-		t.Fatalf("uploaded file mode = %o, want 644", info.Mode().Perm())
+	if !ts.blobStore.has("appliance/files/releases/v1/bundle.txt") {
+		t.Fatal("uploaded file was not stored below the configured blob prefix")
 	}
 
 	downloadReq, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/files/releases/v1/bundle.txt", nil)
@@ -128,8 +121,8 @@ func TestArtifactFilesUploadAndDownload(t *testing.T) {
 	if deleteResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want 204", deleteResp.StatusCode)
 	}
-	if _, err := os.Stat(uploadedPath); !os.IsNotExist(err) {
-		t.Fatalf("expected uploaded file to be removed, stat err = %v", err)
+	if ts.blobStore.has("appliance/files/releases/v1/bundle.txt") {
+		t.Fatal("expected uploaded file to be removed from blob storage")
 	}
 }
 

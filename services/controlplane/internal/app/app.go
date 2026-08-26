@@ -111,26 +111,29 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			ArtifactServer: services.ArtifactServer, Authorizer: services.RegistryAuthorizer, Users: services.Users,
 		}
 	}
-	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) {
-		deps.FilesH = &httpapi.FileHandlers{
-			RootDir:         cfg.FilesRootDir,
-			MaxUploadBytes:  cfg.FilesMaxUploadBytes,
-			TransferTimeout: cfg.FilesTransferTimeout,
-			Audit:           services.Audit,
-		}
-	}
-	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityVideo) {
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) || services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityVideo) {
 		blobClient, err := blobstore.New(cfg.BlobStorageEndpoint, cfg.BlobStorageBucket, cfg.BlobStorageAccessKey, cfg.BlobStorageSecretKey, cfg.BlobStorageRegion)
 		if err != nil {
 			services.DB.Close()
-			return nil, fmt.Errorf("configure video blob storage: %w", err)
+			return nil, fmt.Errorf("configure blob storage: %w", err)
 		}
-		deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
-			Store:           blobClient,
-			ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
-			MaxUploadBytes:  cfg.VideoMaxUploadBytes,
-			TransferTimeout: cfg.VideoTransferTimeout,
-			Audit:           services.Audit,
+		if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameFiles) {
+			deps.FilesH = &httpapi.FileHandlers{
+				Store:           blobClient,
+				ObjectPrefix:    cfg.FilesObjectPrefix,
+				MaxUploadBytes:  cfg.FilesMaxUploadBytes,
+				TransferTimeout: cfg.FilesTransferTimeout,
+				Audit:           services.Audit,
+			}
+		}
+		if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityVideo) {
+			deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
+				Store:           blobClient,
+				ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
+				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
+				TransferTimeout: cfg.VideoTransferTimeout,
+				Audit:           services.Audit,
+			}
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
