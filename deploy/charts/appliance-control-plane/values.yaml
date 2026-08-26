@@ -164,13 +164,13 @@ files:
   transferTimeout: 30m
 
 blobStorage:
-  # The local foundation service is S3-compatible. Cloud deployments replace
-  # this endpoint and secret without changing application object keys.
-  endpoint: http://blob-storage.blob-storage.svc.cluster.local:9000
+  # The local foundation service is S3-compatible and co-located in ace-system
+  # with the control plane and message broker. Cloud deployments replace this
+  # endpoint and secret without changing application object keys.
+  endpoint: http://blob-storage.ace-system.svc.cluster.local:9000
   bucket: appliance
   region: us-east-1
   credentialsSecretName: blob-storage-credentials
-  namespace: blob-storage
   image:
     repository: registry.local/blob-storage
     tag: bundled

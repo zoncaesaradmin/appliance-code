@@ -1,5 +1,6 @@
 {{- if eq (include "appliance-control-plane.aceSystemEnabled" .) "true" }}
-{{- $existing := lookup "v1" "Secret" (include "appliance-control-plane.namespace" .) .Values.blobStorage.credentialsSecretName -}}
+{{- $ns := include "appliance-control-plane.namespace" . -}}
+{{- $existing := lookup "v1" "Secret" $ns .Values.blobStorage.credentialsSecretName -}}
 {{- $accessKey := "" -}}
 {{- $secretKey := "" -}}
 {{- if $existing -}}
@@ -10,29 +11,10 @@
 {{- $secretKey = randAlphaNum 40 | b64enc -}}
 {{- end -}}
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ .Values.blobStorage.namespace }}
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
----
-apiVersion: v1
 kind: Secret
 metadata:
   name: {{ .Values.blobStorage.credentialsSecretName }}
-  namespace: {{ include "appliance-control-plane.namespace" . }}
-type: Opaque
-data:
-  accessKey: {{ $accessKey }}
-  secretKey: {{ $secretKey }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ .Values.blobStorage.credentialsSecretName }}
-  namespace: {{ .Values.blobStorage.namespace }}
+  namespace: {{ $ns }}
 type: Opaque
 data:
   accessKey: {{ $accessKey }}
@@ -49,14 +31,14 @@ spec:
   storageClassName: ""
   hostPath: {path: {{ .Values.blobStorage.persistence.hostPath | quote }}, type: DirectoryOrCreate}
   claimRef:
-    namespace: {{ .Values.blobStorage.namespace }}
+    namespace: {{ $ns }}
     name: {{ .Values.blobStorage.persistence.claimName }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ .Values.blobStorage.persistence.claimName }}
-  namespace: {{ .Values.blobStorage.namespace }}
+  namespace: {{ $ns }}
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: ""
@@ -67,7 +49,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: blob-storage
-  namespace: {{ .Values.blobStorage.namespace }}
+  namespace: {{ $ns }}
 spec:
   selector: {app.kubernetes.io/name: blob-storage}
   ports: [{name: s3, port: 9000, targetPort: s3}]
@@ -76,7 +58,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: blob-storage
-  namespace: {{ .Values.blobStorage.namespace }}
+  namespace: {{ $ns }}
 spec:
   replicas: 1
   strategy: {type: Recreate}
@@ -96,7 +78,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       # Ownership of /data/zon/blob-storage is prepared by zonctl EnsureOwnedDir
       # (UID 10009 / shared GID 20000). Do not add a root init container here:
-      # this namespace enforces Pod Security Admission restricted.
+      # ace-system enforces Pod Security Admission restricted.
       containers:
         - name: blob-storage
           image: {{ .Values.blobStorage.image.repository }}{{ if .Values.blobStorage.image.digest }}@{{ .Values.blobStorage.image.digest }}{{ else }}:{{ .Values.blobStorage.image.tag }}{{ end }}
@@ -118,25 +100,19 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
+# Pod-scoped only: ace-system already has a namespace-wide default-deny from the
+# control-plane NetworkPolicy templates. Do not add another empty-selector deny.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: blob-storage-default-deny
-  namespace: {{ .Values.blobStorage.namespace }}
-spec: {podSelector: {}, policyTypes: [Ingress, Egress]}
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: blob-storage-allow-control-plane
-  namespace: {{ .Values.blobStorage.namespace }}
+  name: blob-storage-allow
+  namespace: {{ $ns }}
 spec:
   podSelector: {matchLabels: {app.kubernetes.io/name: blob-storage}}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ace-system}}
-          podSelector: {matchLabels: {app.kubernetes.io/name: controlplane}}
+        - podSelector: {matchLabels: {app.kubernetes.io/name: controlplane}}
       ports: [{protocol: TCP, port: 9000}]
   egress:
     - to:

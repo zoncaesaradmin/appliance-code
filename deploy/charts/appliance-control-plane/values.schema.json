@@ -597,13 +597,12 @@
     },
     "blobStorage": {
       "type": "object",
-      "required": ["endpoint", "bucket", "region", "credentialsSecretName", "namespace", "image", "persistence"],
+      "required": ["endpoint", "bucket", "region", "credentialsSecretName", "image", "persistence"],
       "properties": {
         "endpoint": {"type": "string", "pattern": "^https?://[^/]+$"},
         "bucket": {"type": "string", "minLength": 1},
         "region": {"type": "string", "minLength": 1},
         "credentialsSecretName": {"type": "string", "minLength": 1},
-        "namespace": {"type": "string", "minLength": 1},
         "image": {
           "type": "object",
           "required": ["repository", "tag", "digest", "pullPolicy"],

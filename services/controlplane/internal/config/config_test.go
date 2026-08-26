@@ -208,7 +208,7 @@ func TestTrainingProfileRequiresBlobStorage(t *testing.T) {
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "blobStorageEndpoint") {
 		t.Fatalf("Validate without blob storage endpoint = %v, want blobStorageEndpoint error", err)
 	}
-	cfg.BlobStorageEndpoint = "http://blob-storage.blob-storage.svc.cluster.local:9000"
+	cfg.BlobStorageEndpoint = "http://blob-storage.ace-system.svc.cluster.local:9000"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate with video gateway URL: %v", err)
 	}

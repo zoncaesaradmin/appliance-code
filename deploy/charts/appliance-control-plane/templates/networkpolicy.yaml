@@ -143,6 +143,14 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.automationRuntimePort }}
     {{- end }}
+    # Foundation blob-storage (MinIO) runs in this same namespace.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: blob-storage
+      ports:
+        - protocol: TCP
+          port: 9000
     # Cluster DNS is required for Service name lookup (registry, dns, …).
     - to:
         - namespaceSelector:
