@@ -31,6 +31,15 @@ func TestVideoLibraryUploadListAndStream(t *testing.T) {
 	ts.createUserWithRole(t, "video-user", testPassword, createdRole.ID)
 	token := ts.login(t, "video-user", testPassword)
 
+	emptyListResp := ts.doJSON(t, "GET", "/api/v1/video/library", token, "")
+	defer emptyListResp.Body.Close()
+	if emptyListResp.StatusCode != http.StatusOK {
+		t.Fatalf("empty library status = %d, want 200", emptyListResp.StatusCode)
+	}
+	if !ts.videoStore.hasBucket() {
+		t.Fatal("listing an empty video library must initialize the blob bucket")
+	}
+
 	validVideo := browserMP4("avc1")
 	uploadReq, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/video/library/clips/intro.mp4", strings.NewReader(string(validVideo)))
 	if err != nil {

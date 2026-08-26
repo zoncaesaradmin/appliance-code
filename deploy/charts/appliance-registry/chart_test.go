@@ -33,6 +33,23 @@ func render(t *testing.T, args ...string) string {
 	return string(out)
 }
 
+func createOCIArchive(t *testing.T, root, name, reference, digest string) string {
+	t.Helper()
+	layout := filepath.Join(root, name+"-layout")
+	if err := os.Mkdir(layout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	index := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + digest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"` + reference + `"}}]}`
+	if err := os.WriteFile(filepath.Join(layout, "index.json"), []byte(index), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, name+".tar")
+	if output, err := exec.Command("tar", "-cf", archive, "-C", layout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create %s archive: %v\n%s", name, err, output)
+	}
+	return archive
+}
+
 func TestHardenedRegistryRender(t *testing.T) {
 	out := render(t, "--set", "logs.prepare.enabled=true", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
 	for _, want := range []string{
@@ -103,31 +120,11 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 		}
 	}
 	digest := strings.Repeat("a", 64)
-	artifactServerLayout := filepath.Join(tmp, "artifact-server-layout")
-	if err := os.Mkdir(artifactServerLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	index := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + digest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/artifact-server:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(artifactServerLayout, "index.json"), []byte(index), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	artifactServerArchive := filepath.Join(tmp, "artifact-server.tar")
-	if output, err := exec.Command("tar", "-cf", artifactServerArchive, "-C", artifactServerLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create Artifact Server archive: %v\n%s", err, output)
-	}
+	artifactServerArchive := createOCIArchive(t, tmp, "artifact-server", "registry.local/artifact-server:bundled", digest)
+	blobStorageDigest := strings.Repeat("b", 64)
+	blobStorageArchive := createOCIArchive(t, tmp, "blob-storage", "registry.local/blob-storage:bundled", blobStorageDigest)
 	hostDigest := strings.Repeat("d", 64)
-	hostLayout := filepath.Join(tmp, "host-layout")
-	if err := os.Mkdir(hostLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	hostIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + hostDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/appliance-host-agent:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	hostAgentArchive := filepath.Join(tmp, "host-agent.tar")
-	if output, err := exec.Command("tar", "-cf", hostAgentArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create host-agent archive: %v\n%s", err, output)
-	}
+	hostAgentArchive := createOCIArchive(t, tmp, "host-agent", "registry.local/appliance-host-agent:bundled", hostDigest)
 	hostBinary := filepath.Join(tmp, "appliance-host-agentd")
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
@@ -159,6 +156,8 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 		"--host-packages-os-version", "24.04",
 		"--artifact-server-image", artifactServerArchive,
 		"--artifact-server-image-reference", "registry.local/artifact-server@sha256:"+digest,
+		"--blob-storage-image", blobStorageArchive,
+		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest,
 		"--artifact-server-version", "2.1.8", "--workflows-crds-dir", crds)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("archive release input: %v\n%s", err, output)
@@ -181,7 +180,7 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatalf("decode release-input.json: %v\n%s", err, raw)
 	}
-	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "artifactServerImage", "artifactServerChart"} {
+	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "artifactServerImage", "artifactServerChart", "blobStorageImage"} {
 		if len(manifest.Artifacts[key]) == 0 {
 			t.Errorf("missing first-class %s artifact", key)
 		}
@@ -198,19 +197,10 @@ func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 	if err := os.WriteFile(artifactServer, []byte("artifact-server"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	blobStorageDigest := strings.Repeat("b", 64)
+	blobStorageArchive := createOCIArchive(t, tmp, "blob-storage", "registry.local/blob-storage:bundled", blobStorageDigest)
 	hostDigest := strings.Repeat("d", 64)
-	hostLayout := filepath.Join(tmp, "host-layout")
-	if err := os.Mkdir(hostLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	hostIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + hostDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/appliance-host-agent:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	hostAgentArchive := filepath.Join(tmp, "host-agent.tar")
-	if output, err := exec.Command("tar", "-cf", hostAgentArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create host-agent archive: %v\n%s", err, output)
-	}
+	hostAgentArchive := createOCIArchive(t, tmp, "host-agent", "registry.local/appliance-host-agent:bundled", hostDigest)
 	hostBinary := filepath.Join(tmp, "appliance-host-agentd")
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
@@ -231,7 +221,9 @@ func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 		"--host-agent-binary", hostBinary,
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
-		"--artifact-server-image", artifactServer).CombinedOutput()
+		"--artifact-server-image", artifactServer,
+		"--blob-storage-image", blobStorageArchive,
+		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
 		t.Fatalf("unpaired Artifact Server image was not rejected: err=%v output=%s", err, out)
 	}

@@ -18,6 +18,7 @@ import (
 type fakeS3 struct {
 	*httptest.Server
 	mu      sync.Mutex
+	bucket  bool
 	objects map[string]fakeS3Object
 }
 
@@ -41,6 +42,12 @@ func (s *fakeS3) has(key string) bool {
 	return ok
 }
 
+func (s *fakeS3) hasBucket() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.bucket
+}
+
 func (s *fakeS3) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	if r.URL.Query().Get("list-type") == "2" {
@@ -48,6 +55,9 @@ func (s *fakeS3) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if key == "appliance" && r.Method == http.MethodPut {
+		s.mu.Lock()
+		s.bucket = true
+		s.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -112,7 +122,10 @@ func (s *fakeS3) writeHeaders(w http.ResponseWriter, object fakeS3Object) {
 }
 
 func (s *fakeS3) list(w http.ResponseWriter, r *http.Request, bucket string) {
-	if bucket != "appliance" {
+	s.mu.Lock()
+	bucketExists := s.bucket
+	s.mu.Unlock()
+	if bucket != "appliance" || !bucketExists {
 		http.NotFound(w, r)
 		return
 	}

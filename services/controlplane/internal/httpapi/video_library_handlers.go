@@ -34,6 +34,13 @@ func (h *VideoLibraryHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}
+	// A new local S3 service has no buckets until its first successful write.
+	// Browsing an empty video library must create the configured bucket instead
+	// of surfacing MinIO's NoSuchBucket response as a storage outage.
+	if err := h.Store.EnsureBucket(r.Context()); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
 	if relativePath == "" {
 		h.writeList(w, r, "")
 		return

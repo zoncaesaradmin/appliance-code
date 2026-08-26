@@ -36,6 +36,10 @@ func (h *FileHandlers) Get(w http.ResponseWriter, r *http.Request) {
 		WriteValidationProblem(w, r, err.Error(), nil)
 		return
 	}
+	if err := h.Store.EnsureBucket(r.Context()); err != nil {
+		h.writeStoreError(w, r, err)
+		return
+	}
 	if relativePath == "" {
 		h.writeList(w, r, "")
 		return

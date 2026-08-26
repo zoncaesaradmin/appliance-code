@@ -37,6 +37,23 @@ func render(t *testing.T, args ...string) string {
 	return string(out)
 }
 
+func createOCIArchive(t *testing.T, root, name, reference, digest string) string {
+	t.Helper()
+	layout := filepath.Join(root, name+"-layout")
+	if err := os.Mkdir(layout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	index := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + digest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"` + reference + `"}}]}`
+	if err := os.WriteFile(filepath.Join(layout, "index.json"), []byte(index), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(root, name+".tar")
+	if output, err := exec.Command("tar", "-cf", archive, "-C", layout, ".").CombinedOutput(); err != nil {
+		t.Fatalf("create %s archive: %v\n%s", name, err, output)
+	}
+	return archive
+}
+
 func TestHardenedDNSRender(t *testing.T) {
 	out := render(t, "--set", "logs.prepare.enabled=true")
 	for _, want := range []string{
@@ -114,44 +131,13 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 		}
 	}
 	digest := strings.Repeat("c", 64)
-	dnsLayout := filepath.Join(tmp, "dns-layout")
-	if err := os.Mkdir(dnsLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	index := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + digest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/coredns:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(dnsLayout, "index.json"), []byte(index), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	dnsArchive := filepath.Join(tmp, "dns-server.tar")
-	if output, err := exec.Command("tar", "-cf", dnsArchive, "-C", dnsLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create CoreDNS archive: %v\n%s", err, output)
-	}
+	dnsArchive := createOCIArchive(t, tmp, "dns-server", "registry.local/coredns:bundled", digest)
 	artifactServerDigest := strings.Repeat("a", 64)
-	artifactServerLayout := filepath.Join(tmp, "artifact-server-layout")
-	if err := os.Mkdir(artifactServerLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	artifactServerIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + artifactServerDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/artifact-server:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(artifactServerLayout, "index.json"), []byte(artifactServerIndex), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	artifactServerArchive := filepath.Join(tmp, "artifact-server.tar")
-	if output, err := exec.Command("tar", "-cf", artifactServerArchive, "-C", artifactServerLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create Artifact Server archive: %v\n%s", err, output)
-	}
+	artifactServerArchive := createOCIArchive(t, tmp, "artifact-server", "registry.local/artifact-server:bundled", artifactServerDigest)
+	blobStorageDigest := strings.Repeat("b", 64)
+	blobStorageArchive := createOCIArchive(t, tmp, "blob-storage", "registry.local/blob-storage:bundled", blobStorageDigest)
 	hostDigest := strings.Repeat("d", 64)
-	hostLayout := filepath.Join(tmp, "host-layout")
-	if err := os.Mkdir(hostLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	hostIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + hostDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/appliance-host-agent:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	hostAgentArchive := filepath.Join(tmp, "host-agent.tar")
-	if output, err := exec.Command("tar", "-cf", hostAgentArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create host-agent archive: %v\n%s", err, output)
-	}
+	hostAgentArchive := createOCIArchive(t, tmp, "host-agent", "registry.local/appliance-host-agent:bundled", hostDigest)
 	hostBinary := filepath.Join(tmp, "appliance-host-agentd")
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
@@ -184,6 +170,8 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 		"--artifact-server-image", artifactServerArchive,
 		"--artifact-server-image-reference", "registry.local/artifact-server@sha256:"+artifactServerDigest,
 		"--artifact-server-version", "2.1.8",
+		"--blob-storage-image", blobStorageArchive,
+		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest,
 		"--dns-image", dnsArchive,
 		"--dns-image-reference", "registry.local/coredns@sha256:"+digest,
 		"--dns-version", "1.14.4",
@@ -209,7 +197,7 @@ func TestReleaseInputPublishesFirstClassDNSArtifacts(t *testing.T) {
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatalf("decode release-input.json: %v\n%s", err, raw)
 	}
-	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "dnsImage", "dnsChart", "artifactServerImage", "artifactServerChart"} {
+	for _, key := range []string{"hostAgentImage", "hostAgentBinary", "dnsImage", "dnsChart", "artifactServerImage", "artifactServerChart", "blobStorageImage"} {
 		if len(manifest.Artifacts[key]) == 0 {
 			t.Errorf("missing first-class %s artifact", key)
 		}
@@ -226,19 +214,10 @@ func TestReleaseInputRejectsUnpairedDNSImage(t *testing.T) {
 	if err := os.WriteFile(dns, []byte("dns"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	blobStorageDigest := strings.Repeat("b", 64)
+	blobStorageArchive := createOCIArchive(t, tmp, "blob-storage", "registry.local/blob-storage:bundled", blobStorageDigest)
 	hostDigest := strings.Repeat("d", 64)
-	hostLayout := filepath.Join(tmp, "host-layout")
-	if err := os.Mkdir(hostLayout, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	hostIndex := `{"schemaVersion":2,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + hostDigest + `","size":1,"annotations":{"org.opencontainers.image.ref.name":"registry.local/appliance-host-agent:bundled"}}]}`
-	if err := os.WriteFile(filepath.Join(hostLayout, "index.json"), []byte(hostIndex), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	hostAgentArchive := filepath.Join(tmp, "host-agent.tar")
-	if output, err := exec.Command("tar", "-cf", hostAgentArchive, "-C", hostLayout, ".").CombinedOutput(); err != nil {
-		t.Fatalf("create host-agent archive: %v\n%s", err, output)
-	}
+	hostAgentArchive := createOCIArchive(t, tmp, "host-agent", "registry.local/appliance-host-agent:bundled", hostDigest)
 	hostBinary := filepath.Join(tmp, "appliance-host-agentd")
 	if err := os.WriteFile(hostBinary, []byte("host-agentd"), 0o700); err != nil {
 		t.Fatal(err)
@@ -259,7 +238,9 @@ func TestReleaseInputRejectsUnpairedDNSImage(t *testing.T) {
 		"--host-agent-binary", hostBinary,
 		"--host-packages-dir", hostPackagesRoot,
 		"--host-packages-os-version", "24.04",
-		"--dns-image", dns).CombinedOutput()
+		"--dns-image", dns,
+		"--blob-storage-image", blobStorageArchive,
+		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest).CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
 		t.Fatalf("unpaired DNS image was not rejected: err=%v output=%s", err, out)
 	}
