@@ -42,6 +42,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "appliance-control-plane.fullname" . }}-config
+          env:
+            - name: APPLIANCE_BLOB_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.blobStorage.credentialsSecretName }}
+                  key: accessKey
+            - name: APPLIANCE_BLOB_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.blobStorage.credentialsSecretName }}
+                  key: secretKey
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:
@@ -71,8 +82,6 @@ spec:
               mountPath: /data/zon/logs
             - name: appliance-files
               mountPath: {{ .Values.files.rootDir }}
-            - name: appliance-video-library
-              mountPath: {{ .Values.videoLibrary.rootDir }}
             {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.dataDir }}
@@ -92,10 +101,6 @@ spec:
         - name: appliance-files
           hostPath:
             path: {{ .Values.files.rootDir }}
-            type: DirectoryOrCreate
-        - name: appliance-video-library
-          hostPath:
-            path: {{ .Values.videoLibrary.rootDir }}
             type: DirectoryOrCreate
         {{- if .Values.persistence.enabled }}
         - name: data

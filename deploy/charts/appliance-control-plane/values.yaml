@@ -135,11 +135,6 @@ config:
   # OpenAI-compatible inference gateway base URL (no path). Inference
   # profiles (lanllm, builder-lanllm, builder-lanllm-storage-landns) fail closed when empty.
   inferenceGatewayBaseURL: ""
-  # Jellyfin-compatible video gateway base URL (no path). Video-capable
-  # profiles fail closed at control-plane startup when this is empty so
-  # the appliance never reports video-capable while the video release is
-  # missing.
-  videoGatewayBaseURL: ""
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.
@@ -167,12 +162,28 @@ files:
   maxUploadBytes: "21474836480"
   transferTimeout: 30m
 
+blobStorage:
+  # The local foundation service is S3-compatible. Cloud deployments replace
+  # this endpoint and secret without changing application object keys.
+  endpoint: http://blob-storage.blob-storage.svc.cluster.local:9000
+  bucket: appliance
+  region: us-east-1
+  credentialsSecretName: blob-storage-credentials
+  namespace: blob-storage
+  image:
+    repository: registry.local/blob-storage
+    tag: bundled
+    digest: ""
+    pullPolicy: IfNotPresent
+  persistence:
+    hostPath: /data/zon/blob-storage
+    claimName: blob-storage-data
+    size: 100Gi
+
 videoLibrary:
-  # Shared host library for the video capability (/api/v1/video/library).
-  # Same path the appliance-video chart mounts into the video-runtime pod.
-  # Always mounted into the control plane (DirectoryOrCreate); routes are
-  # capability-gated so profiles without video never expose the API.
-  rootDir: /data/zon/video/library
+  # Logical object prefix only; physical backing paths stay private to the
+  # blob-storage workload. The API and UI show paths relative to this prefix.
+  objectPrefix: video/library
   maxUploadBytes: "21474836480"
   transferTimeout: 30m
 
@@ -356,11 +367,6 @@ networkPolicy:
   inferenceNamespaceLabel: {}
   inferencePodLabels: {}
   inferencePort: 8080
-  # Populated by zonctl for video-capable profiles so CP can
-  # proxy library/play traffic to the video gateway. Left empty when off.
-  videoNamespaceLabel: {}
-  videoPodLabels: {}
-  videoPort: 8096
   hostAgentPort: 8080
   automationRuntimePort: 8082
 

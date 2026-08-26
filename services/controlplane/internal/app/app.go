@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/httpapi"
 	"appliance-code/services/controlplane/internal/logging"
@@ -118,17 +119,18 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			Audit:           services.Audit,
 		}
 	}
-	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameVideoRuntime) {
-		deps.VideoLibraryH = &httpapi.FileHandlers{
-			RootDir:           cfg.VideoLibraryRootDir,
-			MaxUploadBytes:    cfg.VideoMaxUploadBytes,
-			TransferTimeout:   cfg.VideoTransferTimeout,
-			Audit:             services.Audit,
-			AuditWriteAction:  "video.library.write",
-			AuditDeleteAction: "video.library.delete",
-			RootConfigName:    "videoLibraryRootDir",
-			InlineContent:     true,
-			VideoMP4Only:      true,
+	if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityVideo) {
+		blobClient, err := blobstore.New(cfg.BlobStorageEndpoint, cfg.BlobStorageBucket, cfg.BlobStorageAccessKey, cfg.BlobStorageSecretKey, cfg.BlobStorageRegion)
+		if err != nil {
+			services.DB.Close()
+			return nil, fmt.Errorf("configure video blob storage: %w", err)
+		}
+		deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
+			Store:           blobClient,
+			ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
+			MaxUploadBytes:  cfg.VideoMaxUploadBytes,
+			TransferTimeout: cfg.VideoTransferTimeout,
+			Audit:           services.Audit,
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {

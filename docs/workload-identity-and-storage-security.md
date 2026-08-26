@@ -17,7 +17,6 @@ stable across releases.
 | Host agent | 10005 | 10005 | In-cluster host-agent pod |
 | Inference runtime | 10006 | 10006 | appliance-inference chart |
 | Automation runtime | 10007 | 10007 | Metadata bundle + DSL execution |
-| Video runtime | 10008 | 10008 | appliance-video chart |
 | Workflow controller wrapper | 65532 | 65532 | Upstream non-root controller identity |
 | Builder/workspace workflow pods | 10010 | 10010 | Appliance-generated workflow workloads |
 | Shared appliance filesystem group | n/a | 20000 | Supplemental group for shared writable storage |

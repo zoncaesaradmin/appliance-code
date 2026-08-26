@@ -62,7 +62,7 @@ The initial v1 appliance capabilities are:
 | `artifact` | OCI registry APIs and module behavior: registry-token, grant, repository, and catalog flows backed by Artifact Server |
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
 | `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns`) readiness |
-| `video` | Video library storage and streaming; any video-capable profile installs pack `video` (`video-runtime` + `appliance-video`). The shipped `training` profile enables this capability. |
+| `video` | Video library storage and browser streaming through the foundation blob store. The shipped `training` profile enables this capability. |
 
 Notes:
 

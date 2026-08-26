@@ -326,25 +326,6 @@
               }
             }
           }
-        },
-        {
-          "if": {
-            "properties": {
-              "applianceProfile": {
-                "enum": ["training"]
-              }
-            },
-            "required": ["applianceProfile"]
-          },
-          "then": {
-            "required": ["videoGatewayBaseURL"],
-            "properties": {
-              "videoGatewayBaseURL": {
-                "type": "string",
-                "pattern": "^https?://[^/]+$"
-              }
-            }
-          }
         }
       ],
       "properties": {
@@ -414,9 +395,6 @@
           "type": "string"
         },
         "inferenceGatewayBaseURL": {
-          "type": "string"
-        },
-        "videoGatewayBaseURL": {
           "type": "string"
         },
         "dnsZoneName": {
@@ -617,18 +595,48 @@
         }
       }
     },
+    "blobStorage": {
+      "type": "object",
+      "required": ["endpoint", "bucket", "region", "credentialsSecretName", "namespace", "image", "persistence"],
+      "properties": {
+        "endpoint": {"type": "string", "pattern": "^https?://[^/]+$"},
+        "bucket": {"type": "string", "minLength": 1},
+        "region": {"type": "string", "minLength": 1},
+        "credentialsSecretName": {"type": "string", "minLength": 1},
+        "namespace": {"type": "string", "minLength": 1},
+        "image": {
+          "type": "object",
+          "required": ["repository", "tag", "digest", "pullPolicy"],
+          "properties": {
+            "repository": {"type": "string", "minLength": 1},
+            "tag": {"type": "string", "minLength": 1},
+            "digest": {"type": "string"},
+            "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "required": ["hostPath", "claimName", "size"],
+          "properties": {
+            "hostPath": {"type": "string", "pattern": "^/.+"},
+            "claimName": {"type": "string", "minLength": 1},
+            "size": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
     "videoLibrary": {
       "type": "object",
       "required": [
-        "rootDir",
+        "objectPrefix",
         "maxUploadBytes",
         "transferTimeout"
       ],
       "properties": {
-        "rootDir": {
+        "objectPrefix": {
           "type": "string",
           "minLength": 1,
-          "pattern": "^/.+"
+          "pattern": "^[^/].*[^/]$"
         },
         "maxUploadBytes": {
           "type": "string",

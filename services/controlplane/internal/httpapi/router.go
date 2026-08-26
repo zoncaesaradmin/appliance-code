@@ -29,7 +29,7 @@ type Deps struct {
 	RegistryGrantsH  *RegistryGrantHandlers
 	RegistryCatalogH *RegistryCatalogHandlers
 	FilesH           *FileHandlers
-	VideoLibraryH    *FileHandlers
+	VideoLibraryH    *VideoLibraryHandlers
 	DNSH             *DNSHandlers
 	LANDNSPublishH   *LANDNSPublishHandlers
 	BuildsH          *BuildHandlers
@@ -546,37 +546,37 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermFilesWrite, deps.FilesH.Delete), nil
 		}},
-		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "GET /api/v1/video/library", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityVideo, pattern: "GET /api/v1/video/library", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.VideoLibraryH == nil {
 				return nil, fmt.Errorf("missing video library handlers")
 			}
 			return w.protectAny(deps.VideoLibraryH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
 		}},
-		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "GET /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityVideo, pattern: "GET /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.VideoLibraryH == nil {
 				return nil, fmt.Errorf("missing video library handlers")
 			}
 			return w.protectAny(deps.VideoLibraryH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
 		}},
-		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "POST /api/v1/video/playback-session", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityVideo, pattern: "POST /api/v1/video/playback-session", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.AuthH == nil {
 				return nil, fmt.Errorf("missing auth handlers")
 			}
 			return w.protectAny(deps.AuthH.PrepareVideoPlayback, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
 		}},
-		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "GET /api/v1/video/stream/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityVideo, pattern: "GET /api/v1/video/stream/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.VideoLibraryH == nil {
 				return nil, fmt.Errorf("missing video library handlers")
 			}
 			return w.playback(deps.VideoLibraryH.Get), nil
 		}},
-		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "POST /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityVideo, pattern: "POST /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.VideoLibraryH == nil {
 				return nil, fmt.Errorf("missing video library handlers")
 			}
 			return w.protect(roles.PermVideoLibraryWrite, deps.VideoLibraryH.Upload), nil
 		}},
-		{capability: appliance.CapabilityVideo, moduleName: appliance.ModuleNameVideoRuntime, pattern: "DELETE /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
+		{capability: appliance.CapabilityVideo, pattern: "DELETE /api/v1/video/library/{rest...}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.VideoLibraryH == nil {
 				return nil, fmt.Errorf("missing video library handlers")
 			}

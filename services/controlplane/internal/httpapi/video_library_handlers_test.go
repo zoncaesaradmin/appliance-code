@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -58,9 +56,8 @@ func TestVideoLibraryUploadListAndStream(t *testing.T) {
 		t.Fatalf("upload status = %q, want ready", uploadResult.Status)
 	}
 
-	uploadedPath := filepath.Join(ts.videoLibraryRoot, "clips", "intro.mp4")
-	if _, err := os.Stat(uploadedPath); err != nil {
-		t.Fatalf("stat uploaded video: %v", err)
+	if !ts.videoStore.has("appliance/video/library/clips/intro.mp4") {
+		t.Fatal("uploaded video was not stored below the configured blob prefix")
 	}
 
 	playbackSessionResp := ts.doJSONWithHeaders(t, "POST", "/api/v1/video/playback-session", token, "", map[string]string{
@@ -180,8 +177,8 @@ func TestVideoLibraryRejectsInvalidOrUnsupportedMP4(t *testing.T) {
 			}
 		})
 	}
-	if _, err := os.Stat(filepath.Join(ts.videoLibraryRoot, "clip.mp4")); !os.IsNotExist(err) {
-		t.Fatalf("invalid video was stored, stat error = %v", err)
+	if ts.videoStore.has("appliance/video/library/clip.mp4") {
+		t.Fatal("invalid video was stored")
 	}
 }
 

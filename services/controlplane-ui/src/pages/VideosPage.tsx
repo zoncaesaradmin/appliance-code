@@ -59,26 +59,12 @@ function normalizeRelativePath(path: string): string {
   return path.trim().replace(/^\/+/, "");
 }
 
-function resolveDestinationPath(destination: string, selectedFile: File): string {
-  const cleaned = normalizeRelativePath(destination);
-  if (!cleaned) {
-    return selectedFile.name;
-  }
-  if (cleaned.endsWith("/")) {
-    return joinFilePath(cleaned, selectedFile.name);
-  }
-  return cleaned.replace(/\/+$/g, "");
+function resolveDestinationPath(directory: string, selectedFile: File): string {
+  return joinFilePath(normalizeRelativePath(directory), selectedFile.name);
 }
 
-function describeDestinationPath(destination: string, selectedFile: File | null): string {
-  const cleaned = normalizeRelativePath(destination);
-  if (!cleaned) {
-    return selectedFile ? selectedFile.name : "folder/video.mp4";
-  }
-  if (cleaned.endsWith("/")) {
-    return `${cleaned}${selectedFile?.name || "…"}`;
-  }
-  return cleaned;
+function describeDestinationPath(directory: string, selectedFile: File | null): string {
+  return joinFilePath(normalizeRelativePath(directory), selectedFile?.name || "video.mp4");
 }
 
 function isPlayableVideo(name: string): boolean {
@@ -103,7 +89,7 @@ export function VideosPage(): React.JSX.Element {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [showUploadDialog, setShowUploadDialog] = useState(false);
-  const [logicalName, setLogicalName] = useState("");
+	const [destinationDirectory, setDestinationDirectory] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState | null>(null);
@@ -112,8 +98,8 @@ export function VideosPage(): React.JSX.Element {
   const [playError, setPlayError] = useState("");
 
   const destinationPreview = useMemo(
-    () => describeDestinationPath(logicalName, selectedFile),
-    [logicalName, selectedFile]
+		() => describeDestinationPath(destinationDirectory, selectedFile),
+		[destinationDirectory, selectedFile]
   );
 
   const videoCount = items.filter((row) => row.entry.type === "file").length;
@@ -137,7 +123,7 @@ export function VideosPage(): React.JSX.Element {
   }, []);
 
   function openUploadDialog() {
-    setLogicalName("");
+		setDestinationDirectory("");
     setSelectedFile(null);
     setError("");
     setShowUploadDialog(true);
@@ -156,13 +142,9 @@ export function VideosPage(): React.JSX.Element {
       setError("Choose a video file to upload.");
       return;
     }
-    const destination = resolveDestinationPath(logicalName, selectedFile);
-    if (!destination) {
-      setError("Enter a destination path for the video.");
-      return;
-    }
-    if (!selectedFile.name.toLowerCase().endsWith(".mp4") || !destination.toLowerCase().endsWith(".mp4")) {
-      setError("Videos must be uploaded as MP4 files. Use an .mp4 file and destination path.");
+	const destination = resolveDestinationPath(destinationDirectory, selectedFile);
+	if (!selectedFile.name.toLowerCase().endsWith(".mp4")) {
+		setError("Videos must be uploaded as MP4 files.");
       return;
     }
     setUploading(true);
@@ -393,15 +375,15 @@ export function VideosPage(): React.JSX.Element {
               Upload video
             </h2>
             <p className="mt-2 mb-4 text-sm text-slate-500">
-              Upload a single browser-compatible MP4 file. It is validated synchronously for H.264 video and AAC audio before it is added to the library. Add a trailing slash to upload into a directory.
+              Upload a single browser-compatible MP4 file. It is validated synchronously for H.264 video and AAC audio before it is added to the library.
             </p>
             <form className="stack-form" onSubmit={submitUpload}>
               <label className="field">
-                <span>Destination path</span>
+                <span>Destination directory (optional)</span>
                 <input
-                  value={logicalName}
-                  placeholder="clips/intro.mp4 or clips/"
-                  onChange={(event) => setLogicalName(event.target.value)}
+                  value={destinationDirectory}
+                  placeholder="training/intro"
+                  onChange={(event) => setDestinationDirectory(event.target.value)}
                   disabled={uploading}
                 />
               </label>
@@ -415,7 +397,7 @@ export function VideosPage(): React.JSX.Element {
                 />
               </label>
               <p className="text-sm text-slate-500" style={{ margin: 0 }}>
-              One ready-to-play MP4 copy is stored as <strong>{destinationPreview}</strong> relative to the video library root. No playback-time conversion or alternate resolutions are created.
+              The uploaded filename is kept. Leave the directory empty to store it at the library root; this is stored as <strong>{destinationPreview}</strong>. No playback-time conversion or alternate resolutions are created.
               </p>
               <div className="button-row">
                 <button className="button button--ghost" type="button" onClick={closeUploadDialog} disabled={uploading}>

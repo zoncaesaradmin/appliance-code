@@ -89,7 +89,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-video-runtime-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -311,17 +311,16 @@ package-inference-runtime-image-archive:
 		$${INFERENCE_SOURCE_IMAGE:+--source-image "$${INFERENCE_SOURCE_IMAGE}"} \
 		$${INFERENCE_VERSION:+--inference-version "$${INFERENCE_VERSION}"}
 
-## package-video-runtime-image-archive: re-export the pinned video
-## runtime with registry.local/video-runtime:bundled annotation and
-## platform-manifest digest reference.
-package-video-runtime-image-archive:
-	@out_file="$${OUT_FILE:-$(CURDIR)/.run/video-runtime.tar}"; \
+## package-blob-storage-image-archive: re-export the pinned S3-compatible
+## runtime with registry.local/blob-storage:bundled annotation.
+package-blob-storage-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/blob-storage.tar}"; \
 	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
-	bash ./scripts/package/export-video-runtime-image-archive.sh \
+	bash ./scripts/package/export-blob-storage-image-archive.sh \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
-		$${VIDEO_SOURCE_IMAGE:+--source-image "$${VIDEO_SOURCE_IMAGE}"} \
-		$${VIDEO_VERSION:+--video-version "$${VIDEO_VERSION}"}
+		$${BLOB_STORAGE_SOURCE_IMAGE:+--source-image "$${BLOB_STORAGE_SOURCE_IMAGE}"} \
+		$${BLOB_STORAGE_VERSION:+--blob-storage-version "$${BLOB_STORAGE_VERSION}"}
 
 package-message-broker-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/message-broker-image.tar}"; \

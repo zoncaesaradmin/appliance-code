@@ -12,6 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/app"
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
@@ -36,6 +37,7 @@ type testServer struct {
 	services         *app.Services
 	filesRoot        string
 	videoLibraryRoot string
+	videoStore       *fakeS3
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -132,15 +134,17 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	}
 	var filesRoot string
-	var videoLibraryRoot string
+	var videoStore *fakeS3
 	if resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
 		filesRoot = t.TempDir()
 		cfg.FilesRootDir = filesRoot
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
-		cfg.VideoGatewayBaseURL = "http://video-gateway.video.svc.cluster.local:8096"
-		videoLibraryRoot = t.TempDir()
-		cfg.VideoLibraryRootDir = videoLibraryRoot
+		videoStore = newFakeS3(t)
+		cfg.BlobStorageEndpoint = videoStore.URL
+		cfg.BlobStorageBucket = "appliance"
+		cfg.BlobStorageAccessKey = "test-access-key"
+		cfg.BlobStorageSecretKey = "test-secret-key"
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
@@ -226,17 +230,17 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			Audit:           services.Audit,
 		}
 	}
-	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameVideoRuntime) {
-		deps.VideoLibraryH = &httpapi.FileHandlers{
-			RootDir:           cfg.VideoLibraryRootDir,
-			MaxUploadBytes:    cfg.VideoMaxUploadBytes,
-			TransferTimeout:   cfg.VideoTransferTimeout,
-			Audit:             services.Audit,
-			AuditWriteAction:  "video.library.write",
-			AuditDeleteAction: "video.library.delete",
-			RootConfigName:    "videoLibraryRootDir",
-			InlineContent:     true,
-			VideoMP4Only:      true,
+	if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
+		blobClient, err := blobstore.New(cfg.BlobStorageEndpoint, cfg.BlobStorageBucket, cfg.BlobStorageAccessKey, cfg.BlobStorageSecretKey, cfg.BlobStorageRegion)
+		if err != nil {
+			t.Fatalf("blobstore.New: %v", err)
+		}
+		deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
+			Store:           blobClient,
+			ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
+			MaxUploadBytes:  cfg.VideoMaxUploadBytes,
+			TransferTimeout: cfg.VideoTransferTimeout,
+			Audit:           services.Audit,
 		}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
@@ -253,7 +257,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testServer{Server: srv, services: services, filesRoot: filesRoot, videoLibraryRoot: videoLibraryRoot}
+	return &testServer{Server: srv, services: services, filesRoot: filesRoot, videoStore: videoStore}
 }
 
 // bootstrapAdmin creates the first administrator directly through the

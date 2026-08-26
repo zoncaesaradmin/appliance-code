@@ -199,14 +199,16 @@ func TestInferenceProfilesRequireInferenceGatewayBaseURL(t *testing.T) {
 	}
 }
 
-func TestTrainingProfileRequiresVideoGatewayBaseURL(t *testing.T) {
+func TestTrainingProfileRequiresBlobStorage(t *testing.T) {
 	cfg := config.Default()
 	cfg.ApplianceProfile = "training"
-	cfg.VideoGatewayBaseURL = ""
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "videoGatewayBaseURL") {
-		t.Fatalf("Validate without video gateway URL = %v, want videoGatewayBaseURL error", err)
+	cfg.BlobStorageEndpoint = ""
+	cfg.BlobStorageAccessKey = "test-access-key"
+	cfg.BlobStorageSecretKey = "test-secret-key"
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "blobStorageEndpoint") {
+		t.Fatalf("Validate without blob storage endpoint = %v, want blobStorageEndpoint error", err)
 	}
-	cfg.VideoGatewayBaseURL = "http://video-gateway.video.svc.cluster.local:8096"
+	cfg.BlobStorageEndpoint = "http://blob-storage.blob-storage.svc.cluster.local:9000"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate with video gateway URL: %v", err)
 	}

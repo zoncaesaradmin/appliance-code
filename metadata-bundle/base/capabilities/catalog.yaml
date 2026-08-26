@@ -70,4 +70,4 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.video
     artifacts:
-      required: [video-runtime-image, appliance-video-chart]
+      required: []

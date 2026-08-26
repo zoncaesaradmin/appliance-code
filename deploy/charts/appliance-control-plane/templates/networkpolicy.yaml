@@ -107,20 +107,6 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.inferencePort }}
     {{- end }}
-    {{- $videoNS := index .Values.networkPolicy.videoNamespaceLabel "kubernetes.io/metadata.name" | default "" }}
-    {{- if $videoNS }}
-    # Video gateway proxy for video-capable profiles.
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.videoNamespaceLabel | nindent 14 }}
-          podSelector:
-            matchLabels:
-              {{- toYaml .Values.networkPolicy.videoPodLabels | nindent 14 }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.networkPolicy.videoPort }}
-    {{- end }}
     {{- if .Values.hostAgent.enabled }}
     - to:
         {{- if include "appliance-control-plane.appsNamespaced" . }}

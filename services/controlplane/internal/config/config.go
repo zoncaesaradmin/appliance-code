@@ -48,8 +48,12 @@ type Config struct {
 	DNSBootstrapIPv4         string                    `json:"dnsBootstrapIPv4"`
 	DNSAllowFakeZoneSync     bool                      `json:"dnsAllowFakeZoneSync"`
 	InferenceGatewayBaseURL  string                    `json:"inferenceGatewayBaseURL"`
-	VideoGatewayBaseURL      string                    `json:"videoGatewayBaseURL"`
-	VideoLibraryRootDir      string                    `json:"videoLibraryRootDir"`
+	BlobStorageEndpoint      string                    `json:"blobStorageEndpoint"`
+	BlobStorageBucket        string                    `json:"blobStorageBucket"`
+	BlobStorageAccessKey     string                    `json:"blobStorageAccessKey"`
+	BlobStorageSecretKey     string                    `json:"blobStorageSecretKey"`
+	BlobStorageRegion        string                    `json:"blobStorageRegion"`
+	VideoLibraryObjectPrefix string                    `json:"videoLibraryObjectPrefix"`
 	VideoTransferTimeout     time.Duration             `json:"videoTransferTimeout"`
 	VideoMaxUploadBytes      int64                     `json:"videoMaxUploadBytes"`
 
@@ -89,7 +93,10 @@ func Default() Config {
 		FilesRootDir:             "/data/zon/files",
 		FilesTransferTimeout:     30 * time.Minute,
 		FilesMaxUploadBytes:      20 * 1024 * 1024 * 1024,
-		VideoLibraryRootDir:      "/data/zon/video/library",
+		BlobStorageEndpoint:      "http://blob-storage.blob-storage.svc.cluster.local:9000",
+		BlobStorageBucket:        "appliance",
+		BlobStorageRegion:        "us-east-1",
+		VideoLibraryObjectPrefix: "video/library",
 		VideoTransferTimeout:     30 * time.Minute,
 		VideoMaxUploadBytes:      20 * 1024 * 1024 * 1024,
 		DNSZoneName:              "appliance.internal",
@@ -193,8 +200,12 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DNS_BOOTSTRAP_HOSTNAME", &cfg.DNSBootstrapHostname)
 	str("DNS_BOOTSTRAP_IPV4", &cfg.DNSBootstrapIPv4)
 	str("INFERENCE_GATEWAY_BASE_URL", &cfg.InferenceGatewayBaseURL)
-	str("VIDEO_GATEWAY_BASE_URL", &cfg.VideoGatewayBaseURL)
-	str("VIDEO_LIBRARY_ROOT_DIR", &cfg.VideoLibraryRootDir)
+	str("BLOB_STORAGE_ENDPOINT", &cfg.BlobStorageEndpoint)
+	str("BLOB_STORAGE_BUCKET", &cfg.BlobStorageBucket)
+	str("BLOB_STORAGE_ACCESS_KEY", &cfg.BlobStorageAccessKey)
+	str("BLOB_STORAGE_SECRET_KEY", &cfg.BlobStorageSecretKey)
+	str("BLOB_STORAGE_REGION", &cfg.BlobStorageRegion)
+	str("VIDEO_LIBRARY_OBJECT_PREFIX", &cfg.VideoLibraryObjectPrefix)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
@@ -329,7 +340,7 @@ func (c Config) Validate() error {
 		artifactEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry)
 		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
 		inferenceEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime)
-		videoEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameVideoRuntime)
+		videoEnabled = resolved.Capabilities.Enabled(appliance.CapabilityVideo)
 	}
 	if profileErr == nil && buildEnabled {
 		if !c.BuildCatalog.Empty() {
@@ -420,15 +431,14 @@ func (c Config) Validate() error {
 		}
 	}
 	if profileErr == nil && videoEnabled {
-		if strings.TrimSpace(c.VideoGatewayBaseURL) == "" {
-			errs = append(errs, "videoGatewayBaseURL must not be empty when the video capability is enabled")
-		} else if u, err := url.Parse(c.VideoGatewayBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
-			errs = append(errs, "videoGatewayBaseURL must be an absolute http(s) URL with no path")
+		if u, err := url.Parse(c.BlobStorageEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "blobStorageEndpoint must be an absolute http(s) URL with no path when the video capability is enabled")
 		}
-		if strings.TrimSpace(c.VideoLibraryRootDir) == "" {
-			errs = append(errs, "videoLibraryRootDir must not be empty when the video capability is enabled")
-		} else if !strings.HasPrefix(c.VideoLibraryRootDir, "/") {
-			errs = append(errs, "videoLibraryRootDir must be an absolute path")
+		if strings.TrimSpace(c.BlobStorageBucket) == "" || strings.TrimSpace(c.BlobStorageAccessKey) == "" || strings.TrimSpace(c.BlobStorageSecretKey) == "" {
+			errs = append(errs, "blob storage bucket and credentials must be configured when the video capability is enabled")
+		}
+		if strings.Trim(strings.TrimSpace(c.VideoLibraryObjectPrefix), "/") == "" {
+			errs = append(errs, "videoLibraryObjectPrefix must not be empty when the video capability is enabled")
 		}
 		if c.VideoTransferTimeout <= 0 {
 			errs = append(errs, "videoTransferTimeout must be positive when the video capability is enabled")
