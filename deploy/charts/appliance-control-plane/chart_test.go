@@ -568,6 +568,39 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	}
 }
 
+func TestBlobStorageBelongsToAceSystemRolloutOnly(t *testing.T) {
+	// zonctl installs the same chart as multiple Helm releases. Blob-storage
+	// must render only for the ace-system release so appliance-ace-apps does
+	// not try to adopt the Namespace owned by release "appliance".
+	aceAppsDocs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceSystem.enabled=false",
+		"--set", "rollout.aceApps.enabled=true",
+		"--set", "rollout.applicationSupport.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+	)...)
+	if findByKindAndName(aceAppsDocs, "Namespace", "blob-storage") != nil {
+		t.Fatal("ace-apps rollout must not render blob-storage Namespace")
+	}
+	if findByKindAndName(aceAppsDocs, "Deployment", "blob-storage") != nil {
+		t.Fatal("ace-apps rollout must not render blob-storage Deployment")
+	}
+
+	aceSystemDocs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceSystem.enabled=true",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.applicationSupport.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+	)...)
+	if findByKindAndName(aceSystemDocs, "Namespace", "blob-storage") == nil {
+		t.Fatal("ace-system rollout must render blob-storage Namespace")
+	}
+	if findByKindAndName(aceSystemDocs, "Deployment", "blob-storage") == nil {
+		t.Fatal("ace-system rollout must render blob-storage Deployment")
+	}
+}
+
 func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",

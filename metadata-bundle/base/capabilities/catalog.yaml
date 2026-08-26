@@ -57,7 +57,7 @@ capabilities:
       required: [coredns-image, appliance-dns-chart]
   inference:
     displayName: Inference
-    requires: [base, host]
+    requires: [base]
     conflicts: []
     license:
       requiredEntitlement: zon.capabilities.inference
@@ -65,7 +65,7 @@ capabilities:
       required: [inference-runtime-image, appliance-inference-chart]
   video:
     displayName: Video
-    requires: [base, host]
+    requires: [base]
     conflicts: []
     license:
       requiredEntitlement: zon.capabilities.video

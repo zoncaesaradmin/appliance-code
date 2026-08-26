@@ -2,7 +2,7 @@ profiles:
   core:
     displayName: core
     description: "Default base appliance profile."
-    capabilities: [base, host, files]
+    capabilities: [base, files]
   builder:
     displayName: builder
     description: "Built-in appliance profile."
@@ -30,7 +30,7 @@ profiles:
   lanllm:
     displayName: lanllm
     description: "Local LLM inference API without builder."
-    capabilities: [base, host, files, inference]
+    capabilities: [base, inference]
   builder-lanllm:
     displayName: builder-lanllm
     description: "Builder plus local LLM inference API."
@@ -42,4 +42,4 @@ profiles:
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
-    capabilities: [base, host, files, video]
+    capabilities: [base, files, video]

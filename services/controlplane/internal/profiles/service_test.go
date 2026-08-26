@@ -105,6 +105,8 @@ func TestActivationFailsMissingBundleArtifact(t *testing.T) {
 			"artifact-server-image":       {},
 			"appliance-registry-chart":    {},
 			"workspace-provisioner-image": {},
+			"coredns-image":               {},
+			"appliance-dns-chart":         {},
 			// workflow-templates intentionally missing (required by workflows/build)
 		},
 	})

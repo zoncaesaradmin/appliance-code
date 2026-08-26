@@ -3,10 +3,26 @@ profiles:
     displayName: core
     description: "Default base appliance profile."
     capabilities: [base, files]
+  builder:
+    displayName: builder
+    description: "Built-in appliance profile."
+    capabilities: [base, host, files, workflows, build, artifact]
+  storage:
+    displayName: storage
+    description: "Built-in appliance profile."
+    capabilities: [base, host, files, artifact]
+  landns:
+    displayName: landns
+    description: "Built-in appliance profile."
+    capabilities: [base, host, files, dns]
   storage-landns:
     displayName: storage-landns
     description: "Built-in appliance profile."
     capabilities: [base, host, files, artifact, dns]
+  builder-landns:
+    displayName: builder-landns
+    description: "Built-in appliance profile."
+    capabilities: [base, host, files, workflows, build, artifact, dns]
   builder-storage-landns:
     displayName: builder-storage-landns
     description: "Built-in appliance profile."
@@ -15,6 +31,10 @@ profiles:
     displayName: lanllm
     description: "Local LLM inference API without builder."
     capabilities: [base, inference]
+  builder-lanllm:
+    displayName: builder-lanllm
+    description: "Builder plus local LLM inference API."
+    capabilities: [base, host, files, workflows, build, artifact, inference]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
