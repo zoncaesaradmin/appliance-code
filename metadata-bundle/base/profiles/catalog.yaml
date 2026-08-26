@@ -2,7 +2,7 @@ profiles:
   core:
     displayName: core
     description: "Default base appliance profile."
-    capabilities: [base, host, files]
+    capabilities: [base, files]
   storage-landns:
     displayName: storage-landns
     description: "Built-in appliance profile."
@@ -14,7 +14,7 @@ profiles:
   lanllm:
     displayName: lanllm
     description: "Local LLM inference API without builder."
-    capabilities: [base, host, files, inference]
+    capabilities: [base, inference]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
