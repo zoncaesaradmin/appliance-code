@@ -34,9 +34,10 @@ func testBuildCatalog() devflows.Catalog {
 
 type testServer struct {
 	*httptest.Server
-	services   *app.Services
-	blobStore  *fakeS3
-	videoStore *fakeS3 // alias of blobStore for video tests
+	services           *app.Services
+	blobStore          *fakeS3
+	videoStore         *fakeS3 // alias of blobStore for video tests
+	videoProjectionDir string
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -146,6 +147,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.BlobStorageBucket = "appliance"
 		cfg.BlobStorageAccessKey = "test-access-key"
 		cfg.BlobStorageSecretKey = "test-secret-key"
+		cfg.VideoLibraryProjectionDir = t.TempDir()
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
@@ -241,6 +243,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
 				Store:           blobClient,
 				ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
+				ProjectionDir:   cfg.VideoLibraryProjectionDir,
 				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
 				TransferTimeout: cfg.VideoTransferTimeout,
 				Audit:           services.Audit,
@@ -261,7 +264,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testServer{Server: srv, services: services, blobStore: blobStore, videoStore: blobStore}
+	return &testServer{Server: srv, services: services, blobStore: blobStore, videoStore: blobStore, videoProjectionDir: cfg.VideoLibraryProjectionDir}
 }
 
 // bootstrapAdmin creates the first administrator directly through the

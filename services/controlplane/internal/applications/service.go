@@ -296,8 +296,12 @@ func validate(d Definition) error {
 			if !regexp.MustCompile(`^[1-9][0-9]*(Mi|Gi|Ti)$`).MatchString(volume.Size) {
 				return fmt.Errorf("%w: persistent volume size must use Mi, Gi, or Ti", ErrInvalidDefinition)
 			}
+		case "videoProjection":
+			if !volume.ReadOnly || volume.Size != "" {
+				return fmt.Errorf("%w: videoProjection volumes must be read-only and cannot specify size", ErrInvalidDefinition)
+			}
 		default:
-			return fmt.Errorf("%w: runtime.volumes kind must be emptyDir or persistent", ErrInvalidDefinition)
+			return fmt.Errorf("%w: runtime.volumes kind must be emptyDir, persistent, or videoProjection", ErrInvalidDefinition)
 		}
 	}
 	if d.Runtime.Security.RunAsUser < 0 || d.Runtime.Security.RunAsGroup < 0 || d.Runtime.Security.FSGroup < 0 {

@@ -373,6 +373,8 @@ func volumeSources(definition Definition) []any {
 		source := map[string]any{"name": volume.Name}
 		if volume.Kind == "persistent" {
 			source["persistentVolumeClaim"] = map[string]any{"claimName": definition.Metadata.Name + "-" + volume.Name}
+		} else if volume.Kind == "videoProjection" {
+			source["persistentVolumeClaim"] = map[string]any{"claimName": "appliance-video-media", "readOnly": true}
 		} else {
 			source["emptyDir"] = map[string]any{}
 		}

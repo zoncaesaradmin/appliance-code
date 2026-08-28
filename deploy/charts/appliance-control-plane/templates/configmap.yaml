@@ -37,6 +37,7 @@ data:
   APPLIANCE_BLOB_STORAGE_BUCKET: {{ .Values.blobStorage.bucket | quote }}
   APPLIANCE_BLOB_STORAGE_REGION: {{ .Values.blobStorage.region | quote }}
   APPLIANCE_VIDEO_LIBRARY_OBJECT_PREFIX: {{ .Values.videoLibrary.objectPrefix | quote }}
+  APPLIANCE_VIDEO_LIBRARY_PROJECTION_DIR: {{ .Values.videoLibrary.projection.mountPath | quote }}
   APPLIANCE_VIDEO_MAX_UPLOAD_BYTES: {{ printf "%s" .Values.videoLibrary.maxUploadBytes | quote }}
   APPLIANCE_VIDEO_TRANSFER_TIMEOUT: {{ .Values.videoLibrary.transferTimeout | quote }}
   APPLIANCE_WORKSPACE_ROOT_DIR: {{ .Values.workspaceStorage.rootDir | quote }}

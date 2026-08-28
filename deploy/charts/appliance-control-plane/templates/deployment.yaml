@@ -80,6 +80,8 @@ spec:
               mountPath: /tmp
             - name: appliance-logs
               mountPath: /data/zon/logs
+            - name: video-media-projection
+              mountPath: {{ .Values.videoLibrary.projection.mountPath }}
             {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.dataDir }}
@@ -96,6 +98,10 @@ spec:
           hostPath:
             path: /data/zon/logs
             type: DirectoryOrCreate
+        - name: video-media-projection
+          hostPath:
+            path: {{ .Values.videoLibrary.projection.hostPath }}
+            type: Directory
         {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:

@@ -40,6 +40,10 @@ applications:
         - name: cache
           kind: emptyDir
           mountPath: /cache
+        - name: media
+          kind: videoProjection
+          mountPath: /media
+          readOnly: true
       security:
         runAsUser: 1000
         runAsGroup: 1000

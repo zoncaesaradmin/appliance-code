@@ -130,9 +130,14 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
 				Store:           blobClient,
 				ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
+				ProjectionDir:   cfg.VideoLibraryProjectionDir,
 				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
 				TransferTimeout: cfg.VideoTransferTimeout,
 				Audit:           services.Audit,
+			}
+			if err := deps.VideoLibraryH.SyncProjection(context.Background()); err != nil {
+				services.DB.Close()
+				return nil, fmt.Errorf("materialize video library projection: %w", err)
 			}
 		}
 	}

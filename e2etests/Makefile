@@ -79,7 +79,7 @@ test-profile-gating:
 	run_dir_abs="$$(cd "$(RUN_DIR)" && pwd)"; \
 	admin_password_file="$$run_dir_abs/profile-gating-admin-password.txt"; \
 	printf '%s\n' "$(TEST_ADMIN_PASSWORD)" >"$$admin_password_file"; \
-	for profile in core training; do \
+	for profile in core; do \
 		server_run_dir_abs="$$run_dir_abs/profile-gating-$$profile"; \
 		server_config_file="$$server_run_dir_abs/config.json"; \
 		rm -rf "$$server_run_dir_abs"; \

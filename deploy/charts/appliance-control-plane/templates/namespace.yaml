@@ -22,6 +22,31 @@ metadata:
 data:
   ownership: appliance-control-plane
   contract-version: v1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: appliance-video-media
+spec:
+  capacity: {storage: {{ .Values.videoLibrary.projection.size | quote }}}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath: {path: {{ .Values.videoLibrary.projection.hostPath | quote }}, type: Directory}
+  claimRef:
+    namespace: {{ include "appliance-control-plane.applicationNamespace" . }}
+    name: {{ .Values.videoLibrary.projection.claimName }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.videoLibrary.projection.claimName }}
+  namespace: {{ include "appliance-control-plane.applicationNamespace" . }}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: appliance-video-media
+  resources: {requests: {storage: {{ .Values.videoLibrary.projection.size | quote }}}}
 {{- end }}
 {{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.appsNamespace.create (include "appliance-control-plane.appsNamespaced" .) }}
 ---

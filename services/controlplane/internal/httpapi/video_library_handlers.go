@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +24,7 @@ import (
 type VideoLibraryHandlers struct {
 	Store           *blobstore.Client
 	ObjectPrefix    string
+	ProjectionDir   string
 	MaxUploadBytes  int64
 	TransferTimeout time.Duration
 	Audit           *audit.Recorder
@@ -163,6 +165,13 @@ func (h *VideoLibraryHandlers) Upload(w http.ResponseWriter, r *http.Request) {
 		h.writeStoreError(w, r, err)
 		return
 	}
+	if err := h.materialize(temporaryPath, relativePath); err != nil {
+		// The blob store is authoritative. Roll back this just-written object so
+		// a success response never leaves Jellyfin with a missing media entry.
+		_ = h.Store.Delete(r.Context(), h.objectKey(relativePath))
+		h.writeStoreError(w, r, fmt.Errorf("materialize video library projection: %w", err))
+		return
+	}
 	h.record(r, "video.library.write", relativePath, map[string]any{"size": written, "overwritten": overwritten})
 	status := http.StatusCreated
 	if overwritten {
@@ -204,8 +213,109 @@ func (h *VideoLibraryHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 		h.writeStoreError(w, r, err)
 		return
 	}
+	if err := h.removeMaterialized(relativePath, directory); err != nil {
+		h.writeStoreError(w, r, fmt.Errorf("remove video library projection: %w", err))
+		return
+	}
 	h.record(r, "video.library.delete", relativePath, map[string]any{"directory": directory})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SyncProjection materializes objects that predate the local media view. It
+// runs only inside the control plane; application workloads never receive S3
+// credentials or write access to this directory.
+func (h *VideoLibraryHandlers) SyncProjection(ctx context.Context) error {
+	if strings.TrimSpace(h.ProjectionDir) == "" {
+		return fmt.Errorf("video media projection directory is not configured")
+	}
+	if err := h.Store.EnsureBucket(ctx); err != nil {
+		return err
+	}
+	items, err := h.Store.ListAll(ctx, h.directoryPrefix(""))
+	if err != nil {
+		return err
+	}
+	for _, item := range items.Objects {
+		relativePath := strings.TrimPrefix(item.Key, h.directoryPrefix(""))
+		if relativePath == "" || strings.Contains(relativePath, "..") {
+			continue
+		}
+		response, _, err := h.Store.Get(ctx, item.Key, "")
+		if err != nil {
+			return err
+		}
+		if err := h.materializeReader(response.Body, relativePath); err != nil {
+			_ = response.Body.Close()
+			return err
+		}
+		if err := response.Body.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *VideoLibraryHandlers) materialize(sourcePath, relativePath string) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	return h.materializeReader(source, relativePath)
+}
+
+func (h *VideoLibraryHandlers) materializeReader(source io.Reader, relativePath string) error {
+	target, err := h.projectionPath(relativePath)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o2770); err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(target), ".video-media-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := io.Copy(temporary, source); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Chmod(0o640); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, target)
+}
+
+func (h *VideoLibraryHandlers) removeMaterialized(relativePath string, directory bool) error {
+	target, err := h.projectionPath(relativePath)
+	if err != nil {
+		return err
+	}
+	if directory {
+		return os.RemoveAll(target)
+	}
+	if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (h *VideoLibraryHandlers) projectionPath(relativePath string) (string, error) {
+	root := filepath.Clean(strings.TrimSpace(h.ProjectionDir))
+	if !filepath.IsAbs(root) || root == "/" {
+		return "", fmt.Errorf("invalid video media projection directory")
+	}
+	clean := filepath.Clean(filepath.FromSlash(relativePath))
+	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("invalid video projection path")
+	}
+	return filepath.Join(root, clean), nil
 }
 
 func (h *VideoLibraryHandlers) writeList(w http.ResponseWriter, r *http.Request, relativePath string) {

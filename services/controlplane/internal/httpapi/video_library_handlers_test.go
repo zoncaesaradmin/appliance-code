@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -67,6 +69,11 @@ func TestVideoLibraryUploadListAndStream(t *testing.T) {
 
 	if !ts.videoStore.has("appliance/video/library/clips/intro.mp4") {
 		t.Fatal("uploaded video was not stored below the configured blob prefix")
+	}
+	projectedPath := filepath.Join(ts.videoProjectionDir, "clips", "intro.mp4")
+	projected, err := os.ReadFile(projectedPath)
+	if err != nil || string(projected) != string(validVideo) {
+		t.Fatalf("projected media = %q, err=%v", string(projected), err)
 	}
 
 	playbackSessionResp := ts.doJSONWithHeaders(t, "POST", "/api/v1/video/playback-session", token, "", map[string]string{
@@ -152,6 +159,9 @@ func TestVideoLibraryUploadListAndStream(t *testing.T) {
 	defer deleteResp.Body.Close()
 	if deleteResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want 204", deleteResp.StatusCode)
+	}
+	if _, err := os.Stat(projectedPath); !os.IsNotExist(err) {
+		t.Fatalf("deleted video projection still exists, stat err=%v", err)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -37,30 +38,31 @@ type Config struct {
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	// ApplicationCatalog is parsed from the bundled metadata catalog. Helm and
 	// process environment cannot supply application contracts.
-	ApplicationCatalog       applications.Catalog     `json:"-"`
-	AutomationRuntimeBaseURL string                   `json:"automationRuntimeBaseURL"`
-	ArtifactServerBaseURL    string                   `json:"artifactServerBaseURL"`
-	ArtifactServerAllowFake  bool                     `json:"artifactServerAllowFake"`
-	ServiceRegistry          serviceregistry.Registry `json:"serviceRegistry"`
-	FilesObjectPrefix        string                   `json:"filesObjectPrefix"`
-	FilesTransferTimeout     time.Duration            `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes      int64                    `json:"filesMaxUploadBytes"`
-	DNSReadyURL              string                   `json:"dnsReadyURL"`
-	DNSZoneName              string                   `json:"dnsZoneName"`
-	DNSConfigMapNamespace    string                   `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName         string                   `json:"dnsConfigMapName"`
-	DNSBootstrapHostname     string                   `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4         string                   `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync     bool                     `json:"dnsAllowFakeZoneSync"`
-	InferenceGatewayBaseURL  string                   `json:"inferenceGatewayBaseURL"`
-	BlobStorageEndpoint      string                   `json:"blobStorageEndpoint"`
-	BlobStorageBucket        string                   `json:"blobStorageBucket"`
-	BlobStorageAccessKey     string                   `json:"blobStorageAccessKey"`
-	BlobStorageSecretKey     string                   `json:"blobStorageSecretKey"`
-	BlobStorageRegion        string                   `json:"blobStorageRegion"`
-	VideoLibraryObjectPrefix string                   `json:"videoLibraryObjectPrefix"`
-	VideoTransferTimeout     time.Duration            `json:"videoTransferTimeout"`
-	VideoMaxUploadBytes      int64                    `json:"videoMaxUploadBytes"`
+	ApplicationCatalog        applications.Catalog     `json:"-"`
+	AutomationRuntimeBaseURL  string                   `json:"automationRuntimeBaseURL"`
+	ArtifactServerBaseURL     string                   `json:"artifactServerBaseURL"`
+	ArtifactServerAllowFake   bool                     `json:"artifactServerAllowFake"`
+	ServiceRegistry           serviceregistry.Registry `json:"serviceRegistry"`
+	FilesObjectPrefix         string                   `json:"filesObjectPrefix"`
+	FilesTransferTimeout      time.Duration            `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes       int64                    `json:"filesMaxUploadBytes"`
+	DNSReadyURL               string                   `json:"dnsReadyURL"`
+	DNSZoneName               string                   `json:"dnsZoneName"`
+	DNSConfigMapNamespace     string                   `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName          string                   `json:"dnsConfigMapName"`
+	DNSBootstrapHostname      string                   `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4          string                   `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync      bool                     `json:"dnsAllowFakeZoneSync"`
+	InferenceGatewayBaseURL   string                   `json:"inferenceGatewayBaseURL"`
+	BlobStorageEndpoint       string                   `json:"blobStorageEndpoint"`
+	BlobStorageBucket         string                   `json:"blobStorageBucket"`
+	BlobStorageAccessKey      string                   `json:"blobStorageAccessKey"`
+	BlobStorageSecretKey      string                   `json:"blobStorageSecretKey"`
+	BlobStorageRegion         string                   `json:"blobStorageRegion"`
+	VideoLibraryObjectPrefix  string                   `json:"videoLibraryObjectPrefix"`
+	VideoLibraryProjectionDir string                   `json:"videoLibraryProjectionDir"`
+	VideoTransferTimeout      time.Duration            `json:"videoTransferTimeout"`
+	VideoMaxUploadBytes       int64                    `json:"videoMaxUploadBytes"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -85,32 +87,33 @@ type Config struct {
 // Default returns the local-development default configuration.
 func Default() Config {
 	return Config{
-		ApplianceProfile:         string(appliance.ProfileCore),
-		CanonicalOrigin:          "http://localhost:8080",
-		PublicAddr:               "127.0.0.1:8080",
-		InternalAddr:             "127.0.0.1:8081",
-		DataDir:                  "./data",
-		ApplicationLogPath:       "/data/zon/logs/api-server/application.log",
-		LogLevel:                 "info",
-		TrustedProxyCount:        0,
-		AutomationRuntimeBaseURL: "",
-		ArtifactServerAllowFake:  true,
-		FilesObjectPrefix:        "files",
-		FilesTransferTimeout:     30 * time.Minute,
-		FilesMaxUploadBytes:      20 * 1024 * 1024 * 1024,
-		BlobStorageEndpoint:      "http://blob-storage.ace-system.svc.cluster.local:9000",
-		BlobStorageBucket:        "appliance",
-		BlobStorageAccessKey:     "local-dev",
-		BlobStorageSecretKey:     "local-dev-secret",
-		BlobStorageRegion:        "us-east-1",
-		VideoLibraryObjectPrefix: "video/library",
-		VideoTransferTimeout:     30 * time.Minute,
-		VideoMaxUploadBytes:      20 * 1024 * 1024 * 1024,
-		DNSZoneName:              "appliance.internal",
-		DNSConfigMapNamespace:    "dns",
-		DNSConfigMapName:         "dns-server-config",
-		DNSAllowFakeZoneSync:     true,
-		ReadHeaderTimeout:        5 * time.Second,
+		ApplianceProfile:          string(appliance.ProfileCore),
+		CanonicalOrigin:           "http://localhost:8080",
+		PublicAddr:                "127.0.0.1:8080",
+		InternalAddr:              "127.0.0.1:8081",
+		DataDir:                   "./data",
+		ApplicationLogPath:        "/data/zon/logs/api-server/application.log",
+		LogLevel:                  "info",
+		TrustedProxyCount:         0,
+		AutomationRuntimeBaseURL:  "",
+		ArtifactServerAllowFake:   true,
+		FilesObjectPrefix:         "files",
+		FilesTransferTimeout:      30 * time.Minute,
+		FilesMaxUploadBytes:       20 * 1024 * 1024 * 1024,
+		BlobStorageEndpoint:       "http://blob-storage.ace-system.svc.cluster.local:9000",
+		BlobStorageBucket:         "appliance",
+		BlobStorageAccessKey:      "local-dev",
+		BlobStorageSecretKey:      "local-dev-secret",
+		BlobStorageRegion:         "us-east-1",
+		VideoLibraryObjectPrefix:  "video/library",
+		VideoLibraryProjectionDir: "/var/lib/appliance/video-media",
+		VideoTransferTimeout:      30 * time.Minute,
+		VideoMaxUploadBytes:       20 * 1024 * 1024 * 1024,
+		DNSZoneName:               "appliance.internal",
+		DNSConfigMapNamespace:     "dns",
+		DNSConfigMapName:          "dns-server-config",
+		DNSAllowFakeZoneSync:      true,
+		ReadHeaderTimeout:         5 * time.Second,
 		// Must cover multi-GB /api/v1/files uploads. Keep this aligned with
 		// FilesTransferTimeout; handlers also extend the connection deadline
 		// via ResponseController (requires middleware Unwrap).
@@ -216,6 +219,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("BLOB_STORAGE_SECRET_KEY", &cfg.BlobStorageSecretKey)
 	str("BLOB_STORAGE_REGION", &cfg.BlobStorageRegion)
 	str("VIDEO_LIBRARY_OBJECT_PREFIX", &cfg.VideoLibraryObjectPrefix)
+	str("VIDEO_LIBRARY_PROJECTION_DIR", &cfg.VideoLibraryProjectionDir)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
 	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
 	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
@@ -460,6 +464,10 @@ func (c Config) Validate() error {
 		}
 		if strings.Trim(strings.TrimSpace(c.VideoLibraryObjectPrefix), "/") == "" {
 			errs = append(errs, "videoLibraryObjectPrefix must not be empty when the video capability is enabled")
+		}
+		projectionDir := strings.TrimSpace(c.VideoLibraryProjectionDir)
+		if !filepath.IsAbs(projectionDir) || filepath.Clean(projectionDir) == "/" {
+			errs = append(errs, "videoLibraryProjectionDir must be an absolute non-root path when the video capability is enabled")
 		}
 		if c.VideoTransferTimeout <= 0 {
 			errs = append(errs, "videoTransferTimeout must be positive when the video capability is enabled")

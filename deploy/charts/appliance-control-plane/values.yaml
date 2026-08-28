@@ -189,6 +189,14 @@ videoLibrary:
   objectPrefix: video/library
   maxUploadBytes: "21474836480"
   transferTimeout: 30m
+  # Foundation-owned materialization of the canonical video object prefix.
+  # Jellyfin receives this through a read-only PVC; it never receives S3
+  # credentials or a hostPath volume.
+  projection:
+    hostPath: /data/zon/video-media
+    mountPath: /var/lib/appliance/video-media
+    claimName: appliance-video-media
+    size: 100Gi
 
 secrets:
   # Secret holding the purpose-separated key material internal/keys expects
