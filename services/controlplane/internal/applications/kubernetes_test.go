@@ -50,6 +50,12 @@ func TestNewInClusterManagerWithoutServiceAccountToken(t *testing.T) {
 	if manager != nil {
 		t.Fatal("NewInClusterManager without SA token should return a nil manager")
 	}
+	// The control-plane stores this result as ResourceManager. Keep it a true
+	// nil interface so application reconciliation cannot call a nil receiver.
+	var runtime ResourceManager = manager
+	if runtime != nil {
+		t.Fatal("NewInClusterManager without SA token must remain nil as ResourceManager")
+	}
 }
 
 func TestNewInClusterManagerOutsideCluster(t *testing.T) {

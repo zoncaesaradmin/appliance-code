@@ -186,7 +186,10 @@ func (p *HostAgentProjector) put(ctx context.Context, application string, endpoi
 	return nil
 }
 
-func NewInClusterManager(network ...NetworkProjector) (*KubernetesManager, error) {
+// NewInClusterManager returns nil when Kubernetes credentials are deliberately
+// unavailable for the active profile. Returning the interface directly avoids
+// placing a nil *KubernetesManager inside a non-nil ResourceManager interface.
+func NewInClusterManager(network ...NetworkProjector) (ResourceManager, error) {
 	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
 	if host == "" || port == "" {
 		return nil, nil
