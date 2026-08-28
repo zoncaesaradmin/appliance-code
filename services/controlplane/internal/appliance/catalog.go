@@ -14,6 +14,10 @@ type CatalogDocument struct {
 	Version  string           `json:"version"`
 	Profiles []CatalogProfile `json:"profiles"`
 	Modules  []CatalogModule  `json:"modules"`
+	// Applications is an opaque, signed catalog section interpreted only by
+	// Application Management. Keeping it in this already verified release
+	// catalog prevents Helm values from becoming a privileged authority.
+	Applications json.RawMessage `json:"applications,omitempty"`
 }
 
 type CatalogProfile struct {

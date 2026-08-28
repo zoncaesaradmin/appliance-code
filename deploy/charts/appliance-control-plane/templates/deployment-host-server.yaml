@@ -33,6 +33,8 @@ spec:
               value: {{ printf "%s/%s" .Values.hostAgent.runtime.socketMountPath .Values.hostAgent.runtime.socketFileName | quote }}
             - name: HOST_AGENT_APPLICATION_LOG_PATH
               value: {{ printf "%s/application.log" .Values.hostAgent.logs.hostPath | quote }}
+            - name: HOST_AGENT_INTERNAL_TOKEN_PATH
+              value: /var/run/appliance-internal-auth/api_token_pepper.key
           ports:
             - name: http
               containerPort: {{ .Values.hostAgent.service.port }}
@@ -66,6 +68,9 @@ spec:
               readOnly: true
             - name: host-agent-logs
               mountPath: {{ .Values.hostAgent.logs.hostPath }}
+            - name: internal-auth
+              mountPath: /var/run/appliance-internal-auth
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
@@ -77,4 +82,11 @@ spec:
           hostPath:
             path: {{ .Values.hostAgent.logs.hostPath }}
             type: DirectoryOrCreate
+        - name: internal-auth
+          secret:
+            secretName: {{ .Values.secrets.keysSecretName }}
+            items:
+              - key: api_token_pepper.key
+                path: api_token_pepper.key
+            defaultMode: 0440
 {{- end }}

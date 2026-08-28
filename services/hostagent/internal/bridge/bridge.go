@@ -8,9 +8,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/host"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/wifiap"
@@ -32,6 +34,9 @@ type Bridge interface {
 	WifiAPApply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error)
 	MDNSStatus(ctx context.Context) (mdns.Status, error)
 	MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error)
+	ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error
+	ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error)
+	ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error)
 }
 
 type Local struct {
@@ -39,6 +44,7 @@ type Local struct {
 	WifiClient wificlient.Controller
 	WifiAP     wifiap.Controller
 	MDNS       mdns.Controller
+	Firewall   firewall.Controller
 }
 
 func (l Local) wifiClient() wificlient.Controller {
@@ -61,6 +67,13 @@ func (l Local) mdnsCtrl() mdns.Controller {
 		return l.MDNS
 	}
 	return mdns.NewManager()
+}
+
+func (l Local) firewallCtrl() firewall.Controller {
+	if l.Firewall != nil {
+		return l.Firewall
+	}
+	return firewall.NewManager()
 }
 
 func (l Local) Ping(context.Context) error {
@@ -111,11 +124,32 @@ func (l Local) MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Statu
 	return l.mdnsCtrl().Apply(ctx, req)
 }
 
-type UnixSocketClient struct {
-	socketPath string
-	baseURL    string
-	client     *http.Client
+func (l Local) ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error {
+	manager, ok := l.mdnsCtrl().(*mdns.Manager)
+	if !ok {
+		return fmt.Errorf("bridge: application mDNS requires the host mDNS manager")
+	}
+	return manager.ApplyApplicationServices(ctx, req)
 }
+
+func (l Local) ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error) {
+	return l.firewallCtrl().Status(ctx, application)
+}
+
+func (l Local) ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error) {
+	return l.firewallCtrl().Apply(ctx, policy)
+}
+
+type UnixSocketClient struct {
+	socketPath    string
+	baseURL       string
+	client        *http.Client
+	internalToken string
+}
+
+// SetInternalToken authorizes only the privileged firewall projection over the
+// socket; ordinary host status and Wi-Fi APIs retain their existing contract.
+func (c *UnixSocketClient) SetInternalToken(token string) { c.internalToken = strings.TrimSpace(token) }
 
 func NewUnixSocketClient(socketPath string) *UnixSocketClient {
 	socketPath = strings.TrimSpace(socketPath)
@@ -202,6 +236,22 @@ func (c *UnixSocketClient) MDNSApply(ctx context.Context, req mdns.ApplyRequest)
 	return status, err
 }
 
+func (c *UnixSocketClient) ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error {
+	return c.do(ctx, http.MethodPut, "/internal/v1/host/application-mdns/"+url.PathEscape(req.Application), req, nil)
+}
+
+func (c *UnixSocketClient) ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error) {
+	var status firewall.Status
+	err := c.do(ctx, http.MethodGet, "/internal/v1/host/application-firewall/"+url.PathEscape(application), nil, &status)
+	return status, err
+}
+
+func (c *UnixSocketClient) ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error) {
+	var status firewall.Status
+	err := c.do(ctx, http.MethodPut, "/internal/v1/host/application-firewall/"+url.PathEscape(policy.Application), policy, &status)
+	return status, err
+}
+
 // WifiController adapters so the pod can implement wifiap.Controller.
 func (c *UnixSocketClient) Status(ctx context.Context) (wifiap.Status, error) {
 	return c.WifiAPStatus(ctx)
@@ -259,6 +309,9 @@ func (c *UnixSocketClient) do(ctx context.Context, method, path string, body any
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.internalToken != "" && strings.Contains(path, "/application-firewall/") {
+		req.Header.Set("X-Appliance-Internal-Auth", c.internalToken)
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {

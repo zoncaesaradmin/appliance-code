@@ -10,6 +10,7 @@ import (
 	"appliance-code/services/hostagent/internal/bridge"
 	"appliance-code/services/hostagent/internal/config"
 	"appliance-code/services/hostagent/internal/httpapi"
+	"appliance-code/services/hostagent/internal/internalauth"
 	"appliance-code/services/hostagent/internal/process"
 )
 
@@ -20,9 +21,15 @@ func main() {
 	}
 
 	logger := process.NewLogger(cfg.ApplicationLogPath)
+	pepper, err := os.ReadFile(cfg.InternalTokenPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	internalToken := internalauth.TokenFromPepper(pepper)
 	client := bridge.NewUnixSocketClient(cfg.SocketPath)
+	client.SetInternalToken(internalToken)
 	// Pod forwards host facts, wifi-ap, and mdns control over the host-agentd socket.
-	handler := httpapi.NewHandlerWithControllers(client, bridge.WifiSocketAdapter{Client: client}, client, bridge.MDNSSocketAdapter{Client: client})
+	handler := httpapi.NewHandlerWithInternalToken(client, bridge.WifiSocketAdapter{Client: client}, client, bridge.MDNSSocketAdapter{Client: client}, internalToken)
 	server := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

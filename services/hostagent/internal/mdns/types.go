@@ -36,6 +36,19 @@ type ApplyRequest struct {
 	Desired bool `json:"desired"`
 }
 
+// ApplicationService is a catalog-approved mDNS advertisement. It contains
+// only the small Avahi service shape an application needs, never raw XML.
+type ApplicationService struct {
+	Name        string `json:"name"`
+	ServiceType string `json:"serviceType"`
+	Port        int    `json:"port"`
+}
+
+type ApplicationRequest struct {
+	Application string               `json:"application"`
+	Services    []ApplicationService `json:"services"`
+}
+
 // Controller is the apply/status surface used by the HTTP API.
 type Controller interface {
 	Status(ctx context.Context) (Status, error)
@@ -43,5 +56,6 @@ type Controller interface {
 }
 
 type persistedState struct {
-	Desired bool `json:"desired"`
+	Desired             bool                            `json:"desired"`
+	ApplicationServices map[string][]ApplicationService `json:"applicationServices,omitempty"`
 }

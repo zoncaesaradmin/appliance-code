@@ -158,8 +158,8 @@ func TestPodAndContainerSecurityHardening(t *testing.T) {
 		t.Fatal("could not find spec.template.spec on the Deployment")
 	}
 
-	if automount, _ := podSpec["automountServiceAccountToken"].(bool); automount {
-		t.Error("automountServiceAccountToken should be false for core/default rendering")
+	if automount, _ := podSpec["automountServiceAccountToken"].(bool); !automount {
+		t.Error("automountServiceAccountToken should be true when the default profile enables Application Management")
 	}
 
 	podSecCtx, _ := podSpec["securityContext"].(map[string]any)

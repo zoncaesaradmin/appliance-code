@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/appliance"
+	"appliance-code/services/controlplane/internal/applications"
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/serviceregistry"
 )
@@ -29,33 +30,36 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath       string                    `json:"applicationLogPath"`
-	LogLevel                 string                    `json:"logLevel"`
-	TrustedProxyCount        int                       `json:"trustedProxyCount"`
-	ApplianceCatalog         appliance.CatalogDocument `json:"applianceCatalog"`
-	AutomationRuntimeBaseURL string                    `json:"automationRuntimeBaseURL"`
-	ArtifactServerBaseURL    string                    `json:"artifactServerBaseURL"`
-	ArtifactServerAllowFake  bool                      `json:"artifactServerAllowFake"`
-	ServiceRegistry          serviceregistry.Registry  `json:"serviceRegistry"`
-	FilesObjectPrefix        string                    `json:"filesObjectPrefix"`
-	FilesTransferTimeout     time.Duration             `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes      int64                     `json:"filesMaxUploadBytes"`
-	DNSReadyURL              string                    `json:"dnsReadyURL"`
-	DNSZoneName              string                    `json:"dnsZoneName"`
-	DNSConfigMapNamespace    string                    `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName         string                    `json:"dnsConfigMapName"`
-	DNSBootstrapHostname     string                    `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4         string                    `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync     bool                      `json:"dnsAllowFakeZoneSync"`
-	InferenceGatewayBaseURL  string                    `json:"inferenceGatewayBaseURL"`
-	BlobStorageEndpoint      string                    `json:"blobStorageEndpoint"`
-	BlobStorageBucket        string                    `json:"blobStorageBucket"`
-	BlobStorageAccessKey     string                    `json:"blobStorageAccessKey"`
-	BlobStorageSecretKey     string                    `json:"blobStorageSecretKey"`
-	BlobStorageRegion        string                    `json:"blobStorageRegion"`
-	VideoLibraryObjectPrefix string                    `json:"videoLibraryObjectPrefix"`
-	VideoTransferTimeout     time.Duration             `json:"videoTransferTimeout"`
-	VideoMaxUploadBytes      int64                     `json:"videoMaxUploadBytes"`
+	ApplicationLogPath string                    `json:"applicationLogPath"`
+	LogLevel           string                    `json:"logLevel"`
+	TrustedProxyCount  int                       `json:"trustedProxyCount"`
+	ApplianceCatalog   appliance.CatalogDocument `json:"applianceCatalog"`
+	// ApplicationCatalog is derived exclusively from ApplianceCatalog, whose
+	// source is verified by zonctl as a signed bundle configuration artifact.
+	ApplicationCatalog       applications.Catalog     `json:"-"`
+	AutomationRuntimeBaseURL string                   `json:"automationRuntimeBaseURL"`
+	ArtifactServerBaseURL    string                   `json:"artifactServerBaseURL"`
+	ArtifactServerAllowFake  bool                     `json:"artifactServerAllowFake"`
+	ServiceRegistry          serviceregistry.Registry `json:"serviceRegistry"`
+	FilesObjectPrefix        string                   `json:"filesObjectPrefix"`
+	FilesTransferTimeout     time.Duration            `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes      int64                    `json:"filesMaxUploadBytes"`
+	DNSReadyURL              string                   `json:"dnsReadyURL"`
+	DNSZoneName              string                   `json:"dnsZoneName"`
+	DNSConfigMapNamespace    string                   `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName         string                   `json:"dnsConfigMapName"`
+	DNSBootstrapHostname     string                   `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4         string                   `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync     bool                     `json:"dnsAllowFakeZoneSync"`
+	InferenceGatewayBaseURL  string                   `json:"inferenceGatewayBaseURL"`
+	BlobStorageEndpoint      string                   `json:"blobStorageEndpoint"`
+	BlobStorageBucket        string                   `json:"blobStorageBucket"`
+	BlobStorageAccessKey     string                   `json:"blobStorageAccessKey"`
+	BlobStorageSecretKey     string                   `json:"blobStorageSecretKey"`
+	BlobStorageRegion        string                   `json:"blobStorageRegion"`
+	VideoLibraryObjectPrefix string                   `json:"videoLibraryObjectPrefix"`
+	VideoTransferTimeout     time.Duration            `json:"videoTransferTimeout"`
+	VideoMaxUploadBytes      int64                    `json:"videoMaxUploadBytes"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -144,6 +148,9 @@ func Load(environ []string) (Config, error) {
 
 	if err := applyEnv(&cfg, env); err != nil {
 		return Config{}, fmt.Errorf("config: applying environment: %w", err)
+	}
+	if err := deriveApplicationCatalog(&cfg); err != nil {
+		return Config{}, fmt.Errorf("config: application catalog: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -316,6 +323,17 @@ func applyEnv(cfg *Config, env map[string]string) error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func deriveApplicationCatalog(cfg *Config) error {
+	cfg.ApplicationCatalog = applications.Catalog{}
+	if len(cfg.ApplianceCatalog.Applications) == 0 || string(cfg.ApplianceCatalog.Applications) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(cfg.ApplianceCatalog.Applications, &cfg.ApplicationCatalog); err != nil {
+		return err
 	}
 	return nil
 }

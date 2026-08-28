@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"appliance-code/services/hostagent/internal/host"
@@ -114,7 +115,11 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	if err := m.files().MkdirAll(m.stateDir(), 0o700); err != nil {
 		return Status{}, fmt.Errorf("mdns: create state dir: %w", err)
 	}
-	st := persistedState{Desired: req.Desired}
+	st, err := m.loadState()
+	if err != nil {
+		return Status{}, err
+	}
+	st.Desired = req.Desired
 	if !req.Desired {
 		if packagesPresent(m.runner()) {
 			if err := m.stopService(ctx); err != nil {
@@ -149,6 +154,106 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		return status, nil
 	}
 	return m.Status(ctx)
+}
+
+// ApplyApplicationServices writes the small, validated Avahi service files
+// owned by one catalog application and enables mDNS when services are present.
+func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationRequest) error {
+	if !validApplicationName(req.Application) {
+		return fmt.Errorf("mdns: application must be a DNS label")
+	}
+	for _, service := range req.Services {
+		if !validApplicationService(service) {
+			return fmt.Errorf("mdns: application service must use a DNS-label name, valid service type, and port")
+		}
+	}
+	st, err := m.loadState()
+	if err != nil {
+		return err
+	}
+	if st.ApplicationServices == nil {
+		st.ApplicationServices = map[string][]ApplicationService{}
+	}
+	if err := m.removeApplicationFiles(req.Application, st.ApplicationServices[req.Application]); err != nil {
+		return err
+	}
+	if len(req.Services) == 0 {
+		delete(st.ApplicationServices, req.Application)
+	} else {
+		st.ApplicationServices[req.Application] = append([]ApplicationService(nil), req.Services...)
+		if err := m.writeApplicationFiles(req.Application, req.Services); err != nil {
+			return err
+		}
+		st.Desired = true
+	}
+	if err := m.saveState(st); err != nil {
+		return err
+	}
+	if len(req.Services) > 0 {
+		_, err := m.Apply(ctx, ApplyRequest{Desired: true})
+		return err
+	}
+	return nil
+}
+
+func (m *Manager) applicationServicesDir() string {
+	return filepath.Join(m.root(), "etc", "avahi", "services")
+}
+
+func (m *Manager) applicationFile(application, name string) string {
+	return filepath.Join(m.applicationServicesDir(), "zon-"+application+"-"+name+".service")
+}
+
+func (m *Manager) removeApplicationFiles(application string, services []ApplicationService) error {
+	for _, service := range services {
+		if err := m.files().Remove(m.applicationFile(application, service.Name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("mdns: remove application service: %w", err)
+		}
+	}
+	return nil
+}
+
+func (m *Manager) writeApplicationFiles(application string, services []ApplicationService) error {
+	if err := m.files().MkdirAll(m.applicationServicesDir(), 0o755); err != nil {
+		return fmt.Errorf("mdns: create application services directory: %w", err)
+	}
+	sorted := append([]ApplicationService(nil), services...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	for _, service := range sorted {
+		content := fmt.Sprintf("<service-group>\n  <name replace-wildcards=\"yes\">%s</name>\n  <service>\n    <type>%s</type>\n    <port>%d</port>\n  </service>\n</service-group>\n", service.Name, service.ServiceType, service.Port)
+		if err := m.files().WriteFile(m.applicationFile(application, service.Name), []byte(content), 0o644); err != nil {
+			return fmt.Errorf("mdns: write application service: %w", err)
+		}
+	}
+	return nil
+}
+
+func validApplicationName(value string) bool { return validMDNSLabel(value) }
+
+func validApplicationService(service ApplicationService) bool {
+	if !validMDNSLabel(service.Name) || service.Port < 1 || service.Port > 65535 || !strings.HasPrefix(service.ServiceType, "_") || len(service.ServiceType) > 80 {
+		return false
+	}
+	for _, char := range service.ServiceType {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '_' || char == '-' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validMDNSLabel(value string) bool {
+	if len(value) == 0 || len(value) > 63 {
+		return false
+	}
+	for index, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || (char == '-' && index > 0 && index < len(value)-1) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // Reconcile restores avahi-daemon when desired state survived a reboot but the

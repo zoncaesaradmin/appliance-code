@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"appliance-code/services/hostagent/internal/bridge"
+	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/httpapi"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/process"
@@ -61,11 +62,13 @@ func main() {
 	wifiClientManager := wificlient.NewManager()
 	wifiManager := wifiap.NewManager()
 	mdnsManager := mdns.NewManager()
+	firewallManager := firewall.NewManager()
 	go reconcileDay2Features(logger, wifiClientManager, wifiManager, mdnsManager)
+	go reconcileApplicationFirewall(logger, firewallManager)
 
 	server := &http.Server{
-		Handler: httpapi.NewHandlerWithControllers(
-			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager},
+		Handler: httpapi.NewUnixSocketHandler(
+			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager, Firewall: firewallManager},
 			wifiClientManager,
 			wifiManager,
 			mdnsManager,
@@ -83,6 +86,12 @@ func main() {
 	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		logger.Error("host agent daemon failed", "error", err)
 		os.Exit(1)
+	}
+}
+
+func reconcileApplicationFirewall(logger *slog.Logger, manager *firewall.Manager) {
+	if err := manager.Reconcile(context.Background()); err != nil {
+		logger.Warn("application firewall reconcile failed", "error", err)
 	}
 }
 

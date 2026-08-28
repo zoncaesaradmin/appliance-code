@@ -183,12 +183,15 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	workspaceStore := sqlite.NewWorkspaceStore(db)
 	jobStore := sqlite.NewJobStore(db)
 	applicationStore := sqlite.NewApplicationStore(db)
-	applicationsSvc, err := applications.NewService(applicationStore)
+	applicationsSvc, err := applications.NewService(applicationStore, cfg.ApplicationCatalog)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application management: %w", err)
 	}
-	applicationRuntime, err := applications.NewInClusterManager()
+	applicationRuntime, err := applications.NewInClusterManager(applications.NewHostAgentProjector(
+		"http://host-agent.ace-apps.svc.cluster.local:8080",
+		automationruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper),
+	))
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application resource manager: %w", err)

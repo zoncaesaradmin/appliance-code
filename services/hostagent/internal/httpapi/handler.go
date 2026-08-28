@@ -7,30 +7,52 @@ import (
 	"strings"
 
 	"appliance-code/services/hostagent/internal/bridge"
+	"appliance-code/services/hostagent/internal/firewall"
+	"appliance-code/services/hostagent/internal/internalauth"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/wifiap"
 	"appliance-code/services/hostagent/internal/wificlient"
 )
 
 type Handler struct {
-	bridge     bridge.Bridge
-	wifiClient wificlient.Controller
-	wifiAP     wifiap.Controller
-	mdns       mdns.Controller
+	bridge        bridge.Bridge
+	wifiClient    wificlient.Controller
+	wifiAP        wifiap.Controller
+	mdns          mdns.Controller
+	internalToken string
+	trustedSocket bool
 }
 
 // NewHandler returns the host-agent HTTP API with production wifi and mdns managers.
 func NewHandler(hostBridge bridge.Bridge) http.Handler {
-	return NewHandlerWithControllers(hostBridge, wificlient.NewManager(), wifiap.NewManager(), mdns.NewManager())
+	return NewHandlerWithInternalToken(hostBridge, wificlient.NewManager(), wifiap.NewManager(), mdns.NewManager(), "")
 }
 
 // NewHandlerWithWifi keeps older call sites working (mdns uses production manager).
 func NewHandlerWithWifi(hostBridge bridge.Bridge, wifi wifiap.Controller) http.Handler {
-	return NewHandlerWithControllers(hostBridge, wificlient.NewManager(), wifi, mdns.NewManager())
+	return NewHandlerWithInternalToken(hostBridge, wificlient.NewManager(), wifi, mdns.NewManager(), "")
 }
 
 // NewHandlerWithControllers allows tests and mains to inject controllers.
 func NewHandlerWithControllers(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller) http.Handler {
+	return NewHandlerWithInternalToken(hostBridge, wifiClient, wifiAP, mdnsCtrl, "")
+}
+
+// NewHandlerWithInternalToken protects the privileged firewall projection with
+// a control-plane-only credential. The public host-agent pod never receives an
+// unqualified port-opening request.
+func NewHandlerWithInternalToken(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller, internalToken string) http.Handler {
+	return newHandler(hostBridge, wifiClient, wifiAP, mdnsCtrl, internalToken, false)
+}
+
+// NewUnixSocketHandler enables firewall projection only for callers which can
+// open the root-owned, group-restricted host-agent daemon socket. The network
+// facing host-agent pod still requires the control-plane credential.
+func NewUnixSocketHandler(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller) http.Handler {
+	return newHandler(hostBridge, wifiClient, wifiAP, mdnsCtrl, "", true)
+}
+
+func newHandler(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller, internalToken string, trustedSocket bool) http.Handler {
 	if wifiClient == nil {
 		wifiClient = wificlient.NewManager()
 	}
@@ -40,7 +62,7 @@ func NewHandlerWithControllers(hostBridge bridge.Bridge, wifiClient wificlient.C
 	if mdnsCtrl == nil {
 		mdnsCtrl = mdns.NewManager()
 	}
-	handler := &Handler{bridge: hostBridge, wifiClient: wifiClient, wifiAP: wifiAP, mdns: mdnsCtrl}
+	handler := &Handler{bridge: hostBridge, wifiClient: wifiClient, wifiAP: wifiAP, mdns: mdnsCtrl, internalToken: strings.TrimSpace(internalToken), trustedSocket: trustedSocket}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handler.healthz)
 	mux.HandleFunc("GET /internal/v1/host/info", handler.info)
@@ -54,7 +76,70 @@ func NewHandlerWithControllers(hostBridge bridge.Bridge, wifiClient wificlient.C
 	mux.HandleFunc("PUT /internal/v1/host/wifi-ap", handler.wifiAPPut)
 	mux.HandleFunc("GET /internal/v1/host/mdns", handler.mdnsGet)
 	mux.HandleFunc("PUT /internal/v1/host/mdns", handler.mdnsPut)
+	mux.HandleFunc("GET /internal/v1/host/application-firewall/{application}", handler.applicationFirewallGet)
+	mux.HandleFunc("PUT /internal/v1/host/application-firewall/{application}", handler.applicationFirewallPut)
+	mux.HandleFunc("PUT /internal/v1/host/application-mdns/{application}", handler.applicationMDNSPut)
 	return mux
+}
+
+func (h *Handler) applicationMDNSPut(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "internal authentication failed")
+		return
+	}
+	var request mdns.ApplicationRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application mdns body")
+		return
+	}
+	if request.Application != r.PathValue("application") {
+		writeError(w, http.StatusBadRequest, "application mdns path and body must match")
+		return
+	}
+	if err := h.bridge.ApplicationMDNSApply(r.Context(), request); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) applicationFirewallGet(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "internal authentication failed")
+		return
+	}
+	status, err := h.bridge.ApplicationFirewallStatus(r.Context(), r.PathValue("application"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) applicationFirewallPut(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "internal authentication failed")
+		return
+	}
+	var policy firewall.ApplicationPolicy
+	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid application firewall body")
+		return
+	}
+	if policy.Application != r.PathValue("application") {
+		writeError(w, http.StatusBadRequest, "application firewall path and body must match")
+		return
+	}
+	status, err := h.bridge.ApplicationFirewallApply(r.Context(), policy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) authorized(r *http.Request) bool {
+	return h.trustedSocket || internalauth.EqualToken(r.Header.Get(internalauth.HeaderName), h.internalToken)
 }
 
 func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {

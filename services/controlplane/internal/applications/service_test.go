@@ -2,6 +2,8 @@ package applications
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -54,13 +56,13 @@ func (m *memoryStore) ListInstances(context.Context) ([]storage.ApplicationInsta
 	return m.instances, nil
 }
 
-func TestRegisterAndInstall(t *testing.T) {
-	svc, err := NewService(&memoryStore{})
-	if err != nil {
+func TestCatalogInstall(t *testing.T) {
+	var definition Definition
+	if err := json.Unmarshal([]byte(`{"apiVersion":"appliance.zon/v1","kind":"ApplicationDefinition","metadata":{"name":"camera","version":"1.0.0"},"runtime":{"image":{"reference":"registry.local/camera@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}`), &definition); err != nil {
 		t.Fatal(err)
 	}
-	doc := []byte(`{"apiVersion":"appliance.zon/v1","kind":"ApplicationDefinition","metadata":{"name":"camera","version":"1.0.0"},"runtime":{"image":{"reference":"registry.local/camera@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}`)
-	if _, err := svc.Register(context.Background(), doc); err != nil {
+	svc, err := NewService(&memoryStore{}, Catalog{Applications: []Definition{definition}})
+	if err != nil {
 		t.Fatal(err)
 	}
 	i, err := svc.Install(context.Background(), "camera", "1.0.0")
@@ -72,10 +74,16 @@ func TestRegisterAndInstall(t *testing.T) {
 	}
 }
 
-func TestRejectsUnpinnedOrRemoteImage(t *testing.T) {
+func TestCatalogRejectsUnpinnedImageAndRuntimeRegistration(t *testing.T) {
+	var invalid Definition
+	if err := json.Unmarshal([]byte(`{"apiVersion":"appliance.zon/v1","kind":"ApplicationDefinition","metadata":{"name":"camera","version":"1.0.0"},"runtime":{"image":{"reference":"docker.io/camera:latest"}}}`), &invalid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewService(&memoryStore{}, Catalog{Applications: []Definition{invalid}}); err == nil {
+		t.Fatal("expected invalid catalog image rejection")
+	}
 	svc, _ := NewService(&memoryStore{})
-	doc := []byte(`{"apiVersion":"appliance.zon/v1","kind":"ApplicationDefinition","metadata":{"name":"camera","version":"1.0.0"},"runtime":{"image":{"reference":"docker.io/camera:latest"}}}`)
-	if _, err := svc.Register(context.Background(), doc); err == nil {
-		t.Fatal("expected invalid image rejection")
+	if _, err := svc.Register(context.Background(), []byte(`{}`)); !errors.Is(err, ErrCatalogReadOnly) {
+		t.Fatalf("Register error = %v, want ErrCatalogReadOnly", err)
 	}
 }
