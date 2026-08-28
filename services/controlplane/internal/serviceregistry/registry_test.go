@@ -8,11 +8,15 @@ import (
 )
 
 func TestRegistryFromModulesConvertsHostAgentDescriptor(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("core")
+	resolved, err := appliance.ResolveProfile("training")
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
-	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	registry := serviceregistry.RegistryFromModules(modules)
 	if len(registry.Services) != 1 {
 		t.Fatalf("len(registry.Services) = %d, want 1", len(registry.Services))

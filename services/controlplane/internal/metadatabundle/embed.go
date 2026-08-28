@@ -3,6 +3,10 @@ package metadatabundle
 import (
 	"embed"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -75,4 +79,50 @@ func EmbeddedApplicationCatalog() ([]byte, error) {
 		return nil, fmt.Errorf("metadatabundle: read embedded applications catalog: %w", err)
 	}
 	return append([]byte(nil), data...), nil
+}
+
+// materializeEmbeddedForDevelopment exists only for local test and developer
+// startup using the explicit 0.0.0-dev software identity. Production startup
+// always requires the signed tree staged by zonctl.
+func materializeEmbeddedForDevelopment(dest, softwareVersion, metadataVersion string) error {
+	_ = os.RemoveAll(dest)
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+	return fs.WalkDir(embeddedRoot, "embedded", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel := strings.TrimPrefix(strings.TrimPrefix(path, "embedded"), "/")
+		if rel == "" {
+			return nil
+		}
+		target := filepath.Join(dest, filepath.FromSlash(rel))
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if filepath.Base(path) == "README.generated.md" {
+			return nil
+		}
+		data, err := embeddedRoot.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if filepath.Base(path) == "bundle.yaml" {
+			var manifest Manifest
+			if err := yaml.Unmarshal(data, &manifest); err != nil {
+				return err
+			}
+			manifest.Metadata.SoftwareVersion = softwareVersion
+			manifest.Metadata.MetadataVersion = metadataVersion
+			data, err = yaml.Marshal(manifest)
+			if err != nil {
+				return err
+			}
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
 }

@@ -167,12 +167,20 @@ func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationR
 			return fmt.Errorf("mdns: application service must use a DNS-label name, valid service type, and port")
 		}
 	}
+	for _, alias := range req.Aliases {
+		if !validApplicationAlias(alias) {
+			return fmt.Errorf("mdns: application alias must be a single .local hostname")
+		}
+	}
 	st, err := m.loadState()
 	if err != nil {
 		return err
 	}
 	if st.ApplicationServices == nil {
 		st.ApplicationServices = map[string][]ApplicationService{}
+	}
+	if st.ApplicationAliases == nil {
+		st.ApplicationAliases = map[string][]string{}
 	}
 	if err := m.removeApplicationFiles(req.Application, st.ApplicationServices[req.Application]); err != nil {
 		return err
@@ -186,12 +194,28 @@ func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationR
 		}
 		st.Desired = true
 	}
+	if len(req.Aliases) == 0 {
+		delete(st.ApplicationAliases, req.Application)
+	} else {
+		st.ApplicationAliases[req.Application] = uniqueSorted(req.Aliases)
+		st.Desired = true
+	}
+	if err := m.writeApplicationAliases(ctx, st); err != nil {
+		return err
+	}
 	if err := m.saveState(st); err != nil {
 		return err
 	}
-	if len(req.Services) > 0 {
+	if len(req.Services) > 0 || len(req.Aliases) > 0 {
 		_, err := m.Apply(ctx, ApplyRequest{Desired: true})
 		return err
+	}
+	// Avahi observes hosts files on reload, but a restart gives the same
+	// deterministic convergence used for newly created service records.
+	if st.Desired && packagesPresent(m.runner()) {
+		if err := m.startService(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -202,6 +226,109 @@ func (m *Manager) applicationServicesDir() string {
 
 func (m *Manager) applicationFile(application, name string) string {
 	return filepath.Join(m.applicationServicesDir(), "zon-"+application+"-"+name+".service")
+}
+
+func (m *Manager) applicationAliasesFile() string {
+	return filepath.Join(m.root(), "etc", "avahi", "hosts")
+}
+
+const applicationAliasBegin = "# BEGIN ZON APPLICATION ALIASES"
+const applicationAliasEnd = "# END ZON APPLICATION ALIASES"
+
+// writeApplicationAliases updates only the marked appliance-owned block in
+// Avahi's normal static-host file. Existing operator mappings remain intact.
+func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState) error {
+	path := m.applicationAliasesFile()
+	existing, err := m.files().ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("mdns: read application aliases: %w", err)
+	}
+	base := removeAliasBlock(string(existing))
+	aliases := allAliases(st.ApplicationAliases)
+	if len(aliases) == 0 {
+		if strings.TrimSpace(base) == "" {
+			return nil
+		}
+		return m.files().WriteFile(path, []byte(base), 0o644)
+	}
+	address, err := m.primaryAddress(ctx)
+	if err != nil {
+		return err
+	}
+	if err := m.files().MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("mdns: create aliases directory: %w", err)
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(base, "\n"))
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
+	b.WriteString(applicationAliasBegin)
+	b.WriteString("\n")
+	for _, alias := range aliases {
+		fmt.Fprintf(&b, "%s %s\n", address, alias)
+	}
+	b.WriteString(applicationAliasEnd)
+	b.WriteString("\n")
+	if err := m.files().WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		return fmt.Errorf("mdns: write application aliases: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) primaryAddress(ctx context.Context) (string, error) {
+	out, err := m.runner().CombinedOutput(ctx, "hostname", "-I")
+	if err != nil {
+		return "", fmt.Errorf("mdns: find host address: %w", err)
+	}
+	for _, value := range strings.Fields(out) {
+		// Avahi's static host file accepts IPv4/IPv6, but publish the ordinary
+		// LAN IPv4 address only. Loopback, link-local, and management AP space
+		// must not make an application reachable from the wrong network.
+		parts := strings.Split(value, ".")
+		if len(parts) != 4 || value == "127.0.0.1" || strings.HasPrefix(value, "169.254.") || strings.HasPrefix(value, "10.42.0.") {
+			continue
+		}
+		return value, nil
+	}
+	return "", fmt.Errorf("mdns: no usable LAN IPv4 address is available")
+}
+
+func removeAliasBlock(content string) string {
+	start := strings.Index(content, applicationAliasBegin)
+	if start < 0 {
+		return content
+	}
+	end := strings.Index(content[start:], applicationAliasEnd)
+	if end < 0 {
+		return content[:start]
+	}
+	end += start + len(applicationAliasEnd)
+	if end < len(content) && content[end] == '\n' {
+		end++
+	}
+	return content[:start] + content[end:]
+}
+
+func allAliases(byApplication map[string][]string) []string {
+	var aliases []string
+	for _, values := range byApplication {
+		aliases = append(aliases, values...)
+	}
+	return uniqueSorted(aliases)
+}
+
+func uniqueSorted(values []string) []string {
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	result := make([]string, 0, len(set))
+	for value := range set {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func (m *Manager) removeApplicationFiles(application string, services []ApplicationService) error {
@@ -254,6 +381,14 @@ func validMDNSLabel(value string) bool {
 		return false
 	}
 	return true
+}
+
+func validApplicationAlias(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if !strings.HasSuffix(value, ".local") {
+		return false
+	}
+	return validMDNSLabel(strings.TrimSuffix(value, ".local"))
 }
 
 // Reconcile restores avahi-daemon when desired state survived a reboot but the

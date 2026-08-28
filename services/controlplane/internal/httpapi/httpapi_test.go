@@ -40,7 +40,7 @@ type testServer struct {
 }
 
 func newTestServer(t *testing.T) *testServer {
-	return newTestServerWithCatalog(t, appliance.ProfileBuilder, testBuildCatalog())
+	return newTestServerWithCatalog(t, appliance.ProfileBuilderStorageLANDNS, testBuildCatalog())
 }
 
 func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServer {
@@ -49,7 +49,10 @@ func newTestServerWithProfile(t *testing.T, profile appliance.Profile) *testServ
 
 func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog devflows.Catalog) *testServer {
 	t.Helper()
-	cfg := config.Default()
+	cfg, err := config.Load(nil)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
 	cfg.DataDir = t.TempDir()
 	cfg.ApplianceProfile = string(profile)
 	hostUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +123,11 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	if err != nil {
 		t.Fatalf("ResolveProfile(%s): %v", profile, err)
 	}
-	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	for i := range modules {
 		if modules[i].Name == "host-agent" {
 			modules[i].BaseURL = hostUpstream.URL
@@ -331,14 +338,10 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		profile appliance.Profile
 		want    []string
 	}{
-		{appliance.ProfileCore, []string{"applications", "base", "files", "host", "workflows"}},
-		{appliance.ProfileBuilder, []string{"applications", "artifact", "base", "build", "files", "host", "workflows"}},
-		{appliance.ProfileStorage, []string{"applications", "artifact", "base", "files", "host"}},
-		{appliance.ProfileLANDNS, []string{"applications", "base", "dns", "files", "host"}},
-		{appliance.ProfileStorageLANDNS, []string{"applications", "artifact", "base", "dns", "files", "host"}},
-		{appliance.ProfileBuilderLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
+		{appliance.ProfileCore, []string{"base", "files"}},
 		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
-		{appliance.ProfileTraining, []string{"base", "files", "host", "video"}},
+		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "workflows"}},
+		{appliance.ProfileTraining, []string{"applications", "base", "files", "host", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
@@ -371,7 +374,7 @@ func TestCoreProfileDoesNotExposeArtifactRoutes(t *testing.T) {
 }
 
 func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
-	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	ts := newTestServerWithProfile(t, appliance.ProfileTraining)
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	token := ts.login(t, "admin", testPassword)
 
@@ -398,6 +401,47 @@ func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
 	}
 	if mdns.AdvertisedName != "appliance-01.local" {
 		t.Fatalf("advertisedName = %q, want appliance-01.local", mdns.AdvertisedName)
+	}
+}
+
+func TestApplicationsUseOnlyReleaseCatalogAndAdminLifecycle(t *testing.T) {
+	ts := newTestServerWithProfile(t, appliance.ProfileTraining)
+	ts.bootstrapAdmin(t, "admin", testPassword)
+	token := ts.login(t, "admin", testPassword)
+
+	resp := ts.doJSON(t, http.MethodGet, "/api/v1/applications", token, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list applications status = %d", resp.StatusCode)
+	}
+	var catalog struct {
+		Items []struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&catalog); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if len(catalog.Items) != 1 || catalog.Items[0].Name != "jellyfin" || catalog.Items[0].Version != "10.10.7" {
+		t.Fatalf("catalog = %+v", catalog.Items)
+	}
+
+	resp = ts.doJSON(t, http.MethodPost, "/api/v1/applications/jellyfin/install", token, `{"version":"10.10.7"}`)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("install status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+	resp = ts.doJSON(t, http.MethodPost, "/api/v1/applications/jellyfin/disable", token, "")
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("disable status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resp = ts.doJSON(t, http.MethodPost, "/api/v1/applications", token, `{}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("mutable application registration status = %d, want 404", resp.StatusCode)
 	}
 }
 

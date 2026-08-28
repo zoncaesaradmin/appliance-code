@@ -47,6 +47,10 @@ type ApplicationService struct {
 type ApplicationRequest struct {
 	Application string               `json:"application"`
 	Services    []ApplicationService `json:"services"`
+	// Aliases are reviewed application host names (for example
+	// jellyfin.local). They are advertised by the host agent, never by the
+	// application pod itself.
+	Aliases []string `json:"aliases,omitempty"`
 }
 
 // Controller is the apply/status surface used by the HTTP API.
@@ -58,4 +62,5 @@ type Controller interface {
 type persistedState struct {
 	Desired             bool                            `json:"desired"`
 	ApplicationServices map[string][]ApplicationService `json:"applicationServices,omitempty"`
+	ApplicationAliases  map[string][]string             `json:"applicationAliases,omitempty"`
 }

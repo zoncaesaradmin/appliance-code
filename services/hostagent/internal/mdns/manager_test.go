@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -155,6 +156,44 @@ func TestApplyDisableStopsService(t *testing.T) {
 	}
 	if status.AdvertisedName != "appliance-01.local" {
 		t.Fatalf("advertisedName=%q", status.AdvertisedName)
+	}
+}
+
+func TestApplicationAliasesPreserveOperatorMappingsAndWithdraw(t *testing.T) {
+	root := t.TempDir()
+	files := &memFiles{data: map[string][]byte{filepath.Join(root, "etc", "avahi", "hosts"): []byte("192.168.1.10 printer.local\n")}}
+	runner := &fakeRunner{
+		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
+		outputs: map[string]string{
+			"hostname -I": "10.42.0.1 192.168.1.151\n",
+			"systemctl is-active avahi-daemon.service": "active",
+			"systemctl unmask avahi-daemon.service":    "",
+			"systemctl enable avahi-daemon.service":    "",
+			"systemctl restart avahi-daemon.service":   "",
+		},
+	}
+	m := &Manager{Root: root, StateDir: "/state", Runner: runner, Files: files}
+	request := ApplicationRequest{
+		Application: "jellyfin",
+		Services:    []ApplicationService{{Name: "jellyfin", ServiceType: "_jellyfin._tcp", Port: 8096}},
+		Aliases:     []string{"jellyfin.local"},
+	}
+	if err := m.ApplyApplicationServices(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	hosts := string(files.data[filepath.Join(root, "etc", "avahi", "hosts")])
+	if want := "192.168.1.10 printer.local"; !strings.Contains(hosts, want) {
+		t.Fatalf("operator mapping missing from %q", hosts)
+	}
+	if want := "192.168.1.151 jellyfin.local"; !strings.Contains(hosts, want) {
+		t.Fatalf("application alias missing from %q", hosts)
+	}
+	if err := m.ApplyApplicationServices(context.Background(), ApplicationRequest{Application: "jellyfin"}); err != nil {
+		t.Fatal(err)
+	}
+	hosts = string(files.data[filepath.Join(root, "etc", "avahi", "hosts")])
+	if strings.Contains(hosts, "jellyfin.local") || !strings.Contains(hosts, "printer.local") {
+		t.Fatalf("aliases were not safely withdrawn: %q", hosts)
 	}
 }
 

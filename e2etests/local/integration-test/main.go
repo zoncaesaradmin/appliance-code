@@ -517,7 +517,7 @@ func (r *runner) runRecoveryResetPassword(ctx context.Context, username, newPass
 	cmd := exec.CommandContext(ctx, r.cfg.serverBinary, "recovery", "reset-password", "--username", username, "--password-file", passwordFile)
 	cmd.Env = append(os.Environ(),
 		"APPLIANCE_CONFIG_FILE="+r.cfg.configFile,
-		"APPLIANCE_PROFILE=builder",
+		"APPLIANCE_PROFILE=builder-storage-landns",
 		"APPLIANCE_DATA_DIR="+r.cfg.dataDir,
 		"APPLIANCE_CANONICAL_ORIGIN="+r.cfg.apiBaseURL,
 		"APPLIANCE_PUBLIC_ADDR="+r.cfg.publicAddr,

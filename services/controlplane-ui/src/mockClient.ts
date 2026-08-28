@@ -47,6 +47,8 @@ import type {
   ApplianceFileEntry,
   ApplianceFileListResult,
   ApplianceFileUploadResult,
+  ApplicationDefinition,
+  ApplicationInstance,
   AuditEvent,
   AuditEventsResult
 } from "./types";
@@ -84,11 +86,13 @@ type MockState = {
   wifiClient: HostWifiStatus;
   wifiAP: HostWifiAPStatus;
   mdns: HostMDNSStatus;
+  applications: ApplicationDefinition[];
+  applicationInstances: ApplicationInstance[];
 };
 
 const mockState: MockState = {
   initialized: true,
-  capabilities: ["base", "files", "build", "artifact", "dns"],
+  capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications"],
 	session: {
     userId: "mock-admin",
     username: "admin",
@@ -109,7 +113,9 @@ const mockState: MockState = {
       "notifications.read",
       "notifications.acknowledge",
       "host.read",
-      "host.write"
+      "host.write",
+      "applications.read",
+      "applications.manage"
     ]
   },
   tokens: [
@@ -261,7 +267,9 @@ const mockState: MockState = {
     supportedCapable: true,
     advertisedName: "mock-host.local",
     message: "mdns is not desired"
-  }
+  },
+  applications: [{ name: "jellyfin", version: "10.10.7" }],
+  applicationInstances: []
 };
 
 mockState.currentWorkspaceId = mockState.workspaces[0]?.id ?? null;
@@ -1204,6 +1212,49 @@ export class MockControlPlaneClient {
     };
     return { ...mockState.mdns };
   }
+
+  async listApplications(): Promise<ApplicationDefinition[]> {
+	return mockState.applications.map((item) => ({ ...item }));
+  }
+
+  async listApplicationInstances(): Promise<ApplicationInstance[]> {
+	return mockState.applicationInstances.map((item) => ({ ...item }));
+  }
+
+  async installApplication(name: string, version: string): Promise<ApplicationInstance> {
+	const definition = mockState.applications.find((item) => item.name === name && item.version === version);
+	if (!definition) {
+		throw new Error("Application definition not found");
+	}
+	const next: ApplicationInstance = {
+		name,
+		definitionName: name,
+		definitionVersion: version,
+		desiredState: "running",
+		observedState: "pending",
+		message: "Application accepted for reconciliation.",
+		updatedAt: now()
+	};
+	const index = mockState.applicationInstances.findIndex((item) => item.name === name);
+	if (index >= 0) {
+		mockState.applicationInstances[index] = next;
+	} else {
+		mockState.applicationInstances.push(next);
+	}
+	return { ...next };
+	}
+
+	async disableApplication(name: string): Promise<ApplicationInstance> {
+		const instance = mockState.applicationInstances.find((item) => item.name === name);
+		if (!instance) {
+			throw new Error("Application instance not found");
+		}
+		instance.desiredState = "stopped";
+		instance.observedState = "pending";
+		instance.message = "Application accepted for withdrawal.";
+		instance.updatedAt = now();
+		return { ...instance };
+	}
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
     const limit = params?.limit ?? 10;

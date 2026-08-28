@@ -82,7 +82,7 @@ capabilities:
     packages: [foundation]
   applications:
     displayName: Applications
-    requires: [base]
+    requires: [base, host]
     conflicts: []
     license:
       requiredEntitlement: zon.capabilities.applications

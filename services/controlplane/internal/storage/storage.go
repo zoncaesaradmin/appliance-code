@@ -79,24 +79,24 @@ type OperationsStore interface {
 
 // ApplicationDefinition is a validated, immutable application contract.
 type ApplicationDefinition struct {
-	Name      string
-	Version   string
-	Document  []byte
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Name      string    `json:"name"`
+	Version   string    `json:"version"`
+	Document  []byte    `json:"document,omitempty"`
+	CreatedAt time.Time `json:"createdAt,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt,omitempty"`
 }
 
 // ApplicationInstance is durable desired and observed state for one
 // application installation.
 type ApplicationInstance struct {
-	Name              string
-	DefinitionName    string
-	DefinitionVersion string
-	DesiredState      string
-	ObservedState     string
-	Message           string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	Name              string    `json:"name"`
+	DefinitionName    string    `json:"definitionName"`
+	DefinitionVersion string    `json:"definitionVersion"`
+	DesiredState      string    `json:"desiredState"`
+	ObservedState     string    `json:"observedState"`
+	Message           string    `json:"message,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }
 
 // ApplicationStore persists application definitions and instances. It is

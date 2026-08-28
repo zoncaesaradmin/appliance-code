@@ -149,6 +149,13 @@ export const MODES: Mode[] = [
         icon: "status"
       },
       {
+        label: "Applications",
+        path: "/admin/applications",
+        description: "Enable and disable approved appliance applications",
+        icon: "artifacts",
+        requiredCapability: "applications"
+      },
+      {
         label: "LAN Services",
         path: "/admin/lan-services",
         description: "Manage LAN DNS records for the appliance zone",

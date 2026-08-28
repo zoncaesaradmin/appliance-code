@@ -90,9 +90,9 @@ func TestActivationFailsMissingEntitlement(t *testing.T) {
 	if _, err := lic.AcceptBaseEntitlement(context.Background(), audit.SystemActor); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := svc.Activate(context.Background(), audit.SystemActor, "storage")
+	_, _, err := svc.Activate(context.Background(), audit.SystemActor, "builder-storage-landns")
 	if err == nil {
-		t.Fatal("expected entitlement failure for storage profile")
+		t.Fatal("expected entitlement failure for builder profile")
 	}
 }
 
@@ -113,7 +113,7 @@ func TestActivationFailsMissingBundleArtifact(t *testing.T) {
 	if _, err := lic.AcceptBaseEntitlement(context.Background(), audit.SystemActor); err != nil {
 		t.Fatal(err)
 	}
-	validation, err := svc.Validate(context.Background(), "builder")
+	validation, err := svc.Validate(context.Background(), "builder-storage-landns")
 	if err != nil {
 		t.Fatal(err)
 	}

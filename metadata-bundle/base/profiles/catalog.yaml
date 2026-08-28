@@ -6,12 +6,12 @@ profiles:
   builder-storage-landns:
     displayName: builder-storage-landns
     description: "Built-in appliance profile."
-    capabilities: [base, host, files, workflows, build, artifact, dns]
+    capabilities: [base, host, files, workflows, build, artifact, dns, applications]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
-    capabilities: [base, host, files, workflows, build, artifact, dns, inference]
+    capabilities: [base, host, files, workflows, build, artifact, dns, inference, applications]
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
-    capabilities: [base, host, files, video]
+    capabilities: [base, host, files, video, applications]

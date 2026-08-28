@@ -91,6 +91,9 @@ applicationNamespace:
 # per ADR 0005.
 config:
   applianceProfile: core
+  # Derived by zonctl from the signed metadata profile. This gates application
+  # lifecycle RBAC and the control-plane ServiceAccount token mount.
+  applicationManagementEnabled: false
   # Product LAN instance label (single DNS label). zonctl sets this from
   # --appliance-name; FQDN is applianceName.dnsZoneName.
   applianceName: ""

@@ -158,8 +158,8 @@ func TestPodAndContainerSecurityHardening(t *testing.T) {
 		t.Fatal("could not find spec.template.spec on the Deployment")
 	}
 
-	if automount, _ := podSpec["automountServiceAccountToken"].(bool); !automount {
-		t.Error("automountServiceAccountToken should be true when the default profile enables Application Management")
+	if automount, _ := podSpec["automountServiceAccountToken"].(bool); automount {
+		t.Error("automountServiceAccountToken should be false when Application Management is not enabled by the signed profile")
 	}
 
 	podSecCtx, _ := podSpec["securityContext"].(map[string]any)
@@ -1195,7 +1195,7 @@ func TestImagePullSecretsRenderedOnControlplaneAndAppsDeployments(t *testing.T) 
 }
 
 func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
-	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps")
+	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps", "--set", "config.applicationManagementEnabled=true")
 	ns := findByKindAndName(docs, "Namespace", "apps")
 	if ns != nil {
 		t.Fatal("application namespace must be installer-owned, not Helm-owned")

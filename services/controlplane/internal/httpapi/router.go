@@ -298,12 +298,6 @@ func publicRoutes() []publicRoute {
 			}
 			return w.protect(roles.PermApplicationsRead, deps.ApplicationsH.ListDefinitions), nil
 		}},
-		{capability: appliance.CapabilityApplications, pattern: "POST /api/v1/applications", build: func(deps Deps, w wrappers) (http.Handler, error) {
-			if deps.ApplicationsH == nil {
-				return nil, fmt.Errorf("missing application handlers")
-			}
-			return w.protect(roles.PermApplicationsManage, deps.ApplicationsH.RegisterDefinition), nil
-		}},
 		{capability: appliance.CapabilityApplications, pattern: "GET /api/v1/applications/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.ApplicationsH == nil {
 				return nil, fmt.Errorf("missing application handlers")
@@ -321,6 +315,12 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing application handlers")
 			}
 			return w.protect(roles.PermApplicationsManage, deps.ApplicationsH.Install), nil
+		}},
+		{capability: appliance.CapabilityApplications, pattern: "POST /api/v1/applications/{name}/disable", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.ApplicationsH == nil {
+				return nil, fmt.Errorf("missing application handlers")
+			}
+			return w.protect(roles.PermApplicationsManage, deps.ApplicationsH.Disable), nil
 		}},
 		{capability: appliance.CapabilityApplications, pattern: "GET /api/v1/application-instances/{name}", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.ApplicationsH == nil {

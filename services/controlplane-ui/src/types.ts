@@ -127,6 +127,21 @@ export interface ApplianceFileUploadResult {
 	status?: "ready";
 }
 
+export interface ApplicationDefinition {
+  name: string;
+  version: string;
+}
+
+export interface ApplicationInstance {
+  name: string;
+  definitionName: string;
+  definitionVersion: string;
+  desiredState: "running" | "stopped" | string;
+  observedState: "pending" | "running" | "stopped" | "error" | string;
+  message?: string;
+  updatedAt: string;
+}
+
 export interface UpsertDNSRecordRequest {
   ipv4: string;
   ttl: number;

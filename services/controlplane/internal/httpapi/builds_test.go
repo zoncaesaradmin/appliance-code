@@ -471,7 +471,7 @@ func TestCurrentWorkspaceBuildRejectsUnknownTarget(t *testing.T) {
 func TestCurrentWorkspaceBuildUsesWorkspaceTreeWithoutCommitSHA(t *testing.T) {
 	catalog := testBuildCatalog()
 	catalog.Repos[0].DefaultRef = "main"
-	ts := newTestServerWithCatalog(t, appliance.ProfileBuilder, catalog)
+	ts := newTestServerWithCatalog(t, appliance.ProfileBuilderStorageLANDNS, catalog)
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	ts.createUserWithRole(t, "alice", testPassword, roles.DeveloperRoleID)
 	token := ts.login(t, "alice", testPassword)
@@ -699,7 +699,7 @@ func TestDeleteWorkspaceRejectsActiveJobs(t *testing.T) {
 }
 
 func TestCreateWorkspaceRejectsExistingNameOnDifferentWorkspaceProfile(t *testing.T) {
-	ts := newTestServerWithCatalog(t, appliance.ProfileBuilder, devflows.Catalog{
+	ts := newTestServerWithCatalog(t, appliance.ProfileBuilderStorageLANDNS, devflows.Catalog{
 		WorkProfiles: []devflows.WorkProfile{
 			{Name: "platform-dev", Description: "Platform development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
 			{Name: "firmware-dev", Description: "Firmware development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},

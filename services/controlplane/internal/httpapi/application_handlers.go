@@ -87,6 +87,19 @@ func (h *ApplicationHandlers) Install(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, instance)
 }
 
+func (h *ApplicationHandlers) Disable(w http.ResponseWriter, r *http.Request) {
+	instance, err := h.Applications.Disable(r.Context(), r.PathValue("name"))
+	if errors.Is(err, applications.ErrNotFound) || errors.Is(err, storage.ErrNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "not_found", "Application instance not found", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, instance)
+}
+
 func (h *ApplicationHandlers) GetInstance(w http.ResponseWriter, r *http.Request) {
 	instance, err := h.Applications.GetInstance(r.Context(), r.PathValue("name"))
 	if errors.Is(err, applications.ErrNotFound) || errors.Is(err, storage.ErrNotFound) {

@@ -1271,6 +1271,85 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/applications:
+    get:
+      summary: List release-approved application definitions
+      description: Application definitions are immutable signed-release contracts. This API never accepts arbitrary images or Kubernetes resources.
+      operationId: listApplications
+      responses:
+        "200":
+          description: Approved application catalog.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationDefinitionList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/application-instances:
+    get:
+      summary: List managed application instances
+      operationId: listApplicationInstances
+      responses:
+        "200":
+          description: Current desired and observed application state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationInstanceList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/applications/{applicationName}/install:
+    post:
+      summary: Enable a release-approved application
+      operationId: installApplication
+      parameters:
+        - $ref: "#/components/parameters/ApplicationName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: string
+      responses:
+        "202":
+          description: Application accepted for reconciliation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationInstance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/applications/{applicationName}/disable:
+    post:
+      summary: Disable a managed application and withdraw its host exposure
+      operationId: disableApplication
+      parameters:
+        - $ref: "#/components/parameters/ApplicationName"
+      responses:
+        "202":
+          description: Application withdrawal accepted for reconciliation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationInstance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/video/library:
     get:
       summary: List video library root
@@ -1464,6 +1543,12 @@ components:
       required: true
       schema:
         type: string
+    ApplicationName:
+      in: path
+      name: applicationName
+      required: true
+      schema:
+        type: string
   responses:
     Unauthorized:
       description: Authentication required.
@@ -1496,6 +1581,54 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    ApplicationDefinition:
+      type: object
+      required: [name, version]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+    ApplicationDefinitionList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplicationDefinition"
+    ApplicationInstance:
+      type: object
+      required: [name, definitionName, definitionVersion, desiredState, observedState, createdAt, updatedAt]
+      properties:
+        name:
+          type: string
+        definitionName:
+          type: string
+        definitionVersion:
+          type: string
+        desiredState:
+          type: string
+          enum: [running, stopped]
+        observedState:
+          type: string
+          enum: [pending, running, stopped, error]
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ApplicationInstanceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplicationInstance"
     VideoLibraryEntry:
       type: object
       required: [name, path, type, sizeBytes, modifiedAt]

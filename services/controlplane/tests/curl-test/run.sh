@@ -176,10 +176,12 @@ wait_for_ready() {
 printf '%s\n' "${ADMIN_PASSWORD}" > "${PASSWORD_DIR}/admin.txt"
 cat > "${CONFIG_FILE}" <<EOF
 {
-  "applianceProfile": "builder",
+  "applianceProfile": "builder-storage-landns",
   "allowedGitSourceHosts": ["git.internal.example.com"],
   "workspaceProvisionerImageDigest": "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "builderImageDigest": "${BUILD_BUILDER_DIGEST}",
+	"dnsReadyURL": "http://dns-server.dns.svc.cluster.local:8181/ready",
+	"dnsAllowFakeZoneSync": true,
   "buildCatalog": {
     "workProfiles": [
       {

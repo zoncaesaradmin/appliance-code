@@ -120,7 +120,7 @@ describe("remote control-plane client", () => {
       refreshToken: "refresh",
       accessExpiresAt: "2026-08-03T02:00:00Z"
     });
-    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 204, statusText: "No Content" }));
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204, statusText: "No Content" }));
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new RemoteControlPlaneClient("https://appliance.example/");

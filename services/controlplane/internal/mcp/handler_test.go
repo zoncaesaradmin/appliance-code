@@ -443,7 +443,7 @@ func TestRESTAndMCPAuthorizationEquivalence(t *testing.T) {
 }
 
 func TestBuilderProfileListsDeveloperWorkflowTools(t *testing.T) {
-	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -514,7 +514,7 @@ func TestCoreProfileRejectsDirectDeveloperWorkflowToolCallAsNotFound(t *testing.
 }
 
 func TestMCPInvokeAloneCannotSubmitBuild(t *testing.T) {
-	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -557,7 +557,7 @@ func TestMCPInvokeAloneCannotSubmitBuild(t *testing.T) {
 }
 
 func TestToolsListFiltersByToolPermission(t *testing.T) {
-	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -600,7 +600,7 @@ func TestToolsListFiltersByToolPermission(t *testing.T) {
 }
 
 func TestBuildPermissionAloneCannotUseMCP(t *testing.T) {
-	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -614,7 +614,7 @@ func TestBuildPermissionAloneCannotUseMCP(t *testing.T) {
 }
 
 func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
-	env := newTestEnvWithProfile(t, appliance.ProfileBuilder)
+	env := newTestEnvWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	if _, err := bootstrap.Init(t.Context(), env.services.DB, env.services.UserStore, env.services.RoleStore, env.services.Users, "admin", testPassword, "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -732,7 +732,7 @@ func TestBuilderProfileToolCallsSubmitStatusLogsAndCancelJob(t *testing.T) {
 }
 
 func TestCreateWorkspaceToolRejectsExistingNameOnDifferentWorkspaceProfile(t *testing.T) {
-	env := newTestEnvWithCatalog(t, appliance.ProfileBuilder, devflows.Catalog{
+	env := newTestEnvWithCatalog(t, appliance.ProfileBuilderStorageLANDNS, devflows.Catalog{
 		WorkProfiles: []devflows.WorkProfile{
 			{Name: "platform-dev", Description: "Platform development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},
 			{Name: "firmware-dev", Description: "Firmware development", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}},

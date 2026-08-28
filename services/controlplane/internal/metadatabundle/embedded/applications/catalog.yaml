@@ -1,4 +1,45 @@
-# Reviewed application contracts are added here by release engineering. The
-# empty base catalog keeps the contract format present without granting an app
-# install path until an explicitly reviewed contract is shipped.
-applications: []
+# Reviewed application contracts are added here by release engineering. Images
+# are exported into the signed appliance bundle and imported locally before an
+# administrator can enable the corresponding application.
+applications:
+  - apiVersion: appliance.zon/v1
+    kind: ApplicationDefinition
+    metadata:
+      name: jellyfin
+      version: 10.10.7
+      description: Jellyfin media streaming for approved appliance video libraries.
+    runtime:
+      image:
+        # jellyfin/jellyfin:10.10.7 linux/amd64, re-exported as registry.local/jellyfin.
+        reference: registry.local/jellyfin@sha256:3b38dae4c3ddd6ebc7378538fba4d3f314070ebefbdb3d688166b7c8658fb123
+      port: 8096
+      endpoints:
+        - name: http
+          protocol: TCP
+          port: 8096
+          targetPort: 8096
+          direct: true
+          mdns:
+            serviceType: _jellyfin._tcp
+            instance: jellyfin
+            aliases: [jellyfin.local]
+        - name: discovery
+          protocol: UDP
+          port: 7359
+          targetPort: 7359
+          direct: true
+          mdns:
+            serviceType: _jellyfin._udp
+            instance: jellyfin-discovery
+      volumes:
+        - name: config
+          kind: persistent
+          mountPath: /config
+          size: 5Gi
+        - name: cache
+          kind: emptyDir
+          mountPath: /cache
+      security:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 20000

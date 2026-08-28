@@ -21,7 +21,7 @@ func TestLANDNSPublish_ProxiesToRemoteDNSAppliance(t *testing.T) {
 	}))
 	t.Cleanup(remote.Close)
 
-	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	ts := newTestServerWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	_ = ts.bootstrapAdmin(t, "admin", testPassword)
 	token := ts.login(t, "admin", testPassword)
 
@@ -48,7 +48,7 @@ func TestLANDNSPublish_ProxiesToRemoteDNSAppliance(t *testing.T) {
 }
 
 func TestLANDNSPublish_RequiresPermission(t *testing.T) {
-	ts := newTestServerWithProfile(t, appliance.ProfileCore)
+	ts := newTestServerWithProfile(t, appliance.ProfileBuilderStorageLANDNS)
 	_ = ts.bootstrapAdmin(t, "admin", testPassword)
 	_ = ts.createUserWithRole(t, "viewer", testPassword, roles.ViewerRoleID)
 	token := ts.login(t, "viewer", testPassword)

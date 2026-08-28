@@ -132,7 +132,7 @@ func TestAppNewRequiresLoggers(t *testing.T) {
 
 func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilder)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
 	cfg.WorkflowEngine = "fake"
 	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -211,7 +211,7 @@ func TestStorageProfileReadinessAcceptsRegistryAuthChallenge(t *testing.T) {
 	defer srv.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileStorage)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
 	cfg.ArtifactServerBaseURL = srv.URL
 	cfg.ArtifactServerAllowFake = false
 	logger, err := logging.New("error")
@@ -252,7 +252,7 @@ func TestLANDNSProfileReadinessRequiresDNS(t *testing.T) {
 	defer dnsOK.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
 	cfg.DNSReadyURL = dnsOK.URL + "/ready"
 	logger, err := logging.New("error")
 	if err != nil {
@@ -282,7 +282,7 @@ func TestLANDNSProfileReadinessRequiresDNS(t *testing.T) {
 	}))
 	defer dnsDown.Close()
 	cfg = testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
 	cfg.DNSReadyURL = dnsDown.URL + "/ready"
 	logger, err = logging.New("error")
 	if err != nil {
@@ -318,7 +318,7 @@ func TestStorageProfileReadinessLogsDependencyFailures(t *testing.T) {
 	defer srv.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileStorage)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
 	cfg.ArtifactServerBaseURL = srv.URL
 	cfg.ArtifactServerAllowFake = false
 
@@ -370,7 +370,7 @@ func TestStorageProfileRegistryClientUsesInternalBearerAuth(t *testing.T) {
 	defer srv.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileStorage)
+	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
 	cfg.ArtifactServerBaseURL = srv.URL
 	cfg.ArtifactServerAllowFake = false
 	logger, err := logging.New("error")
