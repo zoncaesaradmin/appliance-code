@@ -42,21 +42,10 @@ const (
 	CapabilityApplications Capability = "applications"
 )
 
+type CapabilityCatalog map[Capability]capabilityDefinition
+
 type capabilityDefinition struct {
 	Dependencies []Capability
-}
-
-var capabilityCatalog = map[Capability]capabilityDefinition{
-	CapabilityBase:         {},
-	CapabilityHost:         {Dependencies: []Capability{CapabilityBase}},
-	CapabilityWorkflows:    {Dependencies: []Capability{CapabilityBase}},
-	CapabilityBuild:        {Dependencies: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityArtifact}},
-	CapabilityFiles:        {Dependencies: []Capability{CapabilityBase}},
-	CapabilityArtifact:     {Dependencies: []Capability{CapabilityBase}},
-	CapabilityDNS:          {Dependencies: []Capability{CapabilityBase}},
-	CapabilityInference:    {Dependencies: []Capability{CapabilityBase}},
-	CapabilityVideo:        {Dependencies: []Capability{CapabilityBase}},
-	CapabilityApplications: {Dependencies: []Capability{CapabilityBase}},
 }
 
 type ProfileDefinition struct {
@@ -103,6 +92,28 @@ func EmbeddedProfileCatalog() (ProfileCatalog, error) {
 	return catalog, nil
 }
 
+// EmbeddedCapabilityCatalog converts the canonical metadata capability
+// catalog. Capability dependency policy is never authored in Go.
+func EmbeddedCapabilityCatalog() (CapabilityCatalog, error) {
+	metadataCatalog, err := metadatabundle.EmbeddedCapabilityCatalog()
+	if err != nil {
+		return nil, err
+	}
+	catalog := make(CapabilityCatalog, len(metadataCatalog.Capabilities))
+	for name, definition := range metadataCatalog.Capabilities {
+		capability := Capability(strings.TrimSpace(name))
+		if capability == "" {
+			return nil, fmt.Errorf("embedded capabilities catalog contains an empty capability name")
+		}
+		dependencies := make([]Capability, len(definition.Requires))
+		for i, dependency := range definition.Requires {
+			dependencies[i] = Capability(strings.TrimSpace(dependency))
+		}
+		catalog[capability] = capabilityDefinition{Dependencies: dependencies}
+	}
+	return catalog, nil
+}
+
 // Set is the resolved enabled capability set for one appliance instance.
 type Set struct {
 	enabled map[Capability]struct{}
@@ -138,11 +149,15 @@ type ResolvedProfile struct {
 // returns the resolved enabled capability set. It does not add implicit
 // dependencies; invalid profile-to-capability combinations fail closed.
 func ResolveProfile(name string) (ResolvedProfile, error) {
-	catalog, err := EmbeddedProfileCatalog()
+	profiles, err := EmbeddedProfileCatalog()
 	if err != nil {
 		return ResolvedProfile{}, fmt.Errorf("load embedded appliance profile catalog: %w", err)
 	}
-	return ResolveProfileWithCatalog(name, catalog)
+	capabilities, err := EmbeddedCapabilityCatalog()
+	if err != nil {
+		return ResolvedProfile{}, fmt.Errorf("load embedded appliance capability catalog: %w", err)
+	}
+	return ResolveProfileWithCatalogs(name, profiles, capabilities)
 }
 
 func ResolveProfileWithLoader(name string, loader ProfileCatalogLoader) (ResolvedProfile, error) {
@@ -160,6 +175,17 @@ func ResolveProfileWithLoader(name string, loader ProfileCatalogLoader) (Resolve
 // and returns the resolved enabled capability set. It does not add implicit
 // dependencies; invalid profile-to-capability combinations fail closed.
 func ResolveProfileWithCatalog(name string, catalog ProfileCatalog) (ResolvedProfile, error) {
+	capabilities, err := EmbeddedCapabilityCatalog()
+	if err != nil {
+		return ResolvedProfile{}, fmt.Errorf("load embedded appliance capability catalog: %w", err)
+	}
+	return ResolveProfileWithCatalogs(name, catalog, capabilities)
+}
+
+// ResolveProfileWithCatalogs validates a profile against the supplied metadata
+// profiles and capabilities. This is used by metadata-bundle consumers after
+// the bundle signature and schema have been validated.
+func ResolveProfileWithCatalogs(name string, catalog ProfileCatalog, capabilityCatalog CapabilityCatalog) (ResolvedProfile, error) {
 	profile := Profile(strings.TrimSpace(name))
 	definition, ok := catalog[profile]
 	if !ok {
@@ -193,14 +219,22 @@ func ResolveProfileWithCatalog(name string, catalog ProfileCatalog) (ResolvedPro
 
 // IsKnownCapability reports whether capability is in the published catalog.
 func IsKnownCapability(capability Capability) bool {
-	_, ok := capabilityCatalog[capability]
+	catalog, err := EmbeddedCapabilityCatalog()
+	if err != nil {
+		return false
+	}
+	_, ok := catalog[capability]
 	return ok
 }
 
 // KnownCapabilities returns every published capability in stable order.
 func KnownCapabilities() []Capability {
-	names := make([]Capability, 0, len(capabilityCatalog))
-	for capability := range capabilityCatalog {
+	catalog, err := EmbeddedCapabilityCatalog()
+	if err != nil {
+		return nil
+	}
+	names := make([]Capability, 0, len(catalog))
+	for capability := range catalog {
 		names = append(names, capability)
 	}
 	sort.Slice(names, func(i, j int) bool { return names[i] < names[j] })
@@ -209,7 +243,11 @@ func KnownCapabilities() []Capability {
 
 // CapabilityDependencies returns direct dependencies for a capability.
 func CapabilityDependencies(capability Capability) ([]Capability, bool) {
-	def, ok := capabilityCatalog[capability]
+	catalog, err := EmbeddedCapabilityCatalog()
+	if err != nil {
+		return nil, false
+	}
+	def, ok := catalog[capability]
 	if !ok {
 		return nil, false
 	}

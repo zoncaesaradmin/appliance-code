@@ -22,6 +22,8 @@ type Bundle struct {
 	Manifest     Manifest
 	Profiles     ProfileCatalog
 	Capabilities CapabilityCatalog
+	Modules      ModuleCatalog
+	Applications ApplicationCatalog
 	DebugTools   *DebugToolsSection
 }
 
@@ -60,6 +62,39 @@ type CapabilityDef struct {
 	Conflicts   []string            `yaml:"conflicts" json:"conflicts"`
 	License     CapabilityLicense   `yaml:"license" json:"license"`
 	Artifacts   CapabilityArtifacts `yaml:"artifacts" json:"artifacts"`
+	Packages    []string            `yaml:"packages" json:"packages"`
+}
+
+// ModuleCatalog declares the platform module surface exposed by a metadata
+// release. It intentionally uses plain strings to keep this package independent
+// of the control-plane routing implementation.
+type ModuleCatalog struct {
+	Modules []ModuleDef `yaml:"modules" json:"modules"`
+}
+
+type ModuleDef struct {
+	Name                 string        `yaml:"name" json:"name"`
+	Kind                 string        `yaml:"kind" json:"kind"`
+	RequiredCapabilities []string      `yaml:"requiredCapabilities" json:"requiredCapabilities"`
+	Dependencies         []string      `yaml:"dependencies" json:"dependencies"`
+	ExecutionMode        string        `yaml:"executionMode" json:"executionMode"`
+	EntitlementKey       string        `yaml:"entitlementKey" json:"entitlementKey"`
+	BaseURL              string        `yaml:"baseURL" json:"baseURL"`
+	Routes               []ModuleRoute `yaml:"routes" json:"routes"`
+	SecurityClass        string        `yaml:"securityClass" json:"securityClass"`
+}
+
+type ModuleRoute struct {
+	Method       string `yaml:"method" json:"method"`
+	ExternalPath string `yaml:"externalPath" json:"externalPath"`
+	UpstreamPath string `yaml:"upstreamPath" json:"upstreamPath"`
+	Permission   string `yaml:"permission" json:"permission"`
+}
+
+// ApplicationCatalog is preserved as raw YAML so the application subsystem
+// owns its contract schema without creating an import cycle here.
+type ApplicationCatalog struct {
+	Raw []byte `yaml:"-" json:"-"`
 }
 
 type CapabilityLicense struct {

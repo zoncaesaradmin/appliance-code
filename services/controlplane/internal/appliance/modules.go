@@ -1,6 +1,11 @@
 package appliance
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+
+	"appliance-code/services/controlplane/internal/metadatabundle"
+)
 
 type ModuleKind string
 
@@ -75,76 +80,27 @@ func (AlwaysEntitled) IsEntitled(ModuleDescriptor, EntitlementContext) bool {
 	return true
 }
 
-func BuiltInModuleCatalog() []ModuleDescriptor {
-	return []ModuleDescriptor{
-		{
-			Name:                 ModuleNameHostAgent,
-			Kind:                 ModuleKindPlatform,
-			RequiredCapabilities: []Capability{CapabilityHost},
-			ExecutionMode:        ExecutionModeHostAgent,
-			EntitlementKey:       ModuleNameHostAgent,
-			BaseURL:              "http://host-agent.ace-apps.svc.cluster.local:8080",
-			SecurityClass:        SecurityClassHostPrivileged,
-			Routes: []ModuleRoute{
-				{Method: "GET", ExternalPath: "/api/v1/host/info", UpstreamPath: "/internal/v1/host/info", Permission: "host.read"},
-				{Method: "GET", ExternalPath: "/api/v1/host/stats", UpstreamPath: "/internal/v1/host/stats", Permission: "host.read"},
-				{Method: "GET", ExternalPath: "/api/v1/host/health", UpstreamPath: "/internal/v1/host/health", Permission: "host.read"},
-				{Method: "GET", ExternalPath: "/api/v1/host/wifi", UpstreamPath: "/internal/v1/host/wifi", Permission: "host.read"},
-				{Method: "PUT", ExternalPath: "/api/v1/host/wifi/enable", UpstreamPath: "/internal/v1/host/wifi/enable", Permission: "host.write"},
-				{Method: "PUT", ExternalPath: "/api/v1/host/wifi", UpstreamPath: "/internal/v1/host/wifi", Permission: "host.write"},
-				{Method: "GET", ExternalPath: "/api/v1/host/wifi/scan", UpstreamPath: "/internal/v1/host/wifi/scan", Permission: "host.read"},
-				{Method: "GET", ExternalPath: "/api/v1/host/wifi-ap", UpstreamPath: "/internal/v1/host/wifi-ap", Permission: "host.read"},
-				{Method: "PUT", ExternalPath: "/api/v1/host/wifi-ap", UpstreamPath: "/internal/v1/host/wifi-ap", Permission: "host.write"},
-				{Method: "GET", ExternalPath: "/api/v1/host/mdns", UpstreamPath: "/internal/v1/host/mdns", Permission: "host.read"},
-				{Method: "PUT", ExternalPath: "/api/v1/host/mdns", UpstreamPath: "/internal/v1/host/mdns", Permission: "host.write"},
-			},
-		},
-		{
-			Name:                 ModuleNameFiles,
-			Kind:                 ModuleKindPlatform,
-			RequiredCapabilities: []Capability{CapabilityFiles},
-			ExecutionMode:        ExecutionModeClusterService,
-			EntitlementKey:       ModuleNameFiles,
-			SecurityClass:        SecurityClassRestricted,
-		},
-		{
-			Name:                 ModuleNameArtifactRegistry,
-			Kind:                 ModuleKindPlatform,
-			RequiredCapabilities: []Capability{CapabilityArtifact},
-			ExecutionMode:        ExecutionModeClusterService,
-			EntitlementKey:       ModuleNameArtifactRegistry,
-			SecurityClass:        SecurityClassRestricted,
-		},
-		{
-			Name:                 ModuleNameLANDNS,
-			Kind:                 ModuleKindPlatform,
-			RequiredCapabilities: []Capability{CapabilityDNS},
-			ExecutionMode:        ExecutionModeClusterService,
-			EntitlementKey:       ModuleNameLANDNS,
-			SecurityClass:        SecurityClassRestricted,
-		},
-		{
-			Name:                 ModuleNameBuild,
-			Kind:                 ModuleKindPlatform,
-			RequiredCapabilities: []Capability{CapabilityBuild},
-			ExecutionMode:        ExecutionModeWorkflowBacked,
-			EntitlementKey:       ModuleNameBuild,
-			SecurityClass:        SecurityClassRestricted,
-		},
-		{
-			Name:                 ModuleNameInferenceRuntime,
-			Kind:                 ModuleKindPlatform,
-			RequiredCapabilities: []Capability{CapabilityInference},
-			ExecutionMode:        ExecutionModeClusterService,
-			EntitlementKey:       ModuleNameInferenceRuntime,
-			BaseURL:              "http://inference-gateway.inference.svc.cluster.local:8080",
-			SecurityClass:        SecurityClassRestricted,
-			Routes: []ModuleRoute{
-				{Method: "GET", ExternalPath: "/inference/v1/models", UpstreamPath: "/v1/models", Permission: "inference.models.read"},
-				{Method: "POST", ExternalPath: "/inference/v1/chat/completions", UpstreamPath: "/v1/chat/completions", Permission: "inference.use"},
-			},
-		},
+func EmbeddedModuleCatalog() ([]ModuleDescriptor, error) {
+	catalog, err := metadatabundle.EmbeddedModuleCatalog()
+	if err != nil {
+		return nil, err
 	}
+	modules := make([]ModuleDescriptor, 0, len(catalog.Modules))
+	for _, module := range catalog.Modules {
+		routes := make([]ModuleRoute, len(module.Routes))
+		for i, route := range module.Routes {
+			routes[i] = ModuleRoute{Method: route.Method, ExternalPath: route.ExternalPath, UpstreamPath: route.UpstreamPath, Permission: route.Permission}
+		}
+		caps := make([]Capability, len(module.RequiredCapabilities))
+		for i, capability := range module.RequiredCapabilities {
+			caps[i] = Capability(capability)
+		}
+		modules = append(modules, ModuleDescriptor{Name: module.Name, Kind: ModuleKind(module.Kind), RequiredCapabilities: caps, Dependencies: append([]string(nil), module.Dependencies...), ExecutionMode: ExecutionMode(module.ExecutionMode), EntitlementKey: module.EntitlementKey, BaseURL: module.BaseURL, Routes: routes, SecurityClass: SecurityClass(module.SecurityClass)})
+	}
+	if len(modules) == 0 {
+		return nil, fmt.Errorf("embedded modules catalog is empty")
+	}
+	return modules, nil
 }
 
 func ResolveModules(resolved ResolvedProfile, evaluator EntitlementEvaluator, catalog []ModuleDescriptor) []ModuleDescriptor {
@@ -156,7 +112,7 @@ func ResolveModulesWithLoader(resolved ResolvedProfile, evaluator EntitlementEva
 		evaluator = AlwaysEntitled{}
 	}
 	if loader == nil {
-		loader = StaticModuleCatalogLoader{Modules: BuiltInModuleCatalog()}
+		return nil, fmt.Errorf("module catalog loader is required")
 	}
 	catalog, err := loader.LoadModuleCatalog()
 	if err != nil {

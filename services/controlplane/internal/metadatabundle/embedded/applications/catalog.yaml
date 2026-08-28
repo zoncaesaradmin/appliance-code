@@ -1,0 +1,4 @@
+# Reviewed application contracts are added here by release engineering. The
+# empty base catalog keeps the contract format present without granting an app
+# install path until an explicitly reviewed contract is shipped.
+applications: []

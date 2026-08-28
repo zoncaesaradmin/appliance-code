@@ -1,0 +1,34 @@
+modules:
+  - name: host-agent
+    kind: platform
+    requiredCapabilities: [host]
+    executionMode: host-agent
+    entitlementKey: host-agent
+    baseURL: http://host-agent.ace-apps.svc.cluster.local:8080
+    securityClass: host-privileged
+    routes:
+      - {method: GET, externalPath: /api/v1/host/info, upstreamPath: /internal/v1/host/info, permission: host.read}
+      - {method: GET, externalPath: /api/v1/host/stats, upstreamPath: /internal/v1/host/stats, permission: host.read}
+      - {method: GET, externalPath: /api/v1/host/health, upstreamPath: /internal/v1/host/health, permission: host.read}
+      - {method: GET, externalPath: /api/v1/host/wifi, upstreamPath: /internal/v1/host/wifi, permission: host.read}
+      - {method: PUT, externalPath: /api/v1/host/wifi/enable, upstreamPath: /internal/v1/host/wifi/enable, permission: host.write}
+      - {method: PUT, externalPath: /api/v1/host/wifi, upstreamPath: /internal/v1/host/wifi, permission: host.write}
+      - {method: GET, externalPath: /api/v1/host/wifi/scan, upstreamPath: /internal/v1/host/wifi/scan, permission: host.read}
+      - {method: GET, externalPath: /api/v1/host/wifi-ap, upstreamPath: /internal/v1/host/wifi-ap, permission: host.read}
+      - {method: PUT, externalPath: /api/v1/host/wifi-ap, upstreamPath: /internal/v1/host/wifi-ap, permission: host.write}
+      - {method: GET, externalPath: /api/v1/host/mdns, upstreamPath: /internal/v1/host/mdns, permission: host.read}
+      - {method: PUT, externalPath: /api/v1/host/mdns, upstreamPath: /internal/v1/host/mdns, permission: host.write}
+  - {name: files, kind: platform, requiredCapabilities: [files], executionMode: cluster-service, entitlementKey: files, securityClass: restricted}
+  - {name: artifact-registry, kind: platform, requiredCapabilities: [artifact], executionMode: cluster-service, entitlementKey: artifact-registry, securityClass: restricted}
+  - {name: lan-dns, kind: platform, requiredCapabilities: [dns], executionMode: cluster-service, entitlementKey: lan-dns, securityClass: restricted}
+  - {name: build, kind: platform, requiredCapabilities: [build], executionMode: workflow-backed, entitlementKey: build, securityClass: restricted}
+  - name: inference-runtime
+    kind: platform
+    requiredCapabilities: [inference]
+    executionMode: cluster-service
+    entitlementKey: inference-runtime
+    baseURL: http://inference-gateway.inference.svc.cluster.local:8080
+    securityClass: restricted
+    routes:
+      - {method: GET, externalPath: /inference/v1/models, upstreamPath: /v1/models, permission: inference.models.read}
+      - {method: POST, externalPath: /inference/v1/chat/completions, upstreamPath: /v1/chat/completions, permission: inference.use}

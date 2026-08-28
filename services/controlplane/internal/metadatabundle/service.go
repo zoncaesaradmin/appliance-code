@@ -264,8 +264,8 @@ func (s *Service) ensureActive(ctx context.Context) error {
 	if err := os.MkdirAll(destRoot, 0o755); err != nil {
 		return err
 	}
-	// Prefer a host-seeded tree (zonctl extract onto the hostPath mount)
-	// over re-materializing the embedded snapshot of metadata-bundle/base.
+	// zonctl stages this exact signed metadata tree before the control plane is
+	// started. Runtime policy must never be regenerated from image content.
 	if b, err := LoadDirectory(dest); err == nil && CompatibleWithSoftware(s.software, b.Manifest.Metadata.MetadataVersion) == nil {
 		digest, _ := dirDigest(dest)
 		rec := storage.MetadataBundleRecord{
@@ -285,30 +285,7 @@ func (s *Service) ensureActive(ctx context.Context) error {
 		s.active = b
 		return nil
 	}
-	if err := materializeEmbedded(dest, s.software, baseVer); err != nil {
-		return err
-	}
-	b, err := LoadDirectory(dest)
-	if err != nil {
-		return err
-	}
-	digest, _ := dirDigest(dest)
-	rec := storage.MetadataBundleRecord{
-		Slot:            "active",
-		MetadataVersion: baseVer,
-		SoftwareVersion: b.Manifest.Metadata.SoftwareVersion,
-		Digest:          digest,
-		DirectoryName:   dirName,
-		DirectoryPath:   dest,
-		Signature:       "offline-dev",
-		InstalledAt:     s.now().UTC(),
-		InstalledBy:     "system",
-	}
-	if err := s.store.PutMetadataBundle(ctx, rec); err != nil {
-		return err
-	}
-	s.active = b
-	return nil
+	return fmt.Errorf("metadatabundle: active signed metadata bundle %q is not staged at %s", baseVer, dest)
 }
 
 func validateSignature(signature string) error {

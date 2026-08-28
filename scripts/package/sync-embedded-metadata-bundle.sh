@@ -5,7 +5,7 @@
 # Go's //go:embed cannot reach outside the controlplane module, so a
 # byte-identical snapshot is kept under
 # services/controlplane/internal/metadatabundle/embedded/ for binary
-# fallback materialization. Edit metadata-bundle/base only, then run this
+# compile-time catalog parsing. Edit metadata-bundle/base only, then run this
 # script (or make build / make verify).
 set -euo pipefail
 

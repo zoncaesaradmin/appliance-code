@@ -7,6 +7,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.base
     artifacts:
       required: [control-plane-image, control-plane-chart]
+    packages: [foundation]
   host:
     displayName: Host
     requires: [base]
@@ -15,6 +16,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.host
     artifacts:
       required: [host-agent-image]
+    packages: [deviceuser]
   files:
     displayName: Files
     requires: [base]
@@ -23,6 +25,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.files
     artifacts:
       required: []
+    packages: [foundation]
   workflows:
     displayName: Workflows
     requires: [base]
@@ -31,6 +34,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.workflows
     artifacts:
       required: [workflow-templates]
+    packages: [developer]
   build:
     displayName: Build
     requires: [base, host, workflows, artifact]
@@ -39,6 +43,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.build
     artifacts:
       required: [workspace-provisioner-image, workflow-templates]
+    packages: [developer]
   artifact:
     displayName: Artifact
     requires: [base]
@@ -47,6 +52,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.artifact
     artifacts:
       required: [artifact-server-image, appliance-registry-chart]
+    packages: [developer]
   dns:
     displayName: LAN DNS
     requires: [base, host]
@@ -55,6 +61,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.dns
     artifacts:
       required: [coredns-image, appliance-dns-chart]
+    packages: [developer]
   inference:
     displayName: Inference
     requires: [base]
@@ -63,6 +70,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.inference
     artifacts:
       required: [inference-runtime-image, appliance-inference-chart]
+    packages: [inference]
   video:
     displayName: Video
     requires: [base]
@@ -71,3 +79,13 @@ capabilities:
       requiredEntitlement: zon.capabilities.video
     artifacts:
       required: []
+    packages: [foundation]
+  applications:
+    displayName: Applications
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.applications
+    artifacts:
+      required: [host-agent-image]
+    packages: [deviceuser]

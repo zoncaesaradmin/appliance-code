@@ -1,262 +1,51 @@
 package appliance_test
 
 import (
-	"errors"
-	"strings"
 	"testing"
 
 	"appliance-code/services/controlplane/internal/appliance"
 )
 
-func TestResolveProfile(t *testing.T) {
-	t.Run("core", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("core")
-		if err != nil {
-			t.Fatalf("ResolveProfile(core): %v", err)
-		}
-		if resolved.Name != appliance.ProfileCore {
-			t.Fatalf("resolved.Name = %q, want %q", resolved.Name, appliance.ProfileCore)
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
-			t.Fatal("core should enable base")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
-			t.Fatal("core should enable workflows")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
-			t.Fatal("core should enable files")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
-			t.Fatal("core should not enable build")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
-			t.Fatal("core should not enable artifact")
-		}
-	})
-
-	t.Run("builder", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("builder")
-		if err != nil {
-			t.Fatalf("ResolveProfile(builder): %v", err)
-		}
-		for _, capability := range []appliance.Capability{
-			appliance.CapabilityBase,
-			appliance.CapabilityFiles,
-			appliance.CapabilityWorkflows,
-			appliance.CapabilityBuild,
-			appliance.CapabilityArtifact,
-		} {
-			if !resolved.Capabilities.Enabled(capability) {
-				t.Fatalf("builder should enable %q", capability)
-			}
-		}
-	})
-
-	t.Run("landns", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("landns")
-		if err != nil {
-			t.Fatalf("ResolveProfile(landns): %v", err)
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
-			t.Fatal("landns should enable base")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
-			t.Fatal("landns should enable dns")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
-			t.Fatal("landns should enable files")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
-			t.Fatal("landns should not enable artifact")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
-			t.Fatal("landns should not enable workflows")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
-			t.Fatal("landns should not enable build")
-		}
-	})
-
-	t.Run("storage-landns", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("storage-landns")
-		if err != nil {
-			t.Fatalf("ResolveProfile(storage-landns): %v", err)
-		}
-		for _, capability := range []appliance.Capability{
-			appliance.CapabilityBase,
-			appliance.CapabilityFiles,
-			appliance.CapabilityArtifact,
-			appliance.CapabilityDNS,
-		} {
-			if !resolved.Capabilities.Enabled(capability) {
-				t.Fatalf("storage-landns should enable %q", capability)
-			}
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityWorkflows) {
-			t.Fatal("storage-landns should not enable workflows")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
-			t.Fatal("storage-landns should not enable build")
-		}
-	})
-
-	for _, name := range []string{"builder-landns", "builder-storage-landns"} {
-		t.Run(name, func(t *testing.T) {
-			resolved, err := appliance.ResolveProfile(name)
+func TestResolveProfileUsesCanonicalMetadataCatalog(t *testing.T) {
+	tests := []struct {
+		name string
+		want []appliance.Capability
+	}{
+		{"core", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityFiles}},
+		{"builder-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
+		{"builder-lanllm-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS, appliance.CapabilityInference}},
+		{"training", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityVideo}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, err := appliance.ResolveProfile(tc.name)
 			if err != nil {
-				t.Fatalf("ResolveProfile(%s): %v", name, err)
+				t.Fatalf("ResolveProfile(%s): %v", tc.name, err)
 			}
-			for _, capability := range []appliance.Capability{
-				appliance.CapabilityBase,
-				appliance.CapabilityWorkflows,
-				appliance.CapabilityBuild,
-				appliance.CapabilityArtifact,
-				appliance.CapabilityDNS,
-			} {
+			for _, capability := range tc.want {
 				if !resolved.Capabilities.Enabled(capability) {
-					t.Fatalf("%s should enable %q", name, capability)
+					t.Fatalf("%s should enable %q", tc.name, capability)
 				}
 			}
 		})
 	}
-
-	t.Run("lanllm", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("lanllm")
-		if err != nil {
-			t.Fatalf("ResolveProfile(lanllm): %v", err)
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
-			t.Fatal("lanllm should enable base")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityInference) {
-			t.Fatal("lanllm should enable inference")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
-			t.Fatal("lanllm should enable files")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
-			t.Fatal("lanllm should not enable build")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
-			t.Fatal("lanllm should not enable artifact")
-		}
-	})
-
-	t.Run("training", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("training")
-		if err != nil {
-			t.Fatalf("ResolveProfile(training): %v", err)
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityBase) {
-			t.Fatal("training should enable base")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityFiles) {
-			t.Fatal("training should enable files")
-		}
-		if !resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
-			t.Fatal("training should enable video")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityBuild) {
-			t.Fatal("training should not enable build")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityArtifact) {
-			t.Fatal("training should not enable artifact")
-		}
-		if resolved.Capabilities.Enabled(appliance.CapabilityInference) {
-			t.Fatal("training should not enable inference")
-		}
-	})
-
-	t.Run("builder-lanllm", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("builder-lanllm")
-		if err != nil {
-			t.Fatalf("ResolveProfile(builder-lanllm): %v", err)
-		}
-		for _, capability := range []appliance.Capability{
-			appliance.CapabilityBase,
-			appliance.CapabilityFiles,
-			appliance.CapabilityWorkflows,
-			appliance.CapabilityBuild,
-			appliance.CapabilityArtifact,
-			appliance.CapabilityInference,
-		} {
-			if !resolved.Capabilities.Enabled(capability) {
-				t.Fatalf("builder-lanllm should enable %q", capability)
-			}
-		}
-	})
-
-	t.Run("builder-lanllm-storage-landns", func(t *testing.T) {
-		resolved, err := appliance.ResolveProfile("builder-lanllm-storage-landns")
-		if err != nil {
-			t.Fatalf("ResolveProfile(builder-lanllm-storage-landns): %v", err)
-		}
-		for _, capability := range []appliance.Capability{
-			appliance.CapabilityBase,
-			appliance.CapabilityHost,
-			appliance.CapabilityFiles,
-			appliance.CapabilityWorkflows,
-			appliance.CapabilityBuild,
-			appliance.CapabilityArtifact,
-			appliance.CapabilityDNS,
-			appliance.CapabilityInference,
-		} {
-			if !resolved.Capabilities.Enabled(capability) {
-				t.Fatalf("builder-lanllm-storage-landns should enable %q", capability)
-			}
-		}
-	})
-
-	t.Run("unknown", func(t *testing.T) {
-		if _, err := appliance.ResolveProfile("does-not-exist"); err == nil {
-			t.Fatal("ResolveProfile should reject an unknown profile")
-		}
-	})
-}
-
-func TestBuiltInProfileCatalogReturnsClone(t *testing.T) {
-	catalog := appliance.BuiltInProfileCatalog()
-	catalog[appliance.ProfileCore] = appliance.ProfileDefinition{}
-
-	resolved, err := appliance.ResolveProfile("core")
-	if err != nil {
-		t.Fatalf("ResolveProfile(core): %v", err)
-	}
-	if !resolved.Capabilities.Enabled(appliance.CapabilityHost) {
-		t.Fatal("mutating cloned catalog must not affect built-in core profile")
+	if _, err := appliance.ResolveProfile("builder"); err == nil {
+		t.Fatal("removed profile should be rejected")
 	}
 }
 
-func TestResolveProfileWithLoaderUsesProvidedCatalog(t *testing.T) {
-	loader := appliance.StaticProfileCatalogLoader{
-		Catalog: appliance.ProfileCatalog{
-			"custom": {Capabilities: []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost}},
-		},
+func TestEmbeddedCapabilityCatalogDefinesDependencies(t *testing.T) {
+	dependencies, ok := appliance.CapabilityDependencies(appliance.CapabilityBuild)
+	if !ok {
+		t.Fatal("build capability should be defined by metadata")
 	}
-	resolved, err := appliance.ResolveProfileWithLoader("custom", loader)
-	if err != nil {
-		t.Fatalf("ResolveProfileWithLoader(custom): %v", err)
+	for _, want := range []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityWorkflows, appliance.CapabilityArtifact} {
+		found := false
+		for _, dependency := range dependencies {
+			found = found || dependency == want
+		}
+		if !found {
+			t.Fatalf("build dependencies = %v, missing %q", dependencies, want)
+		}
 	}
-	if resolved.Name != appliance.Profile("custom") {
-		t.Fatalf("resolved.Name = %q, want custom", resolved.Name)
-	}
-	if !resolved.Capabilities.Enabled(appliance.CapabilityHost) {
-		t.Fatal("custom profile should enable host")
-	}
-}
-
-func TestResolveProfileWithLoaderPropagatesLoaderError(t *testing.T) {
-	_, err := appliance.ResolveProfileWithLoader("core", failingProfileCatalogLoader{})
-	if err == nil {
-		t.Fatal("ResolveProfileWithLoader should fail when the loader fails")
-	}
-	if !strings.Contains(err.Error(), "load appliance profile catalog") {
-		t.Fatalf("error = %q, want loader context", err)
-	}
-}
-
-type failingProfileCatalogLoader struct{}
-
-func (failingProfileCatalogLoader) LoadProfileCatalog() (appliance.ProfileCatalog, error) {
-	return nil, errors.New("boom")
 }

@@ -17,6 +17,8 @@ var allowedTopDirs = map[string]struct{}{
 	"notifications": {},
 	"mcp-tools":     {},
 	"debug-tools":   {},
+	"modules":       {},
+	"applications":  {},
 }
 
 // ValidateBundle checks schema, cross-refs, and directory rules.
@@ -49,6 +51,9 @@ func ValidateBundle(b *Bundle) error {
 	if b.Capabilities.Capabilities == nil || len(b.Capabilities.Capabilities) == 0 {
 		return fmt.Errorf("metadatabundle: capabilities catalog is empty")
 	}
+	if len(b.Modules.Modules) == 0 {
+		return fmt.Errorf("metadatabundle: modules catalog is empty")
+	}
 	for id, cap := range b.Capabilities.Capabilities {
 		for _, dep := range cap.Requires {
 			if _, ok := b.Capabilities.Capabilities[dep]; !ok {
@@ -58,6 +63,30 @@ func ValidateBundle(b *Bundle) error {
 		for _, conflict := range cap.Conflicts {
 			if _, ok := b.Capabilities.Capabilities[conflict]; !ok {
 				return fmt.Errorf("metadatabundle: capability %q conflicts with unknown %q", id, conflict)
+			}
+		}
+	}
+	moduleNames := map[string]struct{}{}
+	for _, module := range b.Modules.Modules {
+		name := strings.TrimSpace(module.Name)
+		if name == "" {
+			return fmt.Errorf("metadatabundle: module name is required")
+		}
+		if _, exists := moduleNames[name]; exists {
+			return fmt.Errorf("metadatabundle: module %q is duplicated", name)
+		}
+		moduleNames[name] = struct{}{}
+		if strings.TrimSpace(module.Kind) == "" || strings.TrimSpace(module.ExecutionMode) == "" || strings.TrimSpace(module.SecurityClass) == "" {
+			return fmt.Errorf("metadatabundle: module %q must define kind, executionMode, and securityClass", name)
+		}
+		for _, capability := range module.RequiredCapabilities {
+			if _, ok := b.Capabilities.Capabilities[strings.TrimSpace(capability)]; !ok {
+				return fmt.Errorf("metadatabundle: module %q requires unknown capability %q", name, capability)
+			}
+		}
+		for _, route := range module.Routes {
+			if strings.TrimSpace(route.Method) == "" || !strings.HasPrefix(strings.TrimSpace(route.ExternalPath), "/") || !strings.HasPrefix(strings.TrimSpace(route.UpstreamPath), "/") || strings.TrimSpace(route.Permission) == "" {
+				return fmt.Errorf("metadatabundle: module %q has an invalid route", name)
 			}
 		}
 	}
@@ -195,6 +224,8 @@ func validateDirectoryLayout(root string) error {
 	for _, req := range []string{
 		filepath.Join(root, "profiles", "catalog.yaml"),
 		filepath.Join(root, "capabilities", "catalog.yaml"),
+		filepath.Join(root, "modules", "catalog.yaml"),
+		filepath.Join(root, "applications", "catalog.yaml"),
 	} {
 		if _, err := os.Stat(req); err != nil {
 			return fmt.Errorf("metadatabundle: missing required file %s", filepath.Base(filepath.Dir(req))+"/"+filepath.Base(req))

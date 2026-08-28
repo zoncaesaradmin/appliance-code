@@ -3,10 +3,6 @@ package metadatabundle
 import (
 	"embed"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -37,55 +33,46 @@ func EmbeddedProfileCatalog() (ProfileCatalog, error) {
 	return catalog, nil
 }
 
-func materializeEmbedded(dest, softwareVersion, metadataVersion string) error {
-	_ = os.RemoveAll(dest)
-	if err := os.MkdirAll(dest, 0o755); err != nil {
-		return err
-	}
-	err := fs.WalkDir(embeddedRoot, "embedded", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel := strings.TrimPrefix(path, "embedded")
-		rel = strings.TrimPrefix(rel, "/")
-		if rel == "" {
-			return nil
-		}
-		target := filepath.Join(dest, filepath.FromSlash(rel))
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		// Packaging/sync markers must not land in active bundle trees.
-		if filepath.Base(path) == "README.generated.md" {
-			return nil
-		}
-		data, err := embeddedRoot.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if filepath.Base(path) == "bundle.yaml" {
-			var manifest Manifest
-			if err := yaml.Unmarshal(data, &manifest); err != nil {
-				return err
-			}
-			sw, err := NormalizeSoftwareVersion(softwareVersion)
-			if err != nil {
-				return err
-			}
-			manifest.Metadata.SoftwareVersion = sw
-			manifest.Metadata.MetadataVersion = metadataVersion
-			data, err = yaml.Marshal(&manifest)
-			if err != nil {
-				return err
-			}
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	})
+// EmbeddedCapabilityCatalog reads the canonical capability policy compiled
+// from metadata-bundle/base/capabilities/catalog.yaml.
+func EmbeddedCapabilityCatalog() (CapabilityCatalog, error) {
+	data, err := embeddedRoot.ReadFile("embedded/capabilities/catalog.yaml")
 	if err != nil {
-		return fmt.Errorf("metadatabundle: materialize embedded: %w", err)
+		return CapabilityCatalog{}, fmt.Errorf("metadatabundle: read embedded capabilities catalog: %w", err)
 	}
-	return nil
+	var catalog CapabilityCatalog
+	if err := yaml.Unmarshal(data, &catalog); err != nil {
+		return CapabilityCatalog{}, fmt.Errorf("metadatabundle: parse embedded capabilities catalog: %w", err)
+	}
+	if len(catalog.Capabilities) == 0 {
+		return CapabilityCatalog{}, fmt.Errorf("metadatabundle: embedded capabilities catalog is empty")
+	}
+	return catalog, nil
+}
+
+// EmbeddedModuleCatalog reads the canonical module descriptors compiled from
+// metadata-bundle/base/modules/catalog.yaml.
+func EmbeddedModuleCatalog() (ModuleCatalog, error) {
+	data, err := embeddedRoot.ReadFile("embedded/modules/catalog.yaml")
+	if err != nil {
+		return ModuleCatalog{}, fmt.Errorf("metadatabundle: read embedded modules catalog: %w", err)
+	}
+	var catalog ModuleCatalog
+	if err := yaml.Unmarshal(data, &catalog); err != nil {
+		return ModuleCatalog{}, fmt.Errorf("metadatabundle: parse embedded modules catalog: %w", err)
+	}
+	if len(catalog.Modules) == 0 {
+		return ModuleCatalog{}, fmt.Errorf("metadatabundle: embedded modules catalog is empty")
+	}
+	return catalog, nil
+}
+
+// EmbeddedApplicationCatalog returns the reviewed application contracts from
+// metadata-bundle/base/applications/catalog.yaml without interpreting them.
+func EmbeddedApplicationCatalog() ([]byte, error) {
+	data, err := embeddedRoot.ReadFile("embedded/applications/catalog.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("metadatabundle: read embedded applications catalog: %w", err)
+	}
+	return append([]byte(nil), data...), nil
 }

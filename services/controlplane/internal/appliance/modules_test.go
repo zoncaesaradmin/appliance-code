@@ -7,19 +7,23 @@ import (
 )
 
 func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("core")
+	resolved, err := appliance.ResolveProfile("training")
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
-	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if len(modules) != 2 {
-		t.Fatalf("ResolveModules(core) returned %d modules, want 2", len(modules))
+		t.Fatalf("ResolveModules(training) returned %d modules, want 2", len(modules))
 	}
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameHostAgent) {
-		t.Fatal("core modules should include host-agent")
+		t.Fatal("training modules should include host-agent")
 	}
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
-		t.Fatal("core modules should include files")
+		t.Fatal("training modules should include files")
 	}
 	module, _ := appliance.ModuleNamed(modules, appliance.ModuleNameHostAgent)
 	if module.PrimaryCapability() != appliance.CapabilityHost {
@@ -31,11 +35,15 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 }
 
 func TestResolveModulesIncludesArtifactAndBuildWhenEnabled(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("builder")
+	resolved, err := appliance.ResolveProfile("builder-storage-landns")
 	if err != nil {
 		t.Fatalf("ResolveProfile(builder): %v", err)
 	}
-	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry) {
 		t.Fatal("builder modules should include artifact-registry")
 	}
@@ -45,11 +53,15 @@ func TestResolveModulesIncludesArtifactAndBuildWhenEnabled(t *testing.T) {
 }
 
 func TestResolveModulesIncludesDNSWhenEnabled(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("landns")
+	resolved, err := appliance.ResolveProfile("builder-storage-landns")
 	if err != nil {
 		t.Fatalf("ResolveProfile(landns): %v", err)
 	}
-	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS) {
 		t.Fatal("landns modules should include lan-dns")
 	}
@@ -60,7 +72,11 @@ func TestResolveModulesIncludesVideoCapabilityWithoutRuntimeModule(t *testing.T)
 	if err != nil {
 		t.Fatalf("ResolveProfile(training): %v", err)
 	}
-	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
 		t.Fatal("training modules should include files")
 	}
@@ -76,18 +92,22 @@ func TestResolveModulesIncludesVideoCapabilityWithoutRuntimeModule(t *testing.T)
 }
 
 func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("core")
+	resolved, err := appliance.ResolveProfile("training")
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
-	modules := appliance.ResolveModules(resolved, denyAllEntitlements{}, appliance.BuiltInModuleCatalog())
+	modules, err := appliance.EmbeddedModuleCatalog()
+	if err != nil {
+		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+	}
+	modules = appliance.ResolveModules(resolved, denyAllEntitlements{}, modules)
 	if len(modules) != 0 {
 		t.Fatalf("ResolveModules(core) with deny-all entitlements returned %d modules, want 0", len(modules))
 	}
 }
 
 func TestResolveModulesSkipsHostAgentWithoutHostCapability(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("builder")
+	resolved, err := appliance.ResolveProfile("builder-storage-landns")
 	if err != nil {
 		t.Fatalf("ResolveProfile(builder): %v", err)
 	}

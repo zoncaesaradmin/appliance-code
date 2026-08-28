@@ -15,7 +15,9 @@ import (
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/applications"
 	"appliance-code/services/controlplane/internal/devflows"
+	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/serviceregistry"
+	"gopkg.in/yaml.v3"
 )
 
 // Config is the complete typed configuration surface for the control plane
@@ -30,12 +32,11 @@ type Config struct {
 	InternalAddr     string `json:"internalAddr"`
 	DataDir          string `json:"dataDir"`
 
-	ApplicationLogPath string                    `json:"applicationLogPath"`
-	LogLevel           string                    `json:"logLevel"`
-	TrustedProxyCount  int                       `json:"trustedProxyCount"`
-	ApplianceCatalog   appliance.CatalogDocument `json:"applianceCatalog"`
-	// ApplicationCatalog is derived exclusively from ApplianceCatalog, whose
-	// source is verified by zonctl as a signed bundle configuration artifact.
+	ApplicationLogPath string `json:"applicationLogPath"`
+	LogLevel           string `json:"logLevel"`
+	TrustedProxyCount  int    `json:"trustedProxyCount"`
+	// ApplicationCatalog is parsed from the bundled metadata catalog. Helm and
+	// process environment cannot supply application contracts.
 	ApplicationCatalog       applications.Catalog     `json:"-"`
 	AutomationRuntimeBaseURL string                   `json:"automationRuntimeBaseURL"`
 	ArtifactServerBaseURL    string                   `json:"artifactServerBaseURL"`
@@ -310,11 +311,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 			cfg.BuildCatalog.Normalize()
 		}
 	}
-	if v, ok := env[envPrefix+"CATALOG_JSON"]; ok && strings.TrimSpace(v) != "" {
-		if err := json.Unmarshal([]byte(v), &cfg.ApplianceCatalog); err != nil {
-			errs = append(errs, fmt.Sprintf("CATALOG_JSON: %v", err))
-		}
-	}
 	if v, ok := env[envPrefix+"SERVICE_REGISTRY_JSON"]; ok && strings.TrimSpace(v) != "" {
 		if err := json.Unmarshal([]byte(v), &cfg.ServiceRegistry); err != nil {
 			errs = append(errs, fmt.Sprintf("SERVICE_REGISTRY_JSON: %v", err))
@@ -329,10 +325,11 @@ func applyEnv(cfg *Config, env map[string]string) error {
 
 func deriveApplicationCatalog(cfg *Config) error {
 	cfg.ApplicationCatalog = applications.Catalog{}
-	if len(cfg.ApplianceCatalog.Applications) == 0 || string(cfg.ApplianceCatalog.Applications) == "null" {
-		return nil
+	data, err := metadatabundle.EmbeddedApplicationCatalog()
+	if err != nil {
+		return err
 	}
-	if err := json.Unmarshal(cfg.ApplianceCatalog.Applications, &cfg.ApplicationCatalog); err != nil {
+	if err := yaml.Unmarshal(data, &cfg.ApplicationCatalog); err != nil {
 		return err
 	}
 	return nil
@@ -566,10 +563,7 @@ func (c Config) profileCatalog() (appliance.ProfileCatalog, error) {
 }
 
 func (c Config) moduleCatalog() ([]appliance.ModuleDescriptor, error) {
-	if len(c.ApplianceCatalog.Profiles) == 0 && len(c.ApplianceCatalog.Modules) == 0 {
-		return appliance.BuiltInModuleCatalog(), nil
-	}
-	return appliance.ModuleCatalogFromDocument(c.ApplianceCatalog)
+	return appliance.EmbeddedModuleCatalog()
 }
 
 func (c Config) SQLitePath() string {

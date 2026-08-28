@@ -9,6 +9,8 @@ metadata:
 sections:
   - profiles
   - capabilities
+  - modules
+  - applications
   - activation
   - ui
   - notifications
