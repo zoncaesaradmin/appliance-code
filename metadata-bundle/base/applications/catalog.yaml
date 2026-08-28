@@ -10,8 +10,9 @@ applications:
       description: Jellyfin media streaming for approved appliance video libraries.
     runtime:
       image:
-        # jellyfin/jellyfin:10.10.7 linux/amd64, re-exported as registry.local/jellyfin.
-        reference: registry.local/jellyfin@sha256:3b38dae4c3ddd6ebc7378538fba4d3f314070ebefbdb3d688166b7c8658fb123
+        # jellyfin/jellyfin:10.10.7 linux/amd64, re-exported into the signed
+        # appliance OCI layout as registry.local/jellyfin.
+        reference: registry.local/jellyfin@sha256:47b47ee4ffa13c7a900318eb501664204ac95f7142cfe1b754a9ab4f9704b4b8
       port: 8096
       endpoints:
         - name: http
