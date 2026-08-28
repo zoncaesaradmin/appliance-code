@@ -562,10 +562,7 @@ func (c Config) ResolveModules(resolved appliance.ResolvedProfile) ([]appliance.
 }
 
 func (c Config) profileCatalog() (appliance.ProfileCatalog, error) {
-	if len(c.ApplianceCatalog.Profiles) == 0 && len(c.ApplianceCatalog.Modules) == 0 {
-		return appliance.BuiltInProfileCatalog(), nil
-	}
-	return appliance.ProfileCatalogFromDocument(c.ApplianceCatalog)
+	return appliance.EmbeddedProfileCatalog()
 }
 
 func (c Config) moduleCatalog() ([]appliance.ModuleDescriptor, error) {

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"appliance-code/services/controlplane/internal/metadatabundle"
 )
 
 // Profile is the product-facing appliance profile name selected at startup.
@@ -73,32 +75,32 @@ type StaticProfileCatalogLoader struct {
 
 func (l StaticProfileCatalogLoader) LoadProfileCatalog() (ProfileCatalog, error) {
 	if l.Catalog == nil {
-		return BuiltInProfileCatalog(), nil
+		return nil, fmt.Errorf("profile catalog loader has no catalog")
 	}
 	return cloneProfileCatalog(l.Catalog), nil
 }
 
-var builtInProfileCatalog = ProfileCatalog{
-	ProfileCore:          {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityApplications}},
-	ProfileBuilder:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityApplications}},
-	ProfileStorage:       {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityArtifact, CapabilityApplications}},
-	ProfileLANDNS:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityDNS, CapabilityApplications}},
-	ProfileStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityArtifact, CapabilityDNS, CapabilityApplications}},
-	// builder ∪ landns (registry/artifact already comes with builder).
-	ProfileBuilderLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityApplications}},
-	// builder ∪ storage ∪ registry ∪ dns — same capability union as
-	// builder-landns (storage/registry add no capabilities beyond builder).
-	ProfileBuilderStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityApplications}},
-	ProfileLANLLM:               {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityInference, CapabilityApplications}},
-	ProfileBuilderLANLLM:        {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityInference, CapabilityApplications}},
-	// builder ∪ lanllm ∪ storage/registry ∪ landns — full capability union.
-	ProfileBuilderLANLLMStorageLANDNS: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityWorkflows, CapabilityBuild, CapabilityArtifact, CapabilityDNS, CapabilityInference, CapabilityApplications}},
-	// core ∪ video — matches metadata-bundle profiles/catalog.yaml.
-	ProfileTraining: {Capabilities: []Capability{CapabilityBase, CapabilityHost, CapabilityFiles, CapabilityVideo}},
-}
-
-func BuiltInProfileCatalog() ProfileCatalog {
-	return cloneProfileCatalog(builtInProfileCatalog)
+// EmbeddedProfileCatalog converts the one metadata source compiled into this
+// image into the resolver's typed catalog. No profile policy is duplicated in
+// Go tables or accepted from deployment configuration.
+func EmbeddedProfileCatalog() (ProfileCatalog, error) {
+	metadataCatalog, err := metadatabundle.EmbeddedProfileCatalog()
+	if err != nil {
+		return nil, err
+	}
+	catalog := make(ProfileCatalog, len(metadataCatalog.Profiles))
+	for name, definition := range metadataCatalog.Profiles {
+		profile := Profile(strings.TrimSpace(name))
+		if profile == "" {
+			return nil, fmt.Errorf("embedded profiles catalog contains an empty profile name")
+		}
+		capabilities := make([]Capability, len(definition.Capabilities))
+		for i, capability := range definition.Capabilities {
+			capabilities[i] = Capability(strings.TrimSpace(capability))
+		}
+		catalog[profile] = ProfileDefinition{Capabilities: capabilities}
+	}
+	return catalog, nil
 }
 
 // Set is the resolved enabled capability set for one appliance instance.
@@ -136,12 +138,16 @@ type ResolvedProfile struct {
 // returns the resolved enabled capability set. It does not add implicit
 // dependencies; invalid profile-to-capability combinations fail closed.
 func ResolveProfile(name string) (ResolvedProfile, error) {
-	return ResolveProfileWithLoader(name, StaticProfileCatalogLoader{Catalog: builtInProfileCatalog})
+	catalog, err := EmbeddedProfileCatalog()
+	if err != nil {
+		return ResolvedProfile{}, fmt.Errorf("load embedded appliance profile catalog: %w", err)
+	}
+	return ResolveProfileWithCatalog(name, catalog)
 }
 
 func ResolveProfileWithLoader(name string, loader ProfileCatalogLoader) (ResolvedProfile, error) {
 	if loader == nil {
-		loader = StaticProfileCatalogLoader{Catalog: builtInProfileCatalog}
+		return ResolvedProfile{}, fmt.Errorf("load appliance profile catalog: loader is required")
 	}
 	catalog, err := loader.LoadProfileCatalog()
 	if err != nil {

@@ -20,6 +20,23 @@ var embeddedRoot embed.FS
 
 type embedFS = embed.FS
 
+// EmbeddedProfileCatalog reads the profile policy compiled into the control
+// plane image. The source is metadata-bundle/base/profiles/catalog.yaml.
+func EmbeddedProfileCatalog() (ProfileCatalog, error) {
+	data, err := embeddedRoot.ReadFile("embedded/profiles/catalog.yaml")
+	if err != nil {
+		return ProfileCatalog{}, fmt.Errorf("metadatabundle: read embedded profiles catalog: %w", err)
+	}
+	var catalog ProfileCatalog
+	if err := yaml.Unmarshal(data, &catalog); err != nil {
+		return ProfileCatalog{}, fmt.Errorf("metadatabundle: parse embedded profiles catalog: %w", err)
+	}
+	if len(catalog.Profiles) == 0 {
+		return ProfileCatalog{}, fmt.Errorf("metadatabundle: embedded profiles catalog is empty")
+	}
+	return catalog, nil
+}
+
 func materializeEmbedded(dest, softwareVersion, metadataVersion string) error {
 	_ = os.RemoveAll(dest)
 	if err := os.MkdirAll(dest, 0o755); err != nil {
