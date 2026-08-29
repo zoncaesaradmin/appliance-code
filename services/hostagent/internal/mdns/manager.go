@@ -390,7 +390,10 @@ func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState
 	}
 	for application, aliases := range st.ApplicationAliases {
 		for _, alias := range uniqueSorted(aliases) {
-			unit := "[Unit]\nDescription=Zon mDNS address publisher for " + alias + "\nRequires=avahi-daemon.service\nAfter=avahi-daemon.service\n\n[Service]\nType=simple\nExecStart=/usr/bin/avahi-publish-address " + alias + " " + address + "\nRestart=on-failure\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n"
+			// The appliance hostname already owns the address's reverse record.
+			// Publish only this application alias's forward A record to avoid a
+			// self-conflict between jellyfin.local and zonsyssrv1.local.
+			unit := "[Unit]\nDescription=Zon mDNS address publisher for " + alias + "\nRequires=avahi-daemon.service\nAfter=avahi-daemon.service\n\n[Service]\nType=simple\nExecStart=/usr/bin/avahi-publish-address -R " + alias + " " + address + "\nRestart=on-failure\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n"
 			if err := m.files().MkdirAll(filepath.Dir(m.applicationAliasPublisherFile(application, alias)), 0o755); err != nil {
 				return fmt.Errorf("mdns: create alias publisher directory: %w", err)
 			}

@@ -194,7 +194,7 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 		t.Fatalf("legacy static application alias remained in %q", hosts)
 	}
 	publisher := string(files.data[m.applicationAliasPublisherFile("jellyfin", "jellyfin.local")])
-	if want := "ExecStart=/usr/bin/avahi-publish-address jellyfin.local 192.168.1.151"; !strings.Contains(publisher, want) {
+	if want := "ExecStart=/usr/bin/avahi-publish-address -R jellyfin.local 192.168.1.151"; !strings.Contains(publisher, want) {
 		t.Fatalf("publisher unit missing %q from %q", want, publisher)
 	}
 	if config := string(files.data[avahiConfig]); !strings.Contains(config, "allow-interfaces=enp1s0\n") {
