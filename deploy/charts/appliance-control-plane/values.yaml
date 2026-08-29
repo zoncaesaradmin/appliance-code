@@ -97,9 +97,10 @@ applicationNamespace:
 # per ADR 0005.
 config:
   applianceProfile: core
-  # Derived by zonctl from the signed metadata profile. This gates application
-  # lifecycle RBAC and the control-plane ServiceAccount token mount.
-  applicationManagementEnabled: false
+  # Derived by zonctl from the signed metadata profile. Helm consumes this
+  # generic capability set for install-time RBAC and token mounts; it never
+  # owns a separate profile or feature-policy mapping.
+  enabledCapabilities: []
   # Product LAN instance label (single DNS label). zonctl sets this from
   # --appliance-name; FQDN is applianceName.dnsZoneName.
   applianceName: ""

@@ -1196,7 +1196,7 @@ func TestImagePullSecretsRenderedOnControlplaneAndAppsDeployments(t *testing.T) 
 }
 
 func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
-	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps", "--set", "config.applicationManagementEnabled=true")
+	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps", "--set", "config.enabledCapabilities={applications}")
 	ns := findByKindAndName(docs, "Namespace", "apps")
 	if ns != nil {
 		t.Fatal("application namespace must be installer-owned, not Helm-owned")

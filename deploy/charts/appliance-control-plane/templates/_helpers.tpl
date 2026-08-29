@@ -52,7 +52,7 @@ releases, enabling only the set it is currently applying.
 {{- end -}}
 
 {{- define "appliance-control-plane.applicationSupportEnabled" -}}
-{{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled .Values.config.applicationManagementEnabled -}}true{{- end -}}
+{{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled (has "applications" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
 
 {{- define "appliance-control-plane.dnsSupportEnabled" -}}
