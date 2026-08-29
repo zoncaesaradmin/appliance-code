@@ -21,11 +21,14 @@ func main() {
 	}
 
 	logger := process.NewLogger(cfg.ApplicationLogPath)
-	pepper, err := os.ReadFile(cfg.InternalTokenPath)
+	encodedPepper, err := os.ReadFile(cfg.InternalTokenPath)
 	if err != nil {
 		log.Fatal(err)
 	}
-	internalToken := internalauth.TokenFromPepper(pepper)
+	internalToken, err := internalauth.TokenFromEncodedPepper(encodedPepper)
+	if err != nil {
+		log.Fatal(err)
+	}
 	client := bridge.NewUnixSocketClient(cfg.SocketPath)
 	client.SetInternalToken(internalToken)
 	// Pod forwards host facts, wifi-ap, and mdns control over the host-agentd socket.
