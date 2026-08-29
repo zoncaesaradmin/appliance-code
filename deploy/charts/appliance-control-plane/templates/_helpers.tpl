@@ -52,7 +52,11 @@ releases, enabling only the set it is currently applying.
 {{- end -}}
 
 {{- define "appliance-control-plane.applicationSupportEnabled" -}}
-{{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled (has "applications" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
+{{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled (eq (include "appliance-control-plane.applicationsEnabled" .) "true") -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.applicationsEnabled" -}}
+{{- if has "applications" (.Values.config.enabledCapabilities | default (list)) -}}true{{- end -}}
 {{- end -}}
 
 {{- define "appliance-control-plane.dnsSupportEnabled" -}}
@@ -215,7 +219,7 @@ Whether the control plane manages LAN DNS zone ConfigMap sync.
 Whether the control-plane ServiceAccount token must be mounted.
 */}}
 {{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
-{{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationSupportEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
+{{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationsEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*

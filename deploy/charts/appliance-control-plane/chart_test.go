@@ -1210,6 +1210,43 @@ func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
 	}
 }
 
+func TestApplicationCapabilityMountsControlPlaneTokenInAceSystemRollout(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceInfra.enabled=false",
+		"--set", "rollout.aceSystem.enabled=true",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.applicationSupport.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+		"--set", "config.enabledCapabilities={applications}",
+	)...)
+	deployment := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
+	if deployment == nil {
+		t.Fatal("expected control-plane deployment")
+	}
+	if got, _ := at(deployment, "spec", "template", "spec", "automountServiceAccountToken").(bool); !got {
+		t.Fatal("applications capability must mount a service-account token in the ace-system rollout")
+	}
+}
+
+func TestApplicationSupportRolloutRendersResourcesForApplicationCapability(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceInfra.enabled=false",
+		"--set", "rollout.aceSystem.enabled=false",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.applicationSupport.enabled=true",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+		"--set", "config.enabledCapabilities={applications}",
+	)...)
+	if marker := findByKindAndName(docs, "ConfigMap", "appliance-application-management"); marker == nil {
+		t.Fatal("application-support rollout must render the application management marker")
+	}
+	if role := findByKindAndName(docs, "Role", "controlplane-applications"); role == nil {
+		t.Fatal("application-support rollout must grant the control plane application permissions")
+	}
+}
+
 func TestWorkflowsBuildNamespaceIsInstallerOwned(t *testing.T) {
 	docs := renderChart(t,
 		"--set", "config.applianceProfile=builder",
