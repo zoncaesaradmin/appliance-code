@@ -1,17 +1,19 @@
 import React, { FormEvent, useEffect, useState } from "react";
+import { isAuthPersisted } from "../auth";
 import { BrandMark } from "../components";
 import { client } from "../lib/api";
 import { displayProductVersion } from "../productVersion";
 
 export function AuthLayout(props: {
   mode: "login" | "setup";
-  onLogin: (username: string, password: string) => Promise<void>;
-  onSetup: (username: string, password: string) => Promise<void>;
+  onLogin: (username: string, password: string, persist: boolean) => Promise<void>;
+  onSetup: (username: string, password: string, persist: boolean) => Promise<void>;
 }): React.JSX.Element {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [domain, setDomain] = useState("local");
+  const [persistSession, setPersistSession] = useState(() => isAuthPersisted());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [productVersion, setProductVersion] = useState<string>("");
@@ -45,9 +47,9 @@ export function AuthLayout(props: {
         if (password !== confirmPassword) {
           throw new Error("Passwords do not match.");
         }
-        await props.onSetup(username, password);
+        await props.onSetup(username, password, persistSession);
       } else {
-        await props.onLogin(username, password);
+        await props.onLogin(username, password, persistSession);
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
@@ -139,6 +141,14 @@ export function AuthLayout(props: {
                 </select>
               </label>
             ) : null}
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={persistSession}
+                onChange={(event) => setPersistSession(event.target.checked)}
+              />
+              <span>Keep me signed in on this device</span>
+            </label>
             {error ? <div className="message message--error">{error}</div> : null}
             <button className="button button--primary" disabled={submitting} type="submit">
               {submitting

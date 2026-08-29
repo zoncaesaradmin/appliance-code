@@ -61,8 +61,8 @@ Useful event names:
 | Browser-visible route | UI handler | Downstream control-plane call(s) | Browser success behavior |
 | --- | --- | --- | --- |
 | `GET /health/ready` | `ready` | `GET /health/ready` on the control-plane internal listener | `200 ready` plain text |
-| `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard` |
-| `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard` |
+| `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
+| `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA honors the same keep-signed-in choice as login |
 | `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |
 | `GET /home` | React `HomePage` Overview | `GET /version`, `GET /health/ready`, `GET /api/v1/appliance/identity`, `GET /api/v1/appliance/setup-state` | SPA page |
 | `GET /home/connectivity` | React `HomePage` Connectivity | Same overview fetches as `/home` | SPA page |
@@ -76,7 +76,7 @@ Useful event names:
 | `GET /manage/builder/workspaces` | React `BuilderPage` Workspaces | Loads work-profiles, workspaces, current-workspace | SPA page |
 | `GET /manage/builder/settings` (legacy alias `/manage/builder/git-access`) | React `BuilderPage` Settings | Loads catalog + git-access only; mutations refresh those two APIs | SPA page |
 | `GET /manage/files` | React `FilesPage` | `GET /api/v1/files` (and `GET /api/v1/files/{path}` when browsing a directory); upload dialog `POST`s octet-stream to `/api/v1/files/{logical-path}`; row ⋮ Delete uses `DELETE /api/v1/files/{path}` | SPA page |
-| `GET /manage/videos` | React `VideosPage` | Capability-gated (`video`). `GET /api/v1/video/library` (and path variants); upload `POST` of an H.264/AAC MP4 to `/api/v1/video/library/{path}` validates and commits synchronously; play first `POST`s `/api/v1/video/playback-session` with the session bearer, then native HTML5 `<video>` uses its HttpOnly cookie to range-stream `GET /api/v1/video/stream/{path}`; delete `DELETE /api/v1/video/library/{path}` | SPA page; playback starts from buffered byte ranges and supports seeking without full-file browser downloads |
+| `GET /manage/videos` | React `VideosPage` | Capability-gated (`video`). `GET /api/v1/video/library` (and path variants); upload `POST` of an H.264/AAC MP4 to `/api/v1/video/library/{path}` validates and commits synchronously; play first `POST`s `/api/v1/video/playback-session` with the session bearer, then native HTML5 `<video>` uses its HttpOnly cookie to range-stream `GET /api/v1/video/stream/{path}`; delete `DELETE /api/v1/video/library/{path}` | SPA page: poster-grid library, theater overlay player (fullscreen, seek, skip, mute), D-pad spatial navigation; playback starts from buffered byte ranges and supports seeking without full-file browser downloads |
 | `POST /builder/git-access` | `configureBuilderGitAccess` (legacy UI service) | Session check/refresh as needed; `PUT /api/v1/builder/git-access/{name}` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/builds` | `submitBuilderBuild` | Session check/refresh as needed; `POST /api/v1/current-workspace/builds` with `targetName` and optional `imageTag` | `303` redirect to `/builder/workspaces` on success; re-renders the builder page with an error for missing catalog/Git access (`412`), workspace not ready (`409`), unknown target / no workspace (`404`), or other validation failures |
 | `POST /builder/workspaces` with `selected_workspace_id=<existing>` | `createBuilderWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
@@ -84,6 +84,24 @@ Useful event names:
 | `POST /builder/current-workspace` | `setBuilderCurrentWorkspace` | Session check/refresh as needed; `POST /api/v1/current-workspace` | `303` redirect to `/builder/workspaces` |
 | `POST /builder/workspaces/delete` | `deleteBuilderWorkspace` | Session check/refresh as needed; `DELETE /api/v1/workspaces/{workspaceId}` | `303` redirect to `/builder/workspaces?workspace_id=new` |
 | `GET /partials/builder/work-profile` | `builderWorkProfilePartial` | Session check/refresh as needed; `GET /api/v1/work-profiles` | `200` HTML partial |
+
+## Videos library UX
+
+The Videos page (`/manage/videos`) is a lean-back library, not a file tree:
+
+- Capability-gated (`video`). After appliance setup and sign-in, the same SPA
+  route works in a desktop browser, a phone, or a TV browser.
+- Titles are shown as 16:9 poster cards grouped into directory shelves. Card
+  activate (click, tap, or D-pad OK) opens a theater overlay that range-streams
+  the MP4 after `POST /api/v1/video/playback-session`.
+- Overlay controls: play/pause, seek, skip ±10s, mute, playback speed,
+  fullscreen, close. Back/Escape exits fullscreen first, then the overlay.
+- Arrow keys move a visible focus ring across toolbar, cards, and overlay
+  controls. Upload is hidden on television user agents (no local file picker).
+- Upload and delete stay permission-gated (`video.library.write`) and use
+  dialogs, not `window.confirm`.
+- Sign-in can persist the interactive session on the device so a TV browser can
+  reopen `/manage/videos` and play without logging in again.
 
 ## Workspace list UX
 

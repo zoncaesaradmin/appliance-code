@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { clearAuth, loadAuth, saveAuth } from "../auth";
+import { clearAuth, loadAuth, saveAuth, setAuthPersist } from "../auth";
 import { AuthLayout } from "./AuthLayout";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
@@ -121,16 +121,18 @@ export function App(): React.JSX.Element {
     }
   }, [pathname, shellState.booting, shellState.initialized, shellState.session]);
 
-  async function handleLogin(username: string, password: string): Promise<void> {
+  async function handleLogin(username: string, password: string, persist: boolean): Promise<void> {
     // Login omits domain in the UI; client/backend default to local.
     const tokens = await client.login(username, password);
+    setAuthPersist(persist);
     saveAuth(tokens);
     setRefreshKey((value) => value + 1);
   }
 
-  async function handleSetup(username: string, password: string): Promise<void> {
+  async function handleSetup(username: string, password: string, persist: boolean): Promise<void> {
     await client.createFirstAdmin(username, password, "");
     const tokens = await client.login(username, password);
+    setAuthPersist(persist);
     saveAuth(tokens);
     setRefreshKey((value) => value + 1);
   }

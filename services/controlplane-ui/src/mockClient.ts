@@ -92,7 +92,7 @@ type MockState = {
 
 const mockState: MockState = {
   initialized: true,
-  capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications"],
+  capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "video"],
 	session: {
     userId: "mock-admin",
     username: "admin",
@@ -115,7 +115,10 @@ const mockState: MockState = {
       "host.read",
       "host.write",
       "applications.read",
-      "applications.manage"
+      "applications.manage",
+      "video.library.read",
+      "video.library.write",
+      "video.play"
     ]
   },
   tokens: [
@@ -223,7 +226,23 @@ const mockState: MockState = {
     }
   ],
   files: {},
-  videos: {},
+  videos: {
+    "welcome.mp4": {
+      sizeBytes: 4_194_304,
+      modifiedAt: now(),
+      content: new Uint8Array([0, 0, 0, 0])
+    },
+    "training/intro.mp4": {
+      sizeBytes: 12_582_912,
+      modifiedAt: now(),
+      content: new Uint8Array([0, 0, 0, 0])
+    },
+    "training/wrap-up.mp4": {
+      sizeBytes: 8_388_608,
+      modifiedAt: now(),
+      content: new Uint8Array([0, 0, 0, 0])
+    }
+  },
   licensingState: "unresolved",
   entitledCapabilities: [],
   profiles: [
@@ -293,7 +312,16 @@ export class MockControlPlaneClient {
       username,
       domain: "local",
       authMethod: "password",
-      permissions: ["dns.records.write", "files.write", "files.read", "artifacts.write", "artifacts.read"]
+      permissions: [
+        "dns.records.write",
+        "files.write",
+        "files.read",
+        "artifacts.write",
+        "artifacts.read",
+        "video.library.read",
+        "video.library.write",
+        "video.play"
+      ]
     };
     return {
       accessToken: uuid(),

@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadAuth, saveAuth } from "./auth";
 import { ApiError, RemoteControlPlaneClient } from "./client";
+import { resetDomStorage } from "./test/domStorage";
 
 describe("remote control-plane client", () => {
   beforeEach(() => {
-    window.sessionStorage.clear();
+    resetDomStorage();
   });
 
   afterEach(() => {

@@ -45,7 +45,7 @@ export function RouteView(props: {
     return <FilesPage />;
   }
   if (props.pathname.startsWith("/manage/videos")) {
-    return <VideosPage />;
+    return <VideosPage session={props.session} />;
   }
   if (props.pathname.startsWith("/manage/artifacts")) {
     return <ArtifactsPage pathname={props.pathname} />;
