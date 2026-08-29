@@ -17,6 +17,7 @@ import (
 )
 
 var namePattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
+var environmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 var (
 	ErrInvalidDefinition = errors.New("applications: invalid definition")
@@ -36,11 +37,18 @@ type Definition struct {
 		Image struct {
 			Reference string `json:"reference" yaml:"reference"`
 		} `json:"image" yaml:"image"`
-		Port      int           `json:"port,omitempty" yaml:"port,omitempty"`
-		Endpoints []Endpoint    `json:"endpoints,omitempty" yaml:"endpoints,omitempty"`
-		Volumes   []Volume      `json:"volumes,omitempty" yaml:"volumes,omitempty"`
-		Security  SecurityGrant `json:"security,omitempty" yaml:"security,omitempty"`
+		Port        int           `json:"port,omitempty" yaml:"port,omitempty"`
+		Environment []Environment `json:"environment,omitempty" yaml:"environment,omitempty"`
+		Endpoints   []Endpoint    `json:"endpoints,omitempty" yaml:"endpoints,omitempty"`
+		Volumes     []Volume      `json:"volumes,omitempty" yaml:"volumes,omitempty"`
+		Security    SecurityGrant `json:"security,omitempty" yaml:"security,omitempty"`
 	} `json:"runtime" yaml:"runtime"`
+}
+
+// Environment is a release-reviewed literal environment variable for an application.
+type Environment struct {
+	Name  string `json:"name" yaml:"name"`
+	Value string `json:"value" yaml:"value"`
 }
 
 // Endpoint is a catalog-reviewed exposure grant. A direct endpoint is backed
@@ -261,6 +269,16 @@ func validate(d Definition) error {
 	image := strings.TrimSpace(d.Runtime.Image.Reference)
 	if !strings.HasPrefix(image, "registry.local/") || !strings.Contains(image, "@sha256:") {
 		return fmt.Errorf("%w: runtime.image.reference must be a local digest-pinned image", ErrInvalidDefinition)
+	}
+	seenEnvironment := map[string]struct{}{}
+	for _, variable := range d.Runtime.Environment {
+		if !environmentNamePattern.MatchString(variable.Name) || strings.TrimSpace(variable.Value) == "" {
+			return fmt.Errorf("%w: runtime.environment must use non-empty names and values", ErrInvalidDefinition)
+		}
+		if _, exists := seenEnvironment[variable.Name]; exists {
+			return fmt.Errorf("%w: runtime.environment names must be unique", ErrInvalidDefinition)
+		}
+		seenEnvironment[variable.Name] = struct{}{}
 	}
 	seenEndpoints := map[string]struct{}{}
 	for _, endpoint := range d.Runtime.Endpoints {

@@ -14,6 +14,9 @@ applications:
         # appliance OCI layout as registry.local/jellyfin.
         reference: registry.local/jellyfin@sha256:47b47ee4ffa13c7a900318eb501664204ac95f7142cfe1b754a9ab4f9704b4b8
       port: 8096
+      environment:
+        - name: JELLYFIN_PublishedServerUrl
+          value: http://jellyfin.local:8096
       endpoints:
         - name: http
           protocol: TCP

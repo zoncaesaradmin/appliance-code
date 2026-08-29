@@ -266,6 +266,7 @@ func (m *KubernetesManager) Apply(ctx context.Context, definition Definition) (s
 					"containers": []any{map[string]any{
 						"name":  "application",
 						"image": definition.Runtime.Image.Reference,
+						"env":   applicationEnvironment(definition),
 						"ports": containerPorts(definition, port),
 						"securityContext": map[string]any{
 							"allowPrivilegeEscalation": false,
@@ -370,6 +371,17 @@ func volumeMounts(definition Definition) []any {
 		mounts = append(mounts, map[string]any{"name": volume.Name, "mountPath": volume.MountPath, "readOnly": volume.ReadOnly})
 	}
 	return mounts
+}
+
+func applicationEnvironment(definition Definition) []any {
+	if len(definition.Runtime.Environment) == 0 {
+		return nil
+	}
+	values := make([]any, 0, len(definition.Runtime.Environment))
+	for _, variable := range definition.Runtime.Environment {
+		values = append(values, map[string]any{"name": variable.Name, "value": variable.Value})
+	}
+	return values
 }
 
 func volumeSources(definition Definition) []any {
