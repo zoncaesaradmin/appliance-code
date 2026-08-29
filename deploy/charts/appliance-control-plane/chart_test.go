@@ -568,11 +568,11 @@ func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
 	}
 }
 
-func TestBlobStorageBelongsToAceSystemRolloutOnly(t *testing.T) {
+func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 	// zonctl installs the same chart as multiple Helm releases. Blob-storage
-	// must render only for the ace-system release so appliance-ace-apps does
-	// not try to own the Deployment.
+	// must render only for the ace-infra release before the control plane.
 	aceAppsDocs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceInfra.enabled=false",
 		"--set", "rollout.aceSystem.enabled=false",
 		"--set", "rollout.aceApps.enabled=true",
 		"--set", "rollout.applicationSupport.enabled=false",
@@ -587,43 +587,44 @@ func TestBlobStorageBelongsToAceSystemRolloutOnly(t *testing.T) {
 	}
 
 	aceSystemDocs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceInfra.enabled=false",
 		"--set", "rollout.aceSystem.enabled=true",
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
 		"--set", "rollout.workflowsSupport.enabled=false",
 	)...)
-	if findByKindAndName(aceSystemDocs, "Namespace", "blob-storage") != nil {
-		t.Fatal("blob-storage must live in ace-system, not a dedicated Namespace object")
+	if findByKindAndName(aceSystemDocs, "Deployment", "blob-storage") != nil {
+		t.Fatal("ace-system rollout must not render blob-storage Deployment")
 	}
-	blobDeploy := findByKindAndName(aceSystemDocs, "Deployment", "blob-storage")
+	infraDocs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceInfra.enabled=true",
+		"--set", "rollout.aceSystem.enabled=false",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.applicationSupport.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+	)...)
+	blobDeploy := findByKindAndName(infraDocs, "Deployment", "blob-storage")
 	if blobDeploy == nil {
-		t.Fatal("ace-system rollout must render blob-storage Deployment")
-	}
-	cpDeploy := findByKindAndName(aceSystemDocs, "Deployment", controlPlaneDeploymentName)
-	if cpDeploy == nil {
-		t.Fatal("expected control-plane Deployment")
+		t.Fatal("ace-infra rollout must render blob-storage Deployment")
 	}
 	blobNS, _ := at(blobDeploy, "metadata", "namespace").(string)
-	cpNS, _ := at(cpDeploy, "metadata", "namespace").(string)
-	if blobNS == "" || blobNS != cpNS {
-		t.Fatalf("blob-storage Deployment namespace = %q, want same as controlplane %q", blobNS, cpNS)
+	if blobNS != "ace-infra" {
+		t.Fatalf("blob-storage namespace = %q, want ace-infra", blobNS)
 	}
 	if initContainers, _ := at(blobDeploy, "spec", "template", "spec", "initContainers").([]any); len(initContainers) != 0 {
 		t.Fatalf("blob-storage must not use a root init container under restricted PSA, got %v", initContainers)
 	}
-	blobSvc := findByKindAndName(aceSystemDocs, "Service", "blob-storage")
+	blobSvc := findByKindAndName(infraDocs, "Service", "blob-storage")
 	if blobSvc == nil {
-		t.Fatal("ace-system rollout must render blob-storage Service")
+		t.Fatal("ace-infra rollout must render blob-storage Service")
 	}
 	if ns, _ := at(blobSvc, "metadata", "namespace").(string); ns != blobNS {
 		t.Fatalf("blob-storage Service namespace = %q, want %q", ns, blobNS)
 	}
-	if findByKindAndName(aceSystemDocs, "NetworkPolicy", "blob-storage-allow") == nil {
+	if findByKindAndName(infraDocs, "NetworkPolicy", "blob-storage-allow") == nil {
 		t.Fatal("expected pod-scoped blob-storage-allow NetworkPolicy")
-	}
-	if findByKindAndName(aceSystemDocs, "NetworkPolicy", "blob-storage-default-deny") != nil {
-		t.Fatal("blob-storage must not add a namespace-wide default-deny in ace-system")
 	}
 	cpAllow := findByKindAndName(aceSystemDocs, "NetworkPolicy", controlPlaneDeploymentName+"-allow")
 	if cpAllow == nil {

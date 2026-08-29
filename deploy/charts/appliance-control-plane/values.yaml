@@ -16,6 +16,8 @@ image:
 imagePullSecrets: []
 
 rollout:
+  aceInfra:
+    enabled: true
   aceSystem:
     enabled: true
   aceApps:
@@ -69,6 +71,10 @@ namespace:
   # Admission labels instead; set this to false in that case.
   create: true
   name: ""
+
+infraNamespace:
+  create: true
+  name: ace-infra
 
 # ui-server, host-agent, and automation-runtime. Empty name co-locates with
 # controlplane (tests). zonctl injects name: ace-apps in production so
@@ -166,10 +172,9 @@ files:
   transferTimeout: 30m
 
 blobStorage:
-  # The local foundation service is S3-compatible and co-located in ace-system
-  # with the control plane and message broker. Cloud deployments replace this
-  # endpoint and secret without changing application object keys.
-  endpoint: http://blob-storage.ace-system.svc.cluster.local:9000
+  # The local foundation service is S3-compatible in ace-infra. Cloud
+  # deployments replace this endpoint and secret without changing object keys.
+  endpoint: http://blob-storage.ace-infra.svc.cluster.local:9000
   bucket: appliance
   region: us-east-1
   credentialsSecretName: blob-storage-credentials

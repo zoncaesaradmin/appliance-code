@@ -31,12 +31,20 @@ Namespace for controlplane Deployment/Service/PVC/keys (Helm release namespace).
 {{- .Values.namespace.name | default .Release.Namespace -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.infraNamespace" -}}
+{{- .Values.infraNamespace.name | default "ace-infra" -}}
+{{- end -}}
+
 {{/*
 Rollout slice gates. zonctl reuses the same chart artifact for multiple
 releases, enabling only the set it is currently applying.
 */}}
 {{- define "appliance-control-plane.aceSystemEnabled" -}}
 {{- if and .Values.rollout .Values.rollout.aceSystem .Values.rollout.aceSystem.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.aceInfraEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.aceInfra .Values.rollout.aceInfra.enabled -}}true{{- end -}}
 {{- end -}}
 
 {{- define "appliance-control-plane.aceAppsEnabled" -}}

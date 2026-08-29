@@ -1,5 +1,5 @@
-{{- if eq (include "appliance-control-plane.aceSystemEnabled" .) "true" }}
-{{- $ns := include "appliance-control-plane.namespace" . -}}
+{{- if eq (include "appliance-control-plane.aceInfraEnabled" .) "true" }}
+{{- $ns := include "appliance-control-plane.infraNamespace" . -}}
 {{- $existing := lookup "v1" "Secret" $ns .Values.blobStorage.credentialsSecretName -}}
 {{- $accessKey := "" -}}
 {{- $secretKey := "" -}}
@@ -78,7 +78,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       # Ownership of /data/zon/blob-storage is prepared by zonctl EnsureOwnedDir
       # (UID 10009 / shared GID 20000). Do not add a root init container here:
-      # ace-system enforces Pod Security Admission restricted.
+      # ace-infra enforces Pod Security Admission restricted.
       containers:
         - name: blob-storage
           image: {{ .Values.blobStorage.image.repository }}{{ if .Values.blobStorage.image.digest }}@{{ .Values.blobStorage.image.digest }}{{ else }}:{{ .Values.blobStorage.image.tag }}{{ end }}
@@ -100,8 +100,7 @@ spec:
         - name: tmp
           emptyDir: {}
 ---
-# Pod-scoped only: ace-system already has a namespace-wide default-deny from the
-# control-plane NetworkPolicy templates. Do not add another empty-selector deny.
+# Pod-scoped only: the infrastructure namespace has no namespace-wide deny.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -112,7 +111,8 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        - podSelector: {matchLabels: {app.kubernetes.io/name: controlplane}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: {{ include "appliance-control-plane.namespace" . | quote }}}}
+          podSelector: {matchLabels: {app.kubernetes.io/name: controlplane}}
       ports: [{protocol: TCP, port: 9000}]
   egress:
     - to:

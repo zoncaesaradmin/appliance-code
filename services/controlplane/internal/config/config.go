@@ -100,7 +100,7 @@ func Default() Config {
 		FilesObjectPrefix:         "files",
 		FilesTransferTimeout:      30 * time.Minute,
 		FilesMaxUploadBytes:       20 * 1024 * 1024 * 1024,
-		BlobStorageEndpoint:       "http://blob-storage.ace-system.svc.cluster.local:9000",
+		BlobStorageEndpoint:       "http://blob-storage.ace-infra.svc.cluster.local:9000",
 		BlobStorageBucket:         "appliance",
 		BlobStorageAccessKey:      "local-dev",
 		BlobStorageSecretKey:      "local-dev-secret",
