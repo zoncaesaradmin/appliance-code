@@ -234,7 +234,12 @@ func (m *KubernetesManager) Apply(ctx context.Context, definition Definition) (s
 	if err := m.applyPersistentVolumes(ctx, definition, labels); err != nil {
 		return "error", err
 	}
-	podSecurity := map[string]any{"runAsNonRoot": true}
+	// Every catalog application must satisfy the apps namespace's Restricted
+	// Pod Security policy; application definitions cannot weaken this default.
+	podSecurity := map[string]any{
+		"runAsNonRoot":   true,
+		"seccompProfile": map[string]any{"type": "RuntimeDefault"},
+	}
 	if definition.Runtime.Security.RunAsUser > 0 {
 		podSecurity["runAsUser"] = definition.Runtime.Security.RunAsUser
 	}

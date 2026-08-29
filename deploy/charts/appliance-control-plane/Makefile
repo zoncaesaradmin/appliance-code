@@ -41,7 +41,7 @@ verify: lint test
 
 ## coverage: run tests with coverage and print a per-function summary
 coverage:
-	go test -race -coverprofile=$(COVER_FILE) ./...
+	go test -race -count=1 -coverprofile=$(COVER_FILE) ./...
 	go tool cover -func=$(COVER_FILE)
 
 ## clean: remove local render/coverage artifacts

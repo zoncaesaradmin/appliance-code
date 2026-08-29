@@ -33,7 +33,7 @@ lint:
 	fi
 
 coverage:
-	$(GO) test -race -coverprofile=$(COVER_FILE) ./...
+	$(GO) test -race -count=1 -coverprofile=$(COVER_FILE) ./...
 	go tool cover -func=$(COVER_FILE)
 
 verify: lint test

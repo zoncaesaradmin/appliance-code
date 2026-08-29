@@ -1,6 +1,10 @@
 package applications
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 )
@@ -33,6 +37,41 @@ func TestServicesAndNetworkPolicyUseOnlyCatalogEndpoints(t *testing.T) {
 	}
 	if ports[1].(map[string]any)["protocol"] != "UDP" || ports[1].(map[string]any)["port"] != 7359 {
 		t.Fatalf("discovery port = %#v", ports[1])
+	}
+}
+
+func TestApplyUsesRuntimeDefaultSeccompProfile(t *testing.T) {
+	var deployment map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch && r.URL.Path == "/apis/apps/v1/namespaces/apps/deployments/jellyfin" {
+			if err := json.NewDecoder(r.Body).Decode(&deployment); err != nil {
+				t.Fatalf("decode deployment: %v", err)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`{"status":{"availableReplicas":1}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	manager := &KubernetesManager{baseURL: server.URL, token: "test-token", client: server.Client()}
+	definition := Definition{}
+	definition.Metadata.Name = "jellyfin"
+	definition.Runtime.Image.Reference = "registry.local/jellyfin@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if observed, err := manager.Apply(context.Background(), definition); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	} else if observed != "running" {
+		t.Fatalf("Apply() observed state = %q, want running", observed)
+	}
+
+	podSpec := deployment["spec"].(map[string]any)["template"].(map[string]any)["spec"].(map[string]any)
+	securityContext := podSpec["securityContext"].(map[string]any)
+	seccompProfile := securityContext["seccompProfile"].(map[string]any)
+	if seccompProfile["type"] != "RuntimeDefault" {
+		t.Fatalf("pod securityContext.seccompProfile.type = %q, want RuntimeDefault", seccompProfile["type"])
 	}
 }
 

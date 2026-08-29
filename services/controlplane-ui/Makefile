@@ -65,7 +65,7 @@ lint:
 	$(MAKE) --no-print-directory ui-typecheck
 
 coverage:
-	go test -coverprofile=$(COVER_FILE) ./...
+	go test -count=1 -coverprofile=$(COVER_FILE) ./...
 	go tool cover -func=$(COVER_FILE)
 
 verify: build lint ui-openapi-check ui-test test

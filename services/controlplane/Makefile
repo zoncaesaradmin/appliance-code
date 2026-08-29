@@ -189,7 +189,7 @@ lint:
 
 ## coverage: run tests with coverage and print a per-function summary
 coverage:
-	go test -race -coverprofile=$(COVER_FILE) ./...
+	go test -race -count=1 -coverprofile=$(COVER_FILE) ./...
 	go tool cover -func=$(COVER_FILE)
 
 ## verify: the local pre-push gate for this module; must pass without containers or K3s
