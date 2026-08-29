@@ -83,6 +83,7 @@ export function ApplicationsPage(): React.JSX.Element {
               {definitions.map((definition) => {
                 const instance = instancesByName.get(definition.name);
                 const enabled = instance?.desiredState === "running";
+				const failed = instance?.observedState === "error";
                 return (
                   <div className="detail-list" key={`${definition.name}@${definition.version}`}>
                     <div>
@@ -101,8 +102,19 @@ export function ApplicationsPage(): React.JSX.Element {
                       <span>Updated</span>
                       <strong>{instance?.updatedAt ? formatTimestamp(instance.updatedAt) : "Not enabled"}</strong>
                     </div>
+					{failed ? (
+					  <div>
+						<span>Action required</span>
+						<strong>{instance.message || "The appliance could not publish this application's LAN address."}</strong>
+						<p className="m-0 text-sm leading-6 text-slate-600">Check the LAN name is available, then retry. The application stays disabled from external use until its approved address is verified.</p>
+					  </div>
+					) : null}
                     <div className="button-row">
-                      {enabled ? (
+					  {failed ? (
+						<Button type="button" disabled={busy === definition.name} onClick={() => void enable(definition)}>
+						  Retry
+						</Button>
+					  ) : enabled ? (
                         <Button type="button" variant="ghost" disabled={busy === definition.name} onClick={() => void disable(instance)}>
                           Disable
                         </Button>

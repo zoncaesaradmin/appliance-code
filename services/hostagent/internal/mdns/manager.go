@@ -189,9 +189,12 @@ func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationR
 		// Application reconciliation runs repeatedly. Rewriting identical Avahi
 		// files would restart the daemon on every pass, preventing mDNS probing
 		// and publication from ever settling.
-		return nil
+		return m.verifyApplicationAliases(ctx, requestedAliases)
 	}
 	if err := m.removeApplicationFiles(req.Application, st.ApplicationServices[req.Application]); err != nil {
+		return err
+	}
+	if err := m.removeApplicationAliasPublishers(ctx, req.Application, st.ApplicationAliases[req.Application]); err != nil {
 		return err
 	}
 	if len(req.Services) == 0 {
@@ -217,13 +220,37 @@ func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationR
 	}
 	if len(req.Services) > 0 || len(req.Aliases) > 0 {
 		_, err := m.Apply(ctx, ApplyRequest{Desired: true})
-		return err
+		if err != nil {
+			return err
+		}
+		if err := m.startApplicationAliasPublishers(ctx, req.Application, requestedAliases); err != nil {
+			return err
+		}
+		return m.verifyApplicationAliases(ctx, requestedAliases)
 	}
 	// Avahi observes hosts files on reload, but a restart gives the same
 	// deterministic convergence used for newly created service records.
 	if st.Desired && packagesPresent(m.runner()) {
 		if err := m.startService(ctx); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// verifyApplicationAliases verifies the records clients will use, not merely
+// that the Avahi process started. A daemon may remain active after rejecting a
+// static alias because of an mDNS name collision.
+func (m *Manager) verifyApplicationAliases(ctx context.Context, aliases []string) error {
+	if len(aliases) == 0 {
+		return nil
+	}
+	if _, err := m.runner().LookPath("avahi-resolve-host-name"); err != nil {
+		return fmt.Errorf("mdns: verify application aliases: avahi-resolve-host-name is unavailable: %w", err)
+	}
+	for _, alias := range aliases {
+		if _, err := m.runner().CombinedOutput(ctx, "avahi-resolve-host-name", "-4", alias); err != nil {
+			return fmt.Errorf("mdns: application alias %q was not published: %w", alias, err)
 		}
 	}
 	return nil
@@ -239,6 +266,14 @@ func (m *Manager) applicationFile(application, name string) string {
 
 func (m *Manager) applicationAliasesFile() string {
 	return filepath.Join(m.root(), "etc", "avahi", "hosts")
+}
+
+func (m *Manager) applicationAliasPublisherFile(application, alias string) string {
+	return filepath.Join(m.root(), "etc", "systemd", "system", "zon-mdns-"+application+"-"+alias+".service")
+}
+
+func applicationAliasPublisherUnit(application, alias string) string {
+	return "zon-mdns-" + application + "-" + alias + ".service"
 }
 
 const applicationAliasBegin = "# BEGIN ZON APPLICATION ALIASES"
@@ -327,8 +362,10 @@ func setServerOption(config, key, value string) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
-// writeApplicationAliases updates only the marked appliance-owned block in
-// Avahi's normal static-host file. Existing operator mappings remain intact.
+// writeApplicationAliases removes the former static-host block and writes one
+// supervised Avahi address publisher per application alias. Static hosts are
+// registered inside avahi-daemon and can be rejected locally before they ever
+// reach the LAN; publisher clients support independent alias entry groups.
 func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState) error {
 	path := m.applicationAliasesFile()
 	existing, err := m.files().ReadFile(path)
@@ -336,12 +373,13 @@ func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState
 		return fmt.Errorf("mdns: read application aliases: %w", err)
 	}
 	base := removeAliasBlock(string(existing))
-	aliases := allAliases(st.ApplicationAliases)
-	if len(aliases) == 0 {
-		if strings.TrimSpace(base) == "" {
-			return nil
+	if strings.TrimSpace(base) != strings.TrimSpace(string(existing)) {
+		if err := m.files().WriteFile(path, []byte(base), 0o644); err != nil {
+			return fmt.Errorf("mdns: remove legacy application aliases: %w", err)
 		}
-		return m.files().WriteFile(path, []byte(base), 0o644)
+	}
+	if len(allAliases(st.ApplicationAliases)) == 0 {
+		return nil
 	}
 	if err := m.configureApplicationInterfaces(ctx); err != nil {
 		return err
@@ -350,23 +388,46 @@ func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState
 	if err != nil {
 		return err
 	}
-	if err := m.files().MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("mdns: create aliases directory: %w", err)
+	for application, aliases := range st.ApplicationAliases {
+		for _, alias := range uniqueSorted(aliases) {
+			unit := "[Unit]\nDescription=Zon mDNS address publisher for " + alias + "\nRequires=avahi-daemon.service\nAfter=avahi-daemon.service\n\n[Service]\nType=simple\nExecStart=/usr/bin/avahi-publish-address " + alias + " " + address + "\nRestart=on-failure\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n"
+			if err := m.files().MkdirAll(filepath.Dir(m.applicationAliasPublisherFile(application, alias)), 0o755); err != nil {
+				return fmt.Errorf("mdns: create alias publisher directory: %w", err)
+			}
+			if err := m.files().WriteFile(m.applicationAliasPublisherFile(application, alias), []byte(unit), 0o644); err != nil {
+				return fmt.Errorf("mdns: write alias publisher: %w", err)
+			}
+		}
 	}
-	var b strings.Builder
-	b.WriteString(strings.TrimRight(base, "\n"))
-	if b.Len() > 0 {
-		b.WriteString("\n")
+	return nil
+}
+
+func (m *Manager) removeApplicationAliasPublishers(ctx context.Context, application string, aliases []string) error {
+	for _, alias := range uniqueSorted(aliases) {
+		unit := applicationAliasPublisherUnit(application, alias)
+		_, _ = m.runner().CombinedOutput(ctx, "systemctl", "disable", "--now", unit)
+		if err := m.files().Remove(m.applicationAliasPublisherFile(application, alias)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("mdns: remove alias publisher: %w", err)
+		}
 	}
-	b.WriteString(applicationAliasBegin)
-	b.WriteString("\n")
-	for _, alias := range aliases {
-		fmt.Fprintf(&b, "%s %s\n", address, alias)
+	return nil
+}
+
+func (m *Manager) startApplicationAliasPublishers(ctx context.Context, application string, aliases []string) error {
+	if len(aliases) == 0 {
+		return nil
 	}
-	b.WriteString(applicationAliasEnd)
-	b.WriteString("\n")
-	if err := m.files().WriteFile(path, []byte(b.String()), 0o644); err != nil {
-		return fmt.Errorf("mdns: write application aliases: %w", err)
+	if _, err := m.runner().LookPath("avahi-publish-address"); err != nil {
+		return fmt.Errorf("mdns: publish application aliases: avahi-publish-address is unavailable: %w", err)
+	}
+	if _, err := m.runner().CombinedOutput(ctx, "systemctl", "daemon-reload"); err != nil {
+		return fmt.Errorf("mdns: reload alias publishers: %w", err)
+	}
+	for _, alias := range uniqueSorted(aliases) {
+		unit := applicationAliasPublisherUnit(application, alias)
+		if _, err := m.runner().CombinedOutput(ctx, "systemctl", "enable", "--now", unit); err != nil {
+			return fmt.Errorf("mdns: start alias publisher %q: %w", alias, err)
+		}
 	}
 	return nil
 }

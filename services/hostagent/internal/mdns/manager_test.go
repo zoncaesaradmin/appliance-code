@@ -167,7 +167,7 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 		avahiConfig: []byte("[server]\nuse-ipv4=yes\n\n[publish]\n"),
 	}}
 	runner := &fakeRunner{
-		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
+		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
 		outputs: map[string]string{
 			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
 			"hostname -I":                              "10.42.0.1 192.168.1.151\n",
@@ -190,8 +190,12 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 	if want := "192.168.1.10 printer.local"; !strings.Contains(hosts, want) {
 		t.Fatalf("operator mapping missing from %q", hosts)
 	}
-	if want := "192.168.1.151 jellyfin.local"; !strings.Contains(hosts, want) {
-		t.Fatalf("application alias missing from %q", hosts)
+	if strings.Contains(hosts, "jellyfin.local") {
+		t.Fatalf("legacy static application alias remained in %q", hosts)
+	}
+	publisher := string(files.data[m.applicationAliasPublisherFile("jellyfin", "jellyfin.local")])
+	if want := "ExecStart=/usr/bin/avahi-publish-address jellyfin.local 192.168.1.151"; !strings.Contains(publisher, want) {
+		t.Fatalf("publisher unit missing %q from %q", want, publisher)
 	}
 	if config := string(files.data[avahiConfig]); !strings.Contains(config, "allow-interfaces=enp1s0\n") {
 		t.Fatalf("Avahi configuration does not limit mDNS to the LAN interface: %q", config)
@@ -214,6 +218,37 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 	hosts = string(files.data[filepath.Join(root, "etc", "avahi", "hosts")])
 	if strings.Contains(hosts, "jellyfin.local") || !strings.Contains(hosts, "printer.local") {
 		t.Fatalf("aliases were not safely withdrawn: %q", hosts)
+	}
+	if _, exists := files.data[m.applicationAliasPublisherFile("jellyfin", "jellyfin.local")]; exists {
+		t.Fatal("alias publisher was not withdrawn")
+	}
+}
+
+func TestApplicationAliasesFailWhenAvahiDoesNotPublishAlias(t *testing.T) {
+	root := t.TempDir()
+	files := &memFiles{data: map[string][]byte{
+		filepath.Join(root, "etc", "avahi", "hosts"):             nil,
+		filepath.Join(root, "etc", "avahi", "avahi-daemon.conf"): []byte("[server]\n\n[publish]\n"),
+	}}
+	runner := &fakeRunner{
+		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
+		outputs: map[string]string{
+			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+			"hostname -I":                              "192.168.1.151\n",
+			"systemctl is-active avahi-daemon.service": "active",
+			"systemctl unmask avahi-daemon.service":    "",
+			"systemctl enable avahi-daemon.service":    "",
+			"systemctl restart avahi-daemon.service":   "",
+		},
+		fail: map[string]error{"avahi-resolve-host-name -4 jellyfin.local": errors.New("timeout reached")},
+	}
+	m := &Manager{Root: root, StateDir: "/state", Runner: runner, Files: files}
+	err := m.ApplyApplicationServices(context.Background(), ApplicationRequest{
+		Application: "jellyfin",
+		Aliases:     []string{"jellyfin.local"},
+	})
+	if err == nil || !strings.Contains(err.Error(), `application alias "jellyfin.local" was not published`) {
+		t.Fatalf("ApplyApplicationServices error = %v", err)
 	}
 }
 
