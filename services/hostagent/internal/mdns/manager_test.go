@@ -196,6 +196,18 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 	if config := string(files.data[avahiConfig]); !strings.Contains(config, "allow-interfaces=enp1s0\n") {
 		t.Fatalf("Avahi configuration does not limit mDNS to the LAN interface: %q", config)
 	}
+	if err := m.ApplyApplicationServices(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	restarts := 0
+	for _, call := range runner.calls {
+		if call == "systemctl restart avahi-daemon.service" {
+			restarts++
+		}
+	}
+	if restarts != 1 {
+		t.Fatalf("identical application reconcile restarted Avahi %d times, want 1", restarts)
+	}
 	if err := m.ApplyApplicationServices(context.Background(), ApplicationRequest{Application: "jellyfin"}); err != nil {
 		t.Fatal(err)
 	}

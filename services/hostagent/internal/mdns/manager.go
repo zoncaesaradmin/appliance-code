@@ -182,13 +182,22 @@ func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationR
 	if st.ApplicationAliases == nil {
 		st.ApplicationAliases = map[string][]string{}
 	}
+	requestedServices := normalizedServices(req.Services)
+	requestedAliases := uniqueSorted(req.Aliases)
+	if st.Desired && sameApplicationServices(st.ApplicationServices[req.Application], requestedServices) &&
+		strings.Join(uniqueSorted(st.ApplicationAliases[req.Application]), ",") == strings.Join(requestedAliases, ",") {
+		// Application reconciliation runs repeatedly. Rewriting identical Avahi
+		// files would restart the daemon on every pass, preventing mDNS probing
+		// and publication from ever settling.
+		return nil
+	}
 	if err := m.removeApplicationFiles(req.Application, st.ApplicationServices[req.Application]); err != nil {
 		return err
 	}
 	if len(req.Services) == 0 {
 		delete(st.ApplicationServices, req.Application)
 	} else {
-		st.ApplicationServices[req.Application] = append([]ApplicationService(nil), req.Services...)
+		st.ApplicationServices[req.Application] = requestedServices
 		if err := m.writeApplicationFiles(req.Application, req.Services); err != nil {
 			return err
 		}
@@ -197,7 +206,7 @@ func (m *Manager) ApplyApplicationServices(ctx context.Context, req ApplicationR
 	if len(req.Aliases) == 0 {
 		delete(st.ApplicationAliases, req.Application)
 	} else {
-		st.ApplicationAliases[req.Application] = uniqueSorted(req.Aliases)
+		st.ApplicationAliases[req.Application] = requestedAliases
 		st.Desired = true
 	}
 	if err := m.writeApplicationAliases(ctx, st); err != nil {
@@ -415,6 +424,34 @@ func uniqueSorted(values []string) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+func normalizedServices(values []ApplicationService) []ApplicationService {
+	result := append([]ApplicationService(nil), values...)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Name != result[j].Name {
+			return result[i].Name < result[j].Name
+		}
+		if result[i].ServiceType != result[j].ServiceType {
+			return result[i].ServiceType < result[j].ServiceType
+		}
+		return result[i].Port < result[j].Port
+	})
+	return result
+}
+
+func sameApplicationServices(left, right []ApplicationService) bool {
+	left = normalizedServices(left)
+	right = normalizedServices(right)
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Manager) removeApplicationFiles(application string, services []ApplicationService) error {
