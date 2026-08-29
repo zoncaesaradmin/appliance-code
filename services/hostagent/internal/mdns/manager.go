@@ -235,6 +235,89 @@ func (m *Manager) applicationAliasesFile() string {
 const applicationAliasBegin = "# BEGIN ZON APPLICATION ALIASES"
 const applicationAliasEnd = "# END ZON APPLICATION ALIASES"
 
+// configureApplicationInterfaces keeps application aliases on the real LAN.
+// Avahi otherwise joins every K3s veth/CNI interface, creating isolated mDNS
+// domains that can collide with an appliance-owned alias.
+func (m *Manager) configureApplicationInterfaces(ctx context.Context) error {
+	iface, err := m.defaultRouteInterface(ctx)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(m.root(), "etc", "avahi", "avahi-daemon.conf")
+	data, err := m.files().ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("mdns: read avahi configuration: %w", err)
+	}
+	updated, err := setServerOption(string(data), "allow-interfaces", iface)
+	if err != nil {
+		return err
+	}
+	if updated == string(data) {
+		return nil
+	}
+	if err := m.files().WriteFile(path, []byte(updated), 0o644); err != nil {
+		return fmt.Errorf("mdns: write avahi configuration: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) defaultRouteInterface(ctx context.Context) (string, error) {
+	out, err := m.runner().CombinedOutput(ctx, "ip", "-4", "route", "show", "default")
+	if err != nil {
+		return "", fmt.Errorf("mdns: find default route: %w", err)
+	}
+	fields := strings.Fields(out)
+	for index, field := range fields {
+		if index+1 >= len(fields) {
+			break
+		}
+		if field == "dev" && validInterfaceName(fields[index+1]) {
+			return fields[index+1], nil
+		}
+	}
+	return "", fmt.Errorf("mdns: no usable IPv4 default-route interface")
+}
+
+func validInterfaceName(value string) bool {
+	if value == "" || len(value) > 15 || value == "lo" {
+		return false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func setServerOption(config, key, value string) (string, error) {
+	lines := strings.Split(config, "\n")
+	server := -1
+	for index, line := range lines {
+		if strings.TrimSpace(line) == "[server]" {
+			server = index
+			break
+		}
+	}
+	if server < 0 {
+		return "", fmt.Errorf("mdns: avahi configuration has no [server] section")
+	}
+	for index := server + 1; index < len(lines); index++ {
+		trimmed := strings.TrimSpace(lines[index])
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			break
+		}
+		if strings.HasPrefix(trimmed, key+"=") {
+			lines[index] = key + "=" + value
+			return strings.Join(lines, "\n"), nil
+		}
+	}
+	lines = append(lines[:server+1], append([]string{key + "=" + value}, lines[server+1:]...)...)
+	return strings.Join(lines, "\n"), nil
+}
+
 // writeApplicationAliases updates only the marked appliance-owned block in
 // Avahi's normal static-host file. Existing operator mappings remain intact.
 func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState) error {
@@ -250,6 +333,9 @@ func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState
 			return nil
 		}
 		return m.files().WriteFile(path, []byte(base), 0o644)
+	}
+	if err := m.configureApplicationInterfaces(ctx); err != nil {
+		return err
 	}
 	address, err := m.primaryAddress(ctx)
 	if err != nil {
