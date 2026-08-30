@@ -1163,10 +1163,6 @@ button {
   min-width: 6.5rem;
 }
 
-.video-player__icon-btn--danger {
-  background: rgba(180, 35, 24, 0.9);
-}
-
 .video-player__sr {
   position: absolute;
   width: 1px;

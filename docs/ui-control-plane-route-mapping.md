@@ -95,7 +95,8 @@ The Videos page (`/manage/videos`) is a lean-back library, not a file tree:
   activate (click, tap, or D-pad OK) opens a theater overlay that range-streams
   the MP4 after `POST /api/v1/video/playback-session`.
 - Overlay controls: play/pause, seek, skip ±10s, mute, playback speed,
-  fullscreen, close. Back/Escape exits fullscreen first, then the overlay.
+  fullscreen, close. Delete is not offered in the player; it stays on the
+  card ⋮ menu only. Back/Escape exits fullscreen first, then the overlay.
 - Arrow keys move a visible focus ring across toolbar, cards, and overlay
   controls. Upload is hidden on television user agents (no local file picker).
 - Upload and delete stay permission-gated (`video.library.write`) and use

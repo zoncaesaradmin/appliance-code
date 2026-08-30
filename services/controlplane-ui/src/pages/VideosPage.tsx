@@ -318,10 +318,8 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
           entry={playing}
           src={playURL}
           error={playError}
-          canDelete={canManage}
           rootRef={playerRef}
           onClose={closePlayer}
-          onDelete={() => setPendingDelete({ kind: "file", entry: playing })}
           onError={setPlayError}
         />
       ) : null}

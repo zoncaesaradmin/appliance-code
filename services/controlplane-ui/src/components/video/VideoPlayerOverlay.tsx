@@ -29,10 +29,8 @@ export function VideoPlayerOverlay(props: {
   entry: ApplianceFileEntry;
   src: string;
   error: string;
-  canDelete: boolean;
   rootRef: React.MutableRefObject<HTMLDivElement | null>;
   onClose: () => void;
-  onDelete: () => void;
   onError: (message: string) => void;
 }): React.JSX.Element {
   const videoRef = useRef<VideoElement | null>(null);
@@ -262,11 +260,6 @@ export function VideoPlayerOverlay(props: {
           <button type="button" className="video-player__icon-btn" data-nav data-nav-id="player-rate" aria-label="Playback speed" onClick={cycleRate}>
             {rate}×
           </button>
-          {props.canDelete ? (
-            <button type="button" className="video-player__icon-btn video-player__icon-btn--danger" data-nav data-nav-id="player-delete" onClick={props.onDelete}>
-              Delete
-            </button>
-          ) : null}
         </div>
       </div>
     </div>
