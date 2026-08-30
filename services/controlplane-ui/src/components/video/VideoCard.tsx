@@ -1,6 +1,7 @@
 import React from "react";
 import type { ApplianceFileEntry } from "../../types";
 import { displayTitle, posterHue } from "../../lib/videoLibrary";
+import { useVideoPoster } from "../../lib/useVideoPoster";
 
 export function VideoCard(props: {
   entry: ApplianceFileEntry;
@@ -10,6 +11,7 @@ export function VideoCard(props: {
   const title = displayTitle(props.entry);
   const hue = posterHue(props.entry.path);
   const letter = (title.trim().charAt(0) || "V").toUpperCase();
+  const { poster, posterRef } = useVideoPoster(props.entry);
 
   return (
     <article className="video-card">
@@ -24,11 +26,18 @@ export function VideoCard(props: {
       >
         <div
           className="video-card__poster"
+          ref={(node) => {
+            posterRef.current = node;
+          }}
           style={{ background: `linear-gradient(160deg, hsl(${hue} 42% 28%), hsl(${(hue + 40) % 360} 38% 14%))` }}
         >
-          <span className="video-card__letter" aria-hidden="true">
-            {letter}
-          </span>
+          {poster ? (
+            <img className="video-card__thumb" src={poster} alt="" draggable={false} />
+          ) : (
+            <span className="video-card__letter" aria-hidden="true">
+              {letter}
+            </span>
+          )}
           <span className="video-card__play" aria-hidden="true">
             ▶
           </span>

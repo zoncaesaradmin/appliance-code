@@ -94,7 +94,9 @@ The Videos page (`/manage/videos`) is a lean-back library, not a file tree:
 - Titles are shown as 16:9 poster cards grouped into directory shelves, with
   the file name only under each poster. Card activate (click, tap, or D-pad
   OK) opens a theater overlay that range-streams the MP4 after
-  `POST /api/v1/video/playback-session`. The card ⋮ opens a details dialog
+  `POST /api/v1/video/playback-session`. Visible cards lazily capture a still
+  frame in the browser from that same stream (no extra image upload, no server
+  conversion) and cache it for the session. The card ⋮ opens a details dialog
   (name, path, size, added time, status) and, with `video.library.write`,
   Delete.
 - Overlay controls: play/pause, seek, skip ±10s, mute, playback speed,
