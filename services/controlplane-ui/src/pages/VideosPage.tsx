@@ -230,6 +230,7 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
       pathname="/manage/videos"
       onNavigate={navigate}
       tabs={[{ label: "Library", path: "/manage/videos" }]}
+      className="page-frame--videos"
     >
       <div className="video-library" ref={pageRef}>
         {message ? <div className="message">{message}</div> : null}

@@ -97,6 +97,9 @@ The Videos page (`/manage/videos`) is a lean-back library, not a file tree:
 - Overlay controls: play/pause, seek, skip ±10s, mute, playback speed,
   fullscreen, close. Delete is not offered in the player; it stays on the
   card ⋮ menu only. Back/Escape exits fullscreen first, then the overlay.
+  On narrow screens the library wraps into a fitted card grid, player chrome
+  stays inside the viewport, and control buttons shrink so they remain visible
+  without sideways page scrolling.
 - Arrow keys move a visible focus ring across toolbar, cards, and overlay
   controls. Upload is hidden on television user agents (no local file picker).
 - Upload and delete stay permission-gated (`video.library.write`) and use

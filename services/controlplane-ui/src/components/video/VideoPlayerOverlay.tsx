@@ -187,7 +187,8 @@ export function VideoPlayerOverlay(props: {
           aria-label={fullscreen ? "Exit full screen" : "Full screen"}
           onClick={() => void toggleFullscreen()}
         >
-          {fullscreen ? "Exit full screen" : "Full screen"}
+          <span className="video-player__btn-wide">{fullscreen ? "Exit full screen" : "Full screen"}</span>
+          <span className="video-player__btn-narrow">{fullscreen ? "Exit" : "Full"}</span>
         </button>
       </header>
 

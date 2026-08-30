@@ -10,11 +10,17 @@ export function PageFrame(props: {
   tabs: Array<{ label: string; path: string }>;
   pathname: string;
   onNavigate: (path: string) => void;
+  className?: string;
   children: ReactNode;
 }): React.JSX.Element {
   const eyebrow = props.eyebrow?.trim();
   return (
-    <section className="min-h-[calc(100vh-112px)] rounded-[1.75rem] border border-slate-200/90 bg-white/95 p-6 shadow-xl shadow-slate-900/[0.07]">
+    <section
+      className={cn(
+        "min-h-[calc(100vh-112px)] rounded-[1.75rem] border border-slate-200/90 bg-white/95 p-6 shadow-xl shadow-slate-900/[0.07]",
+        props.className
+      )}
+    >
       <div>
         {eyebrow ? (
           <span className="mb-2 inline-block text-xs font-bold uppercase tracking-[0.14em] text-blue-950">
