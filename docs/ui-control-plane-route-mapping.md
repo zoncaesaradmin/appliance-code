@@ -91,9 +91,12 @@ The Videos page (`/manage/videos`) is a lean-back library, not a file tree:
 
 - Capability-gated (`video`). After appliance setup and sign-in, the same SPA
   route works in a desktop browser, a phone, or a TV browser.
-- Titles are shown as 16:9 poster cards grouped into directory shelves. Card
-  activate (click, tap, or D-pad OK) opens a theater overlay that range-streams
-  the MP4 after `POST /api/v1/video/playback-session`.
+- Titles are shown as 16:9 poster cards grouped into directory shelves, with
+  the file name only under each poster. Card activate (click, tap, or D-pad
+  OK) opens a theater overlay that range-streams the MP4 after
+  `POST /api/v1/video/playback-session`. The card ⋮ opens a details dialog
+  (name, path, size, added time, status) and, with `video.library.write`,
+  Delete.
 - Overlay controls: play/pause, seek, skip ±10s, mute, playback speed,
   fullscreen, close. Delete is not offered in the player; it stays on the
   card ⋮ menu only. Back/Escape exits fullscreen first, then the overlay.

@@ -997,9 +997,29 @@ button {
   font-size: 1rem;
 }
 
-.video-card__detail {
-  color: #9db0c7;
-  font-size: 0.82rem;
+.video-details {
+  display: grid;
+  gap: 0.85rem;
+  margin: 1rem 0;
+}
+
+.video-details__row {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.video-details__row dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.video-details__row dd {
+  margin: 0;
+  word-break: break-word;
+  font-weight: 600;
 }
 
 .video-card__more {
@@ -1244,10 +1264,6 @@ body:has(.video-player) {
 
   .video-card__title {
     font-size: 0.88rem;
-  }
-
-  .video-card__detail {
-    font-size: 0.72rem;
   }
 
   .video-card__more {

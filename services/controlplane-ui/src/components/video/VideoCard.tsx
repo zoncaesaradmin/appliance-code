@@ -1,12 +1,11 @@
 import React from "react";
 import type { ApplianceFileEntry } from "../../types";
-import { displayTitle, formatBytes, formatModifiedAt, posterHue } from "../../lib/videoLibrary";
+import { displayTitle, posterHue } from "../../lib/videoLibrary";
 
 export function VideoCard(props: {
   entry: ApplianceFileEntry;
-  canManage: boolean;
   onPlay: () => void;
-  onRequestDelete: () => void;
+  onMore: () => void;
 }): React.JSX.Element {
   const title = displayTitle(props.entry);
   const hue = posterHue(props.entry.path);
@@ -36,23 +35,18 @@ export function VideoCard(props: {
         </div>
         <div className="video-card__meta">
           <strong className="video-card__title">{title}</strong>
-          <span className="video-card__detail">
-            {formatBytes(props.entry.sizeBytes)} · {formatModifiedAt(props.entry.modifiedAt)}
-          </span>
         </div>
       </button>
-      {props.canManage ? (
-        <button
-          type="button"
-          className="video-card__more"
-          data-nav
-          data-nav-id={`more:${props.entry.path}`}
-          aria-label={`More actions for ${title}`}
-          onClick={props.onRequestDelete}
-        >
-          ⋮
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="video-card__more"
+        data-nav
+        data-nav-id={`more:${props.entry.path}`}
+        aria-label={`Details for ${title}`}
+        onClick={props.onMore}
+      >
+        ⋮
+      </button>
     </article>
   );
 }

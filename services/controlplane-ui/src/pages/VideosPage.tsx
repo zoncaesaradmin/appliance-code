@@ -13,6 +13,7 @@ import {
   collectVideoTree,
   displayTitle,
   formatBytes,
+  formatModifiedAt,
   isPlayableVideo,
   joinFilePath,
   normalizeRelativePath,
@@ -50,10 +51,12 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
   const [playURL, setPlayURL] = useState("");
   const [playError, setPlayError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [inspecting, setInspecting] = useState<ApplianceFileEntry | null>(null);
 
   const pageRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<HTMLDivElement | null>(null);
   const uploadRef = useRef<HTMLDivElement | null>(null);
+  const inspectRef = useRef<HTMLDivElement | null>(null);
   const confirmRef = useRef<HTMLDivElement | null>(null);
 
   const destinationPreview = useMemo(
@@ -81,12 +84,12 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (loading || playing || showUploadDialog || pendingDelete) {
+    if (loading || playing || showUploadDialog || pendingDelete || inspecting) {
       return;
     }
     const first = pageRef.current?.querySelector<HTMLElement>("[data-nav]");
     first?.focus();
-  }, [loading, playing, showUploadDialog, pendingDelete, shelves]);
+  }, [loading, playing, showUploadDialog, pendingDelete, inspecting, shelves]);
 
   function openUploadDialog() {
     setDestinationDirectory("");
@@ -157,6 +160,7 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
       }
       setMessage(`Deleted ${target}.`);
       setPendingDelete(null);
+      setInspecting(null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Delete failed.");
@@ -201,20 +205,24 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
     if (uploading) {
       return;
     }
+    if (pendingDelete) {
+      setPendingDelete(null);
+      return;
+    }
     setShowUploadDialog(false);
-    setPendingDelete(null);
-  }, [uploading]);
+    setInspecting(null);
+  }, [uploading, pendingDelete]);
 
-  const pageOpen = !playing && !showUploadDialog && !pendingDelete;
+  const pageOpen = !playing && !showUploadDialog && !pendingDelete && !inspecting;
   useSpatialNavigation({ containerRef: pageRef, enabled: pageOpen });
   useSpatialNavigation({
     containerRef: playerRef,
-    enabled: Boolean(playing) && !pendingDelete,
+    enabled: Boolean(playing) && !pendingDelete && !inspecting,
     onBack: handlePlayerBack
   });
   useSpatialNavigation({
-    containerRef: showUploadDialog ? uploadRef : confirmRef,
-    enabled: showUploadDialog || Boolean(pendingDelete),
+    containerRef: showUploadDialog ? uploadRef : pendingDelete ? confirmRef : inspectRef,
+    enabled: showUploadDialog || Boolean(pendingDelete) || Boolean(inspecting),
     onBack: handleModalBack
   });
 
@@ -302,9 +310,8 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
                     <VideoCard
                       key={entry.path}
                       entry={entry}
-                      canManage={canManage}
                       onPlay={() => void playEntry(entry)}
-                      onRequestDelete={() => setPendingDelete({ kind: "file", entry })}
+                      onMore={() => setInspecting(entry)}
                     />
                   ))}
                 </div>
@@ -378,6 +385,64 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {inspecting ? (
+        <div className="video-modal-scrim" role="presentation" onClick={() => setInspecting(null)}>
+          <div
+            className="video-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="videos-details-dialog-title"
+            ref={inspectRef}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="videos-details-dialog-title">{displayTitle(inspecting)}</h2>
+            <dl className="video-details">
+              <div className="video-details__row">
+                <dt>File name</dt>
+                <dd>{inspecting.name}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Library path</dt>
+                <dd>{inspecting.path}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Size</dt>
+                <dd>{formatBytes(inspecting.sizeBytes)}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Added</dt>
+                <dd>{formatModifiedAt(inspecting.modifiedAt)}</dd>
+              </div>
+              {inspecting.status ? (
+                <div className="video-details__row">
+                  <dt>Status</dt>
+                  <dd>{inspecting.status === "ready" ? "Ready to play" : inspecting.status}</dd>
+                </div>
+              ) : null}
+            </dl>
+            <div className="button-row">
+              <button className="button button--ghost" type="button" data-nav data-nav-id="details-close" onClick={() => setInspecting(null)}>
+                Close
+              </button>
+              {canManage ? (
+                <button
+                  className="button button--danger"
+                  type="button"
+                  data-nav
+                  data-nav-id="details-delete"
+                  onClick={() => {
+                    setPendingDelete({ kind: "file", entry: inspecting });
+                    setInspecting(null);
+                  }}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
