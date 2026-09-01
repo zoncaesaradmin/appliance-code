@@ -89,3 +89,12 @@ capabilities:
     artifacts:
       required: [host-agent-image]
     packages: [deviceuser]
+  plaintext-http:
+    displayName: Plaintext HTTP
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.plaintext-http
+    artifacts:
+      required: []
+    packages: [foundation]

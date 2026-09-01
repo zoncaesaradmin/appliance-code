@@ -280,6 +280,8 @@ ingress:
   enabled: true
   # Traefik IngressRoute (CRD). The CRD itself is provided by the K3s-bundled
   # Traefik, not this chart; rendering does not require it to be installed.
+  # TLS stays on websecure. When plaintext-http is in config.enabledCapabilities,
+  # the chart adds a second IngressRoute on web with no TLS.
   entryPoints:
     - websecure
   host: ""

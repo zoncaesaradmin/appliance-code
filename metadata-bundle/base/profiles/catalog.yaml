@@ -14,4 +14,4 @@ profiles:
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
-    capabilities: [base, host, files, video, applications]
+    capabilities: [base, host, files, video, applications, plaintext-http]

@@ -503,6 +503,70 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 	}
 }
 
+func TestIngressRouteOmitsPlaintextHTTPWithoutCapability(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	routes := findByKind(docs, "IngressRoute")
+	if len(routes) != 1 {
+		t.Fatalf("expected exactly one IngressRoute, got %d", len(routes))
+	}
+	tlsRoute := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName)
+	if tlsRoute == nil {
+		t.Fatal("expected TLS IngressRoute")
+	}
+	entryPoints, _ := at(tlsRoute, "spec", "entryPoints").([]any)
+	if fmt.Sprint(entryPoints) != "[websecure]" {
+		t.Fatalf("TLS IngressRoute entryPoints = %#v, want [websecure]", entryPoints)
+	}
+	if at(tlsRoute, "spec", "tls", "secretName") == nil {
+		t.Fatal("TLS IngressRoute must declare tls.secretName")
+	}
+	if findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName+"-http") != nil {
+		t.Fatal("plaintext HTTP IngressRoute must be omitted when plaintext-http is not enabled")
+	}
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName)
+	if cm == nil {
+		t.Fatal("expected UI ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_UI_COOKIE_SECURE"].(string); got != "true" {
+		t.Fatalf("APPLIANCE_UI_COOKIE_SECURE = %q, want true", got)
+	}
+}
+
+func TestIngressRouteRendersPlaintextHTTPWhenCapabilityEnabled(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(), "--set", "config.enabledCapabilities[0]=plaintext-http")...)
+	tlsRoute := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName)
+	if tlsRoute == nil {
+		t.Fatal("expected TLS IngressRoute")
+	}
+	httpRoute := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName+"-http")
+	if httpRoute == nil {
+		t.Fatal("expected plaintext HTTP IngressRoute when plaintext-http is enabled")
+	}
+	entryPoints, _ := at(httpRoute, "spec", "entryPoints").([]any)
+	if fmt.Sprint(entryPoints) != "[web]" {
+		t.Fatalf("plaintext HTTP IngressRoute entryPoints = %#v, want [web]", entryPoints)
+	}
+	if at(httpRoute, "spec", "tls") != nil {
+		t.Fatal("plaintext HTTP IngressRoute must not declare tls")
+	}
+	tlsEntryPoints, _ := at(tlsRoute, "spec", "entryPoints").([]any)
+	if fmt.Sprint(tlsEntryPoints) != "[websecure]" {
+		t.Fatalf("TLS IngressRoute entryPoints = %#v, want [websecure]", tlsEntryPoints)
+	}
+	if at(tlsRoute, "spec", "tls", "secretName") == nil {
+		t.Fatal("TLS IngressRoute must keep tls.secretName")
+	}
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName)
+	if cm == nil {
+		t.Fatal("expected UI ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_UI_COOKIE_SECURE"].(string); got != "false" {
+		t.Fatalf("APPLIANCE_UI_COOKIE_SECURE = %q, want false when plaintext-http is enabled", got)
+	}
+}
+
 func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	cms := findByKind(docs, "ConfigMap")

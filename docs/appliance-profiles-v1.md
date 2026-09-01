@@ -63,6 +63,8 @@ The initial v1 appliance capabilities are:
 | `dns` | LAN DNS data plane: appliance-owned CoreDNS answering on the node UDP/TCP 53 for a local zone plus upstream forwarders; reported in the capability set and required for DNS-bearing profiles (`landns`, `storage-landns`, `builder-landns`, `builder-storage-landns`) readiness |
 | `inference` | Local LLM inference APIs: OpenAI-compatible gateway proxied through the control plane; required for inference-bearing profiles (`lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns`) readiness |
 | `video` | Video library storage and browser streaming through the foundation blob store. The shipped `training` profile enables this capability. |
+| `applications` | User-managed application lifecycle through the host agent. |
+| `plaintext-http` | Serve the existing public UI and API on Traefik's `web` entrypoint (TCP 80) in addition to HTTPS on `websecure`. Canonical origin remains `https://<appliance-fqdn>`. Profiles that omit this capability keep HTTPS-only public ingress. |
 
 Notes:
 
@@ -90,7 +92,7 @@ The initial v1 appliance profiles are:
 | `lanllm` | No | `base`, `host`, `files`, `inference` |
 | `builder-lanllm` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `inference` |
 | `builder-lanllm-storage-landns` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `dns`, `inference` |
-| `training` | No | `base`, `host`, `files`, `video` |
+| `training` | No | `base`, `host`, `files`, `video`, `applications`, `plaintext-http` |
 
 Notes:
 
@@ -141,6 +143,8 @@ The v1 dependency set is:
 | `dns` | `base` |
 | `inference` | `base` |
 | `video` | `base` |
+| `applications` | `base`, `host` |
+| `plaintext-http` | `base` |
 
 Rules:
 

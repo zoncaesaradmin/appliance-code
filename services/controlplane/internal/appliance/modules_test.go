@@ -89,6 +89,9 @@ func TestResolveModulesIncludesVideoCapabilityWithoutRuntimeModule(t *testing.T)
 	if !resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
 		t.Fatal("training profile should enable the video capability")
 	}
+	if !resolved.Capabilities.Enabled(appliance.CapabilityPlaintextHTTP) {
+		t.Fatal("training profile should enable the plaintext-http capability")
+	}
 }
 
 func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {

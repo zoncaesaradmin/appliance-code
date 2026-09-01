@@ -12,7 +12,7 @@ flowchart TD
 
     subgraph Node["Dedicated single-node K3s appliance"]
         subgraph IngressNS["K3s ingress namespace"]
-            Traefik["Traefik pod<br/>HTTPS ingress"]
+            Traefik["Traefik pod<br/>HTTPS ingress; HTTP when plaintext-http is enabled"]
         end
 
         subgraph SystemNS["ace-system namespace"]
@@ -56,7 +56,7 @@ flowchart TD
         end
     end
 
-    Client -->|"TCP 443"| Traefik
+    Client -->|"TCP 443; TCP 80 when plaintext-http is enabled"| Traefik
     Traefik -->|"/ and browser UI paths"| UI
     Traefik -->|"/api/v1/* and /mcp"| Control
     Traefik -.->|ForwardAuth<br/>"/internal/auth/check"| Control
@@ -91,7 +91,7 @@ flowchart TD
 | Control plane | 1 | `/api/v1/*`, `/mcp` | REST, MCP, local identity, sessions, API tokens, RBAC, registry-token issuance, internal ForwardAuth decisions, audit, builds, artifact metadata, reconciliation, and internal maintenance scheduling |
 | Artifact Server | 1 | `/v2/*` | OCI manifests, tags, digests, referrers, blobs, enhanced search, scrub, deduplication, garbage collection, and internal events |
 | Workflow Controller | 1 | None | Watches appliance-owned `Workflow` resources and reconciles build, scan, and image-operation task pods |
-| Traefik | K3s-managed | TCP 443 | TLS termination, canonical-host enforcement, request limits, and routing to the control plane or Artifact Server |
+| Traefik | K3s-managed | TCP 443; TCP 80 when `plaintext-http` is enabled | TLS termination, optional plaintext HTTP for that capability, canonical-host enforcement, request limits, and routing to the control plane or Artifact Server |
 
 SQLite runs inside the control-plane process and stores files on its PVC. It is not a separate pod. MCP is part of the same Go server and is not a separate pod. Argo Server and its UI are not deployed in v1: the Workflow Controller can operate independently, and the appliance's own UI plus control plane remain the only user-facing surfaces.
 
@@ -126,7 +126,8 @@ These are substrate services rather than appliance feature modules. Their exact 
 
 | Source | Destination | Allowed purpose |
 | --- | --- | --- |
-| External clients | Traefik TCP 443 | Canonical HTTPS entry point only |
+| External clients | Traefik TCP 443 | Canonical HTTPS entry point |
+| External clients | Traefik TCP 80 | Public UI and API only when `plaintext-http` is enabled; otherwise unused or HTTPS redirect |
 | Traefik | Control plane public listener | REST and MCP routes, plus cluster-internal ForwardAuth checks at `/internal/auth/check` for protected app ingress |
 | Traefik | Artifact Server | OCI `/v2/*` data path |
 | Control plane | Kubernetes API | Create/get/watch/terminate appliance-owned Workflows and read their task-pod status/logs through namespace-limited RBAC |

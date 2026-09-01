@@ -59,6 +59,14 @@ releases, enabling only the set it is currently applying.
 {{- if has "applications" (.Values.config.enabledCapabilities | default (list)) -}}true{{- end -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.plaintextHTTPEnabled" -}}
+{{- if has "plaintext-http" (.Values.config.enabledCapabilities | default (list)) -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.uiCookieSecure" -}}
+{{- if eq (include "appliance-control-plane.plaintextHTTPEnabled" .) "true" -}}false{{- else -}}{{ .Values.ui.config.cookieSecure }}{{- end -}}
+{{- end -}}
+
 {{- define "appliance-control-plane.dnsSupportEnabled" -}}
 {{- if and .Values.rollout .Values.rollout.dnsSupport .Values.rollout.dnsSupport.enabled -}}true{{- end -}}
 {{- end -}}
@@ -329,4 +337,28 @@ ForwardAuth middleware name.
 */}}
 {{- define "appliance-control-plane.forwardAuthMiddlewareName" -}}
 {{- printf "%s-forward-auth" (include "appliance-control-plane.fullname" .) -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.ingressRouteRules" -}}
+{{- $hostMatch := "" }}
+{{- if .Values.ingress.host }}
+{{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
+{{- end }}
+- match: {{ printf "%s(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/inference/v1`) || PathPrefix(`/video/v1`))" $hostMatch }}
+  kind: Rule
+  priority: 100
+  services:
+    - name: {{ include "appliance-control-plane.fullname" . }}
+      port: {{ .Values.service.publicPort }}
+{{- if .Values.ui.enabled }}
+- match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" $hostMatch }}
+  kind: Rule
+  priority: 1
+  services:
+    - name: {{ include "appliance-control-plane.uiServiceName" . }}
+      {{- if include "appliance-control-plane.appsNamespaced" . }}
+      namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+      {{- end }}
+      port: {{ .Values.ui.service.port }}
+{{- end }}
 {{- end -}}

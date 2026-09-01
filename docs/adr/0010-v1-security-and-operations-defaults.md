@@ -12,7 +12,8 @@ The architecture is settled, but implementation still needs concrete defaults fo
 ### External Origin And Listeners
 
 - Production has one required canonical origin: `https://<appliance-fqdn>`.
-- Traefik exposes only TCP 443. An optional TCP 80 listener may perform an unconditional redirect to the canonical HTTPS origin; it serves no application content.
+- Traefik exposes TCP 443 for every profile. An optional TCP 80 listener may perform an unconditional redirect to the canonical HTTPS origin; it serves no application content unless the resolved capability set includes `plaintext-http`.
+- When `plaintext-http` is enabled, Traefik also serves the same public UI and API routes on TCP 80 without TLS. HTTPS on 443 remains enabled. Profiles that do not enable the capability must not serve application content on port 80.
 - `/api/v1/*`, `/mcp`, and `/v2/*` share the canonical origin. This avoids cross-origin credential and certificate complexity.
 - The control plane has a public application listener and a separate internal operations listener. Health, metrics, profiling, and detailed dependency status are never routed through public ingress.
 - TLS terminates at Traefik in v1. Cluster-internal HTTP is protected by namespace isolation and default-deny NetworkPolicy. Internal mTLS is deferred until a demonstrated threat or multi-node topology justifies its certificate lifecycle.

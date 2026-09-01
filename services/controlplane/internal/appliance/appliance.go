@@ -30,16 +30,17 @@ const (
 type Capability string
 
 const (
-	CapabilityBase         Capability = "base"
-	CapabilityHost         Capability = "host"
-	CapabilityWorkflows    Capability = "workflows"
-	CapabilityBuild        Capability = "build"
-	CapabilityFiles        Capability = "files"
-	CapabilityArtifact     Capability = "artifact"
-	CapabilityDNS          Capability = "dns"
-	CapabilityInference    Capability = "inference"
-	CapabilityVideo        Capability = "video"
-	CapabilityApplications Capability = "applications"
+	CapabilityBase          Capability = "base"
+	CapabilityHost          Capability = "host"
+	CapabilityWorkflows     Capability = "workflows"
+	CapabilityBuild         Capability = "build"
+	CapabilityFiles         Capability = "files"
+	CapabilityArtifact      Capability = "artifact"
+	CapabilityDNS           Capability = "dns"
+	CapabilityInference     Capability = "inference"
+	CapabilityVideo         Capability = "video"
+	CapabilityApplications  Capability = "applications"
+	CapabilityPlaintextHTTP Capability = "plaintext-http"
 )
 
 type CapabilityCatalog map[Capability]capabilityDefinition
