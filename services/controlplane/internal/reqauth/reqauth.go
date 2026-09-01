@@ -25,6 +25,7 @@ import (
 type Principal struct {
 	UserID      string
 	Username    string
+	DisplayName string
 	Domain      string // authentication domain (e.g. authn.AuthDomainLocal); never assume empty means local at call sites — Authenticate always sets it
 	RoleNames   []string
 	Permissions map[string]bool
@@ -103,7 +104,7 @@ func Authenticate(ctx context.Context, deps Deps, raw string) (Principal, error)
 			return Principal{}, err
 		}
 		return Principal{
-			UserID: tok.UserID, Username: user.Username, Domain: authn.AuthDomainLocal, RoleNames: roleNames,
+			UserID: tok.UserID, Username: user.Username, DisplayName: user.DisplayName, Domain: authn.AuthDomainLocal, RoleNames: roleNames,
 			Permissions: authz.IntersectScopes(effective, tok.Scopes),
 			AuthMethod:  "api_token", TokenID: tok.ID,
 		}, nil
@@ -126,7 +127,7 @@ func Authenticate(ctx context.Context, deps Deps, raw string) (Principal, error)
 		domain = authn.AuthDomainLocal
 	}
 	return Principal{
-		UserID: user.ID, Username: user.Username, Domain: domain, RoleNames: roleNames, Permissions: effective,
+		UserID: user.ID, Username: user.Username, DisplayName: claims.DisplayName, Domain: domain, RoleNames: roleNames, Permissions: effective,
 		AuthMethod: "session", FamilyID: claims.FamilyID,
 	}, nil
 }

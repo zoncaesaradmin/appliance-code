@@ -220,6 +220,7 @@ func (h *AuthHandlers) ChangePassword(w http.ResponseWriter, r *http.Request) {
 type sessionResponse struct {
 	UserID      string   `json:"userId"`
 	Username    string   `json:"username"`
+	DisplayName string   `json:"displayName"`
 	Domain      string   `json:"domain"`
 	AuthMethod  string   `json:"authMethod"`
 	Permissions []string `json:"permissions"`
@@ -240,8 +241,12 @@ func (h *AuthHandlers) Session(w http.ResponseWriter, r *http.Request) {
 	if domain == "" {
 		domain = authn.AuthDomainLocal
 	}
+	displayName := principal.DisplayName
+	if displayName == "" {
+		displayName = principal.Username
+	}
 	writeJSON(w, http.StatusOK, sessionResponse{
-		UserID: principal.UserID, Username: principal.Username, Domain: domain,
+		UserID: principal.UserID, Username: principal.Username, DisplayName: displayName, Domain: domain,
 		AuthMethod: principal.AuthMethod, Permissions: perms,
 	})
 }

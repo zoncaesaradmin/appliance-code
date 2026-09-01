@@ -118,7 +118,7 @@ func (s *SessionService) Guest(ctx context.Context, sourceAddr, requestID, name 
 	if err != nil || user.State != storage.UserStateActive {
 		return LoginResult{}, ErrGuestUnavailable
 	}
-	result, err := s.createSessionFamily(ctx, user, AuthDomainLocal)
+	result, err := s.createSessionFamily(ctx, user, AuthDomainLocal, name)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -178,7 +178,7 @@ func (s *SessionService) loginLocalPassword(ctx context.Context, sourceAddr, req
 		return LoginResult{}, err
 	}
 
-	result, err := s.createSessionFamily(ctx, user, AuthDomainLocal)
+	result, err := s.createSessionFamily(ctx, user, AuthDomainLocal, user.DisplayName)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -215,11 +215,15 @@ func (s *SessionService) recordLoginFailure(ctx context.Context, domain, normali
 	return nil
 }
 
-func (s *SessionService) createSessionFamily(ctx context.Context, user storage.User, domain string) (LoginResult, error) {
+func (s *SessionService) createSessionFamily(ctx context.Context, user storage.User, domain, displayName string) (LoginResult, error) {
 	now := time.Now().UTC()
+	if displayName == "" {
+		displayName = user.DisplayName
+	}
 	family := storage.SessionFamily{
 		ID: uuid.Must(uuid.NewV7()).String(), UserID: user.ID, AuthDomain: domain,
-		CreatedAt: now, LastUsedAt: now, AbsoluteExpiresAt: now.Add(RefreshAbsoluteLifetime),
+		DisplayName: displayName,
+		CreatedAt:   now, LastUsedAt: now, AbsoluteExpiresAt: now.Add(RefreshAbsoluteLifetime),
 	}
 
 	refreshRaw, refreshSecret, err := GenerateOpaqueCredential()
@@ -253,7 +257,7 @@ func (s *SessionService) createSessionFamily(ctx context.Context, user storage.U
 			return err
 		}
 
-		accessToken, err := s.issueAccessToken(user, family.ID, domain)
+		accessToken, err := s.issueAccessToken(user, family.ID, domain, family.DisplayName)
 		if err != nil {
 			return err
 		}
@@ -269,7 +273,7 @@ func (s *SessionService) createSessionFamily(ctx context.Context, user storage.U
 	return result, nil
 }
 
-func (s *SessionService) issueAccessToken(user storage.User, familyID, domain string) (string, error) {
+func (s *SessionService) issueAccessToken(user storage.User, familyID, domain, displayName string) (string, error) {
 	now := time.Now().UTC()
 	if domain == "" {
 		domain = AuthDomainLocal
@@ -277,6 +281,7 @@ func (s *SessionService) issueAccessToken(user storage.User, familyID, domain st
 	return IssueSessionJWT(s.keys.SessionPrivateKey, s.keys.SessionKeyID, SessionClaims{
 		Issuer: s.issuer, Audience: s.audience, Subject: user.ID,
 		JTI: uuid.Must(uuid.NewV7()).String(), FamilyID: familyID, AuthDomain: domain,
+		DisplayName:       displayName,
 		CredentialVersion: user.CredentialVersion,
 		IssuedAt:          now, NotBefore: now, ExpiresAt: now.Add(SessionAccessLifetime),
 	})
@@ -373,7 +378,7 @@ func (s *SessionService) Refresh(ctx context.Context, sourceAddr, requestID, ref
 		if err := s.sessions.TouchFamily(ctx, familyID, now); err != nil {
 			return err
 		}
-		accessToken, err := s.issueAccessToken(user, familyID, family.AuthDomain)
+		accessToken, err := s.issueAccessToken(user, familyID, family.AuthDomain, family.DisplayName)
 		if err != nil {
 			return err
 		}

@@ -304,7 +304,7 @@ export function Shell(props: {
                 <Icon name="user" className="h-6 w-6" />
               </span>
               <span>
-                <strong className="block text-sm font-bold text-slate-950">{props.session.username}</strong>
+                <strong className="block text-sm font-bold text-slate-950">{props.session.displayName || props.session.username}</strong>
                 <span className="text-sm text-slate-500">{props.session.authMethod}</span>
               </span>
             </button>

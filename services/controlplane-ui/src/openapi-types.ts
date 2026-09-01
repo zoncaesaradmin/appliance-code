@@ -1330,6 +1330,7 @@ export interface components {
         Session: {
             userId: string;
             username: string;
+            displayName: string;
             domain: components["schemas"]["AuthDomain"];
             authMethod: string;
             permissions: string[];

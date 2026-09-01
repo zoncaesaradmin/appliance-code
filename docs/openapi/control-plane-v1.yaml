@@ -2045,11 +2045,13 @@ components:
             and must differ from currentPassword.
     Session:
       type: object
-      required: [userId, username, domain, authMethod, permissions]
+      required: [userId, username, displayName, domain, authMethod, permissions]
       properties:
         userId:
           type: string
         username:
+          type: string
+        displayName:
           type: string
         domain:
           $ref: "#/components/schemas/AuthDomain"

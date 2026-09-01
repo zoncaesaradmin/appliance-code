@@ -289,6 +289,10 @@ export function AccountPage(props: {
           <Card title="Profile" subtitle="Your appliance user identity">
             <div className="detail-list">
               <div>
+                <span>Display name</span>
+                <strong>{props.session.displayName || props.session.username}</strong>
+              </div>
+              <div>
                 <span>Username</span>
                 <strong>{props.session.username}</strong>
               </div>

@@ -176,7 +176,7 @@ export function HomePage(props: {
 
   return (
     <PageFrame
-      title={`Welcome, ${props.session.username}`}
+      title={`Welcome, ${props.session.displayName || props.session.username}`}
       eyebrow=""
       pathname={props.pathname}
       onNavigate={navigate}

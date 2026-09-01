@@ -246,6 +246,13 @@ button {
   font-size: 0.85rem;
 }
 
+.auth-form__guest .button--secondary {
+  min-height: 52px;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(18, 51, 91, 0.2);
+}
+
 .auth-form__footer {
   flex-shrink: 0;
   margin-top: 16px;

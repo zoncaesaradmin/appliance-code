@@ -32,6 +32,7 @@ type SessionClaims struct {
 	JTI               string    `json:"jti"`
 	FamilyID          string    `json:"familyId"`
 	AuthDomain        string    `json:"authDomain"`
+	DisplayName       string    `json:"displayName"`
 	CredentialVersion int       `json:"credentialVersion"`
 	IssuedAt          time.Time `json:"-"`
 	NotBefore         time.Time `json:"-"`
@@ -51,6 +52,7 @@ type jwtPayload struct {
 	JTI               string `json:"jti"`
 	FamilyID          string `json:"familyId"`
 	AuthDomain        string `json:"authDomain,omitempty"`
+	DisplayName       string `json:"displayName,omitempty"`
 	CredentialVersion int    `json:"credentialVersion"`
 	IssuedAt          int64  `json:"iat"`
 	NotBefore         int64  `json:"nbf"`
@@ -72,7 +74,7 @@ func IssueSessionJWT(priv ed25519.PrivateKey, kid string, claims SessionClaims) 
 
 	payload := jwtPayload{
 		Issuer: claims.Issuer, Audience: claims.Audience, Subject: claims.Subject,
-		JTI: claims.JTI, FamilyID: claims.FamilyID, AuthDomain: claims.AuthDomain,
+		JTI: claims.JTI, FamilyID: claims.FamilyID, AuthDomain: claims.AuthDomain, DisplayName: claims.DisplayName,
 		CredentialVersion: claims.CredentialVersion,
 		IssuedAt:          claims.IssuedAt.Unix(), NotBefore: claims.NotBefore.Unix(), ExpiresAt: claims.ExpiresAt.Unix(),
 	}
@@ -149,7 +151,7 @@ func ValidateSessionJWT(pub ed25519.PublicKey, expectedKid, issuer, audience, to
 
 	claims := SessionClaims{
 		Issuer: payload.Issuer, Audience: payload.Audience, Subject: payload.Subject,
-		JTI: payload.JTI, FamilyID: payload.FamilyID, AuthDomain: payload.AuthDomain,
+		JTI: payload.JTI, FamilyID: payload.FamilyID, AuthDomain: payload.AuthDomain, DisplayName: payload.DisplayName,
 		CredentialVersion: payload.CredentialVersion,
 		IssuedAt:          time.Unix(payload.IssuedAt, 0), NotBefore: notBefore, ExpiresAt: expiresAt,
 	}

@@ -393,6 +393,7 @@ func TestGuestAccessIsCapabilityGated(t *testing.T) {
 		}
 		var principal struct {
 			Username    string   `json:"username"`
+			DisplayName string   `json:"displayName"`
 			Permissions []string `json:"permissions"`
 		}
 		if err := json.NewDecoder(session.Body).Decode(&principal); err != nil {
@@ -400,6 +401,9 @@ func TestGuestAccessIsCapabilityGated(t *testing.T) {
 		}
 		if principal.Username != "guest" {
 			t.Fatalf("guest session username = %q, want guest", principal.Username)
+		}
+		if principal.DisplayName != "Guest Viewer" {
+			t.Fatalf("guest session display name = %q, want Guest Viewer", principal.DisplayName)
 		}
 		permissions := make(map[string]bool, len(principal.Permissions))
 		for _, permission := range principal.Permissions {
