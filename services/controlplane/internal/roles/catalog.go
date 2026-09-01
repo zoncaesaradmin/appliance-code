@@ -20,6 +20,7 @@ const (
 	DeveloperRoleID     = "role-developer"
 	ViewerRoleID        = "role-viewer"
 	AutomationRoleID    = "role-automation"
+	GuestRoleID         = "role-guest"
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	Developer     = "developer"
 	Viewer        = "viewer"
 	Automation    = "automation"
+	Guest         = "guest"
 )
 
 // Permission name constants matching the published catalog in ADR 0010.
@@ -259,6 +261,11 @@ var BuiltInRoles = []BuiltInRole{
 			PermNotificationsRead,
 			PermLicensingRead,
 		},
+	},
+	{
+		ID:          GuestRoleID,
+		Name:        Guest,
+		Permissions: []string{PermVideoLibraryRead, PermVideoPlay},
 	},
 	{
 		ID:   AutomationRoleID,

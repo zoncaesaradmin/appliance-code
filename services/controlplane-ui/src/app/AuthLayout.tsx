@@ -8,6 +8,8 @@ export function AuthLayout(props: {
   mode: "login" | "setup";
   onLogin: (username: string, password: string, persist: boolean) => Promise<void>;
   onSetup: (username: string, password: string, persist: boolean) => Promise<void>;
+  guestAccess: boolean;
+  onGuest: (persist: boolean) => Promise<void>;
 }): React.JSX.Element {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -51,6 +53,18 @@ export function AuthLayout(props: {
       } else {
         await props.onLogin(username, password, persistSession);
       }
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleGuest() {
+    setError("");
+    setSubmitting(true);
+    try {
+      await props.onGuest(persistSession);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
     } finally {
@@ -157,6 +171,11 @@ export function AuthLayout(props: {
                   ? "Create administrator"
                   : "Sign in"}
             </button>
+            {props.mode === "login" && props.guestAccess ? (
+              <button className="button button--secondary" disabled={submitting} type="button" onClick={() => void handleGuest()}>
+                Continue as guest
+              </button>
+            ) : null}
           </form>
         </div>
         <footer className="auth-form__footer">

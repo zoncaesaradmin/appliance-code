@@ -137,6 +137,13 @@ export function App(): React.JSX.Element {
     setRefreshKey((value) => value + 1);
   }
 
+  async function handleGuest(persist: boolean): Promise<void> {
+    const tokens = await client.loginAsGuest();
+    setAuthPersist(persist);
+    saveAuth(tokens);
+    setRefreshKey((value) => value + 1);
+  }
+
   async function handleLogout(): Promise<void> {
     await client.logout();
     setShellState((current) => ({ ...current, session: null }));
@@ -158,6 +165,8 @@ export function App(): React.JSX.Element {
         mode={isSetup ? "setup" : "login"}
         onLogin={handleLogin}
         onSetup={handleSetup}
+        guestAccess={shellState.capabilities.includes("guest-access")}
+        onGuest={handleGuest}
       />
     );
   }

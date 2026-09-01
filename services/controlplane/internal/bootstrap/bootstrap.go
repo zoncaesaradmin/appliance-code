@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"appliance-code/services/controlplane/internal/audit"
+	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/users"
@@ -24,14 +25,19 @@ type Result struct {
 	Username    string
 }
 
-// Initialized reports whether at least one user already exists, meaning the
-// appliance has completed first-admin setup.
+// Initialized reports whether a non-system user exists, meaning the appliance
+// has completed first-admin setup.
 func Initialized(ctx context.Context, userStore storage.UserStore) (bool, error) {
 	existing, err := userStore.List(ctx)
 	if err != nil {
 		return false, err
 	}
-	return len(existing) > 0, nil
+	for _, user := range existing {
+		if user.Username != authn.GuestUsername {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Init creates the first administrator user and its administrator role
@@ -45,8 +51,10 @@ func Init(ctx context.Context, db storage.DB, userStore storage.UserStore, roleS
 		if err != nil {
 			return err
 		}
-		if len(existing) > 0 {
-			return ErrAlreadyInitialized
+		for _, user := range existing {
+			if user.Username != authn.GuestUsername {
+				return ErrAlreadyInitialized
+			}
 		}
 
 		user, err := usersSvc.Create(ctx, audit.Actor{Type: storage.AuditActorSystem, AuthMethod: "bootstrap"}, adminUsername, displayName, adminPassword)

@@ -39,6 +39,7 @@ const (
 	CapabilityDNS           Capability = "dns"
 	CapabilityInference     Capability = "inference"
 	CapabilityVideo         Capability = "video"
+	CapabilityGuestAccess   Capability = "guest-access"
 	CapabilityApplications  Capability = "applications"
 	CapabilityPlaintextHTTP Capability = "plaintext-http"
 )

@@ -166,6 +166,12 @@ func publicRoutes() []publicRoute {
 			}
 			return http.HandlerFunc(deps.AuthH.Login), nil
 		}},
+		{capability: appliance.CapabilityGuestAccess, pattern: "POST /api/v1/auth/guest", build: func(deps Deps, _ wrappers) (http.Handler, error) {
+			if deps.AuthH == nil {
+				return nil, fmt.Errorf("missing auth handlers")
+			}
+			return http.HandlerFunc(deps.AuthH.Guest), nil
+		}},
 		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/auth/refresh", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.AuthH == nil {
 				return nil, fmt.Errorf("missing auth handlers")

@@ -80,6 +80,15 @@ capabilities:
     artifacts:
       required: []
     packages: [foundation]
+  guest-access:
+    displayName: Guest Access
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.guest-access
+    artifacts:
+      required: []
+    packages: [foundation]
   applications:
     displayName: Applications
     requires: [base, host]

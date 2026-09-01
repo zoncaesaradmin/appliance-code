@@ -117,6 +117,7 @@ export interface ControlPlaneClient {
   getCapabilities(): Promise<CapabilitiesResponse>;
   createFirstAdmin(username: string, password: string, displayName: string): Promise<void>;
   login(username: string, password: string, domain?: string): Promise<LoginResponse>;
+  loginAsGuest(): Promise<LoginResponse>;
   refresh(): Promise<LoginResponse>;
   logout(): Promise<void>;
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
@@ -233,6 +234,14 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     return this.request("/api/v1/auth/login", {
       method: "POST",
       body: { username, password, domain: resolvedDomain },
+      auth: false,
+      retryAuth: false
+    });
+  }
+
+  async loginAsGuest(): Promise<LoginResponse> {
+    return this.request("/api/v1/auth/guest", {
+      method: "POST",
       auth: false,
       retryAuth: false
     });

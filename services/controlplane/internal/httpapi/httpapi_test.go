@@ -182,7 +182,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	deps := httpapi.Deps{
 		Logger:        logger,
 		Auth:          authDeps,
-		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users},
+		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users, UserStore: services.UserStore},
 		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
 		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
 		IdentityH: &httpapi.IdentityHandlers{
@@ -344,7 +344,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		{appliance.ProfileCore, []string{"base", "files"}},
 		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
 		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "workflows"}},
-		{appliance.ProfileTraining, []string{"applications", "base", "files", "host", "plaintext-http", "video"}},
+		{appliance.ProfileTraining, []string{"applications", "base", "files", "guest-access", "host", "plaintext-http", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
@@ -365,6 +365,59 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGuestAccessIsCapabilityGated(t *testing.T) {
+	t.Run("enabled", func(t *testing.T) {
+		ts := newTestServerWithProfile(t, appliance.ProfileTraining)
+		ts.bootstrapAdmin(t, "admin", testPassword)
+		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", "")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("guest login status = %d, want 200", resp.StatusCode)
+		}
+		var body struct {
+			AccessToken string `json:"accessToken"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decoding guest login response: %v", err)
+		}
+		if body.AccessToken == "" {
+			t.Fatal("guest login did not return an access token")
+		}
+
+		session := ts.doJSON(t, "GET", "/api/v1/auth/session", body.AccessToken, "")
+		defer session.Body.Close()
+		if session.StatusCode != http.StatusOK {
+			t.Fatalf("guest session status = %d, want 200", session.StatusCode)
+		}
+		var principal struct {
+			Username    string   `json:"username"`
+			Permissions []string `json:"permissions"`
+		}
+		if err := json.NewDecoder(session.Body).Decode(&principal); err != nil {
+			t.Fatalf("decoding guest session: %v", err)
+		}
+		if principal.Username != "guest" {
+			t.Fatalf("guest session username = %q, want guest", principal.Username)
+		}
+		permissions := make(map[string]bool, len(principal.Permissions))
+		for _, permission := range principal.Permissions {
+			permissions[permission] = true
+		}
+		if len(permissions) != 2 || !permissions[roles.PermVideoLibraryRead] || !permissions[roles.PermVideoPlay] {
+			t.Fatalf("guest permissions = %v, want video read/play only", principal.Permissions)
+		}
+	})
+
+	t.Run("disabled", func(t *testing.T) {
+		ts := newTestServerWithProfile(t, appliance.ProfileCore)
+		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", "")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("guest login without capability status = %d, want 404", resp.StatusCode)
+		}
+	})
 }
 
 func TestCoreProfileDoesNotExposeArtifactRoutes(t *testing.T) {

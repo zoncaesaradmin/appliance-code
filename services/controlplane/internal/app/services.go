@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -131,6 +133,12 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	}
 
 	userStore := sqlite.NewUserStore(db)
+	if resolved.Capabilities.Enabled(appliance.CapabilityGuestAccess) {
+		if err := ensureGuestUser(ctx, db, userStore, roleStore); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: ensuring guest user: %w", err)
+		}
+	}
 	tokenStore := sqlite.NewTokenStore(db)
 	sessionStore := sqlite.NewSessionStore(db)
 	throttleStore := sqlite.NewThrottleStore(db)
@@ -349,6 +357,28 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Audit:              recorder,
 		AuditOps:           auditOps,
 	}, nil
+}
+
+func ensureGuestUser(ctx context.Context, db storage.DB, userStore storage.UserStore, roleStore storage.RoleStore) error {
+	guest, err := userStore.GetByUsername(ctx, authn.GuestUsername)
+	if err == nil {
+		return roleStore.AssignUserRole(ctx, guest.ID, roles.GuestRoleID)
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+
+	now := time.Now().UTC()
+	guest = storage.User{
+		ID: uuid.Must(uuid.NewV7()).String(), Username: authn.GuestUsername, DisplayName: "Guest",
+		State: storage.UserStateActive, CredentialVersion: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	return db.WithTx(ctx, func(ctx context.Context) error {
+		if err := userStore.Create(ctx, guest); err != nil {
+			return err
+		}
+		return roleStore.AssignUserRole(ctx, guest.ID, roles.GuestRoleID)
+	})
 }
 
 func bootstrapDNS(ctx context.Context, logger logging.Logger, svc dnsBootstrapper) error {

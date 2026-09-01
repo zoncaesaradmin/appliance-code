@@ -68,7 +68,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	deps := httpapi.Deps{
 		Logger:        logger,
 		Auth:          authDeps,
-		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users},
+		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users, UserStore: services.UserStore},
 		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
 		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
 		IdentityH: &httpapi.IdentityHandlers{

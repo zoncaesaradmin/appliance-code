@@ -93,7 +93,7 @@ type MockState = {
 
 const mockState: MockState = {
   initialized: true,
-  capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "video"],
+  capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "video", "guest-access"],
 	session: {
     userId: "mock-admin",
     username: "admin",
@@ -301,6 +301,21 @@ export class MockControlPlaneClient {
 
   async getCapabilities(): Promise<CapabilitiesResponse> {
     return { capabilities: mockState.capabilities };
+  }
+
+  async loginAsGuest(): Promise<LoginResponse> {
+    mockState.session = {
+      userId: "mock-guest",
+      username: "guest",
+      domain: "local",
+      authMethod: "session",
+      permissions: ["video.library.read", "video.play"]
+    };
+    return {
+      accessToken: uuid(),
+      refreshToken: uuid(),
+      accessExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    };
   }
 
   async createFirstAdmin(): Promise<void> {

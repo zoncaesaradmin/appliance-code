@@ -6,15 +6,18 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/authn"
+	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/reqauth"
+	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/users"
 )
 
 // AuthHandlers implements POST /api/v1/auth/login, logout, refresh,
 // change-password, and GET /api/v1/auth/session.
 type AuthHandlers struct {
-	Sessions *authn.SessionService
-	Users    *users.Service
+	Sessions  *authn.SessionService
+	Users     *users.Service
+	UserStore storage.UserStore
 }
 
 type loginRequest struct {
@@ -62,6 +65,32 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setVideoPlaybackCookie(w, r, result.AccessToken, result.AccessExpiresAt)
+	writeJSON(w, http.StatusOK, loginResponse{
+		AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, AccessExpiresAt: result.AccessExpiresAt,
+	})
+}
+
+// Guest establishes a session for the system-managed guest principal.
+func (h *AuthHandlers) Guest(w http.ResponseWriter, r *http.Request) {
+	initialized, err := bootstrap.Initialized(r.Context(), h.UserStore)
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	if !initialized {
+		WriteProblem(w, r, http.StatusConflict, "setup_required", "Appliance setup is required", "")
+		return
+	}
+	result, err := h.Sessions.Guest(r.Context(), r.RemoteAddr, requestIDFromRequest(r))
+	if errors.Is(err, authn.ErrGuestUnavailable) {
+		WriteProblem(w, r, http.StatusServiceUnavailable, "guest_unavailable", "Guest access is unavailable", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
 	setVideoPlaybackCookie(w, r, result.AccessToken, result.AccessExpiresAt)
 	writeJSON(w, http.StatusOK, loginResponse{
 		AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, AccessExpiresAt: result.AccessExpiresAt,

@@ -374,6 +374,37 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Problem"
+  /api/v1/auth/guest:
+    post:
+      summary: Start a guest session
+      description: Available only when the running appliance enables the `guest-access` capability.
+      operationId: loginAsGuest
+      security: []
+      responses:
+        "200":
+          description: Guest session credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "404":
+          description: Guest access is not enabled.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: Appliance setup is not complete.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Guest access is temporarily unavailable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/auth/refresh:
     post:
       summary: Refresh an interactive session

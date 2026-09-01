@@ -27,6 +27,7 @@ const (
 	progressiveDelayAt   = 5
 	progressiveDelayStep = 200 * time.Millisecond
 	progressiveDelayMax  = 2 * time.Second
+	GuestUsername        = "guest"
 )
 
 // ErrInvalidCredentials covers wrong username, wrong password, unknown
@@ -41,6 +42,10 @@ var ErrAccountLocked = errors.New("authn: account temporarily locked, try again 
 // ErrInvalidRefreshToken covers a malformed, unknown, expired, or revoked
 // refresh credential.
 var ErrInvalidRefreshToken = errors.New("authn: invalid refresh token")
+
+// ErrGuestUnavailable reports that the system-managed guest principal cannot
+// issue a session.
+var ErrGuestUnavailable = errors.New("authn: guest access is unavailable")
 
 // dummyHashSalt/dummyHash absorb the same Argon2id cost for unknown-account
 // login attempts as a real one incurs, narrowing (not eliminating) the
@@ -104,6 +109,25 @@ func (s *SessionService) Login(ctx context.Context, sourceAddr, requestID, domai
 		// branch so new domains are added here rather than by falling through.
 		return LoginResult{}, fmt.Errorf("%w: %q", ErrUnsupportedAuthDomain, normalizedDomain)
 	}
+}
+
+// Guest creates an interactive session for the system-managed guest
+// principal. Route registration is capability-gated by the caller.
+func (s *SessionService) Guest(ctx context.Context, sourceAddr, requestID string) (LoginResult, error) {
+	user, err := s.users.GetByUsername(ctx, GuestUsername)
+	if err != nil || user.State != storage.UserStateActive {
+		return LoginResult{}, ErrGuestUnavailable
+	}
+	result, err := s.createSessionFamily(ctx, user, AuthDomainLocal)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if err := s.audit.Record(ctx, audit.Actor{UserID: user.ID, Type: storage.AuditActorAnonymous, AuthMethod: "guest", RequestID: requestID, SourceAddr: sourceAddr}, audit.Event{
+		Action: "auth.guest", TargetType: "user", TargetID: user.ID, Outcome: storage.AuditOutcomeSuccess,
+	}); err != nil {
+		return LoginResult{}, err
+	}
+	return result, nil
 }
 
 func (s *SessionService) loginLocalPassword(ctx context.Context, sourceAddr, requestID, username, password string) (LoginResult, error) {
