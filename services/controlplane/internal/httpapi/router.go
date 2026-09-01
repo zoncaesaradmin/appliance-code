@@ -40,6 +40,7 @@ type Deps struct {
 	ProfilesH        *ProfileHandlers
 	MetadataH        *MetadataBundleHandlers
 	ApplicationsH    *ApplicationHandlers
+	FocusContentH    *FocusContentHandlers
 	AuditH           *AuditHandlers
 	MCPHandler       http.Handler
 	ProxiedServices  []ServiceProxyRegistration
@@ -587,6 +588,24 @@ func publicRoutes() []publicRoute {
 				return nil, fmt.Errorf("missing video library handlers")
 			}
 			return w.protect(roles.PermVideoLibraryWrite, deps.VideoLibraryH.Delete), nil
+		}},
+		{capability: appliance.CapabilityFocusContent, pattern: "GET /api/v1/focus-content", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FocusContentH == nil {
+				return nil, fmt.Errorf("missing focus content handlers")
+			}
+			return w.protectAny(deps.FocusContentH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
+		}},
+		{capability: appliance.CapabilityFocusContent, pattern: "PUT /api/v1/focus-content", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FocusContentH == nil {
+				return nil, fmt.Errorf("missing focus content handlers")
+			}
+			return w.protect(roles.PermFocusContentManage, deps.FocusContentH.Put), nil
+		}},
+		{capability: appliance.CapabilityFocusContent, pattern: "DELETE /api/v1/focus-content", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.FocusContentH == nil {
+				return nil, fmt.Errorf("missing focus content handlers")
+			}
+			return w.protect(roles.PermFocusContentManage, deps.FocusContentH.Delete), nil
 		}},
 		{moduleName: appliance.ModuleNameLANDNS, pattern: "GET /api/v1/dns/records", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.DNSH == nil {

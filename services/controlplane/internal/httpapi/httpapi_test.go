@@ -250,6 +250,9 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			}
 		}
 	}
+	if resolved.Capabilities.Enabled(appliance.CapabilityFocusContent) {
+		deps.FocusContentH = &httpapi.FocusContentHandlers{Store: services.FocusContentStore, Audit: services.Audit}
+	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
 		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
 		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger, Audit: services.Audit}
@@ -344,7 +347,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		{appliance.ProfileCore, []string{"base", "files"}},
 		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
 		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "workflows"}},
-		{appliance.ProfileTraining, []string{"applications", "base", "files", "guest-access", "host", "plaintext-http", "video"}},
+		{appliance.ProfileTraining, []string{"applications", "base", "files", "focus-content", "guest-access", "host", "plaintext-http", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {

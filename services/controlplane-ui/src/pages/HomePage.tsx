@@ -5,7 +5,7 @@ import { client } from "../lib/api";
 import { capabilityBadge } from "../lib/format";
 import { navigate } from "../lib/navigate";
 import { useViewSyncGeneration, useViewSyncTag } from "../lib/viewSyncHooks";
-import type { ApplianceIdentity, ApplianceSetupState, AuditEvent, Session, Version } from "../types";
+import type { ApplianceIdentity, ApplianceSetupState, AuditEvent, FocusContent, Session, Version } from "../types";
 
 function canReadAudit(session: Session): boolean {
   return session.permissions.some((permission) => permission.trim().toLowerCase() === "audit.read");
@@ -144,6 +144,7 @@ export function HomePage(props: {
   const [health, setHealth] = useState("unknown");
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
   const [setupState, setSetupState] = useState<ApplianceSetupState | null>(null);
+  const [focusContent, setFocusContent] = useState<FocusContent | null>(null);
   const pageSync = useViewSyncGeneration("page");
   const setupTag = useViewSyncTag("setup");
   const showAudit = canReadAudit(props.session);
@@ -161,16 +162,18 @@ export function HomePage(props: {
 
   useEffect(() => {
     void (async () => {
-      const [nextVersion, nextHealth, nextIdentity, nextSetup] = await Promise.all([
+      const [nextVersion, nextHealth, nextIdentity, nextSetup, nextFocusContent] = await Promise.all([
         client.getVersion().catch(() => null),
         client.getReady().then((value) => value.status).catch(() => "degraded"),
         client.getIdentity().catch(() => null),
-        client.getApplianceSetupState().catch(() => null)
+        client.getApplianceSetupState().catch(() => null),
+        props.capabilities.includes("focus-content") ? client.getFocusContent().catch(() => null) : Promise.resolve(null)
       ]);
       setVersion(nextVersion);
       setHealth(nextHealth);
       setIdentity(nextIdentity);
       setSetupState(nextSetup);
+      setFocusContent(nextFocusContent);
     })();
   }, [pageSync, setupTag]);
 
@@ -196,6 +199,19 @@ export function HomePage(props: {
         </Card>
       ) : (
         <div className="stack">
+          {focusContent ? (
+            <Card title="Current focus" subtitle="Selected for everyone on this appliance">
+              <div className="stack">
+                <div>
+                  <strong>{focusContent.title}</strong>
+                  {focusContent.message ? <p>{focusContent.message}</p> : null}
+                </div>
+                <button className="button button--primary" onClick={() => navigate("/videos")}>
+                  Watch now
+                </button>
+              </div>
+            </Card>
+          ) : null}
           {setupState?.licensingUnresolved ? (
             <Card title="Licensing setup required" subtitle="Complete licensing after first login">
               <EmptyState message="Licensing is not configured. Configure licensing to unlock entitled capabilities, or continue with the base entitlement." />

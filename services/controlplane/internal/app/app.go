@@ -91,6 +91,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		},
 		NotificationsH: &httpapi.NotificationHandlers{Notifications: services.Notifications, Audit: services.Audit},
 		ApplicationsH:  &httpapi.ApplicationHandlers{Applications: services.Applications},
+		FocusContentH:  &httpapi.FocusContentHandlers{Store: services.FocusContentStore, Audit: services.Audit},
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
 		AuditH: &httpapi.AuditHandlers{

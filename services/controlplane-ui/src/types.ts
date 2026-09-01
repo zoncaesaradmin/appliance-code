@@ -128,6 +128,15 @@ export interface ApplianceFileUploadResult {
 	status?: "ready";
 }
 
+export interface FocusContent {
+  resourceType: "video";
+  resourcePath: string;
+  title: string;
+  message?: string;
+  publishedAt: string;
+  publishedBy: string;
+}
+
 export interface ApplicationDefinition {
   name: string;
   version: string;

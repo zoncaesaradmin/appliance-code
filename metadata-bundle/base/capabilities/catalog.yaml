@@ -89,6 +89,15 @@ capabilities:
     artifacts:
       required: []
     packages: [foundation]
+  focus-content:
+    displayName: Focus Content
+    requires: [base, video]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.focus-content
+    artifacts:
+      required: []
+    packages: [foundation]
   applications:
     displayName: Applications
     requires: [base, host]

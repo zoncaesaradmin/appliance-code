@@ -51,7 +51,8 @@ import type {
   ApplicationDefinition,
   ApplicationInstance,
   AuditEvent,
-  AuditEventsResult
+  AuditEventsResult,
+  FocusContent
 } from "./types";
 
 function now(): string {
@@ -80,6 +81,7 @@ type MockState = {
   grants: RegistryGrant[];
   files: Record<string, { sizeBytes: number; modifiedAt: string; content: Uint8Array }>;
   videos: Record<string, { sizeBytes: number; modifiedAt: string; content: Uint8Array }>;
+  focusContent?: FocusContent;
   licensingState: "unresolved" | "base_free" | "licensed";
   entitledCapabilities: string[];
   profiles: ApplianceProfile[];
@@ -93,7 +95,7 @@ type MockState = {
 
 const mockState: MockState = {
   initialized: true,
-  capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "video", "guest-access"],
+	capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "video", "guest-access", "focus-content"],
 	session: {
     userId: "mock-admin",
     username: "admin",
@@ -118,6 +120,7 @@ const mockState: MockState = {
       "applications.read",
       "applications.manage",
       "video.library.read",
+		"focus.content.manage",
       "video.library.write",
       "video.play"
     ]
@@ -244,6 +247,14 @@ const mockState: MockState = {
       content: new Uint8Array([0, 0, 0, 0])
     }
   },
+	focusContent: {
+		resourceType: "video",
+		resourcePath: "welcome.mp4",
+		title: "Welcome to the appliance",
+		message: "Start here for the current session.",
+		publishedAt: now(),
+		publishedBy: "mock-admin"
+	},
   licensingState: "unresolved",
   entitledCapabilities: [],
   profiles: [
@@ -878,6 +889,19 @@ export class MockControlPlaneClient {
     if (!removed) {
       throw new Error("Video not found");
     }
+  }
+
+  async getFocusContent(): Promise<FocusContent | null> {
+    return mockState.focusContent ?? null;
+  }
+
+  async putFocusContent(content: Pick<FocusContent, "resourcePath" | "title" | "message">): Promise<FocusContent> {
+    mockState.focusContent = { resourceType: "video", ...content, publishedAt: now(), publishedBy: "mock-admin" };
+    return mockState.focusContent;
+  }
+
+  async clearFocusContent(): Promise<void> {
+    mockState.focusContent = undefined;
   }
 
   async getLicensingStatus(): Promise<LicensingStatus> {

@@ -50,7 +50,8 @@ import type {
   ApplianceFileUploadResult,
   ApplicationDefinition,
   ApplicationInstance,
-  AuditEventsResult
+  AuditEventsResult,
+  FocusContent
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -165,6 +166,9 @@ export interface ControlPlaneClient {
   prepareVideoPlayback(): Promise<void>;
   videoStreamURL(path: string): string;
   deleteVideoLibraryFile(path: string): Promise<void>;
+  getFocusContent(): Promise<FocusContent | null>;
+  putFocusContent(content: Pick<FocusContent, "resourcePath" | "title" | "message">): Promise<FocusContent>;
+  clearFocusContent(): Promise<void>;
   getLicensingStatus(): Promise<LicensingStatus>;
   getLicensingEntitlements(): Promise<string[]>;
   acceptBaseEntitlement(): Promise<LicensingStatus>;
@@ -574,6 +578,24 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async deleteVideoLibraryFile(path: string): Promise<void> {
     await this.request(encodeVideoLibraryPath(path), { method: "DELETE" });
+  }
+
+  async getFocusContent(): Promise<FocusContent | null> {
+    const auth = loadAuth();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (auth?.accessToken) headers.Authorization = `Bearer ${auth.accessToken}`;
+    const response = await fetch(`${this.baseUrl}/api/v1/focus-content`, { headers });
+    if (response.status === 204) return null;
+    if (!response.ok) throw await ApiError.fromResponse(response);
+    return (await response.json()) as FocusContent;
+  }
+
+  async putFocusContent(content: Pick<FocusContent, "resourcePath" | "title" | "message">): Promise<FocusContent> {
+    return this.request("/api/v1/focus-content", { method: "PUT", body: content });
+  }
+
+  async clearFocusContent(): Promise<void> {
+    await this.request("/api/v1/focus-content", { method: "DELETE" });
   }
 
   async getLicensingStatus(): Promise<LicensingStatus> {

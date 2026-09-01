@@ -97,10 +97,11 @@ const (
 	PermInferenceModelsRead = "inference.models.read"
 	PermInferenceAdmin      = "inference.admin"
 
-	PermVideoLibraryRead  = "video.library.read"
-	PermVideoLibraryWrite = "video.library.write"
-	PermVideoPlay         = "video.play"
-	PermVideoAdmin        = "video.admin"
+	PermVideoLibraryRead   = "video.library.read"
+	PermVideoLibraryWrite  = "video.library.write"
+	PermVideoPlay          = "video.play"
+	PermVideoAdmin         = "video.admin"
+	PermFocusContentManage = "focus.content.manage"
 
 	PermMCPInvoke = "mcp.invoke"
 
@@ -185,6 +186,7 @@ var AllPermissions = []storage.Permission{
 	{Name: PermInferenceAdmin, Description: "Manage inference runtime and model packs"},
 
 	{Name: PermVideoLibraryRead, Description: "Browse the video library"},
+	{Name: PermFocusContentManage, Description: "Publish or clear current focus content"},
 	{Name: PermVideoLibraryWrite, Description: "Upload or manage video library content"},
 	{Name: PermVideoPlay, Description: "Stream and play video library items"},
 	{Name: PermVideoAdmin, Description: "Administer the video runtime"},
@@ -244,6 +246,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermHostRead, PermOperationsReadSelf,
 			PermInferenceUse, PermInferenceModelsRead,
 			PermVideoLibraryRead, PermVideoLibraryWrite, PermVideoPlay,
+			PermFocusContentManage,
 			PermMCPInvoke,
 		},
 	},

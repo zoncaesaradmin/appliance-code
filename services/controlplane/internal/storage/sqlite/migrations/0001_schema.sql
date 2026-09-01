@@ -124,6 +124,16 @@ CREATE TABLE session_families (
 
 CREATE INDEX idx_session_families_user ON session_families (user_id);
 
+CREATE TABLE focus_content (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    resource_type TEXT NOT NULL,
+    resource_path TEXT NOT NULL,
+    title         TEXT NOT NULL,
+    message       TEXT NOT NULL DEFAULT '',
+    published_at  TEXT NOT NULL,
+    published_by  TEXT NOT NULL REFERENCES users (id)
+);
+
 CREATE TABLE refresh_credentials (
     family_id        TEXT PRIMARY KEY REFERENCES session_families (id),
     current_digest   BLOB NOT NULL,

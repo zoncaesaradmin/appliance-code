@@ -64,6 +64,7 @@ type Services struct {
 	WorkspaceStore     storage.WorkspaceStore
 	JobStore           storage.JobStore
 	ApplicationStore   storage.ApplicationStore
+	FocusContentStore  storage.FocusContentStore
 
 	Users              *users.Service
 	Roles              *roles.Service
@@ -191,6 +192,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	workspaceStore := sqlite.NewWorkspaceStore(db)
 	jobStore := sqlite.NewJobStore(db)
 	applicationStore := sqlite.NewApplicationStore(db)
+	focusContentStore := sqlite.NewFocusContentStore(db)
 	applicationsSvc, err := applications.NewService(applicationStore, cfg.ApplicationCatalog)
 	if err != nil {
 		db.Close()
@@ -335,6 +337,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		WorkspaceStore:     workspaceStore,
 		JobStore:           jobStore,
 		ApplicationStore:   applicationStore,
+		FocusContentStore:  focusContentStore,
 		Users:              usersSvc,
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokensSvc,
