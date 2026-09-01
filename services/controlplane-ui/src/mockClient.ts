@@ -1,3 +1,4 @@
+import { randomUUID } from "./lib/randomUUID";
 import type {
   APIToken,
   ApplianceIdentity,
@@ -58,7 +59,7 @@ function now(): string {
 }
 
 function uuid(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 type MockState = {

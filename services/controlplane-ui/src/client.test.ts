@@ -129,6 +129,27 @@ describe("remote control-plane client", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://appliance.example/api/v1/tokens/tok-1");
     expect((fetchMock.mock.calls[0]?.[1] as RequestInit).method).toBe("DELETE");
   });
+
+  it("constructs a remote client when crypto.randomUUID is missing", async () => {
+    const original = crypto.randomUUID;
+    Object.defineProperty(crypto, "randomUUID", {
+      configurable: true,
+      writable: true,
+      value: undefined
+    });
+    try {
+      vi.resetModules();
+      const { createControlPlaneClient } = await import("./client");
+      expect(() => createControlPlaneClient()).not.toThrow();
+    } finally {
+      Object.defineProperty(crypto, "randomUUID", {
+        configurable: true,
+        writable: true,
+        value: original
+      });
+      vi.resetModules();
+    }
+  });
 });
 
 function jsonResponse(body: unknown): Response {
