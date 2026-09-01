@@ -113,6 +113,8 @@ CREATE INDEX idx_api_tokens_user ON api_tokens (user_id);
 CREATE TABLE session_families (
     id                   TEXT PRIMARY KEY,
     user_id              TEXT NOT NULL REFERENCES users (id),
+    auth_domain          TEXT NOT NULL DEFAULT 'local',
+    display_name         TEXT NOT NULL DEFAULT '',
     created_at           TEXT NOT NULL,
     last_used_at         TEXT NOT NULL,
     absolute_expires_at  TEXT NOT NULL,
@@ -200,7 +202,9 @@ CREATE TABLE builds (
     updated_at           TEXT NOT NULL,
     started_at           TEXT,
     completed_at         TEXT,
-    deadline_at          TEXT NOT NULL
+    deadline_at          TEXT NOT NULL,
+    push_token_id        TEXT,
+    registry_secret_name TEXT
 );
 
 CREATE INDEX idx_builds_owner ON builds (owner_id);
@@ -263,3 +267,99 @@ CREATE TABLE job_steps (
 );
 
 CREATE INDEX idx_job_steps_job ON job_steps(job_id, created_at ASC);
+
+CREATE TABLE dns_records (
+    name              TEXT PRIMARY KEY,
+    ipv4              TEXT NOT NULL,
+    ttl               INTEGER NOT NULL,
+    source            TEXT NOT NULL,
+    owner             TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    lease_expires_at  TEXT
+);
+
+CREATE INDEX idx_dns_records_lease ON dns_records (lease_expires_at);
+
+CREATE TABLE licensing_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    state TEXT NOT NULL,
+    license_document TEXT,
+    license_summary_json TEXT NOT NULL DEFAULT '{}',
+    accepted_at TEXT,
+    accepted_by_user_id TEXT,
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO licensing_state (id, state, updated_at)
+VALUES (1, 'unresolved', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+CREATE TABLE appliance_custom_profiles (
+    id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    capabilities_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    created_by_user_id TEXT
+);
+
+CREATE TABLE appliance_profile_activation (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    desired_profile_id TEXT,
+    status TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    updated_by_user_id TEXT
+);
+
+INSERT INTO appliance_profile_activation (id, desired_profile_id, status, message, updated_at)
+VALUES (1, NULL, 'active', '', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+CREATE TABLE notification_acknowledgements (
+    notification_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    acknowledged_at TEXT NOT NULL
+);
+
+CREATE TABLE metadata_bundle_state (
+    slot TEXT PRIMARY KEY CHECK (slot IN ('active', 'previous')),
+    metadata_version TEXT NOT NULL,
+    software_version TEXT NOT NULL,
+    digest TEXT NOT NULL DEFAULT '',
+    directory_name TEXT NOT NULL,
+    directory_path TEXT NOT NULL,
+    signature TEXT NOT NULL DEFAULT '',
+    installed_at TEXT NOT NULL,
+    installed_by TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE builder_catalog (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    document_text TEXT NOT NULL DEFAULT '',
+    content_type TEXT NOT NULL DEFAULT 'application/json',
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO builder_catalog (id, document_text, content_type, updated_at)
+VALUES (1, '', 'application/json', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+CREATE TABLE application_definitions (
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    document BLOB NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (name, version)
+);
+
+CREATE TABLE application_instances (
+    name TEXT PRIMARY KEY,
+    definition_name TEXT NOT NULL,
+    definition_version TEXT NOT NULL,
+    desired_state TEXT NOT NULL,
+    observed_state TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
