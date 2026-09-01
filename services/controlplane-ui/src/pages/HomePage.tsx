@@ -1,11 +1,17 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow, StatCard } from "../components";
+import { VideoPlayerOverlay } from "../components/video/VideoPlayerOverlay";
 import { ApiError } from "../client";
 import { client } from "../lib/api";
 import { capabilityBadge } from "../lib/format";
 import { navigate } from "../lib/navigate";
 import { useViewSyncGeneration, useViewSyncTag } from "../lib/viewSyncHooks";
-import type { ApplianceIdentity, ApplianceSetupState, AuditEvent, FocusContent, Session, Version } from "../types";
+import type { ApplianceFileEntry, ApplianceIdentity, ApplianceSetupState, AuditEvent, FocusContent, Session, Version } from "../types";
+
+function focusVideoEntry(content: FocusContent): ApplianceFileEntry {
+  const segments = content.resourcePath.split("/");
+  return { name: segments.at(-1) || content.title, path: content.resourcePath, type: "file", sizeBytes: 0, modifiedAt: content.publishedAt };
+}
 
 function canReadAudit(session: Session): boolean {
   return session.permissions.some((permission) => permission.trim().toLowerCase() === "audit.read");
@@ -145,6 +151,9 @@ export function HomePage(props: {
   const [identity, setIdentity] = useState<ApplianceIdentity | null>(null);
   const [setupState, setSetupState] = useState<ApplianceSetupState | null>(null);
   const [focusContent, setFocusContent] = useState<FocusContent | null>(null);
+  const [focusPlaybackURL, setFocusPlaybackURL] = useState("");
+  const [focusPlaybackError, setFocusPlaybackError] = useState("");
+  const focusPlayerRef = useRef<HTMLDivElement | null>(null);
   const pageSync = useViewSyncGeneration("page");
   const setupTag = useViewSyncTag("setup");
   const showAudit = canReadAudit(props.session);
@@ -177,6 +186,17 @@ export function HomePage(props: {
     })();
   }, [pageSync, setupTag]);
 
+  async function playFocusContent() {
+    if (!focusContent) return;
+    setFocusPlaybackError("");
+    try {
+      await client.prepareVideoPlayback();
+      setFocusPlaybackURL(client.videoStreamURL(focusContent.resourcePath));
+    } catch (err) {
+      setFocusPlaybackError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not load the video.");
+    }
+  }
+
   return (
     <PageFrame
       title={`Welcome, ${props.session.displayName || props.session.username}`}
@@ -200,15 +220,13 @@ export function HomePage(props: {
       ) : (
         <div className="stack">
           {focusContent ? (
-            <Card title="Current focus" subtitle="Selected for everyone on this appliance">
+            <Card title="Current focus">
               <div className="stack">
-                <div>
-                  <strong>{focusContent.title}</strong>
-                  {focusContent.message ? <p>{focusContent.message}</p> : null}
-                </div>
-                <button className="button button--primary" onClick={() => navigate("/videos")}>
-                  Watch now
+                {focusContent.message ? <p>{focusContent.message}</p> : null}
+                <button className="button button--primary" onClick={() => void playFocusContent()}>
+                  Watch this video
                 </button>
+				{focusPlaybackError ? <EmptyState message={focusPlaybackError} /> : null}
               </div>
             </Card>
           ) : null}
@@ -260,6 +278,16 @@ export function HomePage(props: {
           </div>
         </div>
       )}
+      {focusContent && focusPlaybackURL ? (
+        <VideoPlayerOverlay
+          entry={focusVideoEntry(focusContent)}
+          src={focusPlaybackURL}
+          error={focusPlaybackError}
+          rootRef={focusPlayerRef}
+          onClose={() => { setFocusPlaybackURL(""); setFocusPlaybackError(""); }}
+          onError={setFocusPlaybackError}
+        />
+      ) : null}
     </PageFrame>
   );
 }
