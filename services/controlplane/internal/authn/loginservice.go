@@ -113,7 +113,7 @@ func (s *SessionService) Login(ctx context.Context, sourceAddr, requestID, domai
 
 // Guest creates an interactive session for the system-managed guest
 // principal. Route registration is capability-gated by the caller.
-func (s *SessionService) Guest(ctx context.Context, sourceAddr, requestID string) (LoginResult, error) {
+func (s *SessionService) Guest(ctx context.Context, sourceAddr, requestID, name string) (LoginResult, error) {
 	user, err := s.users.GetByUsername(ctx, GuestUsername)
 	if err != nil || user.State != storage.UserStateActive {
 		return LoginResult{}, ErrGuestUnavailable
@@ -124,6 +124,7 @@ func (s *SessionService) Guest(ctx context.Context, sourceAddr, requestID string
 	}
 	if err := s.audit.Record(ctx, audit.Actor{UserID: user.ID, Type: storage.AuditActorAnonymous, AuthMethod: "guest", RequestID: requestID, SourceAddr: sourceAddr}, audit.Event{
 		Action: "auth.guest", TargetType: "user", TargetID: user.ID, Outcome: storage.AuditOutcomeSuccess,
+		Details: map[string]any{"name": name},
 	}); err != nil {
 		return LoginResult{}, err
 	}

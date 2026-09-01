@@ -3,7 +3,9 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/bootstrap"
@@ -30,6 +32,10 @@ type loginResponse struct {
 	AccessToken     string    `json:"accessToken"`
 	RefreshToken    string    `json:"refreshToken"`
 	AccessExpiresAt time.Time `json:"accessExpiresAt"`
+}
+
+type guestRequest struct {
+	Name string `json:"name"`
 }
 
 func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +79,16 @@ func (h *AuthHandlers) Login(w http.ResponseWriter, r *http.Request) {
 
 // Guest establishes a session for the system-managed guest principal.
 func (h *AuthHandlers) Guest(w http.ResponseWriter, r *http.Request) {
+	var req guestRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		WriteValidationProblem(w, r, "invalid request body", nil)
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || utf8.RuneCountInString(name) > 128 {
+		WriteValidationProblem(w, r, "name is required and must be at most 128 characters", nil)
+		return
+	}
 	initialized, err := bootstrap.Initialized(r.Context(), h.UserStore)
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
@@ -82,7 +98,7 @@ func (h *AuthHandlers) Guest(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusConflict, "setup_required", "Appliance setup is required", "")
 		return
 	}
-	result, err := h.Sessions.Guest(r.Context(), r.RemoteAddr, requestIDFromRequest(r))
+	result, err := h.Sessions.Guest(r.Context(), r.RemoteAddr, requestIDFromRequest(r), name)
 	if errors.Is(err, authn.ErrGuestUnavailable) {
 		WriteProblem(w, r, http.StatusServiceUnavailable, "guest_unavailable", "Guest access is unavailable", "")
 		return

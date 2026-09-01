@@ -9,12 +9,13 @@ export function AuthLayout(props: {
   onLogin: (username: string, password: string, persist: boolean) => Promise<void>;
   onSetup: (username: string, password: string, persist: boolean) => Promise<void>;
   guestAccess: boolean;
-  onGuest: (persist: boolean) => Promise<void>;
+  onGuest: (name: string, persist: boolean) => Promise<void>;
 }): React.JSX.Element {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [domain, setDomain] = useState("local");
+  const [guestName, setGuestName] = useState("");
   const [persistSession, setPersistSession] = useState(() => isAuthPersisted());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -60,11 +61,12 @@ export function AuthLayout(props: {
     }
   }
 
-  async function handleGuest() {
+  async function handleGuest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      await props.onGuest(persistSession);
+      await props.onGuest(guestName, persistSession);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Authentication failed.");
     } finally {
@@ -171,12 +173,28 @@ export function AuthLayout(props: {
                   ? "Create administrator"
                   : "Sign in"}
             </button>
-            {props.mode === "login" && props.guestAccess ? (
-              <button className="button button--secondary" disabled={submitting} type="button" onClick={() => void handleGuest()}>
-                Continue as guest
-              </button>
-            ) : null}
           </form>
+          {props.mode === "login" && props.guestAccess ? (
+            <form className="stack-form auth-form__guest" method="post" onSubmit={handleGuest}>
+              <div className="auth-form__guest-heading">
+                <span>Guest access</span>
+                <p>Enter your name to continue as a guest.</p>
+              </div>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  name="guest-name"
+                  value={guestName}
+                  onChange={(event) => setGuestName(event.target.value)}
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <button className="button button--secondary" disabled={submitting} type="submit">
+                {submitting ? "Working..." : "Continue as guest"}
+              </button>
+            </form>
+          ) : null}
         </div>
         <footer className="auth-form__footer">
           <p className="auth-form__copyright">© {year} Zon. All rights reserved.</p>

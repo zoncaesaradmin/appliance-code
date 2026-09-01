@@ -303,7 +303,7 @@ export class MockControlPlaneClient {
     return { capabilities: mockState.capabilities };
   }
 
-  async loginAsGuest(): Promise<LoginResponse> {
+  async loginAsGuest(_name: string): Promise<LoginResponse> {
     mockState.session = {
       userId: "mock-guest",
       username: "guest",

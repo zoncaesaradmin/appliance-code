@@ -1312,6 +1312,9 @@ export interface components {
             /** Format: date-time */
             accessExpiresAt: string;
         };
+        GuestLoginRequest: {
+            name: string;
+        };
         ChangePasswordRequest: {
             /**
              * Format: password
@@ -2064,7 +2067,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuestLoginRequest"];
+            };
+        };
         responses: {
             /** @description Guest session credentials. */
             200: {

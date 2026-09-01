@@ -137,8 +137,8 @@ export function App(): React.JSX.Element {
     setRefreshKey((value) => value + 1);
   }
 
-  async function handleGuest(persist: boolean): Promise<void> {
-    const tokens = await client.loginAsGuest();
+  async function handleGuest(name: string, persist: boolean): Promise<void> {
+    const tokens = await client.loginAsGuest(name);
     setAuthPersist(persist);
     saveAuth(tokens);
     setRefreshKey((value) => value + 1);

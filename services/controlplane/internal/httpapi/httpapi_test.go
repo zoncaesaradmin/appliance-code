@@ -371,7 +371,7 @@ func TestGuestAccessIsCapabilityGated(t *testing.T) {
 	t.Run("enabled", func(t *testing.T) {
 		ts := newTestServerWithProfile(t, appliance.ProfileTraining)
 		ts.bootstrapAdmin(t, "admin", testPassword)
-		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", "")
+		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", `{"name":"Guest Viewer"}`)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("guest login status = %d, want 200", resp.StatusCode)
@@ -412,10 +412,20 @@ func TestGuestAccessIsCapabilityGated(t *testing.T) {
 
 	t.Run("disabled", func(t *testing.T) {
 		ts := newTestServerWithProfile(t, appliance.ProfileCore)
-		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", "")
+		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", `{"name":"Guest Viewer"}`)
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusNotFound {
 			t.Fatalf("guest login without capability status = %d, want 404", resp.StatusCode)
+		}
+	})
+
+	t.Run("requires name", func(t *testing.T) {
+		ts := newTestServerWithProfile(t, appliance.ProfileTraining)
+		ts.bootstrapAdmin(t, "admin", testPassword)
+		resp := ts.doJSON(t, "POST", "/api/v1/auth/guest", "", `{}`)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("guest login without name status = %d, want 400", resp.StatusCode)
 		}
 	})
 }

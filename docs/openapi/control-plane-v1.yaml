@@ -380,6 +380,12 @@ paths:
       description: Available only when the running appliance enables the `guest-access` capability.
       operationId: loginAsGuest
       security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuestLoginRequest"
       responses:
         "200":
           description: Guest session credentials.
@@ -2015,6 +2021,14 @@ components:
         accessExpiresAt:
           type: string
           format: date-time
+    GuestLoginRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
     ChangePasswordRequest:
       type: object
       required: [currentPassword, newPassword]

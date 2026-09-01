@@ -228,6 +228,24 @@ button {
   font-size: 0.95rem;
 }
 
+.auth-form__guest {
+  width: 100%;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.auth-form__guest-heading span {
+  display: block;
+  font-weight: 650;
+}
+
+.auth-form__guest-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .auth-form__footer {
   flex-shrink: 0;
   margin-top: 16px;
