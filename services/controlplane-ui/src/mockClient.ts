@@ -229,7 +229,18 @@ const mockState: MockState = {
       createdAt: now()
     }
   ],
-  files: {},
+  files: {
+    "docs/readme.txt": {
+      sizeBytes: 43,
+      modifiedAt: now(),
+      content: new TextEncoder().encode("Welcome to the appliance document library.\n")
+    },
+    "docs/policies/sample.pdf": {
+      sizeBytes: 4096,
+      modifiedAt: now(),
+      content: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d])
+    }
+  },
   videos: {
     "welcome.mp4": {
       sizeBytes: 4_194_304,

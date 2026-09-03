@@ -258,6 +258,9 @@ export function HomePage(props: {
           {focusContent ? (
             <Card title="Current focus" subtitle="">
               <div className="stack">
+                <p>
+                  Type: <strong>{focusContent.resourceType === "video" ? "Video" : "File"}</strong>
+                </p>
                 {focusContent.message ? <p>{focusContent.message}</p> : null}
                 {focusContent.resourceType === "video" && focusPlaybackURL ? <FocusVideo content={focusContent} src={focusPlaybackURL} /> : null}
 				{focusContent.resourceType === "file" ? <FocusFile content={focusContent} /> : null}

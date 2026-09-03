@@ -412,8 +412,8 @@ func TestGuestAccessIsCapabilityGated(t *testing.T) {
 		for _, permission := range principal.Permissions {
 			permissions[permission] = true
 		}
-		if len(permissions) != 2 || !permissions[roles.PermVideoLibraryRead] || !permissions[roles.PermVideoPlay] {
-			t.Fatalf("guest permissions = %v, want video read/play only", principal.Permissions)
+		if len(permissions) != 3 || !permissions[roles.PermVideoLibraryRead] || !permissions[roles.PermVideoPlay] || !permissions[roles.PermFilesRead] {
+			t.Fatalf("guest permissions = %v, want video read/play and files.read", principal.Permissions)
 		}
 	})
 

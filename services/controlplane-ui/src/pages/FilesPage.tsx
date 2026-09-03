@@ -1,9 +1,9 @@
 import React, { FormEvent, useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow } from "../components";
+import { Card, EmptyState, Icon, PageFrame, RowActionsMenu } from "../components";
 import { ApiError } from "../client";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
-import type { ApplianceFileEntry } from "../types";
+import type { ApplianceFileEntry, Session } from "../types";
 
 function formatBytes(size: number): string {
   if (size < 1024) {
@@ -50,9 +50,84 @@ function parentPath(path: string): string {
   return parts.join("/");
 }
 
-export function FilesPage(): React.JSX.Element {
-  const [currentPath, setCurrentPath] = useState("");
-  const [items, setItems] = useState<ApplianceFileEntry[]>([]);
+type FileShelf = {
+  id: string;
+  title: string;
+  directoryPath: string;
+  files: ApplianceFileEntry[];
+};
+
+function hasPermission(session: Pick<Session, "permissions">, permission: string): boolean {
+  const wanted = permission.trim().toLowerCase();
+  return session.permissions.some((entry) => entry.trim().toLowerCase() === wanted);
+}
+
+function canManageFiles(session: Pick<Session, "permissions">): boolean {
+  return hasPermission(session, "files.write");
+}
+
+function canManageFocus(session: Pick<Session, "permissions">): boolean {
+  return hasPermission(session, "focus.content.manage");
+}
+
+function fileTitle(entry: ApplianceFileEntry): string {
+  return entry.name.replace(/\.[^.]+$/, "") || entry.name;
+}
+
+function previewKind(path: string): "pdf" | "text" | "image" | "other" {
+  if (/\.pdf$/i.test(path)) return "pdf";
+  if (/\.(txt|md|json|yaml|yml|log|csv|xml)$/i.test(path)) return "text";
+  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(path)) return "image";
+  return "other";
+}
+
+function previewLabel(path: string): string {
+  const kind = previewKind(path);
+  if (kind === "pdf") return "PDF";
+  if (kind === "text") return "TEXT";
+  if (kind === "image") return "IMAGE";
+  const ext = path.split(".").at(-1);
+  return ext ? ext.toUpperCase() : "FILE";
+}
+
+function buildShelves(files: ApplianceFileEntry[]): FileShelf[] {
+  const buckets = new Map<string, ApplianceFileEntry[]>();
+  for (const file of files) {
+    const directoryPath = parentPath(file.path);
+    const list = buckets.get(directoryPath) ?? [];
+    list.push(file);
+    buckets.set(directoryPath, list);
+  }
+  const keys = [...buckets.keys()].sort((left, right) => {
+    if (left === "") return -1;
+    if (right === "") return 1;
+    return left.localeCompare(right);
+  });
+  return keys.map((directoryPath) => ({
+    id: directoryPath || "library",
+    title: directoryPath || "Library",
+    directoryPath,
+    files: [...(buckets.get(directoryPath) ?? [])].sort((left, right) => left.name.localeCompare(right.name))
+  }));
+}
+
+async function collectFileTree(path = ""): Promise<ApplianceFileEntry[]> {
+  const result = await client.listApplianceFiles(path);
+  const files: ApplianceFileEntry[] = [];
+  for (const entry of result.items) {
+    if (entry.type === "file") {
+      files.push(entry);
+      continue;
+    }
+    files.push(...(await collectFileTree(entry.path)));
+  }
+  return files;
+}
+
+export function FilesPage(props: { session: Session; capabilities: string[] }): React.JSX.Element {
+  const canWrite = canManageFiles(props.session);
+  const canSetFocus = props.capabilities.includes("focus-content") && canManageFocus(props.session);
+  const [shelves, setShelves] = useState<FileShelf[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -60,6 +135,11 @@ export function FilesPage(): React.JSX.Element {
   const [logicalName, setLogicalName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [viewing, setViewing] = useState<ApplianceFileEntry | null>(null);
+  const [viewURL, setViewURL] = useState("");
+  const [viewText, setViewText] = useState("");
+  const [viewError, setViewError] = useState("");
+  const [inspecting, setInspecting] = useState<ApplianceFileEntry | null>(null);
 
   const destinationPreview = useMemo(() => {
     const name = logicalName.trim().replace(/^\/+/, "");
@@ -67,32 +147,33 @@ export function FilesPage(): React.JSX.Element {
       return name;
     }
     if (selectedFile) {
-      return joinFilePath(currentPath, selectedFile.name);
+      return selectedFile.name;
     }
-    return currentPath ? `${currentPath}/…` : "…";
-  }, [logicalName, selectedFile, currentPath]);
+    return "…";
+  }, [logicalName, selectedFile]);
 
-  async function refresh(path = currentPath) {
+  const fileCount = shelves.reduce((count, shelf) => count + shelf.files.length, 0);
+
+  async function refresh() {
     setLoading(true);
     setError("");
     try {
-      const result = await client.listApplianceFiles(path);
-      setCurrentPath(result.path || "");
-      setItems(result.items);
+      const files = await collectFileTree("");
+      setShelves(buildShelves(files));
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not list files.");
-      setItems([]);
+      setShelves([]);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    void refresh("");
+    void refresh();
   }, []);
 
   function openUploadDialog() {
-    setLogicalName(currentPath ? `${currentPath}/` : "");
+    setLogicalName("");
     setSelectedFile(null);
     setError("");
     setShowUploadDialog(true);
@@ -111,7 +192,7 @@ export function FilesPage(): React.JSX.Element {
       setError("Choose a file to upload.");
       return;
     }
-    const destination = logicalName.trim().replace(/^\/+|\/+$/g, "") || joinFilePath(currentPath, selectedFile.name);
+    const destination = logicalName.trim().replace(/^\/+|\/+$/g, "") || joinFilePath("", selectedFile.name);
     if (!destination) {
       setError("Enter a logical name / destination path.");
       return;
@@ -126,7 +207,7 @@ export function FilesPage(): React.JSX.Element {
           : `Uploaded ${result.path} (${formatBytes(result.size)}).`
       );
       setShowUploadDialog(false);
-      await refresh(parentPath(result.path));
+      await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -135,17 +216,54 @@ export function FilesPage(): React.JSX.Element {
   }
 
   async function deleteEntry(entry: ApplianceFileEntry) {
-    const kind = entry.type === "directory" ? "directory" : "file";
-    if (!window.confirm(`Delete ${kind} “${entry.name}”? This cannot be undone.`)) {
+    if (!window.confirm(`Delete file “${entry.name}”? This cannot be undone.`)) {
       return;
     }
     setError("");
     try {
       await client.deleteApplianceFile(entry.path);
       setMessage(`Deleted ${entry.path}.`);
-      await refresh(currentPath);
+      await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Delete failed.");
+    }
+  }
+
+  async function openEntry(entry: ApplianceFileEntry) {
+    setViewError("");
+    setViewText("");
+    setViewURL("");
+    setViewing(entry);
+    try {
+      const blob = await client.downloadApplianceFile(entry.path);
+      if (previewKind(entry.path) === "text") {
+        setViewText(await blob.text());
+        return;
+      }
+      setViewURL(URL.createObjectURL(blob));
+    } catch (err) {
+      setViewError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not open file.");
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (viewURL) {
+        URL.revokeObjectURL(viewURL);
+      }
+    };
+  }, [viewURL]);
+
+  async function setCurrentFocus(entry: ApplianceFileEntry) {
+    try {
+      await client.putFocusContent({
+        resourceType: "file",
+        resourcePath: entry.path,
+        title: fileTitle(entry)
+      });
+      setMessage(`${fileTitle(entry)} is now the current focus.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not set current focus.");
     }
   }
 
@@ -153,66 +271,82 @@ export function FilesPage(): React.JSX.Element {
     <PageFrame
       title="Files"
       eyebrow=""
-      description="Named file spaces on this appliance."
+      description="Manage uploaded documents and set focus content for viewers."
       pathname="/manage/files"
       onNavigate={navigate}
-      tabs={[{ label: "Browse", path: "/manage/files" }]}
+      tabs={[{ label: "Library", path: "/manage/files" }]}
     >
       {message ? <div className="message">{message}</div> : null}
       {error ? <div className="message message--error">{error}</div> : null}
 
-      <Card title="File spaces" subtitle="Browse directories and files stored on the appliance">
-        <div className="button-row" style={{ marginBottom: "1rem" }}>
-          <button className="button button--primary" type="button" onClick={openUploadDialog}>
-            + Add file
-          </button>
-        </div>
+      <Card title="Document library" subtitle="Preview uploaded files and publish one as current focus">
+        <div className="video-library">
+          <section className="video-library__stage">
+            <div className="video-library__toolbar">
+              {canWrite ? (
+                <button className="button button--primary" type="button" onClick={openUploadDialog}>
+                  Upload file
+                </button>
+              ) : null}
+              <button className="button button--ghost" type="button" onClick={() => void refresh()} disabled={loading}>
+                Refresh
+              </button>
+              <p className="video-library__count">{loading ? "Loading library…" : `${fileCount} file${fileCount === 1 ? "" : "s"}`}</p>
+            </div>
 
-        {loading ? (
-          <EmptyState message="Loading file spaces…" />
-        ) : items.length === 0 ? (
-          <EmptyState message="No files here yet. Use Add file to upload from this machine." />
-        ) : (
-          <ResourceList>
-            {items.map((entry) => (
-              <ResourceListRow
-                key={entry.path}
-                ariaLabel={
-                  entry.type === "directory"
-                    ? `Open directory ${entry.name}`
-                    : `File ${entry.name}`
-                }
-                onClick={entry.type === "directory" ? () => void refresh(entry.path) : undefined}
-                actionsLabel={`Actions for ${entry.name}`}
-                columns={[
-                  {
-                    key: "name",
-                    label: "Name",
-                    value: entry.type === "directory" ? `${entry.name}/` : entry.name
-                  },
-                  {
-                    key: "size",
-                    label: "Size",
-                    value: entry.type === "directory" ? "—" : formatBytes(entry.sizeBytes)
-                  },
-                  {
-                    key: "modified",
-                    label: "Modified",
-                    value: formatModifiedAt(entry.modifiedAt)
-                  }
-                ]}
-                actions={[
-                  {
-                    id: "delete",
-                    label: "Delete",
-                    danger: true,
-                    onSelect: () => void deleteEntry(entry)
-                  }
-                ]}
-              />
-            ))}
-          </ResourceList>
-        )}
+            {loading ? (
+              <EmptyState message="Loading file library…" />
+            ) : fileCount === 0 ? (
+              <EmptyState message="No files here yet. Upload PDF or text documents to begin." />
+            ) : (
+              shelves.map((shelf) => (
+                <section className="video-shelf" key={shelf.id} aria-label={shelf.title}>
+                  <div className="video-shelf__header">
+                    <h2>{shelf.title}</h2>
+                    {shelf.directoryPath ? <span className="pill pill--navy">{shelf.directoryPath}</span> : null}
+                  </div>
+                  <div className="file-shelf__row">
+                    {shelf.files.map((entry) => (
+                      <article key={entry.path} className="file-card">
+                        <button
+                          type="button"
+                          className="file-card__hit"
+                          onClick={() => void openEntry(entry)}
+                          aria-label={`Open ${entry.name}`}
+                        >
+                          <div className="file-card__preview">
+                            <Icon name="files" className="h-8 w-8" />
+                            <span className="file-card__badge">{previewLabel(entry.path)}</span>
+                          </div>
+                          <div className="file-card__meta">
+                            <strong className="file-card__title">{entry.name}</strong>
+                            <span>{formatBytes(entry.sizeBytes)}</span>
+                            <span>{formatModifiedAt(entry.modifiedAt)}</span>
+                          </div>
+                        </button>
+                        <div className="file-card__menu">
+                          <RowActionsMenu
+                            label={`Actions for ${entry.name}`}
+                            actions={[
+                              { id: "open", label: "View", onSelect: () => void openEntry(entry) },
+                              { id: "details", label: "View details", onSelect: () => setInspecting(entry) },
+                              ...(canSetFocus
+                                ? [{ id: "focus", label: "Set as current focus", onSelect: () => void setCurrentFocus(entry) }]
+                                : []),
+                              ...(canWrite
+                                ? [{ id: "delete", label: "Delete", danger: true, onSelect: () => void deleteEntry(entry) }]
+                                : [])
+                            ]}
+                          />
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+          </section>
+        </div>
       </Card>
 
       {showUploadDialog ? (
@@ -268,6 +402,78 @@ export function FilesPage(): React.JSX.Element {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {viewing ? (
+        <div className="video-modal-scrim" role="presentation" onClick={() => setViewing(null)}>
+          <div className="video-modal" role="dialog" aria-modal="true" aria-labelledby="files-preview-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="files-preview-dialog-title">{fileTitle(viewing)}</h2>
+            <p>{viewing.path}</p>
+            {viewError ? <EmptyState message={viewError} /> : null}
+            {!viewError && viewText ? <pre className="focus-file focus-file--text">{viewText}</pre> : null}
+            {!viewError && !viewText && previewKind(viewing.path) === "pdf" && viewURL ? (
+              <iframe className="focus-file focus-file--pdf" src={viewURL} title={viewing.name} />
+            ) : null}
+            {!viewError && !viewText && previewKind(viewing.path) === "image" && viewURL ? (
+              <img className="focus-file focus-file--image" src={viewURL} alt={viewing.name} />
+            ) : null}
+            {!viewError && !viewText && previewKind(viewing.path) === "other" && viewURL ? (
+              <a className="button button--primary" href={viewURL} target="_blank" rel="noreferrer">
+                Open file
+              </a>
+            ) : null}
+            <div className="button-row">
+              <button className="button button--ghost" type="button" onClick={() => setViewing(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {inspecting ? (
+        <div className="video-modal-scrim" role="presentation" onClick={() => setInspecting(null)}>
+          <div className="video-modal" role="dialog" aria-modal="true" aria-labelledby="files-details-dialog-title" onClick={(event) => event.stopPropagation()}>
+            <h2 id="files-details-dialog-title">{fileTitle(inspecting)}</h2>
+            <dl className="video-details">
+              <div className="video-details__row">
+                <dt>File name</dt>
+                <dd>{inspecting.name}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Library path</dt>
+                <dd>{inspecting.path}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Type</dt>
+                <dd>{previewLabel(inspecting.path)}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Size</dt>
+                <dd>{formatBytes(inspecting.sizeBytes)}</dd>
+              </div>
+              <div className="video-details__row">
+                <dt>Modified</dt>
+                <dd>{formatModifiedAt(inspecting.modifiedAt)}</dd>
+              </div>
+            </dl>
+            <div className="button-row">
+              <button className="button button--ghost" type="button" onClick={() => setInspecting(null)}>
+                Close
+              </button>
+              {canSetFocus ? (
+                <button className="button button--primary" type="button" onClick={() => void setCurrentFocus(inspecting)}>
+                  Set as current focus
+                </button>
+              ) : null}
+              {canWrite ? (
+                <button className="button button--danger" type="button" onClick={() => void deleteEntry(inspecting)}>
+                  Delete
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

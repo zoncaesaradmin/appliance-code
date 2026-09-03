@@ -1072,6 +1072,78 @@ button {
   font-weight: 700;
 }
 
+.file-shelf__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: 0.85rem;
+}
+
+.file-card {
+  position: relative;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  min-height: 12rem;
+}
+
+.file-card__hit {
+  display: grid;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #f3f7fc;
+  text-align: left;
+  padding: 0.8rem;
+  gap: 0.8rem;
+}
+
+.file-card__preview {
+  position: relative;
+  min-height: 5.8rem;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 16, 28, 0.72);
+  display: grid;
+  place-items: center;
+  color: #a8c3df;
+}
+
+.file-card__badge {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #d8e8f7;
+}
+
+.file-card__meta {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  color: #9db0c7;
+}
+
+.file-card__title {
+  font-size: 0.96rem;
+  color: #f3f7fc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-card__menu {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+}
+
+.file-card__menu .row-actions__trigger {
+  background: rgba(8, 12, 18, 0.62);
+  color: #fff;
+}
+
 .focus-video {
   overflow: hidden;
   border: 1px solid var(--line);

@@ -42,7 +42,7 @@ export function RouteView(props: {
     return <Redirect to="/admin/lan-services" />;
   }
   if (props.pathname.startsWith("/manage/files")) {
-    return <FilesPage />;
+    return <FilesPage session={props.session} capabilities={props.capabilities} />;
   }
   if (props.pathname.startsWith("/manage/videos")) {
     return <VideosPage session={props.session} />;

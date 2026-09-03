@@ -268,7 +268,7 @@ var BuiltInRoles = []BuiltInRole{
 	{
 		ID:          GuestRoleID,
 		Name:        Guest,
-		Permissions: []string{PermVideoLibraryRead, PermVideoPlay},
+		Permissions: []string{PermFilesRead, PermVideoLibraryRead, PermVideoPlay},
 	},
 	{
 		ID:   AutomationRoleID,
