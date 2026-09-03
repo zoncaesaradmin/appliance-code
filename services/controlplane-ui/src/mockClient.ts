@@ -895,8 +895,8 @@ export class MockControlPlaneClient {
     return mockState.focusContent ?? null;
   }
 
-  async putFocusContent(content: Pick<FocusContent, "resourcePath" | "title" | "message">): Promise<FocusContent> {
-    mockState.focusContent = { resourceType: "video", ...content, publishedAt: now(), publishedBy: "mock-admin" };
+  async putFocusContent(content: Pick<FocusContent, "resourceType" | "resourcePath" | "title" | "message">): Promise<FocusContent> {
+    mockState.focusContent = { ...content, publishedAt: now(), publishedBy: "mock-admin" };
     return mockState.focusContent;
   }
 

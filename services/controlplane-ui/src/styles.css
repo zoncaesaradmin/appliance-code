@@ -1087,6 +1087,35 @@ button {
   background: #0b1825;
 }
 
+.focus-file {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.focus-file--image {
+  max-height: 70vh;
+  width: auto;
+  object-fit: contain;
+}
+
+.focus-file--pdf {
+  width: min(100%, 860px);
+  height: min(75vh, 980px);
+}
+
+.focus-file--text {
+  width: min(100%, 860px);
+  max-height: 75vh;
+  overflow: auto;
+  padding: 2rem;
+  white-space: pre-wrap;
+  font: 1rem/1.6 "IBM Plex Mono", monospace;
+}
+
 .video-library [data-nav]:focus,
 .video-modal [data-nav]:focus,
 .video-player [data-nav]:focus {

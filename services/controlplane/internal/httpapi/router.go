@@ -593,7 +593,7 @@ func publicRoutes() []publicRoute {
 			if deps.FocusContentH == nil {
 				return nil, fmt.Errorf("missing focus content handlers")
 			}
-			return w.protectAny(deps.FocusContentH.Get, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
+			return w.protectAny(deps.FocusContentH.Get, roles.PermFilesRead, roles.PermVideoLibraryRead, roles.PermVideoPlay), nil
 		}},
 		{capability: appliance.CapabilityFocusContent, pattern: "PUT /api/v1/focus-content", build: func(deps Deps, w wrappers) (http.Handler, error) {
 			if deps.FocusContentH == nil {

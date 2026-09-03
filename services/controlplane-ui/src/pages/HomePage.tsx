@@ -25,6 +25,27 @@ function FocusVideo(props: { content: FocusContent; src: string }): React.JSX.El
   );
 }
 
+function FocusFile(props: { content: FocusContent }): React.JSX.Element {
+  const [url, setURL] = useState("");
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let objectURL = "";
+    let cancelled = false;
+    void client.downloadApplianceFile(props.content.resourcePath).then(async (blob) => {
+      if (cancelled) return;
+      if (blob.type.startsWith("text/")) setText(await blob.text());
+      else { objectURL = URL.createObjectURL(blob); setURL(objectURL); }
+    }).catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load the focused file."); });
+    return () => { cancelled = true; if (objectURL) URL.revokeObjectURL(objectURL); };
+  }, [props.content.resourcePath]);
+  if (error) return <EmptyState message={error} />;
+  if (text) return <pre className="focus-file focus-file--text">{text}</pre>;
+  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(props.content.resourcePath)) return <img className="focus-file focus-file--image" src={url} alt={props.content.title} />;
+  if (/\.pdf$/i.test(props.content.resourcePath)) return <iframe className="focus-file focus-file--pdf" src={url} title={props.content.title} />;
+  return url ? <a className="button button--primary" href={url} download={props.content.title}>Open file</a> : <EmptyState message="Loading current focus…" />;
+}
+
 function canReadAudit(session: Session): boolean {
   return session.permissions.some((permission) => permission.trim().toLowerCase() === "audit.read");
 }
@@ -239,6 +260,7 @@ export function HomePage(props: {
               <div className="stack">
                 {focusContent.message ? <p>{focusContent.message}</p> : null}
                 {focusContent.resourceType === "video" && focusPlaybackURL ? <FocusVideo content={focusContent} src={focusPlaybackURL} /> : null}
+				{focusContent.resourceType === "file" ? <FocusFile content={focusContent} /> : null}
                 {focusPlaybackError ? <EmptyState message={focusPlaybackError} /> : null}
               </div>
             </Card>

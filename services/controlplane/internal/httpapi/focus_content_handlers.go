@@ -17,6 +17,7 @@ type FocusContentHandlers struct {
 }
 
 type setFocusContentRequest struct {
+	ResourceType string `json:"resourceType"`
 	ResourcePath string `json:"resourcePath"`
 	Title        string `json:"title"`
 	Message      string `json:"message"`
@@ -42,14 +43,18 @@ func (h *FocusContentHandlers) Put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resourcePath := strings.Trim(strings.TrimSpace(req.ResourcePath), "/")
+	resourceType := strings.TrimSpace(req.ResourceType)
+	if resourceType == "" {
+		resourceType = "video"
+	}
 	title := strings.TrimSpace(req.Title)
 	message := strings.TrimSpace(req.Message)
-	if resourcePath == "" || path.Clean(resourcePath) != resourcePath || strings.HasPrefix(resourcePath, "../") || !strings.HasSuffix(strings.ToLower(resourcePath), ".mp4") || title == "" {
-		WriteValidationProblem(w, r, "resourcePath must be a video-library MP4 path and title is required", nil)
+	if resourcePath == "" || path.Clean(resourcePath) != resourcePath || strings.HasPrefix(resourcePath, "../") || title == "" || (resourceType != "video" && resourceType != "file") || (resourceType == "video" && !strings.HasSuffix(strings.ToLower(resourcePath), ".mp4")) {
+		WriteValidationProblem(w, r, "resourceType must be video or file; video paths must be MP4; title is required", nil)
 		return
 	}
 	actor, _ := PrincipalFromContext(r.Context())
-	content := storage.FocusContent{ResourceType: "video", ResourcePath: resourcePath, Title: title, Message: message, PublishedAt: time.Now().UTC(), PublishedBy: actor.UserID}
+	content := storage.FocusContent{ResourceType: resourceType, ResourcePath: resourcePath, Title: title, Message: message, PublishedAt: time.Now().UTC(), PublishedBy: actor.UserID}
 	if err := h.Store.PutFocusContent(r.Context(), content); err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return

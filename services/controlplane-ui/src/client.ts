@@ -167,7 +167,7 @@ export interface ControlPlaneClient {
   videoStreamURL(path: string): string;
   deleteVideoLibraryFile(path: string): Promise<void>;
   getFocusContent(): Promise<FocusContent | null>;
-  putFocusContent(content: Pick<FocusContent, "resourcePath" | "title" | "message">): Promise<FocusContent>;
+  putFocusContent(content: Pick<FocusContent, "resourceType" | "resourcePath" | "title" | "message">): Promise<FocusContent>;
   clearFocusContent(): Promise<void>;
   getLicensingStatus(): Promise<LicensingStatus>;
   getLicensingEntitlements(): Promise<string[]>;
@@ -590,7 +590,7 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     return (await response.json()) as FocusContent;
   }
 
-  async putFocusContent(content: Pick<FocusContent, "resourcePath" | "title" | "message">): Promise<FocusContent> {
+  async putFocusContent(content: Pick<FocusContent, "resourceType" | "resourcePath" | "title" | "message">): Promise<FocusContent> {
     return this.request("/api/v1/focus-content", { method: "PUT", body: content });
   }
 
