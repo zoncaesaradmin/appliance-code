@@ -87,7 +87,9 @@ func (h *FileHandlers) stream(w http.ResponseWriter, r *http.Request, relativePa
 	defer response.Body.Close()
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Accept-Ranges", "bytes")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", path.Base(relativePath)))
+	// Use "inline" so browsers can render PDFs and text directly in iframes
+	// and object-URL previews. The filename is still present for save-as.
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", path.Base(relativePath)))
 	contentType := strings.TrimSpace(object.ContentType)
 	if contentType == "" {
 		contentType = strings.TrimSpace(got.ContentType)

@@ -25,25 +25,40 @@ function FocusVideo(props: { content: FocusContent; src: string }): React.JSX.El
   );
 }
 
-function FocusFile(props: { content: FocusContent }): React.JSX.Element {
+function FocusFile(props: { content: FocusContent }): React.JSX.Element | null {
   const [url, setURL] = useState("");
   const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const resourcePath = props.content.resourcePath;
   useEffect(() => {
     let objectURL = "";
     let cancelled = false;
-    void client.downloadApplianceFile(props.content.resourcePath).then(async (blob) => {
+    setLoading(true);
+    setError("");
+    setText("");
+    setURL("");
+    void client.downloadApplianceFile(resourcePath).then(async (blob) => {
       if (cancelled) return;
-      if (blob.type.startsWith("text/")) setText(await blob.text());
-      else { objectURL = URL.createObjectURL(blob); setURL(objectURL); }
-    }).catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load the focused file."); });
+      if (blob.type.startsWith("text/") || /\.(txt|md|json|yaml|yml|log|csv|xml)$/i.test(resourcePath)) {
+        setText(await blob.text());
+      } else {
+        objectURL = URL.createObjectURL(blob);
+        setURL(objectURL);
+      }
+    }).catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : "Could not load the focused file.");
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
     return () => { cancelled = true; if (objectURL) URL.revokeObjectURL(objectURL); };
-  }, [props.content.resourcePath]);
+  }, [resourcePath]);
+  if (loading) return <EmptyState message="Loading current focus…" />;
   if (error) return <EmptyState message={error} />;
   if (text) return <pre className="focus-file focus-file--text">{text}</pre>;
-  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(props.content.resourcePath)) return <img className="focus-file focus-file--image" src={url} alt={props.content.title} />;
-  if (/\.pdf$/i.test(props.content.resourcePath)) return <iframe className="focus-file focus-file--pdf" src={url} title={props.content.title} />;
-  return url ? <a className="button button--primary" href={url} download={props.content.title}>Open file</a> : <EmptyState message="Loading current focus…" />;
+  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(resourcePath)) return <img className="focus-file focus-file--image" src={url} alt={props.content.title} />;
+  if (/\.pdf$/i.test(resourcePath)) return url ? <iframe className="focus-file focus-file--pdf" src={url} title={props.content.title} /> : null;
+  return url ? <a className="button button--primary" href={url} target="_blank" rel="noreferrer">{props.content.title}</a> : null;
 }
 
 function canReadAudit(session: Session): boolean {

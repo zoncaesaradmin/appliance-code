@@ -139,6 +139,7 @@ export function FilesPage(props: { session: Session; capabilities: string[] }): 
   const [viewURL, setViewURL] = useState("");
   const [viewText, setViewText] = useState("");
   const [viewError, setViewError] = useState("");
+  const [viewLoading, setViewLoading] = useState(false);
   const [inspecting, setInspecting] = useState<ApplianceFileEntry | null>(null);
 
   const destinationPreview = useMemo(() => {
@@ -233,16 +234,19 @@ export function FilesPage(props: { session: Session; capabilities: string[] }): 
     setViewError("");
     setViewText("");
     setViewURL("");
+    setViewLoading(true);
     setViewing(entry);
     try {
       const blob = await client.downloadApplianceFile(entry.path);
-      if (previewKind(entry.path) === "text") {
+      if (previewKind(entry.path) === "text" || blob.type.startsWith("text/")) {
         setViewText(await blob.text());
         return;
       }
       setViewURL(URL.createObjectURL(blob));
     } catch (err) {
       setViewError(err instanceof ApiError ? err.detail : err instanceof Error ? err.message : "Could not open file.");
+    } finally {
+      setViewLoading(false);
     }
   }
 
@@ -410,21 +414,22 @@ export function FilesPage(props: { session: Session; capabilities: string[] }): 
         <div className="video-modal-scrim" role="presentation" onClick={() => setViewing(null)}>
           <div className="video-modal" role="dialog" aria-modal="true" aria-labelledby="files-preview-dialog-title" onClick={(event) => event.stopPropagation()}>
             <h2 id="files-preview-dialog-title">{fileTitle(viewing)}</h2>
-            <p>{viewing.path}</p>
-            {viewError ? <EmptyState message={viewError} /> : null}
-            {!viewError && viewText ? <pre className="focus-file focus-file--text">{viewText}</pre> : null}
-            {!viewError && !viewText && previewKind(viewing.path) === "pdf" && viewURL ? (
+            <p style={{ margin: "0.25rem 0 0.75rem", fontSize: "0.85rem", color: "var(--muted)" }}>{viewing.path}</p>
+            {viewLoading ? <EmptyState message="Loading file…" /> : null}
+            {!viewLoading && viewError ? <EmptyState message={viewError} /> : null}
+            {!viewLoading && !viewError && viewText ? <pre className="focus-file focus-file--text">{viewText}</pre> : null}
+            {!viewLoading && !viewError && !viewText && viewURL && previewKind(viewing.path) === "pdf" ? (
               <iframe className="focus-file focus-file--pdf" src={viewURL} title={viewing.name} />
             ) : null}
-            {!viewError && !viewText && previewKind(viewing.path) === "image" && viewURL ? (
+            {!viewLoading && !viewError && !viewText && viewURL && previewKind(viewing.path) === "image" ? (
               <img className="focus-file focus-file--image" src={viewURL} alt={viewing.name} />
             ) : null}
-            {!viewError && !viewText && previewKind(viewing.path) === "other" && viewURL ? (
+            {!viewLoading && !viewError && !viewText && viewURL && previewKind(viewing.path) === "other" ? (
               <a className="button button--primary" href={viewURL} target="_blank" rel="noreferrer">
                 Open file
               </a>
             ) : null}
-            <div className="button-row">
+            <div className="button-row" style={{ marginTop: "1rem" }}>
               <button className="button button--ghost" type="button" onClick={() => setViewing(null)}>
                 Close
               </button>
