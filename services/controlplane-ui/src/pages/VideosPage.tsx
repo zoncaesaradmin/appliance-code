@@ -432,7 +432,10 @@ export function VideosPage(props: { session: Session }): React.JSX.Element {
 					<button
 						className="button button--primary"
 						type="button"
-						onClick={() => void client.putFocusContent({ resourcePath: inspecting.path, title: displayTitle(inspecting) }).then(() => setMessage(`${displayTitle(inspecting)} is now the current focus.`)).catch((err) => setError(err instanceof Error ? err.message : "Could not set current focus."))}
+						onClick={() => void client.putFocusContent({ resourcePath: inspecting.path, title: displayTitle(inspecting) }).then(() => {
+							setMessage(`${displayTitle(inspecting)} is now the current focus.`);
+							setInspecting(null);
+						}).catch((err) => setError(err instanceof Error ? err.message : "Could not set current focus."))}
 					>
 						Set as current focus
 					</button>

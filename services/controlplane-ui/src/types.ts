@@ -129,7 +129,7 @@ export interface ApplianceFileUploadResult {
 }
 
 export interface FocusContent {
-  resourceType: "video";
+  resourceType: string;
   resourcePath: string;
   title: string;
   message?: string;

@@ -1072,6 +1072,21 @@ button {
   font-weight: 700;
 }
 
+.focus-video {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #0b1825;
+  box-shadow: 0 16px 32px rgb(9 27 42 / 18%);
+}
+
+.focus-video__player {
+  display: block;
+  width: 100%;
+  max-height: min(62vh, 640px);
+  background: #0b1825;
+}
+
 .video-library [data-nav]:focus,
 .video-modal [data-nav]:focus,
 .video-player [data-nav]:focus {
