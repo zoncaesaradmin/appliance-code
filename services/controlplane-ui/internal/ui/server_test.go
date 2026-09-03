@@ -120,6 +120,9 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "connect-src 'self'") {
 			t.Fatalf("Content-Security-Policy = %q, want self connect-src", got)
 		}
+		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-src 'self' blob:") {
+			t.Fatalf("Content-Security-Policy = %q, want frame-src blob for document preview", got)
+		}
 	})
 }
 

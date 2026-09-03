@@ -1,4 +1,5 @@
 import { randomUUID } from "./lib/randomUUID";
+import { mimeTypeForPath } from "./lib/filePreview";
 import type {
   APIToken,
   ApplianceIdentity,
@@ -782,7 +783,7 @@ export class MockControlPlaneClient {
     if (!stored) {
       throw new Error("File not found");
     }
-    return new Blob([Uint8Array.from(stored.content)]);
+    return new Blob([Uint8Array.from(stored.content)], { type: mimeTypeForPath(cleaned) });
   }
 
   async deleteApplianceFile(path: string): Promise<void> {

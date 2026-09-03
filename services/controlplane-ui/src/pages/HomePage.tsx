@@ -3,6 +3,7 @@ import { Card, EmptyState, PageFrame, ResourceList, ResourceListRow, StatCard } 
 import { ApiError } from "../client";
 import { client } from "../lib/api";
 import { capabilityBadge } from "../lib/format";
+import { ensureBlobType, isTextPreview } from "../lib/filePreview";
 import { navigate } from "../lib/navigate";
 import { useVideoPoster } from "../lib/useVideoPoster";
 import { useViewSyncGeneration, useViewSyncTag } from "../lib/viewSyncHooks";
@@ -38,9 +39,10 @@ function FocusFile(props: { content: FocusContent }): React.JSX.Element | null {
     setError("");
     setText("");
     setURL("");
-    void client.downloadApplianceFile(resourcePath).then(async (blob) => {
+    void client.downloadApplianceFile(resourcePath).then(async (raw) => {
       if (cancelled) return;
-      if (blob.type.startsWith("text/") || /\.(txt|md|json|yaml|yml|log|csv|xml)$/i.test(resourcePath)) {
+      const blob = ensureBlobType(raw, resourcePath);
+      if (isTextPreview(resourcePath, blob)) {
         setText(await blob.text());
       } else {
         objectURL = URL.createObjectURL(blob);

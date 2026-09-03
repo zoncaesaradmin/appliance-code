@@ -2,6 +2,7 @@ import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { Card, EmptyState, Icon, PageFrame, RowActionsMenu } from "../components";
 import { ApiError } from "../client";
 import { client } from "../lib/api";
+import { ensureBlobType, isTextPreview, previewKind, previewLabel } from "../lib/filePreview";
 import { navigate } from "../lib/navigate";
 import type { ApplianceFileEntry, Session } from "../types";
 
@@ -72,22 +73,6 @@ function canManageFocus(session: Pick<Session, "permissions">): boolean {
 
 function fileTitle(entry: ApplianceFileEntry): string {
   return entry.name.replace(/\.[^.]+$/, "") || entry.name;
-}
-
-function previewKind(path: string): "pdf" | "text" | "image" | "other" {
-  if (/\.pdf$/i.test(path)) return "pdf";
-  if (/\.(txt|md|json|yaml|yml|log|csv|xml)$/i.test(path)) return "text";
-  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(path)) return "image";
-  return "other";
-}
-
-function previewLabel(path: string): string {
-  const kind = previewKind(path);
-  if (kind === "pdf") return "PDF";
-  if (kind === "text") return "TEXT";
-  if (kind === "image") return "IMAGE";
-  const ext = path.split(".").at(-1);
-  return ext ? ext.toUpperCase() : "FILE";
 }
 
 function buildShelves(files: ApplianceFileEntry[]): FileShelf[] {
@@ -237,8 +222,9 @@ export function FilesPage(props: { session: Session; capabilities: string[] }): 
     setViewLoading(true);
     setViewing(entry);
     try {
-      const blob = await client.downloadApplianceFile(entry.path);
-      if (previewKind(entry.path) === "text" || blob.type.startsWith("text/")) {
+      const raw = await client.downloadApplianceFile(entry.path);
+      const blob = ensureBlobType(raw, entry.path);
+      if (isTextPreview(entry.path, blob)) {
         setViewText(await blob.text());
         return;
       }
