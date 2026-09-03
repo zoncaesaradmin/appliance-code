@@ -832,6 +832,7 @@ button {
 
 .row-actions {
   position: relative;
+  isolation: isolate;
 }
 
 .row-actions__trigger {
@@ -854,6 +855,12 @@ button {
 
 .row-actions__menu {
   min-width: 160px;
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgba(8, 12, 24, 0.18);
+  z-index: 60;
 }
 
 .row-actions__item--danger {
