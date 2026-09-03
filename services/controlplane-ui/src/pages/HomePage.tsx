@@ -220,7 +220,7 @@ export function HomePage(props: {
       ) : (
         <div className="stack">
           {focusContent ? (
-            <Card title="Current focus">
+            <Card title="Current focus" subtitle="">
               <div className="stack">
                 {focusContent.message ? <p>{focusContent.message}</p> : null}
                 <button className="button button--primary" onClick={() => void playFocusContent()}>
