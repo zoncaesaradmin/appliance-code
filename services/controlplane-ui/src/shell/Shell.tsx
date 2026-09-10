@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  BrandMark,
   Icon,
   IconButton,
   cn
@@ -19,6 +18,7 @@ import {
 import type { Session } from "../types";
 import { AboutApplianceDialog } from "./AboutApplianceDialog";
 import { RouteView } from "./RouteView";
+import zonLogo from "./zon-logo.png";
 
 export function Shell(props: {
   pathname: string;
@@ -189,7 +189,7 @@ export function Shell(props: {
     <div className="grid min-h-screen grid-rows-[auto_1fr]">
       <header className="top-navigation relative z-[70] flex items-center justify-between gap-6 overflow-visible border-b border-slate-200/80 bg-white px-6 py-4 shadow-sm shadow-slate-900/5 max-[680px]:flex-col max-[680px]:items-start">
         <div className="flex items-center gap-3">
-          <BrandMark />
+          <img src={zonLogo} alt="Zon" width={44} height={44} className="h-11 w-11 shrink-0 object-contain" />
           <div>
             <strong className="block text-sm font-bold text-slate-950">Zon Appliance</strong>
             <span className="text-sm text-slate-500">Control Plane UI</span>
