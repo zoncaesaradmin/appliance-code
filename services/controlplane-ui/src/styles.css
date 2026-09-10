@@ -1,14 +1,21 @@
 @import "tailwindcss";
 
+/* Brand colors also cover shared components using Tailwind utilities. */
+@theme {
+  --color-blue-950: #0f2230;
+  --color-blue-900: #1b6667;
+  --color-blue-100: #e3f0ee;
+}
+
 :root {
-  --bg: #f3f5f7;
+  --bg: #ffffff;
   --panel: #ffffff;
-  --panel-strong: #f7f9fb;
-  --border: #d9e0e8;
-  --text: #111827;
-  --muted: #5b6878;
-  --navy: #12335b;
-  --navy-soft: #d8e4f3;
+  --panel-strong: #f5f8f8;
+  --border: #d9e1e2;
+  --text: #14232d;
+  --muted: #435560;
+  --navy: #0f2230;
+  --navy-soft: #e3f0ee;
   --success: #0b8b5c;
   --success-soft: #d7f4e7;
   --danger: #b42318;
@@ -30,9 +37,7 @@
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(18, 51, 91, 0.08), transparent 35%),
-    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  background: var(--bg);
 }
 
 button,
@@ -77,7 +82,7 @@ button {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--navy), #2a5e9b);
+  background: linear-gradient(135deg, var(--navy), #1b6667);
   color: #fff;
   font-weight: 800;
 }
@@ -85,7 +90,7 @@ button {
 .eyebrow {
   display: inline-block;
   margin-bottom: 10px;
-  color: var(--navy);
+  color: #91471b;
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -101,8 +106,8 @@ button {
 .auth-visual {
   padding: 48px;
   background:
-    linear-gradient(135deg, rgba(18, 51, 91, 0.98), rgba(13, 26, 46, 0.96)),
-    linear-gradient(180deg, #0b1728 0%, #143b66 100%);
+    linear-gradient(135deg, rgba(15, 34, 48, 0.98), rgba(14, 31, 45, 0.96)),
+    linear-gradient(180deg, #0f2230 0%, #1b6667 100%);
   color: #f8fafc;
   display: grid;
   place-items: center;
@@ -169,7 +174,7 @@ button {
   flex-direction: column;
   min-height: 100vh;
   padding: 36px 40px 24px;
-  background: #f7f9fc;
+  background: #ffffff;
 }
 
 .auth-form__logo {
@@ -391,7 +396,7 @@ button {
 }
 
 .button--primary {
-  background: linear-gradient(135deg, var(--navy), #215998);
+  background: linear-gradient(135deg, var(--navy), #1b6667);
   color: #fff;
 }
 
@@ -553,7 +558,7 @@ button {
 }
 
 .mode-rail__button--active {
-  background: linear-gradient(180deg, rgba(18, 51, 91, 0.16), rgba(18, 51, 91, 0.08));
+  background: linear-gradient(180deg, rgba(27, 102, 103, 0.16), rgba(27, 102, 103, 0.08));
   color: var(--navy);
 }
 
