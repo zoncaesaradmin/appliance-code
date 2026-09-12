@@ -86,7 +86,7 @@ The initial v1 appliance profiles are:
 | `builder` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact` |
 | `storage` | No | `base`, `host`, `files`, `artifact` |
 | `landns` | No | `base`, `host`, `files`, `dns` |
-| `storage-landns` | No | `base`, `host`, `files`, `artifact`, `dns` |
+| `storage-landns` | No | `base`, `files`, `artifact`, `dns` |
 | `builder-landns` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `dns` |
 | `builder-storage-landns` | No | `base`, `host`, `files`, `workflows`, `build`, `artifact`, `dns` |
 | `lanllm` | No | `base`, `host`, `files`, `inference` |
@@ -247,6 +247,13 @@ enable workflows or build. The `storage` profile also enables `files`, so the
 same appliance acts as both a file server and an OCI artifact server.
 
 ### `dns`
+
+LAN DNS does not require the `host` capability or host-agent APIs. The
+`storage-landns` profile provides files, artifacts, and DNS without host
+management, builds, workflows, or application management. Installer-owned
+port-53 preparation still applies and is driven by the `dns` capability.
+Profile selection and release packaging consume the canonical metadata catalog;
+existing installations need the updated signed metadata bundle to see this profile.
 
 `dns` enables the appliance-owned LAN DNS data plane (CoreDNS) and the
 control-plane DNS records API:

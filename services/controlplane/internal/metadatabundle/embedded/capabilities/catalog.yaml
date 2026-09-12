@@ -55,7 +55,7 @@ capabilities:
     packages: [developer]
   dns:
     displayName: LAN DNS
-    requires: [base, host]
+    requires: [base]
     conflicts: []
     license:
       requiredEntitlement: zon.capabilities.dns

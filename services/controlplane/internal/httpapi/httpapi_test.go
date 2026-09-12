@@ -345,6 +345,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		want    []string
 	}{
 		{appliance.ProfileCore, []string{"base", "files"}},
+		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "files"}},
 		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
 		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "workflows"}},
 		{appliance.ProfileTraining, []string{"applications", "base", "files", "focus-content", "guest-access", "host", "plaintext-http", "video"}},
