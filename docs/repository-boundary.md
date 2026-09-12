@@ -82,9 +82,9 @@ archive, for example `appliance-metadata-bundle-4.3.2.0.tar.zst` containing
 `appliance-metadata-bundle-4.3.2.0/`. The archive remains a separate file inside
 the final bundle and is listed in the signed release manifest with its own
 path, size, digest, metadata version, compatible software version, and top-level
-directory name. It may also be embedded or mounted by product components for
-runtime convenience, but that does not replace the separate signed-bundle
-artifact contract.
+directory name. Product components read the staged files through their existing
+metadata-bundles mount; metadata is not compiled into Go or duplicated under a
+service source tree. This preserves the separate signed-bundle artifact contract.
 
 There is no connected production package in v1. A machine with internet access may install the same air-gap bundle, but installation and runtime never fetch missing components or switch behavior based on connectivity.
 

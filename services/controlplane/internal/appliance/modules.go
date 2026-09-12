@@ -80,11 +80,15 @@ func (AlwaysEntitled) IsEntitled(ModuleDescriptor, EntitlementContext) bool {
 	return true
 }
 
-func EmbeddedModuleCatalog() ([]ModuleDescriptor, error) {
-	catalog, err := metadatabundle.EmbeddedModuleCatalog()
+func DevelopmentModuleCatalog() ([]ModuleDescriptor, error) {
+	b, err := metadatabundle.LoadDevelopment()
 	if err != nil {
 		return nil, err
 	}
+	return ModuleCatalogFromMetadata(b.Modules)
+}
+
+func ModuleCatalogFromMetadata(catalog metadatabundle.ModuleCatalog) ([]ModuleDescriptor, error) {
 	modules := make([]ModuleDescriptor, 0, len(catalog.Modules))
 	for _, module := range catalog.Modules {
 		routes := make([]ModuleRoute, len(module.Routes))
@@ -98,7 +102,7 @@ func EmbeddedModuleCatalog() ([]ModuleDescriptor, error) {
 		modules = append(modules, ModuleDescriptor{Name: module.Name, Kind: ModuleKind(module.Kind), RequiredCapabilities: caps, Dependencies: append([]string(nil), module.Dependencies...), ExecutionMode: ExecutionMode(module.ExecutionMode), EntitlementKey: module.EntitlementKey, BaseURL: module.BaseURL, Routes: routes, SecurityClass: SecurityClass(module.SecurityClass)})
 	}
 	if len(modules) == 0 {
-		return nil, fmt.Errorf("embedded modules catalog is empty")
+		return nil, fmt.Errorf("modules catalog is empty")
 	}
 	return modules, nil
 }

@@ -25,13 +25,15 @@ import (
 // process. All fields have safe local-development defaults; production
 // deployment layers override them through environment variables.
 type Config struct {
-	ApplianceProfile string `json:"applianceProfile"`
-	ApplianceName    string `json:"applianceName"`
-	NodeIPv4         string `json:"nodeIPv4"`
-	CanonicalOrigin  string `json:"canonicalOrigin"`
-	PublicAddr       string `json:"publicAddr"`
-	InternalAddr     string `json:"internalAddr"`
-	DataDir          string `json:"dataDir"`
+	// Metadata is an immutable startup snapshot, never supplied through JSON.
+	Metadata         *metadatabundle.Bundle `json:"-"`
+	ApplianceProfile string                 `json:"applianceProfile"`
+	ApplianceName    string                 `json:"applianceName"`
+	NodeIPv4         string                 `json:"nodeIPv4"`
+	CanonicalOrigin  string                 `json:"canonicalOrigin"`
+	PublicAddr       string                 `json:"publicAddr"`
+	InternalAddr     string                 `json:"internalAddr"`
+	DataDir          string                 `json:"dataDir"`
 
 	ApplicationLogPath string `json:"applicationLogPath"`
 	LogLevel           string `json:"logLevel"`
@@ -153,8 +155,8 @@ func Load(environ []string) (Config, error) {
 	if err := applyEnv(&cfg, env); err != nil {
 		return Config{}, fmt.Errorf("config: applying environment: %w", err)
 	}
-	if err := deriveApplicationCatalog(&cfg); err != nil {
-		return Config{}, fmt.Errorf("config: application catalog: %w", err)
+	if err := cfg.LoadMetadata(); err != nil {
+		return Config{}, fmt.Errorf("config: metadata: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -329,11 +331,11 @@ func applyEnv(cfg *Config, env map[string]string) error {
 
 func deriveApplicationCatalog(cfg *Config) error {
 	cfg.ApplicationCatalog = applications.Catalog{}
-	data, err := metadatabundle.EmbeddedApplicationCatalog()
+	b, err := cfg.metadataBundle()
 	if err != nil {
 		return err
 	}
-	if err := yaml.Unmarshal(data, &cfg.ApplicationCatalog); err != nil {
+	if err := yaml.Unmarshal(b.Applications.Raw, &cfg.ApplicationCatalog); err != nil {
 		return err
 	}
 	return nil
@@ -555,7 +557,15 @@ func (c Config) ResolveProfile() (appliance.ResolvedProfile, error) {
 	if err != nil {
 		return appliance.ResolvedProfile{}, err
 	}
-	return appliance.ResolveProfileWithCatalog(c.ApplianceProfile, catalog)
+	b, err := c.metadataBundle()
+	if err != nil {
+		return appliance.ResolvedProfile{}, err
+	}
+	capabilities, err := appliance.CapabilityCatalogFromMetadata(b.Capabilities)
+	if err != nil {
+		return appliance.ResolvedProfile{}, err
+	}
+	return appliance.ResolveProfileWithCatalogs(c.ApplianceProfile, catalog, capabilities)
 }
 
 func (c Config) ResolveModules(resolved appliance.ResolvedProfile) ([]appliance.ModuleDescriptor, error) {
@@ -567,11 +577,39 @@ func (c Config) ResolveModules(resolved appliance.ResolvedProfile) ([]appliance.
 }
 
 func (c Config) profileCatalog() (appliance.ProfileCatalog, error) {
-	return appliance.EmbeddedProfileCatalog()
+	b, err := c.metadataBundle()
+	if err != nil {
+		return nil, err
+	}
+	return appliance.ProfileCatalogFromMetadata(b.Profiles)
 }
 
 func (c Config) moduleCatalog() ([]appliance.ModuleDescriptor, error) {
-	return appliance.EmbeddedModuleCatalog()
+	b, err := c.metadataBundle()
+	if err != nil {
+		return nil, err
+	}
+	return appliance.ModuleCatalogFromMetadata(b.Modules)
+}
+
+// LoadMetadata freezes file-backed policy for this configuration. A restart
+// creates a new configuration and reads edits; request handling never reloads it.
+func (c *Config) LoadMetadata() error {
+	if c.Metadata == nil {
+		b, err := metadatabundle.LoadStartup(c.DataDir)
+		if err != nil {
+			return err
+		}
+		c.Metadata = b
+	}
+	return deriveApplicationCatalog(c)
+}
+
+func (c Config) metadataBundle() (*metadatabundle.Bundle, error) {
+	if c.Metadata != nil {
+		return c.Metadata, nil
+	}
+	return metadatabundle.LoadStartup(c.DataDir)
 }
 
 func (c Config) SQLitePath() string {

@@ -7,9 +7,9 @@ import (
 
 func TestResolveProfileRejectsMissingCapabilityDependency(t *testing.T) {
 	const invalidProfile Profile = "invalid-builder-without-artifact"
-	catalog, err := EmbeddedProfileCatalog()
+	catalog, err := DevelopmentProfileCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedProfileCatalog: %v", err)
+		t.Fatalf("DevelopmentProfileCatalog: %v", err)
 	}
 	catalog[invalidProfile] = ProfileDefinition{Capabilities: []Capability{CapabilityBase, CapabilityWorkflows, CapabilityBuild}}
 

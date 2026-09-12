@@ -72,19 +72,22 @@ func (l StaticProfileCatalogLoader) LoadProfileCatalog() (ProfileCatalog, error)
 	return cloneProfileCatalog(l.Catalog), nil
 }
 
-// EmbeddedProfileCatalog converts the one metadata source compiled into this
-// image into the resolver's typed catalog. No profile policy is duplicated in
-// Go tables or accepted from deployment configuration.
-func EmbeddedProfileCatalog() (ProfileCatalog, error) {
-	metadataCatalog, err := metadatabundle.EmbeddedProfileCatalog()
+// DevelopmentProfileCatalog reads the repository catalog for local tools and tests.
+// Production wiring uses ProfileCatalogFromMetadata with its startup snapshot.
+func DevelopmentProfileCatalog() (ProfileCatalog, error) {
+	b, err := metadatabundle.LoadDevelopment()
 	if err != nil {
 		return nil, err
 	}
+	return ProfileCatalogFromMetadata(b.Profiles)
+}
+
+func ProfileCatalogFromMetadata(metadataCatalog metadatabundle.ProfileCatalog) (ProfileCatalog, error) {
 	catalog := make(ProfileCatalog, len(metadataCatalog.Profiles))
 	for name, definition := range metadataCatalog.Profiles {
 		profile := Profile(strings.TrimSpace(name))
 		if profile == "" {
-			return nil, fmt.Errorf("embedded profiles catalog contains an empty profile name")
+			return nil, fmt.Errorf("profiles catalog contains an empty profile name")
 		}
 		capabilities := make([]Capability, len(definition.Capabilities))
 		for i, capability := range definition.Capabilities {
@@ -95,18 +98,22 @@ func EmbeddedProfileCatalog() (ProfileCatalog, error) {
 	return catalog, nil
 }
 
-// EmbeddedCapabilityCatalog converts the canonical metadata capability
+// DevelopmentCapabilityCatalog converts the canonical metadata capability
 // catalog. Capability dependency policy is never authored in Go.
-func EmbeddedCapabilityCatalog() (CapabilityCatalog, error) {
-	metadataCatalog, err := metadatabundle.EmbeddedCapabilityCatalog()
+func DevelopmentCapabilityCatalog() (CapabilityCatalog, error) {
+	b, err := metadatabundle.LoadDevelopment()
 	if err != nil {
 		return nil, err
 	}
+	return CapabilityCatalogFromMetadata(b.Capabilities)
+}
+
+func CapabilityCatalogFromMetadata(metadataCatalog metadatabundle.CapabilityCatalog) (CapabilityCatalog, error) {
 	catalog := make(CapabilityCatalog, len(metadataCatalog.Capabilities))
 	for name, definition := range metadataCatalog.Capabilities {
 		capability := Capability(strings.TrimSpace(name))
 		if capability == "" {
-			return nil, fmt.Errorf("embedded capabilities catalog contains an empty capability name")
+			return nil, fmt.Errorf("capabilities catalog contains an empty capability name")
 		}
 		dependencies := make([]Capability, len(definition.Requires))
 		for i, dependency := range definition.Requires {
@@ -152,13 +159,13 @@ type ResolvedProfile struct {
 // returns the resolved enabled capability set. It does not add implicit
 // dependencies; invalid profile-to-capability combinations fail closed.
 func ResolveProfile(name string) (ResolvedProfile, error) {
-	profiles, err := EmbeddedProfileCatalog()
+	profiles, err := DevelopmentProfileCatalog()
 	if err != nil {
-		return ResolvedProfile{}, fmt.Errorf("load embedded appliance profile catalog: %w", err)
+		return ResolvedProfile{}, fmt.Errorf("load development appliance profile catalog: %w", err)
 	}
-	capabilities, err := EmbeddedCapabilityCatalog()
+	capabilities, err := DevelopmentCapabilityCatalog()
 	if err != nil {
-		return ResolvedProfile{}, fmt.Errorf("load embedded appliance capability catalog: %w", err)
+		return ResolvedProfile{}, fmt.Errorf("load development appliance capability catalog: %w", err)
 	}
 	return ResolveProfileWithCatalogs(name, profiles, capabilities)
 }
@@ -178,9 +185,9 @@ func ResolveProfileWithLoader(name string, loader ProfileCatalogLoader) (Resolve
 // and returns the resolved enabled capability set. It does not add implicit
 // dependencies; invalid profile-to-capability combinations fail closed.
 func ResolveProfileWithCatalog(name string, catalog ProfileCatalog) (ResolvedProfile, error) {
-	capabilities, err := EmbeddedCapabilityCatalog()
+	capabilities, err := DevelopmentCapabilityCatalog()
 	if err != nil {
-		return ResolvedProfile{}, fmt.Errorf("load embedded appliance capability catalog: %w", err)
+		return ResolvedProfile{}, fmt.Errorf("load development appliance capability catalog: %w", err)
 	}
 	return ResolveProfileWithCatalogs(name, catalog, capabilities)
 }
@@ -222,7 +229,7 @@ func ResolveProfileWithCatalogs(name string, catalog ProfileCatalog, capabilityC
 
 // IsKnownCapability reports whether capability is in the published catalog.
 func IsKnownCapability(capability Capability) bool {
-	catalog, err := EmbeddedCapabilityCatalog()
+	catalog, err := DevelopmentCapabilityCatalog()
 	if err != nil {
 		return false
 	}
@@ -232,7 +239,7 @@ func IsKnownCapability(capability Capability) bool {
 
 // KnownCapabilities returns every published capability in stable order.
 func KnownCapabilities() []Capability {
-	catalog, err := EmbeddedCapabilityCatalog()
+	catalog, err := DevelopmentCapabilityCatalog()
 	if err != nil {
 		return nil
 	}
@@ -246,7 +253,7 @@ func KnownCapabilities() []Capability {
 
 // CapabilityDependencies returns direct dependencies for a capability.
 func CapabilityDependencies(capability Capability) ([]Capability, bool) {
-	catalog, err := EmbeddedCapabilityCatalog()
+	catalog, err := DevelopmentCapabilityCatalog()
 	if err != nil {
 		return nil, false
 	}

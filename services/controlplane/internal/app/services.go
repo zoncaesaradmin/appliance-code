@@ -95,6 +95,9 @@ type dnsBootstrapper interface {
 }
 
 func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
+	if err := cfg.LoadMetadata(); err != nil {
+		return nil, err
+	}
 	resolved, err := cfg.ResolveProfile()
 	if err != nil {
 		return nil, fmt.Errorf("app: resolving appliance profile: %w", err)
@@ -149,7 +152,12 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	dnsRecordStore := sqlite.NewDNSRecordStore(db)
 	licensingStore := sqlite.NewLicensingStore(db)
 	recorder := audit.NewRecorder(auditStore)
-	licensingSvc := licensing.NewService(db, licensingStore, recorder)
+	capabilityCatalog, err := appliance.CapabilityCatalogFromMetadata(cfg.Metadata.Capabilities)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	licensingSvc := licensing.NewService(db, licensingStore, recorder, capabilityCatalog)
 	auditOps, err := auditops.NewService(auditStore, operationsStore, cfg.DataDir, cfg.AuditRetentionDays, logger)
 	if err != nil {
 		db.Close()

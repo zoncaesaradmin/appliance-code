@@ -44,14 +44,19 @@ type Document struct {
 
 // Service owns licensing state transitions and entitlement checks.
 type Service struct {
-	store storage.LicensingStore
-	db    storage.DB
-	audit *audit.Recorder
-	now   func() time.Time
+	capabilities appliance.CapabilityCatalog
+	store        storage.LicensingStore
+	db           storage.DB
+	audit        *audit.Recorder
+	now          func() time.Time
 }
 
-func NewService(db storage.DB, store storage.LicensingStore, recorder *audit.Recorder) *Service {
-	return &Service{db: db, store: store, audit: recorder, now: time.Now}
+func NewService(db storage.DB, store storage.LicensingStore, recorder *audit.Recorder, catalogs ...appliance.CapabilityCatalog) *Service {
+	s := &Service{db: db, store: store, audit: recorder, now: time.Now}
+	if len(catalogs) > 0 {
+		s.capabilities = catalogs[0]
+	}
+	return s
 }
 
 func (s *Service) Status(ctx context.Context) (Status, error) {
@@ -151,7 +156,15 @@ func (s *Service) AcceptBaseEntitlement(ctx context.Context, actor audit.Actor) 
 }
 
 func (s *Service) ImportLicense(ctx context.Context, actor audit.Actor, raw string) (Status, error) {
-	doc, err := ParseAndValidateDocument(raw)
+	catalog := s.capabilities
+	if catalog == nil {
+		var err error
+		catalog, err = appliance.DevelopmentCapabilityCatalog()
+		if err != nil {
+			return Status{}, err
+		}
+	}
+	doc, err := parseAndValidateDocument(raw, catalog)
 	if err != nil {
 		return Status{}, err
 	}
@@ -229,6 +242,14 @@ func baseFreeCapabilities() []string {
 }
 
 func ParseAndValidateDocument(raw string) (Document, error) {
+	catalog, err := appliance.DevelopmentCapabilityCatalog()
+	if err != nil {
+		return Document{}, err
+	}
+	return parseAndValidateDocument(raw, catalog)
+}
+
+func parseAndValidateDocument(raw string, catalog appliance.CapabilityCatalog) (Document, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return Document{}, fmt.Errorf("%w: empty document", ErrInvalidDocument)
@@ -258,7 +279,7 @@ func ParseAndValidateDocument(raw string) (Document, error) {
 	caps := normalizeCapabilities(doc.Capabilities)
 	hasBase := false
 	for _, c := range caps {
-		if !appliance.IsKnownCapability(appliance.Capability(c)) {
+		if _, ok := catalog[appliance.Capability(c)]; !ok {
 			return Document{}, fmt.Errorf("%w: unknown capability %q", ErrInvalidDocument, c)
 		}
 		if c == string(appliance.CapabilityBase) {

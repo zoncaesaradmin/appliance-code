@@ -6,10 +6,10 @@ import (
 	"appliance-code/services/controlplane/internal/appliance"
 )
 
-func TestEmbeddedModuleCatalogProvidesReviewedRoutes(t *testing.T) {
-	modules, err := appliance.EmbeddedModuleCatalog()
+func TestDevelopmentModuleCatalogProvidesReviewedRoutes(t *testing.T) {
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	host, ok := appliance.ModuleNamed(modules, appliance.ModuleNameHostAgent)
 	if !ok || len(host.Routes) == 0 {

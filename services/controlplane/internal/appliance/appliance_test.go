@@ -35,7 +35,7 @@ func TestResolveProfileUsesCanonicalMetadataCatalog(t *testing.T) {
 	}
 }
 
-func TestEmbeddedCapabilityCatalogDefinesDependencies(t *testing.T) {
+func TestDevelopmentCapabilityCatalogDefinesDependencies(t *testing.T) {
 	dependencies, ok := appliance.CapabilityDependencies(appliance.CapabilityBuild)
 	if !ok {
 		t.Fatal("build capability should be defined by metadata")

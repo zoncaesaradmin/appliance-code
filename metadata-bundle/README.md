@@ -19,18 +19,36 @@ services/controlplane/internal/metadatabundle/   # Go only
 
 Do **not** put product catalog YAML under that package for editing.
 
-Because Go `//go:embed` cannot reference files outside the controlplane module,
-a **generated** byte-identical snapshot is kept for offline fallback
-materialization:
+Metadata is read from files at startup, not compiled into Go. There is no
+generated source copy, embedding step, or synchronization command.
 
-```text
-services/controlplane/internal/metadatabundle/embedded/   # generated
-```
+## Local Development
 
-After changing `base/`, sync and commit the snapshot:
+Run the development binary from this repository (including a service
+subdirectory). It finds `metadata-bundle/base/` by walking up from the working
+directory. When running elsewhere, set `APPLIANCE_DEVELOPMENT_METADATA_DIR` to
+the absolute path of that directory. This override is development-only.
 
-```bash
-./scripts/package/sync-embedded-metadata-bundle.sh
-```
+Edit YAML here and restart the control plane and, when running separately,
+the automation runtime. No Go rebuild or copy step is needed. Configuration
+is a startup snapshot: editing files does not hot-reload API routes or partially
+rewire services. Missing files, invalid YAML, and invalid capability dependencies
+fail startup. Old development copies under the service data directory are not used.
 
-`make build` syncs automatically; `make verify` runs `--check` so drift fails closed.
+## Installed Appliances
+
+Release binaries have no repository fallback. The control plane reads the
+version-matched base tree at
+`<dataDir>/metadata-bundles/appliance-metadata-bundle-X.Y.Z.0/`, already mounted
+by the chart and staged by `zonctl` from the verified signed offline bundle.
+Signature verification remains the installer's responsibility; the runtime
+validates metadata schema and software compatibility before startup.
+
+Do not edit installed signed trees in place. Publish the changed metadata via
+the signed offline release flow and restart the affected services. YAML-only
+changes do not require recompiling Go, but still require packaging and signing
+the updated release input. Metadata archive installation/rollback APIs retain
+their own explicit lifecycle; source-file edits are not an activation API.
+
+`make verify` validates the canonical files through the file-loader and startup
+tests, including restart-to-apply and production fail-closed behavior.

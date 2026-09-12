@@ -124,9 +124,9 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	if err != nil {
 		t.Fatalf("ResolveProfile(%s): %v", profile, err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	for i := range modules {

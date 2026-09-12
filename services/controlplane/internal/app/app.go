@@ -49,6 +49,9 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	if processLogger == nil {
 		return nil, errors.New("process logger is required")
 	}
+	if err := cfg.LoadMetadata(); err != nil {
+		return nil, err
+	}
 	resolved, err := cfg.ResolveProfile()
 	if err != nil {
 		return nil, err

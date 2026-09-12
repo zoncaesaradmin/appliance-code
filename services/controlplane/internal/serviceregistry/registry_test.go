@@ -12,9 +12,9 @@ func TestRegistryFromModulesConvertsHostAgentDescriptor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	registry := serviceregistry.RegistryFromModules(modules)

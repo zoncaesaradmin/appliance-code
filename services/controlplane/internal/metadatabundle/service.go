@@ -247,9 +247,24 @@ func (s *Service) Rollback(ctx context.Context, actor audit.Actor) (Status, erro
 }
 
 func (s *Service) ensureActive(ctx context.Context) error {
-	if rec, err := s.store.GetMetadataBundle(ctx, "active"); err == nil {
+	if s.software == "0.0.0-dev" {
+		// Read the authoring tree on every process start, never a stale copy in
+		// the data directory left by an earlier development run.
+		b, err := LoadDevelopment()
+		if err != nil {
+			return err
+		}
+		s.active = b
+		return s.store.PutMetadataBundle(ctx, storage.MetadataBundleRecord{
+			Slot: "active", MetadataVersion: b.Manifest.Metadata.MetadataVersion,
+			SoftwareVersion: b.Manifest.Metadata.SoftwareVersion,
+			DirectoryName:   filepath.Base(b.RootDir), DirectoryPath: b.RootDir,
+			Signature: "development-only", InstalledAt: s.now().UTC(), InstalledBy: "development",
+		})
+	}
+	if rec, err := s.store.GetMetadataBundle(ctx, "active"); err == nil && rec.Signature != "development-only" {
 		b, err := LoadDirectory(rec.DirectoryPath)
-		if err == nil && CompatibleWithSoftware(s.software, rec.MetadataVersion) == nil {
+		if err == nil && b.Manifest.Metadata.MetadataVersion == rec.MetadataVersion && CompatibleWithSoftware(s.software, b.Manifest.Metadata.MetadataVersion) == nil {
 			s.active = b
 			return nil
 		}
@@ -285,22 +300,7 @@ func (s *Service) ensureActive(ctx context.Context) error {
 		s.active = b
 		return nil
 	}
-	if s.software != "0.0.0-dev" {
-		return fmt.Errorf("metadatabundle: active signed metadata bundle %q is not staged at %s", baseVer, dest)
-	}
-	if err := materializeEmbeddedForDevelopment(dest, s.software, baseVer); err != nil {
-		return fmt.Errorf("metadatabundle: stage local development metadata: %w", err)
-	}
-	b, err := LoadDirectory(dest)
-	if err != nil {
-		return err
-	}
-	digest, _ := dirDigest(dest)
-	if err := s.store.PutMetadataBundle(ctx, storage.MetadataBundleRecord{Slot: "active", MetadataVersion: baseVer, SoftwareVersion: b.Manifest.Metadata.SoftwareVersion, Digest: digest, DirectoryName: dirName, DirectoryPath: dest, Signature: "development-only", InstalledAt: s.now().UTC(), InstalledBy: "development"}); err != nil {
-		return err
-	}
-	s.active = b
-	return nil
+	return fmt.Errorf("metadatabundle: active signed metadata bundle %q is not staged at %s", baseVer, dest)
 }
 
 func validateSignature(signature string) error {

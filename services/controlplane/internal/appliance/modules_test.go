@@ -11,9 +11,9 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if len(modules) != 2 {
@@ -39,9 +39,9 @@ func TestResolveModulesIncludesArtifactAndBuildWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveProfile(builder): %v", err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry) {
@@ -57,9 +57,9 @@ func TestResolveModulesIncludesDNSWhenEnabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveProfile(landns): %v", err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS) {
@@ -72,9 +72,9 @@ func TestResolveModulesIncludesVideoCapabilityWithoutRuntimeModule(t *testing.T)
 	if err != nil {
 		t.Fatalf("ResolveProfile(training): %v", err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
@@ -99,9 +99,9 @@ func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
 	}
-	modules, err := appliance.EmbeddedModuleCatalog()
+	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
-		t.Fatalf("EmbeddedModuleCatalog: %v", err)
+		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, denyAllEntitlements{}, modules)
 	if len(modules) != 0 {
