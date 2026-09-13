@@ -36,10 +36,8 @@ func validatePackageCatalog(packages PackageCatalog, capabilities CapabilityCata
 			// exactly one of them for a bundle; profiles only require the capability.
 			owners[capability] = append(owners[capability], id)
 		}
-		for capability, runtime := range pkg.Runtimes {
-			if !seen[capability] || !packageIDPattern.MatchString(runtime.Engine) {
-				return fmt.Errorf("metadatabundle: package %q has invalid runtime declaration for %q", id, capability)
-			}
+		if seen["inference"] && !packageIDPattern.MatchString(pkg.InferenceEngine) {
+			return fmt.Errorf("metadatabundle: package %q must declare a valid inferenceEngine", id)
 		}
 	}
 	for capability := range capabilities.Capabilities {

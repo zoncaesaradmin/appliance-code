@@ -71,15 +71,11 @@ type PackageCatalog struct {
 	Packages map[string]PackageDef `yaml:"packages" json:"packages"`
 }
 
-type PackageRuntime struct {
-	Engine string `yaml:"engine" json:"engine"`
-}
-
 type PackageDef struct {
-	Runtimes     map[string]PackageRuntime `yaml:"runtimes,omitempty" json:"runtimes,omitempty"`
-	DisplayName  string                    `yaml:"displayName" json:"displayName"`
-	Description  string                    `yaml:"description" json:"description"`
-	Capabilities []string                  `yaml:"capabilities" json:"capabilities"`
+	InferenceEngine string   `yaml:"inferenceEngine,omitempty" json:"inferenceEngine,omitempty"`
+	DisplayName     string   `yaml:"displayName" json:"displayName"`
+	Description     string   `yaml:"description" json:"description"`
+	Capabilities    []string `yaml:"capabilities" json:"capabilities"`
 }
 
 // ModuleCatalog declares the platform module surface exposed by a metadata
