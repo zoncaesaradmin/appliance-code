@@ -36,8 +36,8 @@ func validatePackageCatalog(packages PackageCatalog, capabilities CapabilityCata
 			// exactly one of them for a bundle; profiles only require the capability.
 			owners[capability] = append(owners[capability], id)
 		}
-		if seen["inference"] && !packageIDPattern.MatchString(pkg.InferenceEngine) {
-			return fmt.Errorf("metadatabundle: package %q must declare a valid inferenceEngine", id)
+		if seen["inference"] && (!packageIDPattern.MatchString(pkg.Runtime.InferenceEngine) || !packageIDPattern.MatchString(pkg.Runtime.Architecture)) {
+			return fmt.Errorf("metadatabundle: package %q must declare a valid inference engine and architecture", id)
 		}
 	}
 	for capability := range capabilities.Capabilities {

@@ -55,7 +55,7 @@ Options:
   --blob-storage-image-reference REF
                                    Canonical registry.local/blob-storage@sha256:...
                                    platform-manifest reference. Required.
-  --inference-runtime-image PATH   Pinned inference-runtime linux/amd64 OCI archive.
+  --inference-runtime-image PATH   Pinned inference-runtime OCI archive for the selected target architecture.
   --inference-runtime-image-reference REF
                                    Canonical
                                    registry.local/inference-runtime@sha256:...
