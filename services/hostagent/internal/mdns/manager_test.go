@@ -161,6 +161,24 @@ func TestApplyDisableStopsService(t *testing.T) {
 	}
 }
 
+func TestStatusReportsFailedService(t *testing.T) {
+	runner := &fakeRunner{
+		paths:   map[string]bool{"avahi-daemon": true, "systemctl": true},
+		outputs: map[string]string{"systemctl is-active avahi-daemon.service": "failed"},
+		fail:    map[string]error{"systemctl is-active avahi-daemon.service": errors.New("exit status 3")},
+	}
+	m := &Manager{StateDir: "/state", Runner: runner, Files: &memFiles{data: map[string][]byte{
+		"/state/state.json": []byte(`{"desired":true,"applianceName":"test-device-1"}`),
+	}}}
+	status, err := m.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Actual != ActualFailed || status.Reason != ReasonServiceStartFailed {
+		t.Fatalf("status=%+v, want failed service", status)
+	}
+}
+
 func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing.T) {
 	root := t.TempDir()
 	avahiConfig := filepath.Join(root, "etc", "avahi", "avahi-daemon.conf")

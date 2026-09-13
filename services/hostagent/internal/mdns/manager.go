@@ -639,7 +639,10 @@ func (m *Manager) serviceActive(ctx context.Context) (bool, error) {
 	out, err := m.runner().CombinedOutput(ctx, "systemctl", "is-active", ServiceName)
 	if err != nil {
 		// systemctl returns non-zero for inactive/failed units.
-		if strings.Contains(out, "inactive") || strings.Contains(out, "failed") || strings.Contains(out, "dead") {
+		if strings.Contains(out, "failed") {
+			return false, fmt.Errorf("%s is failed", ServiceName)
+		}
+		if strings.Contains(out, "inactive") || strings.Contains(out, "dead") {
 			return false, nil
 		}
 		// Missing unit treated as inactive.
