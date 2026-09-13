@@ -71,6 +71,7 @@ Notes:
 
 - `base` is required for every appliance profile.
 - All current shipped profiles include `lan-discovery`; a future profile may omit it when local-network advertisement is not appropriate.
+- `<appliance-name>.local` is published by Avahi mDNS and intentionally does not appear in `/etc/hosts`.
 - `files` is required on every shipped v1 profile. It is intentionally separate from `artifact` so inference-only and core appliances can accept laptop uploads without an OCI registry.
 - `artifact` is the OCI registry capability. The current implementation behind
   it is registry-oriented, but the capability name is intentionally not tied
