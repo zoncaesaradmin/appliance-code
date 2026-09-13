@@ -5,7 +5,7 @@ section files that ship as `appliance-metadata-bundle-X.Y.Z.N.tar.zst`.
 
 | Path | Role |
 |------|------|
-| `base/` | Source of truth for profiles, capabilities, activation, UI, notifications, MCP tools, and `bundle.yaml` |
+| `base/` | Source of truth for profiles, capabilities, delivery packages, activation, UI, notifications, MCP tools, and `bundle.yaml` |
 | (packaged) | `scripts/package/generate-metadata-bundle.sh` builds the signed release archive from `base/` |
 
 ## Separation from Go
@@ -52,3 +52,10 @@ their own explicit lifecycle; source-file edits are not an activation API.
 
 `make verify` validates the canonical files through the file-loader and startup
 tests, including restart-to-apply and production fail-closed behavior.
+
+## Delivery Packages
+
+`base/packages/catalog.yaml` is the sole capability-to-delivery-package mapping.
+Every capability is assigned to exactly one package. Release tooling derives the
+reverse mapping and profile package requirements from this file; it does not
+maintain a second mapping in Go, installer scripts, or release configuration.

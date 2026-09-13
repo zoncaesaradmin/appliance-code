@@ -22,6 +22,7 @@ type Bundle struct {
 	Manifest     Manifest
 	Profiles     ProfileCatalog
 	Capabilities CapabilityCatalog
+	Packages     PackageCatalog
 	Modules      ModuleCatalog
 	Applications ApplicationCatalog
 	DebugTools   *DebugToolsSection
@@ -62,7 +63,18 @@ type CapabilityDef struct {
 	Conflicts   []string            `yaml:"conflicts" json:"conflicts"`
 	License     CapabilityLicense   `yaml:"license" json:"license"`
 	Artifacts   CapabilityArtifacts `yaml:"artifacts" json:"artifacts"`
-	Packages    []string            `yaml:"packages" json:"packages"`
+}
+
+// PackageCatalog maps delivery packages to the capabilities their artifacts
+// make available. It is the single authoring point for this relationship.
+type PackageCatalog struct {
+	Packages map[string]PackageDef `yaml:"packages" json:"packages"`
+}
+
+type PackageDef struct {
+	DisplayName  string   `yaml:"displayName" json:"displayName"`
+	Description  string   `yaml:"description" json:"description"`
+	Capabilities []string `yaml:"capabilities" json:"capabilities"`
 }
 
 // ModuleCatalog declares the platform module surface exposed by a metadata

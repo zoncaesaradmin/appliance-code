@@ -45,6 +45,14 @@ func LoadDirectory(dir string) (*Bundle, error) {
 	if err := yaml.Unmarshal(capBytes, &capabilities); err != nil {
 		return nil, fmt.Errorf("metadatabundle: parse capabilities/catalog.yaml: %w", err)
 	}
+	packageBytes, err := os.ReadFile(filepath.Join(abs, "packages", "catalog.yaml"))
+	if err != nil {
+		return nil, fmt.Errorf("metadatabundle: read packages/catalog.yaml: %w", err)
+	}
+	var packages PackageCatalog
+	if err := yaml.Unmarshal(packageBytes, &packages); err != nil {
+		return nil, fmt.Errorf("metadatabundle: parse packages/catalog.yaml: %w", err)
+	}
 	moduleBytes, err := os.ReadFile(filepath.Join(abs, "modules", "catalog.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("metadatabundle: read modules/catalog.yaml: %w", err)
@@ -62,6 +70,7 @@ func LoadDirectory(dir string) (*Bundle, error) {
 		Manifest:     manifest,
 		Profiles:     profiles,
 		Capabilities: capabilities,
+		Packages:     packages,
 		Modules:      modules,
 		Applications: ApplicationCatalog{Raw: applicationBytes},
 	}

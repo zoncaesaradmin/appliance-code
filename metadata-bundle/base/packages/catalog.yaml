@@ -1,0 +1,17 @@
+packages:
+  foundation:
+    displayName: Foundation
+    description: Core appliance services and baseline product functionality.
+    capabilities: [base, files, video, guest-access, focus-content, plaintext-http]
+  dev-platform:
+    displayName: Development Platform Services
+    description: Artifact registry, appliance-owned LAN DNS, workflow execution, and build workspace provisioning.
+    capabilities: [artifact, dns, workflows, build]
+  deviceuser:
+    displayName: Device User Services
+    description: Host-agent-backed host and application management.
+    capabilities: [host, applications]
+  inference:
+    displayName: Inference Services
+    description: Local inference runtime and gateway.
+    capabilities: [inference]

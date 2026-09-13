@@ -655,7 +655,7 @@ if [[ -n "${WORKFLOWS_CRDS_DIR}" && ! -d "${WORKFLOWS_CRDS_DIR}" ]]; then
 fi
 # Package the workflows chart only when CRDs (or other workflows inputs) are
 # provided. ADR 0011 still requires workflows in the complete appliance, but
-# pack-selective builds (build-workflows pack omitted) may skip workflows inputs.
+# pack-selective builds (dev-platform pack omitted) may skip workflows inputs.
 # Never ship the chart without CRDs: that installs a controller that
 # crash-loops on "get workflows.argoproj.io" until install times out.
 if [[ -z "${WORKFLOWS_CRDS_DIR}" ]]; then
