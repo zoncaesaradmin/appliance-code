@@ -307,6 +307,10 @@ func (h *Handler) mdnsPut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid mdns apply body")
 		return
 	}
+	if !h.trustedSocket && strings.TrimSpace(req.ApplianceName) != "" {
+		writeError(w, http.StatusBadRequest, "applianceName is set only by the installer")
+		return
+	}
 	status, err := h.mdns.Apply(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

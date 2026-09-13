@@ -135,6 +135,16 @@ func TestHandlerRejectsConflictingClientWifiAndAPEnablement(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsApplianceNameOverNetworkMDNSAPI(t *testing.T) {
+	handler := NewHandlerWithControllers(bridge.Local{}, nil, nil, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/internal/v1/host/mdns", strings.NewReader(`{"desired":true,"applianceName":"other-appliance"}`))
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
 func TestHandlerServesClientWifiWorkflowEndpoints(t *testing.T) {
 	wifi := &wifiClientStub{
 		status: wificlient.Status{

@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"appliance-code/services/hostagent/internal/host"
 )
 
 // Manager owns apply/status for host mDNS (avahi-daemon).
@@ -73,13 +71,13 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		Desired:        st.Desired,
 		Actual:         ActualInactive,
 		Service:        ServiceName,
-		AdvertisedName: host.MDNSAdvertisedName(m.root()),
+		AdvertisedName: applianceMDNSName(st.ApplianceName),
 	}
 	if !packagesPresent(m.runner()) {
 		status.SupportedCapable = false
 		if st.Desired {
 			status.Reason = ReasonPackagesMissing
-			status.Message = "mdns packages (avahi-daemon) are not installed on this host; complete product install stages host packages for day-2 enablement"
+			status.Message = "mdns packages (avahi-daemon) are not installed on this host; foundation installation must stage them"
 		} else {
 			status.Reason = ReasonDesiredOff
 			status.Message = "mdns is not desired"
@@ -120,6 +118,12 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		return Status{}, err
 	}
 	st.Desired = req.Desired
+	if requestedName := strings.ToLower(strings.TrimSpace(req.ApplianceName)); requestedName != "" {
+		if !validMDNSLabel(requestedName) {
+			return Status{}, fmt.Errorf("mdns: appliance name must be a DNS label")
+		}
+		st.ApplianceName = requestedName
+	}
 	if !req.Desired {
 		if packagesPresent(m.runner()) {
 			if err := m.stopService(ctx); err != nil {
@@ -139,8 +143,19 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		status, _ := m.Status(ctx)
 		status.Desired = true
 		status.Reason = ReasonPackagesMissing
-		status.Message = "mdns packages (avahi-daemon) are not installed on this host; complete product install stages host packages for day-2 enablement"
+		status.Message = "mdns packages (avahi-daemon) are not installed on this host; foundation installation must stage them"
 		return status, nil
+	}
+	if st.ApplianceName == "" {
+		_ = m.saveState(st)
+		status, _ := m.Status(ctx)
+		status.Desired = true
+		status.Reason = ReasonNotConfigured
+		status.Message = "mdns requires the appliance name configured during installation"
+		return status, nil
+	}
+	if err := m.configureAvahiServer(ctx, st.ApplianceName); err != nil {
+		return Status{}, err
 	}
 	if err := m.saveState(st); err != nil {
 		return Status{}, err
@@ -279,10 +294,10 @@ func applicationAliasPublisherUnit(application, alias string) string {
 const applicationAliasBegin = "# BEGIN ZON APPLICATION ALIASES"
 const applicationAliasEnd = "# END ZON APPLICATION ALIASES"
 
-// configureApplicationInterfaces keeps application aliases on the real LAN.
+// configureAvahiServer gives the appliance its one mDNS name on the real LAN.
 // Avahi otherwise joins every K3s veth/CNI interface, creating isolated mDNS
-// domains that can collide with an appliance-owned alias.
-func (m *Manager) configureApplicationInterfaces(ctx context.Context) error {
+// domains that can collide with the appliance identity.
+func (m *Manager) configureAvahiServer(ctx context.Context, applianceName string) error {
 	iface, err := m.defaultRouteInterface(ctx)
 	if err != nil {
 		return err
@@ -293,6 +308,10 @@ func (m *Manager) configureApplicationInterfaces(ctx context.Context) error {
 		return fmt.Errorf("mdns: read avahi configuration: %w", err)
 	}
 	updated, err := setServerOption(string(data), "allow-interfaces", iface)
+	if err != nil {
+		return err
+	}
+	updated, err = setServerOption(updated, "host-name", applianceName)
 	if err != nil {
 		return err
 	}
@@ -381,7 +400,7 @@ func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState
 	if len(allAliases(st.ApplicationAliases)) == 0 {
 		return nil
 	}
-	if err := m.configureApplicationInterfaces(ctx); err != nil {
+	if err := m.configureAvahiServer(ctx, st.ApplianceName); err != nil {
 		return err
 	}
 	address, err := m.primaryAddress(ctx)
@@ -570,6 +589,14 @@ func validMDNSLabel(value string) bool {
 	return true
 }
 
+func applianceMDNSName(applianceName string) string {
+	applianceName = strings.ToLower(strings.TrimSpace(applianceName))
+	if !validMDNSLabel(applianceName) {
+		return ""
+	}
+	return applianceName + ".local"
+}
+
 func validApplicationAlias(value string) bool {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if !strings.HasSuffix(value, ".local") {
@@ -595,7 +622,7 @@ func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
 	if status.Actual == ActualActive {
 		return status, nil
 	}
-	return m.Apply(ctx, ApplyRequest{Desired: true})
+	return m.Apply(ctx, ApplyRequest{Desired: true, ApplianceName: st.ApplianceName})
 }
 
 func packagesPresent(r Runner) bool {

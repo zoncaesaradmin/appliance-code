@@ -67,7 +67,10 @@ host login.
 Host mDNS (`avahi-daemon`) is applied through the same host-agentd path:
 `GET|PUT /internal/v1/host/mdns`, mirrored as `GET|PUT /api/v1/host/mdns`.
 Enabling without offline mDNS packages yields soft status `packages_missing`.
-The status payload includes the advertised host mDNS name in `hostname.local`
+The status payload includes the advertised appliance mDNS name in
+`<appliance-name>.local`. The installer configures that name through the
+root-owned host-agent socket; the host mDNS API can toggle it but cannot change
+the appliance identity.
 form so the Admin UI/API can show the exact browser/discovery name in use.
 Admin UI **Host Services** (`/admin/host-services`) is the day-2 configuration
 surface for all three host features. Management AP browser access is

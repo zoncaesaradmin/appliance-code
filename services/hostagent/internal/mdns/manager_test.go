@@ -82,7 +82,7 @@ func TestApplyMissingPackages(t *testing.T) {
 		Runner:   &fakeRunner{paths: map[string]bool{}},
 		Files:    &memFiles{},
 	}
-	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true})
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true, ApplianceName: "test-device-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,17 +92,17 @@ func TestApplyMissingPackages(t *testing.T) {
 	if !status.Desired {
 		t.Fatal("desired")
 	}
-	if status.AdvertisedName != "appliance-01.local" {
+	if status.AdvertisedName != "test-device-1.local" {
 		t.Fatalf("advertisedName=%q", status.AdvertisedName)
 	}
 }
 
 func TestApplyEnableStartsService(t *testing.T) {
 	root := t.TempDir()
-	mustWriteHostFile(t, root, "proc/sys/kernel/hostname", "Kitchen-Box.example.internal\n")
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
+			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
 			"systemctl is-active avahi-daemon.service": "active",
 			"systemctl unmask avahi-daemon.service":    "",
 			"systemctl enable avahi-daemon.service":    "",
@@ -113,23 +113,25 @@ func TestApplyEnableStartsService(t *testing.T) {
 		Root:     root,
 		StateDir: "/state",
 		Runner:   runner,
-		Files:    &memFiles{},
+		Files:    &memFiles{data: map[string][]byte{filepath.Join(root, "etc", "avahi", "avahi-daemon.conf"): []byte("[server]\n\n[publish]\n")}},
 	}
-	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true})
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: true, ApplianceName: "test-device-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if status.Actual != ActualActive {
 		t.Fatalf("actual=%q status=%+v", status.Actual, status)
 	}
-	if status.AdvertisedName != "Kitchen-Box.local" {
+	if status.AdvertisedName != "test-device-1.local" {
 		t.Fatalf("advertisedName=%q", status.AdvertisedName)
+	}
+	if config := string(m.Files.(*memFiles).data[filepath.Join(root, "etc", "avahi", "avahi-daemon.conf")]); !strings.Contains(config, "host-name=test-device-1\n") {
+		t.Fatalf("Avahi host name = %q", config)
 	}
 }
 
 func TestApplyDisableStopsService(t *testing.T) {
 	root := t.TempDir()
-	mustWriteHostFile(t, root, "proc/sys/kernel/hostname", "appliance-01.local\n")
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
@@ -144,7 +146,7 @@ func TestApplyDisableStopsService(t *testing.T) {
 		Runner:   runner,
 		Files:    &memFiles{},
 	}
-	status, err := m.Apply(context.Background(), ApplyRequest{Desired: false})
+	status, err := m.Apply(context.Background(), ApplyRequest{Desired: false, ApplianceName: "test-device-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +156,7 @@ func TestApplyDisableStopsService(t *testing.T) {
 	if status.Actual != ActualInactive {
 		t.Fatalf("actual=%q", status.Actual)
 	}
-	if status.AdvertisedName != "appliance-01.local" {
+	if status.AdvertisedName != "test-device-1.local" {
 		t.Fatalf("advertisedName=%q", status.AdvertisedName)
 	}
 }
@@ -164,7 +166,8 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 	avahiConfig := filepath.Join(root, "etc", "avahi", "avahi-daemon.conf")
 	files := &memFiles{data: map[string][]byte{
 		filepath.Join(root, "etc", "avahi", "hosts"): []byte("192.168.1.10 printer.local\n"),
-		avahiConfig: []byte("[server]\nuse-ipv4=yes\n\n[publish]\n"),
+		avahiConfig:         []byte("[server]\nuse-ipv4=yes\n\n[publish]\n"),
+		"/state/state.json": []byte(`{"applianceName":"test-device-1"}`),
 	}}
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
@@ -229,6 +232,7 @@ func TestApplicationAliasesFailWhenAvahiDoesNotPublishAlias(t *testing.T) {
 	files := &memFiles{data: map[string][]byte{
 		filepath.Join(root, "etc", "avahi", "hosts"):             nil,
 		filepath.Join(root, "etc", "avahi", "avahi-daemon.conf"): []byte("[server]\n\n[publish]\n"),
+		"/state/state.json": []byte(`{"applianceName":"test-device-1"}`),
 	}}
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},

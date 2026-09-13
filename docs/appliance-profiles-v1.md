@@ -56,6 +56,7 @@ The initial v1 appliance capabilities are:
 | Capability | Purpose |
 | --- | --- |
 | `base` | Mandatory control-plane baseline: server startup, health/version surface, authentication/session shell, user/role/token administration, internal forward-auth checks, and the minimum API contract required for any appliance profile |
+| `lan-discovery` | Host-level mDNS advertisement of the appliance as `<appliance-name>.local` for same-VLAN discovery. It is delivered by `foundation` but only enabled when the selected appliance profile includes this capability. The OS hostname remains a separate node identity. |
 | `files` | Named appliance file spaces with authenticated upload/download under `/api/v1/files/*`, backed by foundation blob-storage; present on every v1 profile and gated by RBAC (`files.read` / `files.write`) |
 | `workflows` | Workflow substrate awareness and workflow-dependent module activation for v1 and future expansion |
 | `build` | Build APIs and build service/module behavior |
@@ -69,6 +70,7 @@ The initial v1 appliance capabilities are:
 Notes:
 
 - `base` is required for every appliance profile.
+- All current shipped profiles include `lan-discovery`; a future profile may omit it when local-network advertisement is not appropriate.
 - `files` is required on every shipped v1 profile. It is intentionally separate from `artifact` so inference-only and core appliances can accept laptop uploads without an OCI registry.
 - `artifact` is the OCI registry capability. The current implementation behind
   it is registry-oriented, but the capability name is intentionally not tied

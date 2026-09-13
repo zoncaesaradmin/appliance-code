@@ -2,20 +2,20 @@ profiles:
   core:
     displayName: core
     description: "Default base appliance profile."
-    capabilities: [base, files]
+    capabilities: [base, lan-discovery, files]
   storage-landns:
     displayName: storage-landns
     description: "File storage, artifact registry, and LAN DNS."
-    capabilities: [base, files, artifact, dns]
+    capabilities: [base, lan-discovery, files, artifact, dns]
   builder-storage-landns:
     displayName: builder-storage-landns
     description: "Built-in appliance profile."
-    capabilities: [base, host, files, workflows, build, artifact, dns, applications]
+    capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, applications]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
-    capabilities: [base, host, files, workflows, build, artifact, dns, inference, applications]
+    capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, inference, applications]
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
-    capabilities: [base, host, files, video, guest-access, focus-content, applications, plaintext-http]
+    capabilities: [base, lan-discovery, host, files, video, guest-access, focus-content, applications, plaintext-http]

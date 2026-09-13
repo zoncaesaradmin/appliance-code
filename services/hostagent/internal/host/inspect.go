@@ -60,21 +60,6 @@ func Hostname(root string) string {
 	return hostHostname(root)
 }
 
-func MDNSAdvertisedName(root string) string {
-	hostname := strings.TrimSpace(Hostname(root))
-	if hostname == "" {
-		return ""
-	}
-	if i := strings.Index(hostname, "."); i > 0 {
-		hostname = hostname[:i]
-	}
-	hostname = strings.TrimSpace(strings.TrimSuffix(hostname, ".local"))
-	if hostname == "" {
-		return ""
-	}
-	return hostname + ".local"
-}
-
 func hostHostname(root string) string {
 	if hostname, err := readTrimmed(filepath.Join(root, "proc/sys/kernel/hostname")); err == nil && hostname != "" {
 		return hostname

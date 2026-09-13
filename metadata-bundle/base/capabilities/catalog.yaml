@@ -7,6 +7,14 @@ capabilities:
       requiredEntitlement: zon.capabilities.base
     artifacts:
       required: [control-plane-image, control-plane-chart]
+  lan-discovery:
+    displayName: LAN Discovery
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.lan-discovery
+    artifacts:
+      required: [host-agent-daemon, mdns-host-packages]
   host:
     displayName: Host
     requires: [base]

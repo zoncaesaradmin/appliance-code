@@ -235,6 +235,7 @@ func (s *Service) entitledCapabilities(rec storage.LicensingRecord) ([]string, e
 func baseFreeCapabilities() []string {
 	return []string{
 		string(appliance.CapabilityBase),
+		string(appliance.CapabilityLANDiscovery),
 		string(appliance.CapabilityHost),
 		string(appliance.CapabilityFiles),
 		string(appliance.CapabilityWorkflows),

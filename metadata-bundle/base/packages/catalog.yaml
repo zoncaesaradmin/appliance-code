@@ -1,8 +1,8 @@
 packages:
   foundation:
     displayName: Foundation
-    description: Core appliance services and baseline product functionality.
-    capabilities: [base, files, video, guest-access, focus-content, plaintext-http]
+    description: Core appliance services, baseline product functionality, and local mDNS discovery.
+    capabilities: [base, lan-discovery, files, video, guest-access, focus-content, plaintext-http]
   dev-platform:
     displayName: Development Platform Services
     description: Artifact registry, appliance-owned LAN DNS, workflow execution, and build workspace provisioning.

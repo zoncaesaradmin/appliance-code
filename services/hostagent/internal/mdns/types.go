@@ -33,7 +33,8 @@ type Status struct {
 
 // ApplyRequest is the shared install/API apply body.
 type ApplyRequest struct {
-	Desired bool `json:"desired"`
+	Desired       bool   `json:"desired"`
+	ApplianceName string `json:"applianceName,omitempty"`
 }
 
 // ApplicationService is a catalog-approved mDNS advertisement. It contains
@@ -60,6 +61,7 @@ type Controller interface {
 }
 
 type persistedState struct {
+	ApplianceName       string                          `json:"applianceName,omitempty"`
 	Desired             bool                            `json:"desired"`
 	ApplicationServices map[string][]ApplicationService `json:"applicationServices,omitempty"`
 	ApplicationAliases  map[string][]string             `json:"applicationAliases,omitempty"`
