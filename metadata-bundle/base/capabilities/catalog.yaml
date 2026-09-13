@@ -34,7 +34,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.workflows
     artifacts:
       required: [workflow-templates]
-    packages: [developer]
+    packages: [build-workflows]
   build:
     displayName: Build
     requires: [base, host, workflows, artifact]
@@ -43,7 +43,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.build
     artifacts:
       required: [workspace-provisioner-image, workflow-templates]
-    packages: [developer]
+    packages: [build-workflows]
   artifact:
     displayName: Artifact
     requires: [base]
@@ -52,7 +52,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.artifact
     artifacts:
       required: [artifact-server-image, appliance-registry-chart]
-    packages: [developer]
+    packages: [storage-network]
   dns:
     displayName: LAN DNS
     requires: [base]
@@ -61,7 +61,7 @@ capabilities:
       requiredEntitlement: zon.capabilities.dns
     artifacts:
       required: [coredns-image, appliance-dns-chart]
-    packages: [developer]
+    packages: [storage-network]
   inference:
     displayName: Inference
     requires: [base]

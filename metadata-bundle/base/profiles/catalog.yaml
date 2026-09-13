@@ -5,7 +5,7 @@ profiles:
     capabilities: [base, files]
   storage-landns:
     displayName: storage-landns
-    description: "File storage, artifact registry, and LAN DNS without host management."
+    description: "File storage, artifact registry, and LAN DNS."
     capabilities: [base, files, artifact, dns]
   builder-storage-landns:
     displayName: builder-storage-landns

@@ -20,7 +20,7 @@ Install:             ctr import (gets :bundled or import-DATE) → ctr image tag
 Runtime:             config.*ImageDigest == digest pin → workflow pod image (IfNotPresent)
 ```
 
-Names today (product packs): `workspace-provisioner` (developer), `artifact-server`/`coredns` (base), `inference-runtime` (inference pack). `dev-build` is build-host tooling only (not packaged).
+Names today (product packs): `workspace-provisioner` (build-workflows), `artifact-server`/`coredns` (storage-network), `inference-runtime` (inference pack). `dev-build` is build-host tooling only (not packaged).
 
 Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manifest).
 
@@ -83,7 +83,7 @@ Online pulls happen **only on the build host** during bundle assembly. Target in
 
 - **Annotation scheme** → ctl `ValidateOCIArchiveReference` + preload tag tests; release finalize + `validate-release-artifacts.py`; config.example docs
 - **Digest derivation** → finalize (archive wins); never reintroduce inspect-first pins
-- **EXTRA_OCI refs/order** → pairing comments; path/token validator; workspace-provisioner in developer pack
+- **EXTRA_OCI refs/order** → pairing comments; path/token validator; workspace-provisioner in build-workflows pack
 - **Builder image name** → `source.go`, `catalog.go` DefaultBuilderImageRef, chart schema, examples, tests
 - **Tag/import algorithm** → `preload.go` / tests; install+upgrade fake-ctr tests
 - **PrepareValuesFile keys** → chart `configmap.yaml` env names; config Load; chart_test
