@@ -11,7 +11,15 @@ packages:
     displayName: Device User Services
     description: Host-agent-backed host and application management.
     capabilities: [host, applications]
-  inference:
-    displayName: Inference Services
-    description: Local inference runtime and gateway.
+  std-llm-amd64:
+    displayName: Standard LLM (amd64)
+    description: Standard CPU inference using Ollama behind the shared inference gateway.
     capabilities: [inference]
+    runtimes:
+      inference: {engine: ollama}
+  acc-llm-arm64:
+    displayName: Accelerated LLM (arm64)
+    description: Accelerated inference package reserved for the arm64 runtime implementation.
+    capabilities: [inference]
+    runtimes:
+      inference: {engine: vllm}

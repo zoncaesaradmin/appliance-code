@@ -1,4 +1,10 @@
+# inference / cpu-llm: Ollama runs on CPU; GPU visibility is disabled
+# in the Deployment. The shared inference-gateway Service/API stays stable.
 replicaCount: 1
+
+runtime:
+  variant: cpu
+  engine: ollama
 
 image:
   repository: registry.local/inference-runtime

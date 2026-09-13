@@ -52,7 +52,7 @@ func ValidateBundle(b *Bundle) error {
 	if b.Capabilities.Capabilities == nil || len(b.Capabilities.Capabilities) == 0 {
 		return fmt.Errorf("metadatabundle: capabilities catalog is empty")
 	}
-	if err := validatePackageCatalog(b.Packages, b.Capabilities); err != nil {
+	if err := validatePackageCatalog(b.Packages, b.Capabilities, b.Profiles); err != nil {
 		return err
 	}
 	if len(b.Modules.Modules) == 0 {
@@ -135,41 +135,6 @@ func ValidateBundle(b *Bundle) error {
 	}
 	if err := validateDebugTools(b); err != nil {
 		return err
-	}
-	return nil
-}
-
-func validatePackageCatalog(packages PackageCatalog, capabilities CapabilityCatalog) error {
-	if len(packages.Packages) == 0 {
-		return fmt.Errorf("metadatabundle: packages catalog is empty")
-	}
-	owners := make(map[string]string, len(capabilities.Capabilities))
-	for id, pkg := range packages.Packages {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return fmt.Errorf("metadatabundle: package id is required")
-		}
-		if strings.TrimSpace(pkg.DisplayName) == "" || strings.TrimSpace(pkg.Description) == "" {
-			return fmt.Errorf("metadatabundle: package %q must define displayName and description", id)
-		}
-		if len(pkg.Capabilities) == 0 {
-			return fmt.Errorf("metadatabundle: package %q has no capabilities", id)
-		}
-		for _, capability := range pkg.Capabilities {
-			capability = strings.TrimSpace(capability)
-			if _, ok := capabilities.Capabilities[capability]; !ok {
-				return fmt.Errorf("metadatabundle: package %q references unknown capability %q", id, capability)
-			}
-			if owner, exists := owners[capability]; exists {
-				return fmt.Errorf("metadatabundle: capability %q is assigned to both packages %q and %q", capability, owner, id)
-			}
-			owners[capability] = id
-		}
-	}
-	for capability := range capabilities.Capabilities {
-		if _, ok := owners[capability]; !ok {
-			return fmt.Errorf("metadatabundle: capability %q is not assigned to a delivery package", capability)
-		}
 	}
 	return nil
 }

@@ -1,8 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["replicaCount", "image", "service", "persistence"],
+  "required": ["replicaCount", "image", "service", "persistence", "runtime"],
   "properties": {
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant",
+        "engine"
+      ],
+      "properties": {
+        "variant": {
+          "const": "cpu"
+        },
+        "engine": {
+          "const": "ollama"
+        }
+      }
+    },
     "replicaCount": {"type": "integer", "const": 1},
     "imagePullSecrets": {
       "type": "array",

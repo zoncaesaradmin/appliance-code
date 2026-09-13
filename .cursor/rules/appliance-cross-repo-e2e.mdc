@@ -20,7 +20,7 @@ Install:             ctr import (gets :bundled or import-DATE) → ctr image tag
 Runtime:             config.*ImageDigest == digest pin → workflow pod image (IfNotPresent)
 ```
 
-Names today (product packs): `workspace-provisioner` (build-workflows), `artifact-server`/`coredns` (storage-network), `inference-runtime` (inference pack). `dev-build` is build-host tooling only (not packaged).
+Names today (product packs): `workspace-provisioner` (build-workflows), `artifact-server`/`coredns` (storage-network), `inference-runtime` (cpu-llm pack). `dev-build` is build-host tooling only (not packaged).
 
 Never trust `skopeo inspect` alone for pins (multi-arch index ≠ platform manifest).
 

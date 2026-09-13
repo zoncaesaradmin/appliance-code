@@ -344,11 +344,11 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		profile appliance.Profile
 		want    []string
 	}{
-		{appliance.ProfileCore, []string{"base", "files"}},
-		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "files"}},
-		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "workflows"}},
-		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "workflows"}},
-		{appliance.ProfileTraining, []string{"applications", "base", "files", "focus-content", "guest-access", "host", "plaintext-http", "video"}},
+		{appliance.ProfileCore, []string{"base", "files", "lan-discovery"}},
+		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "files", "lan-discovery"}},
+		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "lan-discovery", "workflows"}},
+		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "lan-discovery", "workflows"}},
+		{appliance.ProfileTraining, []string{"applications", "base", "files", "focus-content", "guest-access", "host", "lan-discovery", "plaintext-http", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {

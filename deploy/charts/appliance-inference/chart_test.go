@@ -38,6 +38,8 @@ func TestInferenceGatewayRender(t *testing.T) {
 	for _, want := range []string{
 		"kind: Service\nmetadata:\n  name: inference-gateway",
 		"runAsUser: 10006",
+		"name: CUDA_VISIBLE_DEVICES\n              value: \"-1\"",
+		"name: ROCR_VISIBLE_DEVICES\n              value: \"-1\"",
 		"name: HOME",
 		"value: \"/home/ollama\"",
 		"name: OLLAMA_MODELS",
@@ -102,5 +104,20 @@ func TestImageDigestWins(t *testing.T) {
 	out := render(t, "--set", "image.digest="+digest)
 	if !strings.Contains(out, "image: registry.local/inference-runtime@"+digest) {
 		t.Fatalf("digest-pinned image not rendered")
+	}
+}
+
+func TestUnsupportedRuntimeCannotRender(t *testing.T) {
+	if _, err := exec.LookPath("helm"); err != nil {
+		t.Skip("helm not installed")
+	}
+	for _, selection := range []string{"runtime.engine=vllm", "runtime.variant=gpu"} {
+		out, err := exec.Command("helm", "template", "inference", chartDir(t), "--set", selection).CombinedOutput()
+		if err == nil {
+			t.Fatalf("unsupported runtime %s rendered: %s", selection, out)
+		}
+		if !strings.Contains(string(out), "runtime") {
+			t.Fatalf("unrelated Helm error: %s", out)
+		}
 	}
 }

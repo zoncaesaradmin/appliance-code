@@ -13,7 +13,7 @@ profiles:
     capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, applications]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
-    description: "Full union: builder, registry/storage, LAN DNS, and local LLM inference."
+    description: "Full union: builder, registry/storage, LAN DNS, and CPU LLM inference."
     capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, inference, applications]
   training:
     displayName: training

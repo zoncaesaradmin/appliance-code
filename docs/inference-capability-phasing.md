@@ -1,111 +1,99 @@
-# Inference Capability Phasing
+# Standard and Accelerated Inference
 
-This note captures the rollout split for the optional local LLM inference
-capability. Implementation naming uses `inference` for capability, module,
-API paths, and permissions. Product-facing profiles use `lanllm` (parallel to
-`landns` for DNS).
+The current implementation is standard CPU inference: capability `inference`
+is delivered by the signed `std-llm-amd64` package and runs the pinned Ollama engine.
+The next implementation will use the same `inference` capability and package
+`acc-llm-arm64`. That package is reserved for planning; it is not yet published or
+selectable.
 
-## Decisions (Phase 1)
+## Current contract
 
-- **Surface:** inference only — OpenAI-compatible chat/completions and models
-  list, gated by capability
-- **Models:** runtime (+ gateway Service) ship in the main air-gap bundle;
-  **model weights** ship as a separate signed **model pack**
-- **Not in this phase:** coding-agent tools, RAG/vector DB, Open WebUI, cloud
-  LLM fallback
-- **Default backend:** Ollama-compatible runtime; product names stay
-  runtime-agnostic behind `inference-gateway`
+| Layer | Current name |
+| --- | --- |
+| Capability | `inference` (Standard Inference) |
+| Capability entitlement | `zon.capabilities.inference` |
+| Delivery package | `std-llm-amd64` |
+| Archive | `appliance-<version>-std-llm-amd64.tar.gz` |
+| Canonical profile enabling it | `builder-lanllm-storage-landns` |
+| Module / container | `inference-runtime` |
+| Chart / Helm release | `appliance-inference` |
+| Deployment / Service | `inference-gateway` in namespace `inference` |
+| In-cluster URL | `http://inference-gateway.inference.svc.cluster.local:8080` |
+| Public API | `/inference/v1/models`, `/inference/v1/chat/completions` |
+| Permissions | `inference.use`, `inference.models.read`, `inference.admin` |
 
-## Naming
+The profile ID remains unchanged; its metadata capability set now contains
+`inference`. Other profiles stay unchanged. Profiles are selected from the
+signed metadata catalog, and the release index projects their capabilities onto
+delivery packages. Having a package available never enables its capability.
 
-| Layer | Name | Meaning |
-|---|---|---|
-| Capability | `inference` | Local LLM inference APIs exist on this appliance |
-| Module | `inference-runtime` | Cluster service: gateway + inference runtime |
-| Profiles | `lanllm`, `builder-lanllm`, `builder-lanllm-storage-landns` | Inference-only; builder ∪ inference; full union |
-| Stable in-cluster URL | `http://inference-gateway.inference.svc.cluster.local:8080` | Swap Ollama/vLLM/LiteLLM without changing the control plane |
-| Public API | `/inference/v1/*` (OpenAI-compatible) | External clients; appliance Bearer / `apt_` token |
-| Permissions | `inference.use`, `inference.models.read`, `inference.admin` | Completions; list models; manage packs/runtime |
+`inference` requires `base`. It gates the existing module, image preload,
+Helm install, gateway configuration, authenticated proxy routes, and readiness
+configuration. The current chart explicitly disables NVIDIA and AMD GPU
+visibility using `CUDA_VISIBLE_DEVICES=-1` and `ROCR_VISIBLE_DEVICES=-1`, following
+the [pinned Ollama GPU selection documentation](https://github.com/ollama/ollama/blob/v0.6.5/docs/gpu.md).
+It requests CPU and memory only. The upstream image is unchanged and may contain
+GPU libraries; this phase establishes CPU execution, not a stripped image build.
 
-`lanllm` is the product face for capability `inference` (like `landns` for
-`dns`). `builder-lanllm` = builder ∪ lanllm.
-`builder-lanllm-storage-landns` = builder ∪ storage/registry ∪ landns ∪ lanllm
-(full capability set).
+Release inputs retain `inferenceRuntimeImage`, `inferenceChart`, and
+`compatibility.inferenceVersion`. OCI archives retain
+`registry.local/inference-runtime:bundled` and the verified platform-manifest
+digest reference `registry.local/inference-runtime@sha256:...`. Assembly places
+the runtime and chart in `std-llm-amd64`; zonctl verifies, imports, and tags that image
+before installing the shared chart. Online packaging pulls the pinned upstream;
+offline packaging consumes the existing `deps/inference` LAN seed without an
+upstream fallback.
 
-## Slice A — Capability / profile wiring (no workload yet)
+## Upgrade and operator changes
 
-Mirror LAN DNS Phase 1 wiring:
+Change explicit `APPLIANCE_PACKS` / `build_flow.appliance_packs` selections from
+`inference` to `std-llm-amd64`. For example, use `foundation,std-llm-amd64` for a metadata
+profile requiring only base and standard inference; the canonical full builder
+profile also needs `dev-platform` and `deviceuser`. Regenerate assembly configs
+with `bundle-assembly.std-llm-amd64.json`, package the updated signed metadata, and
+publish the corresponding release index and packs together. `all` includes
+`std-llm-amd64`. The old package ID is rejected with migration guidance.
 
-- Add `CapabilityInference = "inference"` and profiles `lanllm` /
-  `builder-lanllm` / `builder-lanllm-storage-landns` in control-plane and
-  `zonctl` productconfig catalogs
-- Capability deps: `inference` → `base` (and `host` in metadata YAML for
-  consistency with dns)
-- Module `inference-runtime`: `ExecutionModeClusterService`, stable `BaseURL`,
-  proxy routes for `/inference/v1/models` and `/inference/v1/chat/completions`
-- Metadata catalogs under `metadata-bundle/base/` + sync/embed
-- Docs and schema enums so the new profiles are accepted and reported
-- Tests: resolve profile/modules; non-inference profiles do not enable the
-  module
+The capability ID and entitlement key are a coordinated metadata/software
+change. Metadata and offline licenses using the old capability name must be
+reissued for the new contract; no implicit alias grants standard or accelerated
+inference. Existing profile IDs, API paths, permissions, Helm identity, model
+storage, and UID/GID remain stable. Existing installations need the new signed
+release and matching metadata to see the rename.
 
-Slice A does **not** require a running inference pod.
+Model weights remain separately signed model packs. The CPU backend keeps
+`/data/zon/inference/models`, UID `10006`, shared GID `20000`, and the current
+Ollama import contract. See [inference-model-packs.md](inference-model-packs.md).
 
-## Slice B — Runtime chart + install gates + OpenAI proxy
+## Accelerated follow-up
 
-Follow the artifact/DNS vertical:
+The proposed GPU engine is vLLM, subject to selecting and pinning the supported
+hardware/backend version. It provides an
+[OpenAI-compatible server](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/),
+which can preserve the existing client models/chat API. Compatibility tests must
+cover streaming, errors, model IDs, and supported request options before release.
 
-1. **Chart** `deploy/charts/appliance-inference` (namespace `inference`):
-   - ClusterIP Service `inference-gateway` (port 8080 → runtime 11434)
-   - Deployment (single replica, Recreate), no `hostNetwork`
-   - Models PVC (empty at install; filled by model-pack import)
-   - Non-root UID/GID `10005` / shared `fsGroup` `20000`, RO rootfs,
-     Restricted-PSA friendly
-2. **Bundle contract** (first-class):
-   - `inferenceRuntimeImage` / `inferenceChart` /
-     `compatibility.inferenceVersion`
-   - Annotation `registry.local/inference-runtime:bundled` + digest pin
-     `registry.local/inference-runtime@sha256:…`
-3. **zonctl install:** capability-gated preload/Helm before control plane;
-   inject `config.inferenceGatewayBaseURL`; refuse in-place
-   inference → non-inference upgrades
-4. **Control plane:** fail-closed when capability is on and base URL is
-   empty; authz + reverse-proxy to the gateway; Traefik path through CP;
-   permissions in roles catalog
-5. **Verify:** profile-matrix evidence for inference vs non-inference
-   profiles
+Keep the same Deployment, Service, module, and external API. Switching engines
+replaces the pod with a different digest-pinned image; it cannot retain the exact
+Kubernetes pod name or UID. The runtime chart needs explicit engine-specific
+startup arguments, ports, probes, and GPU resource configuration. A Service name
+alone does not make the implementations interchangeable.
 
-## Slice C — Signed model pack (separate from main bundle)
+Before enabling `acc-llm-arm64`:
 
-See [inference-model-packs.md](inference-model-packs.md) for the pack
-format, `zonctl models-import`, release publish path, and the ~30 GB Qwen
-reference guidance.
+- Publish a separate metadata bundle/package set in which `acc-llm-arm64` is the
+  single package providing `inference`. Profiles continue to require only the
+  shared capability.
+- Define separate signed CPU/GPU artifact pins and unambiguous package ownership,
+  updating producers, schemas, validators, image preload, Helm values, and status.
+- Seed every new GPU image, driver/toolkit, and device-plugin dependency for
+  offline use, with the same pinned upstream inputs in online builds.
+- Validate supported GPU hardware, offline driver/runtime provisioning, and
+  device allocation before deploying; retain the non-root/storage boundaries.
+- Define backend-specific signed model-pack compatibility and migration. Do not
+  assume Ollama's model files can be consumed unchanged by vLLM.
+- Exercise install, CPU/GPU transition, rollback, backup/restore, and machine
+  migration, including model storage preservation and observable inference.
 
-Summary:
-
-- **Model pack format** (`appliance.modelpack/v1`): signed `manifest.json` + blobs
-- **CLI:** `zonctl models-import --bundle-dir <extracted-pack>`
-- **Host path:** `/data/zon/inference/models` (UID `10006`, shared GID `20000`)
-- Main `build-full-bundle` does **not** embed weights
-
-## Intent
-
-Stabilize names, profiles, and installer contracts first (Slice A), then land
-the runtime chart and OpenAI proxy (Slice B) with an empty models PVC, then
-deliver signed model packs outside the main air-gap bundle (Slice C).
-
-## Explicit non-goals (Phase 1)
-
-- Coding-agent module, workspace tool loop, MCP inference tools beyond
-  existing `/mcp`
-- RAG / embeddings / vector DB
-- Open WebUI
-- Cloud model providers / LiteLLM multi-backend (Stable Service URL leaves
-  room for later)
-- GPU scheduling policy beyond documenting host requirements
-
-## Follow-on (out of Phase 1)
-
-- Module `coding-agent` for workspace coding-agent behavior
-- LiteLLM or vLLM swap behind `inference-gateway`
-- Minimal appliance UI chat page
-- RAG service + vector store
+No GPU package, GPU profile, driver provisioning, or engine switch is implemented
+in this rename phase.

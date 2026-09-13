@@ -131,3 +131,28 @@ type denyAllEntitlements struct{}
 func (denyAllEntitlements) IsEntitled(appliance.ModuleDescriptor, appliance.EntitlementContext) bool {
 	return false
 }
+
+func TestInferenceRuntimeUsesSharedGateway(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("builder-lanllm-storage-landns")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Capabilities.Enabled(appliance.Capability("inference")) {
+		t.Fatalf("unexpected capabilities: %v", resolved.Capabilities)
+	}
+	catalog, err := appliance.DevelopmentModuleCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, catalog)
+	module, ok := appliance.ModuleNamed(modules, appliance.ModuleNameInferenceRuntime)
+	if !ok || module.PrimaryCapability() != appliance.CapabilityInference {
+		t.Fatalf("standard inference module = %+v", module)
+	}
+	if module.BaseURL != "http://inference-gateway.inference.svc.cluster.local:8080" || len(module.Routes) != 2 {
+		t.Fatalf("inference gateway contract changed: %+v", module)
+	}
+	if module.Routes[0].ExternalPath != "/inference/v1/models" || module.Routes[1].ExternalPath != "/inference/v1/chat/completions" {
+		t.Fatalf("inference API changed: %+v", module.Routes)
+	}
+}

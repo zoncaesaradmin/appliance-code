@@ -33,3 +33,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "appliance-inference.modelsVolumeName" -}}
 {{- printf "%s-models" (include "appliance-inference.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
+
+{{/* Engine-specific settings behind the shared inference service. */}}
+{{- define "appliance-inference.runtimeEnv" -}}
+{{- if and (eq .Values.runtime.engine "ollama") (eq .Values.runtime.variant "cpu") -}}
+- name: CUDA_VISIBLE_DEVICES
+  value: "-1"
+- name: ROCR_VISIBLE_DEVICES
+  value: "-1"
+- name: HOME
+  value: "/home/ollama"
+- name: OLLAMA_HOST
+  value: "0.0.0.0:11434"
+- name: OLLAMA_MODELS
+  value: "/models"
+{{- else -}}
+{{- fail "unsupported inference runtime variant/engine; install a supported signed runtime package" -}}
+{{- end -}}
+{{- end -}}
