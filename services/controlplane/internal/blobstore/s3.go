@@ -38,8 +38,12 @@ type Client struct {
 	AccessKey string
 	SecretKey string
 	Region    string
-	HTTP      *http.Client
-	Now       func() time.Time
+	// UsePathStyle keeps the bucket in the request path. This is required for
+	// the in-cluster MinIO endpoint, whose DNS service does not provide a
+	// wildcard record for bucket subdomains.
+	UsePathStyle bool
+	HTTP         *http.Client
+	Now          func() time.Time
 }
 
 func New(endpoint, bucket, accessKey, secretKey, region string) (*Client, error) {
@@ -53,7 +57,7 @@ func New(endpoint, bucket, accessKey, secretKey, region string) (*Client, error)
 	if strings.TrimSpace(bucket) == "" || strings.TrimSpace(accessKey) == "" || strings.TrimSpace(secretKey) == "" {
 		return nil, fmt.Errorf("blob storage bucket and credentials are required")
 	}
-	return &Client{Endpoint: u, Bucket: bucket, AccessKey: accessKey, SecretKey: secretKey, Region: defaultRegion(region), HTTP: http.DefaultClient, Now: time.Now}, nil
+	return &Client{Endpoint: u, Bucket: bucket, AccessKey: accessKey, SecretKey: secretKey, Region: defaultRegion(region), UsePathStyle: true, HTTP: http.DefaultClient, Now: time.Now}, nil
 }
 
 func (c *Client) EnsureBucket(ctx context.Context) error {
@@ -208,11 +212,13 @@ var ErrNotFound = fmt.Errorf("blob not found")
 
 func (c *Client) newRequest(ctx context.Context, method, key string, body io.Reader, size int64, contentType string) (*http.Request, error) {
 	u := *c.Endpoint
-	segments := []string{strings.Trim(u.Path, "/"), strings.Trim(c.Bucket, "/"), strings.Trim(key, "/")}
-	u.Path = "/" + strings.Trim(path.Join(segments...), "/")
-	if key == "" {
-		u.Path = "/" + strings.Trim(path.Join(segments[:2]...), "/")
+	segments := []string{strings.Trim(u.Path, "/"), strings.Trim(key, "/")}
+	if c.UsePathStyle {
+		segments = append([]string{strings.Trim(u.Path, "/"), strings.Trim(c.Bucket, "/")}, strings.Trim(key, "/"))
+	} else {
+		u.Host = strings.Trim(c.Bucket, "/") + "." + u.Host
 	}
+	u.Path = "/" + strings.Trim(path.Join(segments...), "/")
 	request, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err

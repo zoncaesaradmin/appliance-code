@@ -15,6 +15,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/blobstore"
+	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/videomedia"
 )
@@ -28,6 +29,7 @@ type VideoLibraryHandlers struct {
 	MaxUploadBytes  int64
 	TransferTimeout time.Duration
 	Audit           *audit.Recorder
+	Logger          logging.Logger
 }
 
 func (h *VideoLibraryHandlers) Get(w http.ResponseWriter, r *http.Request) {
@@ -393,5 +395,6 @@ func (h *VideoLibraryHandlers) extendTransferDeadlines(w http.ResponseWriter) er
 	return nil
 }
 func (h *VideoLibraryHandlers) writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
+	h.Logger.WithContext(r.Context()).Errorw("blob storage request failed", "requestId", requestIDFromRequest(r), "error", err.Error())
 	WriteProblem(w, r, http.StatusInternalServerError, "blob_storage_unavailable", "Blob storage is unavailable", "")
 }

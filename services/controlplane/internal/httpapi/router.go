@@ -69,6 +69,12 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 	if deps.Logger == nil {
 		return nil, fmt.Errorf("logger is required")
 	}
+	if deps.FilesH != nil && deps.FilesH.Logger == nil {
+		return nil, fmt.Errorf("files handler logger is required")
+	}
+	if deps.VideoLibraryH != nil && deps.VideoLibraryH.Logger == nil {
+		return nil, fmt.Errorf("video library handler logger is required")
+	}
 	mux := http.NewServeMux()
 
 	authRequired := RequireAuth(deps.Auth)

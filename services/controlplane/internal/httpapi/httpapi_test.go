@@ -237,6 +237,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 				MaxUploadBytes:  cfg.FilesMaxUploadBytes,
 				TransferTimeout: cfg.FilesTransferTimeout,
 				Audit:           services.Audit,
+				Logger:          logger,
 			}
 		}
 		if resolved.Capabilities.Enabled(appliance.CapabilityVideo) {
@@ -247,6 +248,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
 				TransferTimeout: cfg.VideoTransferTimeout,
 				Audit:           services.Audit,
+				Logger:          logger,
 			}
 		}
 	}

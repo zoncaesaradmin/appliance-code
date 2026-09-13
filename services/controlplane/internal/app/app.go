@@ -128,6 +128,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 				MaxUploadBytes:  cfg.FilesMaxUploadBytes,
 				TransferTimeout: cfg.FilesTransferTimeout,
 				Audit:           services.Audit,
+				Logger:          logger,
 			}
 		}
 		if services.ApplianceProfile.Capabilities.Enabled(appliance.CapabilityVideo) {
@@ -138,6 +139,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
 				TransferTimeout: cfg.VideoTransferTimeout,
 				Audit:           services.Audit,
+				Logger:          logger,
 			}
 			if err := syncVideoProjection(context.Background(), deps.VideoLibraryH, processLogger); err != nil {
 				services.DB.Close()
