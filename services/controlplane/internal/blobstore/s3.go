@@ -172,7 +172,7 @@ func (c *Client) list(ctx context.Context, prefix string, delimiter bool) (ListR
 	if prefix != "" {
 		query.Set("prefix", prefix)
 	}
-	request.URL.RawQuery = query.Encode()
+	request.URL.RawQuery = awsCanonicalQuery(query)
 	c.sign(request, "UNSIGNED-PAYLOAD")
 	response, err := c.do(request)
 	if err != nil {
@@ -219,6 +219,11 @@ func (c *Client) newRequest(ctx context.Context, method, key string, body io.Rea
 		u.Host = strings.Trim(c.Bucket, "/") + "." + u.Host
 	}
 	u.Path = "/" + strings.Trim(path.Join(segments...), "/")
+	// AWS SigV4 uses a stricter URI encoding than RFC 3986. In particular,
+	// characters such as '+' must be percent-encoded in both the request target
+	// and canonical request. Keep Path decoded for net/url and provide the exact
+	// wire encoding through RawPath.
+	u.RawPath = awsURIEncode(u.Path, false)
 	request, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
@@ -253,12 +258,47 @@ func (c *Client) sign(request *http.Request, payloadHash string) {
 	request.Header.Set("X-Amz-Content-Sha256", payloadHash)
 	canonicalHeaders := "host:" + request.URL.Host + "\n" + "x-amz-content-sha256:" + payloadHash + "\n" + "x-amz-date:" + date + "\n"
 	signedHeaders := "host;x-amz-content-sha256;x-amz-date"
-	canonicalRequest := strings.Join([]string{request.Method, request.URL.EscapedPath(), request.URL.Query().Encode(), canonicalHeaders, signedHeaders, payloadHash}, "\n")
+	canonicalRequest := strings.Join([]string{request.Method, awsURIEncode(request.URL.Path, false), awsCanonicalQuery(request.URL.Query()), canonicalHeaders, signedHeaders, payloadHash}, "\n")
 	scope := day + "/" + c.Region + "/s3/aws4_request"
 	stringToSign := "AWS4-HMAC-SHA256\n" + date + "\n" + scope + "\n" + sha256Hex(canonicalRequest)
 	signingKey := hmacBytes(hmacBytes(hmacBytes(hmacBytes([]byte("AWS4"+c.SecretKey), day), c.Region), "s3"), "aws4_request")
 	signature := hex.EncodeToString(hmacBytes(signingKey, stringToSign))
 	request.Header.Set("Authorization", "AWS4-HMAC-SHA256 Credential="+c.AccessKey+"/"+scope+", SignedHeaders="+signedHeaders+", Signature="+signature)
+}
+
+func awsCanonicalQuery(query url.Values) string {
+	pairs := make([]string, 0, len(query))
+	for key, values := range query {
+		encodedKey := awsURIEncode(key, true)
+		if len(values) == 0 {
+			pairs = append(pairs, encodedKey+"=")
+			continue
+		}
+		for _, value := range values {
+			pairs = append(pairs, encodedKey+"="+awsURIEncode(value, true))
+		}
+	}
+	sort.Strings(pairs)
+	return strings.Join(pairs, "&")
+}
+
+func awsURIEncode(value string, encodeSlash bool) string {
+	const hexDigits = "0123456789ABCDEF"
+	var encoded strings.Builder
+	encoded.Grow(len(value))
+	for i := 0; i < len(value); i++ {
+		char := value[i]
+		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '.' || char == '_' || char == '~' ||
+			(char == '/' && !encodeSlash) {
+			encoded.WriteByte(char)
+			continue
+		}
+		encoded.WriteByte('%')
+		encoded.WriteByte(hexDigits[char>>4])
+		encoded.WriteByte(hexDigits[char&0x0f])
+	}
+	return encoded.String()
 }
 
 func objectFromHeaders(key string, response *http.Response) Object {
