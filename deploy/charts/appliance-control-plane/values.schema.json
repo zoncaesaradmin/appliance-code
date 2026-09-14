@@ -242,12 +242,13 @@
         {
           "if": {
             "properties": {
-              "applianceProfile": {
-                "enum": ["builder", "builder-landns", "builder-storage-landns", "builder-lanllm", "builder-lanllm-storage-landns"]
+              "enabledCapabilities": {
+                "type": "array",
+                "contains": {"const": "build"}
               }
             },
             "required": [
-              "applianceProfile"
+              "enabledCapabilities"
             ]
           },
           "then": {
@@ -270,11 +271,12 @@
         {
           "if": {
             "properties": {
-              "applianceProfile": {
-                "enum": ["builder", "storage", "storage-landns", "builder-landns", "builder-storage-landns", "builder-lanllm", "builder-lanllm-storage-landns"]
+              "enabledCapabilities": {
+                "type": "array",
+                "contains": {"const": "artifact"}
               }
             },
-            "required": ["applianceProfile"]
+            "required": ["enabledCapabilities"]
           },
           "then": {
             "required": ["artifactServerBaseURL"],
@@ -292,11 +294,12 @@
         {
           "if": {
             "properties": {
-              "applianceProfile": {
-                "enum": ["landns", "storage-landns", "builder-landns", "builder-storage-landns", "builder-lanllm-storage-landns"]
+              "enabledCapabilities": {
+                "type": "array",
+                "contains": {"const": "dns"}
               }
             },
-            "required": ["applianceProfile"]
+            "required": ["enabledCapabilities"]
           },
           "then": {
             "required": ["dnsReadyURL"],
@@ -311,11 +314,12 @@
         {
           "if": {
             "properties": {
-              "applianceProfile": {
-                "enum": ["lanllm", "builder-lanllm", "builder-lanllm-storage-landns", "private-ai"]
+              "enabledCapabilities": {
+                "type": "array",
+                "contains": {"const": "inference"}
               }
             },
-            "required": ["applianceProfile"]
+            "required": ["enabledCapabilities"]
           },
           "then": {
             "required": ["inferenceGatewayBaseURL"],
@@ -331,20 +335,7 @@
       "properties": {
         "applianceProfile": {
           "type": "string",
-          "enum": [
-            "core",
-            "builder",
-            "storage",
-            "landns",
-            "storage-landns",
-            "builder-landns",
-            "builder-storage-landns",
-            "lanllm",
-            "builder-lanllm",
-            "builder-lanllm-storage-landns",
-            "training",
-            "private-ai"
-          ]
+          "minLength": 1
         },
         "applianceName": {
           "type": "string",

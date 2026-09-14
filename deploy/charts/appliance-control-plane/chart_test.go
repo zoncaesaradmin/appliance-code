@@ -733,9 +733,9 @@ func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 func TestArtifactProfilesRenderRealArtifactServerDependency(t *testing.T) {
 	for _, profile := range []string{"storage", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
-			args := append(defaultRenderArgs(), "--set", "config.applianceProfile="+profile)
+			args := append(defaultRenderArgs(), "--set", "config.applianceProfile="+profile, "--set", "config.enabledCapabilities={artifact}")
 			if profile == "storage-landns" {
-				args = append(args, "--set", "config.dnsReadyURL=http://dns-server.dns.svc.cluster.local:8181/ready")
+				args = append(args, "--set", "config.enabledCapabilities={artifact,dns}", "--set", "config.dnsReadyURL=http://dns-server.dns.svc.cluster.local:8181/ready")
 			}
 			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
@@ -762,11 +762,13 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 		t.Run(profile, func(t *testing.T) {
 			args := append(defaultRenderArgs(),
 				"--set", "config.applianceProfile="+profile,
+				"--set", "config.enabledCapabilities={dns}",
 				"--set", "config.dnsReadyURL=http://dns-server.dns.svc.cluster.local:8181/ready",
 			)
 			switch profile {
 			case "builder-landns", "builder-storage-landns":
 				args = append(args,
+					"--set", "config.enabledCapabilities={dns,workflows,build,artifact}",
 					"--set", "config.buildCatalog.workProfiles[0].name=builder",
 					"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 					"--set", "config.buildCatalog.repos[0].name=app",
@@ -813,7 +815,7 @@ func TestValuesSchemaRejectsArtifactProfilesWithoutArtifactServerURL(t *testing.
 	for _, profile := range []string{"storage", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			valuesPath := filepath.Join(t.TempDir(), profile+"-without-artifact-server.yaml")
-			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  artifactServerBaseURL: \"\"\n", profile)
+			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  enabledCapabilities: [artifact]\n  artifactServerBaseURL: \"\"\n", profile)
 			if profile == "storage-landns" {
 				values += "  dnsReadyURL: \"http://dns-server.dns.svc.cluster.local:8181/ready\"\n"
 			}
@@ -836,7 +838,7 @@ func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
 	for _, profile := range []string{"landns", "storage-landns", "builder-landns", "builder-storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			valuesPath := filepath.Join(t.TempDir(), profile+"-without-dns.yaml")
-			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  dnsReadyURL: \"\"\n", profile)
+			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  enabledCapabilities: [dns]\n  dnsReadyURL: \"\"\n", profile)
 			switch profile {
 			case "storage-landns":
 				values += "  artifactServerBaseURL: \"http://appliance-registry.artifacts.svc.cluster.local:5000\"\n  artifactServerAllowFake: false\n"
@@ -927,12 +929,13 @@ config:
 	}
 }
 
-func TestValuesSchemaAllowsPrivateAIInferenceProfile(t *testing.T) {
+func TestValuesSchemaAllowsCatalogDefinedInferenceProfile(t *testing.T) {
 	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "private-ai.yaml")
+	valuesPath := filepath.Join(t.TempDir(), "catalog-defined-inference.yaml")
 	values := []byte(`
 config:
-  applianceProfile: private-ai
+  applianceProfile: future-catalog-profile
+  enabledCapabilities: [base, inference]
   inferenceGatewayBaseURL: http://inference-gateway.inference.svc.cluster.local:8080
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
@@ -941,7 +944,28 @@ config:
 	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("helm lint rejected private-ai inference profile:\n%s", out)
+		t.Fatalf("helm lint rejected catalog-defined inference profile:\n%s", out)
+	}
+}
+
+func TestValuesSchemaRequiresInferenceGatewayForCapability(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "inference-without-gateway.yaml")
+	values := []byte(`
+config:
+  applianceProfile: future-catalog-profile
+  enabledCapabilities: [base, inference]
+  inferenceGatewayBaseURL: ""
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	out, err := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("helm lint accepted inference capability without gateway:\n%s", out)
+	}
+	if !bytes.Contains(out, []byte("inferenceGatewayBaseURL")) {
+		t.Fatalf("helm lint failed for the wrong reason:\n%s", out)
 	}
 }
 
@@ -974,6 +998,7 @@ func TestValuesSchemaRejectsBuilderWithoutWorkspaceProvisionerImage(t *testing.T
 	values := []byte(`
 config:
   applianceProfile: builder
+  enabledCapabilities: [build]
   buildCatalog:
     workProfiles:
       - name: builder
@@ -1026,6 +1051,7 @@ config:
 func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
+		"--set", "config.enabledCapabilities={build,workflows}",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
@@ -1083,6 +1109,7 @@ func TestBuilderWorkspacePrepareJobOptInFailsFast(t *testing.T) {
 	requireHelm(t)
 	extraArgs := append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
+		"--set", "config.enabledCapabilities={build,workflows}",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
@@ -1104,6 +1131,7 @@ func TestBuilderWorkspacePrepareJobOptInFailsFast(t *testing.T) {
 func TestBuilderWorkflowRBACRenders(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",
+		"--set", "config.enabledCapabilities={build,workflows}",
 		"--set", "config.buildCatalog.workProfiles[0].name=builder",
 		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
 		"--set", "config.buildCatalog.repos[0].name=app",
@@ -1332,6 +1360,7 @@ func TestApplicationSupportRolloutRendersResourcesForApplicationCapability(t *te
 func TestWorkflowsBuildNamespaceIsInstallerOwned(t *testing.T) {
 	docs := renderChart(t,
 		"--set", "config.applianceProfile=builder",
+		"--set", "config.enabledCapabilities={build,workflows}",
 		"--set", "namespace.name=ace-system",
 		"--set", "appsNamespace.name=ace-apps",
 		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",

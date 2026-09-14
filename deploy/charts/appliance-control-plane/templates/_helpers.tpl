@@ -213,14 +213,14 @@ ServiceAccount name.
 Whether the control plane should get API access for workflow submission.
 */}}
 {{- define "appliance-control-plane.workflowsEnabled" -}}
-{{- if or (eq .Values.config.applianceProfile "builder") (eq .Values.config.applianceProfile "builder-landns") (eq .Values.config.applianceProfile "builder-storage-landns") -}}true{{- else -}}false{{- end -}}
+{{- if has "workflows" (.Values.config.enabledCapabilities | default (list)) -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*
 Whether the control plane manages LAN DNS zone ConfigMap sync.
 */}}
 {{- define "appliance-control-plane.dnsAdminEnabled" -}}
-{{- if or (eq .Values.config.applianceProfile "landns") (eq .Values.config.applianceProfile "storage-landns") (eq .Values.config.applianceProfile "builder-landns") (eq .Values.config.applianceProfile "builder-storage-landns") -}}true{{- else -}}false{{- end -}}
+{{- if has "dns" (.Values.config.enabledCapabilities | default (list)) -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*
