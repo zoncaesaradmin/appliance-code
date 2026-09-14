@@ -927,6 +927,24 @@ config:
 	}
 }
 
+func TestValuesSchemaAllowsPrivateAIInferenceProfile(t *testing.T) {
+	requireHelm(t)
+	valuesPath := filepath.Join(t.TempDir(), "private-ai.yaml")
+	values := []byte(`
+config:
+  applianceProfile: private-ai
+  inferenceGatewayBaseURL: http://inference-gateway.inference.svc.cluster.local:8080
+`)
+	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
+		t.Fatalf("writing test values: %v", err)
+	}
+	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helm lint rejected private-ai inference profile:\n%s", out)
+	}
+}
+
 func TestValuesSchemaAllowsBuilderWithoutDay2BuilderImageDigest(t *testing.T) {
 	requireHelm(t)
 	valuesPath := filepath.Join(t.TempDir(), "builder-no-day2-builder.yaml")

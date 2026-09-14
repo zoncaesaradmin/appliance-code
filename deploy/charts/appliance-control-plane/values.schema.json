@@ -312,7 +312,7 @@
           "if": {
             "properties": {
               "applianceProfile": {
-                "enum": ["lanllm", "builder-lanllm", "builder-lanllm-storage-landns"]
+                "enum": ["lanllm", "builder-lanllm", "builder-lanllm-storage-landns", "private-ai"]
               }
             },
             "required": ["applianceProfile"]
@@ -342,7 +342,8 @@
             "lanllm",
             "builder-lanllm",
             "builder-lanllm-storage-landns",
-            "training"
+            "training",
+            "private-ai"
           ]
         },
         "applianceName": {
