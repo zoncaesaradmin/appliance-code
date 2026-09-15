@@ -1163,6 +1163,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inference/models/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read cached upstream candidates with current hardware eligibility */
+        get: operations["getInferenceCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inference/models/imports": {
         parameters: {
             query?: never;
@@ -1647,10 +1664,33 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        InferenceCatalog: {
+            engine: string;
+            /** Format: date-time */
+            lastAttempt: string;
+            /** Format: date-time */
+            lastSuccess: string;
+            lastError?: string;
+            refreshing: boolean;
+            stale: boolean;
+            scope: string;
+            items: {
+                id: string;
+                source: string;
+                downloadBytes: number;
+                memoryBytes: number;
+                eligible: boolean;
+                reason?: string;
+                launchArguments?: string[];
+            }[];
+        };
         InferenceModelImportRequest: {
             modelId: string;
+            /** @description Revalidate this cached selection against current capacity and use its runtime launch settings. modelId and source must match the cached selection. */
+            catalogId?: string;
             source: string;
             digest?: string;
+            /** @description Validated vLLM server arguments, represented as an argv array without shell evaluation. */
             launchArguments?: string[];
         };
         Problem: {
@@ -3637,6 +3677,29 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["InferenceModel"][];
                     };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
+    getInferenceCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persistent catalog refreshed at startup when due and every 24 hours. Does not list downloaded state; join with locally available models by id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceCatalog"];
                 };
             };
             401: components["responses"]["Unauthorized"];

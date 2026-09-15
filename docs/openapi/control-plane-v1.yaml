@@ -1586,6 +1586,19 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/models/catalog:
+    get:
+      summary: Read cached upstream candidates with current hardware eligibility
+      operationId: getInferenceCatalog
+      responses:
+        "200":
+          description: Persistent catalog refreshed at startup when due and every 24 hours. Does not list downloaded state; join with locally available models by id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InferenceCatalog" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/inference/models/imports:
     post:
       summary: Download and install a model
@@ -2531,11 +2544,40 @@ components:
         details:
           type: object
           additionalProperties: true
+    InferenceCatalog:
+      type: object
+      required: [engine, lastAttempt, lastSuccess, refreshing, stale, scope, items]
+      properties:
+        engine: { type: string }
+        lastAttempt: { type: string, format: date-time }
+        lastSuccess: { type: string, format: date-time }
+        lastError: { type: string }
+        refreshing: { type: boolean }
+        stale: { type: boolean }
+        scope: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, source, downloadBytes, memoryBytes, eligible]
+            properties:
+              id: { type: string }
+              source: { type: string }
+              downloadBytes: { type: integer, minimum: 0 }
+              memoryBytes: { type: integer, minimum: 0 }
+              eligible: { type: boolean }
+              reason: { type: string }
+              launchArguments:
+                type: array
+                items: { type: string }
     InferenceModelImportRequest:
       type: object
       required: [modelId, source]
       properties:
         modelId: { type: string, minLength: 1 }
+        catalogId:
+          type: string
+          description: Revalidate this cached selection against current capacity and use its runtime launch settings. modelId and source must match the cached selection.
         source: { type: string, minLength: 1 }
         digest:
           type: string

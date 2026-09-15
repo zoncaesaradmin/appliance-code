@@ -1,0 +1,42 @@
+# Model discovery
+
+The manager refreshes metadata on first start and every 24 hours thereafter.
+It persists the last attempt, last successful catalog, and error under
+`/models/.appliance-catalog/<engine>.json` on the existing model PVC. A restart
+uses the saved schedule. Failed or empty refreshes retain the last good list;
+failure never prevents startup or use of downloaded models. No model weights
+are downloaded by this job. Operators control connectivity at the network edge.
+
+Discovery is bounded to popular upstream candidates: up to 24 Ollama families
+and eight explicit tags each, or 40 Hugging Face text-generation repositories.
+The limits avoid mirroring huge registries daily. This is not an exhaustive
+supported-model matrix. Ollama's HTML library adapter fails closed if discovery
+breaks; its registry manifests provide actual layer sizes. Hugging Face uses
+repository metadata with pinned commit revisions. vLLM candidates must match
+the installed ModelRegistry and use non-quantized safetensors with no custom-code
+configuration; gated/private repositories are excluded. Advanced quantized
+models remain available through the existing explicit import API.
+
+Eligibility is an estimate, not a guarantee of runtime compatibility, especially
+for new model families in older Ollama versions. The UI states that a load is
+required to verify execution. No hardware vendors or specific model names are
+hardcoded. Runtime mode, host available memory, container cgroup memory limits,
+GPU free memory for CUDA, and PVC free space determine current eligibility.
+GPU memory is not summed across devices; automatic tensor parallelism is not
+configured. Conservatively reserve 25% of CPU memory (20% of GPU memory), require
+twice the weights plus 2 GiB (Ollama) or 4 GiB (vLLM), and twice download storage.
+vLLM catalog launches use a 2048-token context. Estimates are recomputed locally
+on every catalog read and selection. Cached Hugging Face revisions can become
+unavailable upstream; report a download error without changing installed models.
+
+`GET /internal/v1/models/catalog` returns cached candidates and eligibility.
+`GET /v1/models` independently lists downloaded models. The control plane exposes
+the catalog as `GET /api/v1/inference/models/catalog`. Catalog imports include
+`catalogId` alongside matching `modelId` and `source`; the manager revalidates
+capacity and takes launch arguments from the cache. Explicit imports retain
+the existing administrator API for advanced uses.
+
+UI download state is derived from the runtime inventory, never inferred from
+catalog membership. Removing or losing a catalog entry does not remove its
+download or prevent loading/deleting it. Offline catalog status includes the
+last successful refresh and failure so cached metadata is not presented as fresh.

@@ -1,12 +1,31 @@
 package inference
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestCatalogReadUsesRuntimeCache(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/internal/v1/models/catalog" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"engine":"ollama","stale":true,"items":[]}`))
+	}))
+	defer server.Close()
+	s, err := New(Config{BaseURL: server.URL, Engine: "ollama"}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Catalog(context.Background())
+	if err != nil || !json.Valid(result) {
+		t.Fatalf("catalog=%s error=%v", result, err)
+	}
+}
 
 func TestOllamaModelLifecycle(t *testing.T) {
 	var calls []string

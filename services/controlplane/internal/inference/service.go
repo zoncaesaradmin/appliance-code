@@ -70,10 +70,18 @@ type Model struct {
 }
 
 type ImportRequest struct {
+	CatalogID       string   `json:"catalogId,omitempty"`
 	ModelID         string   `json:"modelId"`
 	Source          string   `json:"source"`
 	Digest          string   `json:"digest,omitempty"`
 	LaunchArguments []string `json:"launchArguments,omitempty"`
+}
+
+// Catalog is runtime-owned and cached locally; reading it never refreshes upstream.
+func (s *Service) Catalog(ctx context.Context) (json.RawMessage, error) {
+	var catalog json.RawMessage
+	err := s.getJSON(ctx, "/internal/v1/models/catalog", &catalog)
+	return catalog, err
 }
 
 type Service struct {

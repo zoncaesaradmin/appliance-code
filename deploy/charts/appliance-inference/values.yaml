@@ -62,10 +62,10 @@ networkPolicy:
     # Matches appliance-control-plane chart selectorLabels:
     # app.kubernetes.io/name=controlplane.
     app.kubernetes.io/name: controlplane
-  # Offline-friendly: allow DNS to kube-system only; no other egress.
+  # DNS is required during the operator-controlled connected window.
   allowDNSToKubeSystem: true
   # The operator controls the connected window at the appliance/network edge.
-  # The runtime may use HTTPS only to fetch an explicitly requested model.
+  # HTTPS supports daily catalog metadata discovery and user-requested downloads.
   allowModelDownloadHTTPS: true
 
 podSecurityContext:

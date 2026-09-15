@@ -55,6 +55,7 @@ import type {
   AuditEventsResult,
   FocusContent,
   InferenceRuntimeStatus,
+  InferenceCatalog,
   InferenceModel,
   ImportInferenceModelRequest
 } from "./types";
@@ -1353,6 +1354,13 @@ export class MockControlPlaneClient {
 
   async listInferenceModels(): Promise<InferenceModel[]> {
     return mockState.inferenceModels.map((model) => ({ ...model }));
+  }
+
+  async getInferenceCatalog(): Promise<InferenceCatalog> {
+    return { engine: "ollama", lastAttempt: new Date().toISOString(), lastSuccess: new Date().toISOString(), refreshing: false, stale: false, scope: "Mock model catalog", items: [
+      { id: "example-local-model", source: "example-local-model", downloadBytes: 1000000000, memoryBytes: 4000000000, eligible: true, reason: "Estimated fit; verified when loaded" },
+      { id: "example-download-model", source: "example-download-model", downloadBytes: 2000000000, memoryBytes: 6000000000, eligible: true, reason: "Estimated fit; verified when loaded" }
+    ] };
   }
 
   async importInferenceModel(request: ImportInferenceModelRequest): Promise<void> {

@@ -540,8 +540,29 @@ export interface InferenceModel {
 }
 
 export interface ImportInferenceModelRequest {
+	 catalogId?: string;
   modelId: string;
   source: string;
   digest?: string;
   launchArguments?: string[];
+}
+
+export interface InferenceCatalogEntry {
+  id: string;
+  source: string;
+  downloadBytes: number;
+  memoryBytes: number;
+  eligible: boolean;
+  reason?: string;
+}
+
+export interface InferenceCatalog {
+  engine: string;
+  lastAttempt: string;
+  lastSuccess: string;
+  lastError?: string;
+  refreshing: boolean;
+  stale: boolean;
+  scope: string;
+  items: InferenceCatalogEntry[];
 }

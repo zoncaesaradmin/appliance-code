@@ -53,6 +53,7 @@ import type {
   AuditEventsResult,
   FocusContent,
   InferenceRuntimeStatus,
+  InferenceCatalog,
   InferenceModel,
   ImportInferenceModelRequest
 } from "./types";
@@ -202,6 +203,7 @@ export interface ControlPlaneClient {
   installApplication(name: string, version: string): Promise<ApplicationInstance>;
   disableApplication(name: string): Promise<ApplicationInstance>;
   getInferenceStatus(): Promise<InferenceRuntimeStatus>;
+  getInferenceCatalog(): Promise<InferenceCatalog>;
   listInferenceModels(): Promise<InferenceModel[]>;
   importInferenceModel(request: ImportInferenceModelRequest): Promise<void>;
   loadInferenceModel(modelId: string): Promise<void>;
@@ -741,6 +743,10 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async getInferenceStatus(): Promise<InferenceRuntimeStatus> {
 	return this.request("/api/v1/inference/status");
+  }
+
+  async getInferenceCatalog(): Promise<InferenceCatalog> {
+    return this.request("/api/v1/inference/models/catalog");
   }
 
   async listInferenceModels(): Promise<InferenceModel[]> {

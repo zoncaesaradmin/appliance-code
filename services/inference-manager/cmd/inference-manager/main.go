@@ -58,6 +58,7 @@ type manager struct {
 	download    func(context.Context, string, string) error
 	start       func(context.Context, model) (*exec.Cmd, error)
 	cudaProbe   func(context.Context) bool
+	catalog     *modelCatalog
 }
 
 func main() {
@@ -84,6 +85,8 @@ func main() {
 	server := &http.Server{Addr: env("INFERENCE_LISTEN_ADDRESS", "0.0.0.0:11434"), Handler: m.handler(), ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	m.catalog = newModelCatalog(m)
+	go m.catalog.run(ctx)
 	go func() {
 		<-ctx.Done()
 		m.stopProcess()
@@ -106,6 +109,7 @@ func (m *manager) handler() http.Handler {
 	mux.HandleFunc("POST /internal/v1/models/{model}/load", m.loadModel)
 	mux.HandleFunc("DELETE /internal/v1/models/{model}", m.deleteModel)
 	mux.HandleFunc("GET /v1/models", m.listModels)
+	mux.HandleFunc("GET /internal/v1/models/catalog", m.modelCatalog)
 	mux.HandleFunc("/v1/", m.proxyOpenAI)
 	return mux
 }
@@ -273,6 +277,7 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 		Source          string
 		Digest          string
 		LaunchArguments []string `json:"launchArguments"`
+		CatalogID       string   `json:"catalogId"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -281,6 +286,22 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 	if !modelRefRE.MatchString(req.ModelID) || !modelRefRE.MatchString(req.Source) {
 		writeError(w, http.StatusBadRequest, "modelId and source must be repository model references")
 		return
+	}
+	if req.CatalogID != "" {
+		if m.catalog == nil {
+			writeError(w, http.StatusServiceUnavailable, "model catalog is not ready")
+			return
+		}
+		entry, err := m.catalog.selection(r.Context(), req.CatalogID)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if req.ModelID != entry.ID || req.Source != entry.Source {
+			writeError(w, http.StatusConflict, "catalog selection changed; refresh the model list")
+			return
+		}
+		req.LaunchArguments = entry.LaunchArguments
 	}
 	if _, exists := m.reg.Models[req.ModelID]; exists {
 		writeError(w, http.StatusConflict, "model is already installed")

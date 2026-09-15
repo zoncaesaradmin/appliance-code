@@ -1,0 +1,98 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+)
+
+func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	c.discover = func(context.Context) ([]catalogEntry, error) {
+		return []catalogEntry{{ID: "test:small", Source: "test:small", DownloadBytes: 1, MemoryBytes: 2}}, nil
+	}
+	c.refresh(context.Background())
+	first := c.state.LastSuccess
+	if first.IsZero() {
+		t.Fatal("successful refresh was not recorded")
+	}
+	c.discover = func(context.Context) ([]catalogEntry, error) { return nil, errors.New("offline") }
+	c.refresh(context.Background())
+	restarted := newModelCatalog(m)
+	restarted.budget = func(context.Context) (uint64, uint64) { return 10, 10 }
+	snapshot := restarted.snapshot(context.Background())
+	if len(snapshot.Items) != 1 || !snapshot.Items[0].Eligible || snapshot.LastError == "" || !snapshot.Stale || !snapshot.LastSuccess.Equal(first) {
+		t.Fatalf("lost offline snapshot: %+v", snapshot)
+	}
+	if snapshot.LastAttempt.IsZero() {
+		t.Fatal("refresh schedule not persisted")
+	}
+	called := false
+	restarted.discover = func(context.Context) ([]catalogEntry, error) { called = true; return nil, nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	restarted.run(ctx)
+	if called {
+		t.Fatal("fresh persisted schedule triggered another discovery")
+	}
+}
+
+func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
+	m := testManager(t)
+	m.engine = "vllm"
+	c := newModelCatalog(m)
+	c.state.Items = []catalogEntry{{ID: "org/model", Source: "org/model@revision", DownloadBytes: 10, MemoryBytes: 20}}
+	c.state.LastSuccess = time.Now()
+	c.budget = func(context.Context) (uint64, uint64) { return 30, 30 }
+	if _, err := c.selection(context.Background(), "org/model"); err != nil {
+		t.Fatal(err)
+	}
+	c.budget = func(context.Context) (uint64, uint64) { return 19, 30 }
+	if _, err := c.selection(context.Background(), "org/model"); err == nil {
+		t.Fatal("low-memory model accepted")
+	}
+	c.budget = func(context.Context) (uint64, uint64) { return 30, 19 }
+	if _, err := c.selection(context.Background(), "org/model"); err == nil {
+		t.Fatal("low-disk model accepted")
+	}
+	if _, err := c.selection(context.Background(), "unknown"); err == nil {
+		t.Fatal("unknown model accepted")
+	}
+	m.catalog = c
+	response := httptest.NewRecorder()
+	m.handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/internal/v1/models/catalog", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("catalog route: %d", response.Code)
+	}
+}
+
+func TestEmptyRefreshDoesNotEraseCatalog(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	c.state.Items = []catalogEntry{{ID: "retained"}}
+	c.discover = func(context.Context) ([]catalogEntry, error) { return nil, nil }
+	c.refresh(context.Background())
+	if len(c.state.Items) != 1 || c.state.LastError == "" {
+		t.Fatal("empty discovery erased catalog")
+	}
+}
+
+func TestOllamaLibraryParsing(t *testing.T) {
+	page := `<a href="/library/example">Example</a><a href="/library/example:latest">latest</a><a href="/library/example:3b">small</a><a href="/library/example:3b">duplicate</a><a href="/library/example:cloud">cloud</a><a href="/library/example:7b">large</a><a href="https://evil.example/model">untrusted</a>`
+	refs := libraryReferences(page, true, 8)
+	if len(refs) != 2 || refs[0] != "example:3b" || refs[1] != "example:7b" {
+		t.Fatalf("refs=%v", refs)
+	}
+	if len(libraryReferences(page, false, 24)) != 1 {
+		t.Fatal("family discovery failed")
+	}
+	if len(libraryReferences(page, true, 1)) != 1 {
+		t.Fatal("discovery limit not applied")
+	}
+}

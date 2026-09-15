@@ -31,6 +31,15 @@ func (h *InferenceHandlers) Models(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": models})
 }
 
+func (h *InferenceHandlers) Catalog(w http.ResponseWriter, r *http.Request) {
+	catalog, err := h.Inference.Catalog(r.Context())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, catalog)
+}
+
 func (h *InferenceHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	var req inference.ImportRequest
 	if err := decodeJSON(w, r, &req); err != nil {
