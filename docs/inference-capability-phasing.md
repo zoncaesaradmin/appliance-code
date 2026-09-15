@@ -1,99 +1,123 @@
-# Standard and Accelerated Inference
+# Private AI runtime and model management
 
-The current implementation is standard CPU inference: capability `inference`
-is delivered by the signed `std-llm-amd64` package and runs the pinned Ollama engine.
-The next implementation will use the same `inference` capability and package
-`acc-llm-arm64`. That package is reserved for planning; it is not yet published or
-selectable.
+Private AI is a first-class appliance capability. It is not implemented through
+the generic Applications catalog because the platform owns its authentication,
+stable API, persistent model storage, lifecycle checks, and upgrade contract.
 
-## Current contract
+## Runtime packages
 
-| Layer | Current name |
+Package metadata carries only the minimum runtime contract:
+
+| Package | Engine | Architecture | Package modes |
+| --- | --- | --- | --- |
+| `std-llm-amd64` | Ollama | `amd64` | `cpu` |
+| `acc-llm-amd64` | vLLM | `amd64` | `cpu` |
+| `acc-llm-arm64` | vLLM | `arm64` | `cpu`, `cuda` |
+
+These entries are not a supported-model or hardware-vendor catalog. The package
+declares modes its runtime can implement; runtime capability checks report the
+host architecture and the actually selected mode. Installation requests `auto`.
+The manager prefers CUDA when the signed package allows it and its own CUDA
+backend can use a visible device; otherwise it selects CPU. It never infers
+CUDA from ARM, a machine name, or a vendor string. The API reports both
+`availableModes` and `activeMode`, including why a CUDA probe was rejected.
+
+For a future CUDA-capable package, install-time hardware discovery must first
+confirm that Kubernetes can advertise a GPU resource and configure the pod to
+request it. The manager then performs the final in-container CUDA probe before
+loading a model. If either check fails, the deployment uses CPU. There is no
+normal user-facing mode picker; an explicit non-`auto` mode is reserved for a
+future controlled diagnostic or policy override.
+More architecture-specific packages can be added later without changing the
+profile or public API.
+
+The signed package still contains the pinned inference engine image and chart.
+It does not contain model weights. The `inference` capability is enabled by a
+profile, while the release index and host architecture select the one package
+that supplies it. Merely including a package never enables the capability.
+
+## Public and administrative APIs
+
+The stable inference prefix is `/ai/v1/*`. The control plane authenticates and
+authorizes the request, removes only `/ai`, and streams the request and response
+to the internal runtime `/v1/*`. This exposes the OpenAI-compatible endpoints
+implemented by the selected engine without creating an appliance-specific copy
+of every OpenAI operation. Engine-native management endpoints are never exposed
+under this prefix.
+
+Administrators use a separate engine-neutral lifecycle API:
+
+- `GET /api/v1/inference/runtime-capabilities`
+- `GET /api/v1/inference/status`
+- `GET /api/v1/inference/models`
+- `POST /api/v1/inference/models/imports`
+- `POST /api/v1/inference/models/{modelId}/load`
+- `DELETE /api/v1/inference/models/{modelId}`
+
+Reads require `inference.models.read`, mutations require `inference.admin`, and
+OpenAI inference calls require `inference.use`. Mutations are audited. The first
+implementation serializes model mutations and returns `409` if another one is
+running. This is intentional: downloads can be large, and concurrent imports
+would make storage and memory admission unpredictable. A later job-backed
+implementation may queue multiple requests without changing these resources.
+
+Every inference image now uses the appliance manager as its entrypoint. The
+manager starts the packaged engine process, owns the stable health/OpenAI/model
+lifecycle endpoints, and delegates to an engine adapter. The Ollama adapter
+maps to pull, tags, generate/keep-alive, and delete. The vLLM adapter downloads
+and verifies a source, records installed models, and restarts/switches the
+single active vLLM server when `load` is requested. Multiple models may be
+stored, but one vLLM base model is active per runtime pod.
+
+vLLM launch configuration is stored with the imported model as a validated
+argv array—never shell text. The current contract accepts quantization,
+maximum model length, GPU-memory utilization, CUDA graph capture size,
+FlashInfer autotune disablement, automatic tool choice, served model name, and
+tool-call parser. The manager owns the model path, bind address, port, and
+device arguments so callers cannot bypass the appliance boundary.
+
+The tested Docker invocation maps to the pod without rebuilding the vLLM
+environment:
+
+| Docker setting | Appliance pod equivalent |
 | --- | --- |
-| Capability | `inference` (Standard Inference) |
-| Capability entitlement | `zon.capabilities.inference` |
-| Delivery package | `std-llm-amd64` |
-| Archive | `appliance-<version>-std-llm-amd64.tar.gz` |
-| Canonical profile enabling it | `builder-lanllm-storage-landns` |
-| Module / container | `inference-runtime` |
-| Chart / Helm release | `appliance-inference` |
-| Deployment / Service | `inference-gateway` in namespace `inference` |
-| In-cluster URL | `http://inference-gateway.inference.svc.cluster.local:8080` |
-| Public API | `/inference/v1/models`, `/inference/v1/chat/completions` |
-| Permissions | `inference.use`, `inference.models.read`, `inference.admin` |
+| official `vllm/vllm-openai` image | pinned base of the managed inference image |
+| `--gpus all` | detected K3s `nvidia` RuntimeClass plus `NVIDIA_VISIBLE_DEVICES=all` |
+| `--ipc=host` | isolated, memory-backed `/dev/shm` volume |
+| memlock/stack ulimits | manager raises inherited memlock to the container maximum and requests a 64 MiB stack |
+| port `8000` | manager-only loopback backend, exposed through the appliance Service on `/ai/v1` |
+| Hugging Face and vLLM caches | persistent model PVC cache directories |
+| vLLM server flags | validated `launchArguments` argv stored with the model |
 
-The profile ID remains unchanged; its metadata capability set now contains
-`inference`. Other profiles stay unchanged. Profiles are selected from the
-signed metadata catalog, and the release index projects their capabilities onto
-delivery packages. Having a package available never enables its capability.
+Host IPC is intentionally not enabled: the isolated `/dev/shm` mount supplies
+the shared memory vLLM needs without weakening Restricted pod isolation.
 
-`inference` requires `base`. It gates the existing module, image preload,
-Helm install, gateway configuration, authenticated proxy routes, and readiness
-configuration. The current chart explicitly disables NVIDIA and AMD GPU
-visibility using `CUDA_VISIBLE_DEVICES=-1` and `ROCR_VISIBLE_DEVICES=-1`, following
-the [pinned Ollama GPU selection documentation](https://github.com/ollama/ollama/blob/v0.6.5/docs/gpu.md).
-It requests CPU and memory only. The upstream image is unchanged and may contain
-GPU libraries; this phase establishes CPU execution, not a stripped image build.
+## Connected model-acquisition window
 
-Release inputs retain `inferenceRuntimeImage`, `inferenceChart`, and
-`compatibility.inferenceVersion`. OCI archives retain
-`registry.local/inference-runtime:bundled` and the verified platform-manifest
-digest reference `registry.local/inference-runtime@sha256:...`. Assembly places
-the runtime and chart in `std-llm-amd64`; zonctl verifies, imports, and tags that image
-before installing the shared chart. Online packaging pulls the pinned upstream;
-offline packaging consumes the existing `deps/inference` LAN seed without an
-upstream fallback.
+Installation, startup, inference using already installed models, and all other
+normal appliance operation remain offline. Model acquisition is the narrow
+exception: after installation an administrator may connect the appliance,
+explicitly request the desired models, wait for verification and installation,
+and disconnect it again. The inference NetworkPolicy permits DNS plus outbound
+HTTPS for that administrator-directed fetch. It does not download engines,
+drivers, plugins, updates, or models in the background.
 
-## Upgrade and operator changes
+The admin UI is available at **Admin → AI Services**. It shows runtime readiness
+and detected mode, lists installed models, accepts an engine-supported model
+reference, and provides load and remove actions.
 
-Change explicit `APPLIANCE_PACKS` / `build_flow.appliance_packs` selections from
-`inference` to `std-llm-amd64`. For example, use `foundation,std-llm-amd64` for a metadata
-profile requiring only base and standard inference; the canonical full builder
-profile also needs `dev-platform` and `deviceuser`. Regenerate assembly configs
-with `bundle-assembly.std-llm-amd64.json`, package the updated signed metadata, and
-publish the corresponding release index and packs together. `all` includes
-`std-llm-amd64`. The old package ID is rejected with migration guidance.
+## Accelerated package completion gate
 
-The capability ID and entitlement key are a coordinated metadata/software
-change. Metadata and offline licenses using the old capability name must be
-reissued for the new contract; no implicit alias grants standard or accelerated
-inference. Existing profile IDs, API paths, permissions, Helm identity, model
-storage, and UID/GID remain stable. Existing installations need the new signed
-release and matching metadata to see the rename.
+`acc-llm-amd64` packages the pinned x86 CPU vLLM image with the appliance
+runtime manager. It can start without a model, validates the host's minimum CPU
+instruction capability, downloads an explicitly requested Hugging Face
+snapshot, verifies its deterministic content digest, and starts one selected
+model behind the stable OpenAI proxy. It remains intentionally CPU-only.
 
-Model weights remain separately signed model packs. The CPU backend keeps
-`/data/zon/inference/models`, UID `10006`, shared GID `20000`, and the current
-Ollama import contract. See [inference-model-packs.md](inference-model-packs.md).
-
-## Accelerated follow-up
-
-The proposed GPU engine is vLLM, subject to selecting and pinning the supported
-hardware/backend version. It provides an
-[OpenAI-compatible server](https://docs.vllm.ai/en/latest/serving/online_serving/openai_compatible_server/),
-which can preserve the existing client models/chat API. Compatibility tests must
-cover streaming, errors, model IDs, and supported request options before release.
-
-Keep the same Deployment, Service, module, and external API. Switching engines
-replaces the pod with a different digest-pinned image; it cannot retain the exact
-Kubernetes pod name or UID. The runtime chart needs explicit engine-specific
-startup arguments, ports, probes, and GPU resource configuration. A Service name
-alone does not make the implementations interchangeable.
-
-Before enabling `acc-llm-arm64`:
-
-- Publish a separate metadata bundle/package set in which `acc-llm-arm64` is the
-  single package providing `inference`. Profiles continue to require only the
-  shared capability.
-- Define separate signed CPU/GPU artifact pins and unambiguous package ownership,
-  updating producers, schemas, validators, image preload, Helm values, and status.
-- Seed every new GPU image, driver/toolkit, and device-plugin dependency for
-  offline use, with the same pinned upstream inputs in online builds.
-- Validate supported GPU hardware, offline driver/runtime provisioning, and
-  device allocation before deploying; retain the non-root/storage boundaries.
-- Define backend-specific signed model-pack compatibility and migration. Do not
-  assume Ollama's model files can be consumed unchanged by vLLM.
-- Exercise install, CPU/GPU transition, rollback, backup/restore, and machine
-  migration, including model storage preservation and observable inference.
-
-No GPU package, GPU profile, driver provisioning, or engine switch is implemented
-in this rename phase.
+`acc-llm-arm64` packages a pinned arm64 vLLM image and the same non-root
+manager. Its package is selected explicitly; it is not included by `all` while
+we maintain the standard AMD64 delivery baseline. CUDA is still contingent on
+Kubernetes GPU-resource exposure and the manager's in-container confirmation.
+Each release must validate OpenAI streaming, model switching, persistence,
+rollback, backup/restore, and interrupted-download cleanup for the exact image
+digest it publishes.

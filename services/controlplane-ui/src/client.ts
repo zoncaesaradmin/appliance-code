@@ -51,7 +51,10 @@ import type {
   ApplicationDefinition,
   ApplicationInstance,
   AuditEventsResult,
-  FocusContent
+  FocusContent,
+  InferenceRuntimeStatus,
+  InferenceModel,
+  ImportInferenceModelRequest
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -198,6 +201,11 @@ export interface ControlPlaneClient {
   listApplicationInstances(): Promise<ApplicationInstance[]>;
   installApplication(name: string, version: string): Promise<ApplicationInstance>;
   disableApplication(name: string): Promise<ApplicationInstance>;
+  getInferenceStatus(): Promise<InferenceRuntimeStatus>;
+  listInferenceModels(): Promise<InferenceModel[]>;
+  importInferenceModel(request: ImportInferenceModelRequest): Promise<void>;
+  loadInferenceModel(modelId: string): Promise<void>;
+  deleteInferenceModel(modelId: string): Promise<void>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
 
@@ -729,6 +737,27 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async disableApplication(name: string): Promise<ApplicationInstance> {
 	return this.request(`/api/v1/applications/${encodeURIComponent(name)}/disable`, { method: "POST" });
+  }
+
+  async getInferenceStatus(): Promise<InferenceRuntimeStatus> {
+	return this.request("/api/v1/inference/status");
+  }
+
+  async listInferenceModels(): Promise<InferenceModel[]> {
+	const result = await this.request<{ items?: InferenceModel[] }>("/api/v1/inference/models");
+	return result.items || [];
+  }
+
+  async importInferenceModel(request: ImportInferenceModelRequest): Promise<void> {
+	await this.request("/api/v1/inference/models/imports", { method: "POST", body: request });
+  }
+
+  async loadInferenceModel(modelId: string): Promise<void> {
+	await this.request(`/api/v1/inference/models/${encodeURIComponent(modelId)}/load`, { method: "POST" });
+  }
+
+  async deleteInferenceModel(modelId: string): Promise<void> {
+	await this.request(`/api/v1/inference/models/${encodeURIComponent(modelId)}`, { method: "DELETE" });
   }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {

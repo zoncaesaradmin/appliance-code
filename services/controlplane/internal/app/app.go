@@ -105,6 +105,14 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		ProxiedServices: httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry),
 		Audit:           services.Audit,
 	}
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameInferenceRuntime) {
+		deps.AIProxy, err = httpapi.NewAIProxyHandler(logger, cfg.InferenceGatewayBaseURL)
+		if err != nil {
+			services.DB.Close()
+			return nil, fmt.Errorf("building AI proxy: %w", err)
+		}
+		deps.InferenceH = &httpapi.InferenceHandlers{Inference: services.Inference, Audit: services.Audit}
+	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{
 			Auth: authDeps, Users: services.Users, Authorizer: services.RegistryAuthorizer,

@@ -25,6 +25,7 @@ import (
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/dnsrecords"
+	"appliance-code/services/controlplane/internal/inference"
 	"appliance-code/services/controlplane/internal/keys"
 	"appliance-code/services/controlplane/internal/licensing"
 	"appliance-code/services/controlplane/internal/logging"
@@ -84,6 +85,7 @@ type Services struct {
 	Notifications      *notifications.Service
 	Applications       *applications.Service
 	ApplicationRuntime applications.ResourceManager
+	Inference          *inference.Service
 
 	Keys     *keys.Material
 	Audit    *audit.Recorder
@@ -113,6 +115,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	artifactEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameArtifactRegistry)
 	buildEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameBuild)
 	dnsEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameLANDNS)
+	inferenceEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameInferenceRuntime)
 	db, err := sqlite.Open(cfg.SQLitePath())
 	if err != nil {
 		return nil, fmt.Errorf("app: opening storage: %w", err)
@@ -205,6 +208,18 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application management: %w", err)
+	}
+	var inferenceSvc *inference.Service
+	if inferenceEnabled {
+		inferenceSvc, err = inference.New(inference.Config{
+			BaseURL: cfg.InferenceGatewayBaseURL, Package: cfg.InferenceRuntimePackage,
+			Engine: cfg.InferenceEngine, Architecture: cfg.InferenceArchitecture,
+			SupportedModes: cfg.InferenceSupportedModes, RequestedMode: cfg.InferenceMode,
+		}, nil)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: wiring inference management: %w", err)
+		}
 	}
 	applicationRuntime, err := applications.NewInClusterManager(applications.NewHostAgentProjector(
 		"http://host-agent.ace-apps.svc.cluster.local:8080",
@@ -364,6 +379,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Notifications:      notificationsSvc,
 		Applications:       applicationsSvc,
 		ApplicationRuntime: applicationRuntime,
+		Inference:          inferenceSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 		AuditOps:           auditOps,

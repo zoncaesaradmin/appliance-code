@@ -91,6 +91,9 @@ spec:
         {{- include "appliance-inference.selectorLabels" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      {{- if .Values.gpu.enabled }}
+      runtimeClassName: {{ .Values.gpu.runtimeClassName | quote }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -107,6 +110,12 @@ spec:
               protocol: TCP
           env:
             {{- include "appliance-inference.runtimeEnv" . | nindent 12 }}
+            {{- if .Values.gpu.enabled }}
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: {{ .Values.gpu.visibleDevices | quote }}
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: {{ .Values.gpu.driverCapabilities | quote }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:
@@ -130,16 +139,26 @@ spec:
               mountPath: /models
             - name: tmp
               mountPath: /tmp
-            - name: ollama-home
-              mountPath: /home/ollama
+            - name: runtime-home
+              mountPath: /home/runtime
+            {{- if eq .Values.runtime.engine "vllm" }}
+            - name: shared-memory
+              mountPath: /dev/shm
+            {{- end }}
       volumes:
         - name: models
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.claimName }}
         - name: tmp
           emptyDir: {}
-        - name: ollama-home
+        - name: runtime-home
           emptyDir: {}
+        {{- if eq .Values.runtime.engine "vllm" }}
+        - name: shared-memory
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.runtime.sharedMemorySize }}
+        {{- end }}
 {{- if .Values.networkPolicy.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -172,6 +191,9 @@ spec:
       ports:
         - {protocol: TCP, port: {{ .Values.service.targetPort }}}
         - {protocol: TCP, port: {{ .Values.service.port }}}
+  {{- if and (not .Values.networkPolicy.allowDNSToKubeSystem) (not .Values.networkPolicy.allowModelDownloadHTTPS) }}
+  egress: []
+  {{- else }}
   egress:
     {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
     - to:
@@ -181,7 +203,10 @@ spec:
       ports:
         - {protocol: UDP, port: 53}
         - {protocol: TCP, port: 53}
-    {{- else }}
-    []
     {{- end }}
+    {{- if .Values.networkPolicy.allowModelDownloadHTTPS }}
+    - ports:
+        - {protocol: TCP, port: 443}
+    {{- end }}
+  {{- end }}
 {{- end }}

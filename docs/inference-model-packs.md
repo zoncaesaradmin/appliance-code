@@ -1,96 +1,48 @@
-# Inference Model Packs
+# Inference model acquisition
 
-Model weights are **not** part of the main signed air-gap appliance bundle.
-They ship as a separate signed **model pack** that operators import after
-install (or as a day-2 step) with `zonctl models-import`.
+Model weights are not part of the appliance delivery packs. Packaging every
+model family, size, and quantization would make releases impractically large and
+would couple platform upgrades to model choice.
 
-## Why separate packs
+The normal path is an administrator-directed connected window after install:
 
-- Platform releases stay small and update independently of multi‑GB weights.
-- Operators can choose which models to place on a given host (for example a
-  ~30 GB RAM class host running a Qwen coding model).
-- The inference runtime image/chart remain swappable behind
-  `inference-gateway` without rebaking weights into the platform bundle.
+1. Connect the appliance to a network that can reach the model source.
+2. Open **Admin → AI Services**.
+3. Enter an engine-supported model reference and start the import.
+4. Wait until the model appears in the installed-model list and validate it
+   through `/ai/v1/models` and an inference request.
+5. Disconnect the appliance. Installed models remain on persistent storage and
+   inference continues without internet access.
 
-## Pack layout (appliance.modelpack/v1)
+The lifecycle API is described in
+[inference-capability-phasing.md](inference-capability-phasing.md). It serializes
+model-changing operations in the initial implementation. Downloads are never
+started during appliance installation, startup, or in the background.
 
-Extracted directory:
+## Validation boundaries
 
-```text
-manifest.json
-manifest.json.sig          # ed25519 detached signature of manifest.json
-blobs/
-  <weight-file>            # content-addressed blob(s)
-```
+The API accepts model references, not arbitrary URLs or filesystem paths. The
+common runtime manager invokes the selected engine adapter and validates the
+download. If the accelerated runtime accepts an expected digest, the manager
+verifies it before publishing the model as installed. Ollama pull cannot
+return an independently verifiable aggregate digest to the appliance, so the API
+rejects an expected digest for that path rather than reporting false assurance.
 
-`manifest.json` fields:
+Compatibility checks are capability-based: architecture, available CPU/CUDA
+mode, storage, memory, and runtime-reported model requirements. They must not be
+a hardcoded list of machine vendors, product names, or individual models.
+Automatic best-mode selection is the installation default: verified CUDA is
+preferred when the package and pod runtime support it, with CPU as fallback.
+The admin UI does not expose a manual mode selector.
 
-| Field | Meaning |
-|---|---|
-| `schemaVersion` | `1` |
-| `kind` | `appliance.modelpack/v1` |
-| `modelId` | OpenAI-compatible model name clients pass (for example `qwen2.5-coder:14b`) |
-| `runtime` | Initial value `ollama` (product stays runtime-agnostic at the API layer) |
-| `digest` | Aggregate/content digest for the pack |
-| `sizeBytes` | Sum of blob sizes |
-| `minRAMGB` | Operator guidance (for example `30` for a 14B–30B class coding model) |
-| `compatibility.inferenceVersion` | Must match the appliance `compatibility.inferenceVersion` |
-| `blobs[]` | `{path, digest, sizeBytes}` entries verified on import |
+## Offline transfer fallback
 
-## Import on the appliance
+`zonctl models-import` remains a low-level offline transfer mechanism for a
+separately prepared and signed `appliance.modelpack/v1`. It verifies the pack and
+copies its blobs into `/data/zon/inference/models`. It is not the primary model
+catalog and a blob copy alone does not guarantee registration with every engine;
+engine-specific registration must complete before the admin API lists the model.
 
-```bash
-# Pack directory already extracted on the target host.
-sudo zonctl models-import \
-  --bundle-dir /path/to/extracted-modelpack \
-  --public-key /etc/zon/keys/release-signing.pub
-```
-
-Behavior:
-
-1. Verify `manifest.json` (+ signature when a public key is supplied).
-2. Verify every blob digest/size.
-3. Ensure `/data/zon/inference/models` exists with UID/GID `10006:20000` mode `2770`.
-4. Copy blobs into `/data/zon/inference/models/<sanitized-modelId>/`.
-
-The inference Deployment mounts that host path at `/models` (`OLLAMA_MODELS`)
-via a static hostPath PersistentVolume + PVC (Restricted PSA forbids pod-level
-hostPath). Install without a pack still succeeds: the gateway comes up and
-`GET /inference/v1/models` may be empty until a pack is imported.
-
-## Publishing packs (release skill)
-
-Model packs are published **alongside** platform bundles, not inside
-`build-full-bundle.sh`.
-
-Suggested release-host recipe:
-
-1. Pull/export the chosen Ollama model blob set offline (or from an
-   approved internal cache).
-2. Write `manifest.json` with `compatibility.inferenceVersion` equal to the
-   platform release’s inference version.
-3. Sign `manifest.json` with the same release-signing key used for bundles.
-4. Upload the pack archive to the DEV_REGISTRY files API (or equivalent)
-   under a versioned path such as
-   `model-packs/<inferenceVersion>/<modelId>.tar.zst`.
-5. Record the pack digest and `minRAMGB` in release notes; do **not** add
-   the weights to `release-input.json` platform artifacts.
-
-## Reference: Qwen pack for ~30 GB hosts
-
-| Field | Suggested value |
-|---|---|
-| `modelId` | `qwen2.5-coder:14b` (or a 30B-class MoE variant when the host allows) |
-| `runtime` | `ollama` |
-| `minRAMGB` | `30` |
-| Host class | ~30 GB RAM appliance (CPU or modest GPU) |
-| Notes | Prefer a coding-tuned Qwen build with tool-calling support if later enabling the coding-agent module |
-
-Exact quantized blob names and digests are produced when the pack is built;
-this document only fixes the operator contract and sizing guidance.
-
-## Non-goals
-
-- Embedding weights in the platform air-gap bundle
-- Cloud model providers / LiteLLM multi-backend in this pack format
-- Automatic public download of models during install
+This fallback exists for sites that cannot temporarily connect the appliance.
+It does not justify putting model weights in the platform bundle or adding model
+names to package metadata.

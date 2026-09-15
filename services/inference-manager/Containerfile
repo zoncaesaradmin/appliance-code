@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=docker.io/vllm/vllm-openai-cpu:v0.17.1-x86_64
+FROM ${BASE_IMAGE}
+
+COPY bin/inference-manager /usr/local/bin/inference-manager
+COPY download_model.py /usr/local/libexec/inference-manager/download_model.py
+
+USER 10006:10006
+ENTRYPOINT ["/usr/local/bin/inference-manager"]

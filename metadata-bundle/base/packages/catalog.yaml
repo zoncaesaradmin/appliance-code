@@ -15,9 +15,14 @@ packages:
     displayName: Standard LLM (amd64)
     description: Standard CPU inference using Ollama behind the shared inference gateway.
     capabilities: [inference]
-    runtime: {inferenceEngine: ollama, architecture: amd64}
+    runtime: {inferenceEngine: ollama, architecture: amd64, supportedModes: [cpu]}
+  acc-llm-amd64:
+    displayName: Accelerated LLM (amd64)
+    description: Accelerated inference package reserved for the amd64 runtime implementation.
+    capabilities: [inference]
+    runtime: {inferenceEngine: vllm, architecture: amd64, supportedModes: [cpu]}
   acc-llm-arm64:
     displayName: Accelerated LLM (arm64)
     description: Accelerated inference package reserved for the arm64 runtime implementation.
     capabilities: [inference]
-    runtime: {inferenceEngine: vllm, architecture: arm64}
+    runtime: {inferenceEngine: vllm, architecture: arm64, supportedModes: [cpu, cuda]}

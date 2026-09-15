@@ -483,12 +483,12 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		name, _ := svc["name"].(string)
 		priority, _ := route["priority"].(int)
 		switch {
-		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/inference/v1`) || PathPrefix(`/video/v1`))" && name == controlPlaneServiceName:
+		case match == "(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/ai/v1`) || PathPrefix(`/inference/v1`) || PathPrefix(`/video/v1`))" && name == controlPlaneServiceName:
 			if priority != 100 {
 				t.Errorf("API route priority = %v, want 100", route["priority"])
 			}
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/ai`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
 			if priority != 1 {
 				t.Errorf("UI route priority = %v, want 1", route["priority"])
 			}
@@ -496,10 +496,10 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 		}
 	}
 	if !apiRouteOK {
-		t.Error("expected /api/v1, /mcp, /inference/v1, and /video/v1 route to target control-plane service")
+		t.Error("expected /api/v1, /mcp, /ai/v1, /inference/v1, and /video/v1 route to target control-plane service")
 	}
 	if !uiRouteOK {
-		t.Error("expected / route to target UI service with API/MCP/inference/video/registry exclusions")
+		t.Error("expected / route to target UI service with API/MCP/AI/inference/video/registry exclusions")
 	}
 }
 
@@ -937,6 +937,11 @@ config:
   applianceProfile: future-catalog-profile
   enabledCapabilities: [base, inference]
   inferenceGatewayBaseURL: http://inference-gateway.inference.svc.cluster.local:8080
+  inferenceRuntimePackage: std-llm-amd64
+  inferenceEngine: ollama
+  inferenceArchitecture: amd64
+  inferenceSupportedModes: [cpu]
+  inferenceMode: auto
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)

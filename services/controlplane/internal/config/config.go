@@ -56,6 +56,11 @@ type Config struct {
 	DNSBootstrapIPv4          string                   `json:"dnsBootstrapIPv4"`
 	DNSAllowFakeZoneSync      bool                     `json:"dnsAllowFakeZoneSync"`
 	InferenceGatewayBaseURL   string                   `json:"inferenceGatewayBaseURL"`
+	InferenceRuntimePackage   string                   `json:"inferenceRuntimePackage"`
+	InferenceEngine           string                   `json:"inferenceEngine"`
+	InferenceArchitecture     string                   `json:"inferenceArchitecture"`
+	InferenceSupportedModes   []string                 `json:"inferenceSupportedModes"`
+	InferenceMode             string                   `json:"inferenceMode"`
 	BlobStorageEndpoint       string                   `json:"blobStorageEndpoint"`
 	BlobStorageBucket         string                   `json:"blobStorageBucket"`
 	BlobStorageAccessKey      string                   `json:"blobStorageAccessKey"`
@@ -178,6 +183,16 @@ func parseEnviron(environ []string) map[string]string {
 	return out
 }
 
+func splitCSV(raw string) []string {
+	var values []string
+	for _, value := range strings.Split(raw, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
 func loadFile(path string, cfg *Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -215,6 +230,13 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DNS_BOOTSTRAP_HOSTNAME", &cfg.DNSBootstrapHostname)
 	str("DNS_BOOTSTRAP_IPV4", &cfg.DNSBootstrapIPv4)
 	str("INFERENCE_GATEWAY_BASE_URL", &cfg.InferenceGatewayBaseURL)
+	str("INFERENCE_RUNTIME_PACKAGE", &cfg.InferenceRuntimePackage)
+	str("INFERENCE_ENGINE", &cfg.InferenceEngine)
+	str("INFERENCE_ARCHITECTURE", &cfg.InferenceArchitecture)
+	str("INFERENCE_MODE", &cfg.InferenceMode)
+	if raw, ok := env[envPrefix+"INFERENCE_SUPPORTED_MODES"]; ok {
+		cfg.InferenceSupportedModes = splitCSV(raw)
+	}
 	str("BLOB_STORAGE_ENDPOINT", &cfg.BlobStorageEndpoint)
 	str("BLOB_STORAGE_BUCKET", &cfg.BlobStorageBucket)
 	str("BLOB_STORAGE_ACCESS_KEY", &cfg.BlobStorageAccessKey)
@@ -455,6 +477,35 @@ func (c Config) Validate() error {
 			errs = append(errs, "inferenceGatewayBaseURL must not be empty when the inference capability is enabled")
 		} else if u, err := url.Parse(c.InferenceGatewayBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
 			errs = append(errs, "inferenceGatewayBaseURL must be an absolute http(s) URL with no path")
+		}
+		if strings.TrimSpace(c.InferenceRuntimePackage) == "" {
+			errs = append(errs, "inferenceRuntimePackage must not be empty when the inference capability is enabled")
+		}
+		engine := strings.ToLower(strings.TrimSpace(c.InferenceEngine))
+		if engine != "ollama" && engine != "vllm" {
+			errs = append(errs, "inferenceEngine must be ollama or vllm when the inference capability is enabled")
+		}
+		if strings.TrimSpace(c.InferenceArchitecture) == "" {
+			errs = append(errs, "inferenceArchitecture must not be empty when the inference capability is enabled")
+		}
+		if len(c.InferenceSupportedModes) == 0 {
+			errs = append(errs, "inferenceSupportedModes must not be empty when the inference capability is enabled")
+		}
+		seenModes := map[string]bool{}
+		for _, supportedMode := range c.InferenceSupportedModes {
+			supportedMode = strings.ToLower(strings.TrimSpace(supportedMode))
+			if supportedMode != "cpu" && supportedMode != "cuda" {
+				errs = append(errs, "inferenceSupportedModes may contain only cpu or cuda")
+			} else if seenModes[supportedMode] {
+				errs = append(errs, "inferenceSupportedModes must not contain duplicates")
+			}
+			seenModes[supportedMode] = true
+		}
+		mode := strings.ToLower(strings.TrimSpace(c.InferenceMode))
+		if mode != "auto" && mode != "cpu" && mode != "cuda" {
+			errs = append(errs, "inferenceMode must be auto, cpu, or cuda when the inference capability is enabled")
+		} else if mode != "auto" && !seenModes[mode] {
+			errs = append(errs, "inferenceMode must be one of inferenceSupportedModes")
 		}
 	}
 	if profileErr == nil && videoEnabled {

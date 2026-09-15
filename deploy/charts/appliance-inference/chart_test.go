@@ -41,14 +41,17 @@ func TestInferenceGatewayRender(t *testing.T) {
 		"name: CUDA_VISIBLE_DEVICES\n              value: \"-1\"",
 		"name: ROCR_VISIBLE_DEVICES\n              value: \"-1\"",
 		"name: HOME",
-		"value: \"/home/ollama\"",
+		"value: \"/home/runtime\"",
 		"name: OLLAMA_MODELS",
 		"value: \"/models\"",
+		"name: INFERENCE_ENGINE\n              value: \"ollama\"",
+		"name: INFERENCE_BACKEND_URL\n              value: \"http://127.0.0.1:8001\"",
 		"kind: PersistentVolume",
 		"name: inference-gateway-models",
 		"path: \"/data/zon/inference/models\"",
 		"kind: PersistentVolumeClaim",
 		"claimName: models",
+		"{protocol: TCP, port: 443}",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
@@ -66,6 +69,15 @@ func TestInferenceGatewayRender(t *testing.T) {
 	}
 	if !strings.Contains(out, "volumes:\n        - name: models\n          persistentVolumeClaim:\n            claimName: models") {
 		t.Error("models volume must mount the models PVC")
+	}
+}
+
+func TestGPUContainerRuntimeMappingRenders(t *testing.T) {
+	out := render(t, "--set", "runtime.engine=vllm", "--set", "runtime.supportedModes={cpu,cuda}", "--set", "gpu.enabled=true")
+	for _, want := range []string{"runtimeClassName: \"nvidia\"", "name: NVIDIA_VISIBLE_DEVICES", "value: \"all\"", "name: NVIDIA_DRIVER_CAPABILITIES", "mountPath: /dev/shm"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("GPU runtime mapping missing %q: %s", want, out)
+		}
 	}
 }
 
@@ -99,6 +111,13 @@ func TestNamespaceCreateRendersRestrictedPSA(t *testing.T) {
 	}
 }
 
+func TestInferenceEgressCanBeClosedAfterConnectedWindow(t *testing.T) {
+	out := render(t, "--set", "networkPolicy.allowDNSToKubeSystem=false", "--set", "networkPolicy.allowModelDownloadHTTPS=false")
+	if !strings.Contains(out, "egress: []") {
+		t.Fatalf("closed egress policy not rendered: %s", out)
+	}
+}
+
 func TestImageDigestWins(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("b", 64)
 	out := render(t, "--set", "image.digest="+digest)
@@ -107,17 +126,14 @@ func TestImageDigestWins(t *testing.T) {
 	}
 }
 
-func TestUnsupportedRuntimeCannotRender(t *testing.T) {
+func TestVLLMRuntimeContractRenders(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
 	}
-	for _, selection := range []string{"runtime.engine=vllm", "runtime.variant=gpu"} {
-		out, err := exec.Command("helm", "template", "inference", chartDir(t), "--set", selection).CombinedOutput()
-		if err == nil {
-			t.Fatalf("unsupported runtime %s rendered: %s", selection, out)
-		}
-		if !strings.Contains(string(out), "runtime") {
-			t.Fatalf("unrelated Helm error: %s", out)
+	out := render(t, "--set", "runtime.engine=vllm", "--set", "runtime.supportedModes={cpu,cuda}")
+	for _, want := range []string{"name: INFERENCE_ENGINE", "value: \"vllm\"", "name: INFERENCE_MODE", "value: \"auto\"", "name: INFERENCE_SUPPORTED_MODES", "value: \"cpu,cuda\"", "name: VLLM_CPU_KVCACHE_SPACE", "mountPath: /dev/shm", "sizeLimit: 4Gi"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("vLLM runtime contract missing %q: %s", want, out)
 		}
 	}
 }

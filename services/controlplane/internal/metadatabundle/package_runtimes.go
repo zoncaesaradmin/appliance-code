@@ -39,6 +39,22 @@ func validatePackageCatalog(packages PackageCatalog, capabilities CapabilityCata
 		if seen["inference"] && (!packageIDPattern.MatchString(pkg.Runtime.InferenceEngine) || !packageIDPattern.MatchString(pkg.Runtime.Architecture)) {
 			return fmt.Errorf("metadatabundle: package %q must declare a valid inference engine and architecture", id)
 		}
+		if seen["inference"] {
+			if len(pkg.Runtime.SupportedModes) == 0 {
+				return fmt.Errorf("metadatabundle: package %q must declare at least one supported inference mode", id)
+			}
+			modes := map[string]bool{}
+			for _, mode := range pkg.Runtime.SupportedModes {
+				mode = strings.TrimSpace(mode)
+				if mode != "cpu" && mode != "cuda" {
+					return fmt.Errorf("metadatabundle: package %q has unsupported inference mode %q", id, mode)
+				}
+				if modes[mode] {
+					return fmt.Errorf("metadatabundle: package %q repeats inference mode %q", id, mode)
+				}
+				modes[mode] = true
+			}
+		}
 	}
 	for capability := range capabilities.Capabilities {
 		if len(owners[capability]) == 0 {

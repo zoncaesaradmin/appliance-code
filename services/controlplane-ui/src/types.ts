@@ -513,3 +513,35 @@ export interface AuditEventsResult {
   items: AuditEvent[];
   nextCursor?: string;
 }
+
+export interface InferenceCheck {
+  name: string;
+  status: "pass" | "fail" | "pending" | string;
+  message?: string;
+}
+
+export interface InferenceRuntimeStatus {
+  package: string;
+  engine: "ollama" | "vllm" | string;
+  architecture: string;
+  hostArchitecture: string;
+  supportedModes: string[];
+  requestedMode: string;
+  activeMode?: string;
+  checks: InferenceCheck[];
+  ready?: boolean;
+}
+
+export interface InferenceModel {
+  id: string;
+  object?: string;
+  ownedBy?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ImportInferenceModelRequest {
+  modelId: string;
+  source: string;
+  digest?: string;
+  launchArguments?: string[];
+}

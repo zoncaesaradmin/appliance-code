@@ -156,6 +156,13 @@ export const MODES: Mode[] = [
         requiredCapability: "applications"
       },
       {
+        label: "AI Services",
+        path: "/admin/ai-services",
+        description: "Inspect the inference runtime and manage installed models",
+        icon: "analyze",
+        requiredCapability: "inference"
+      },
+      {
         label: "LAN Services",
         path: "/admin/lan-services",
         description: "Manage LAN DNS records for the appliance zone",

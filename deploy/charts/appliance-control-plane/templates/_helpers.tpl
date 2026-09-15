@@ -344,14 +344,14 @@ ForwardAuth middleware name.
 {{- if .Values.ingress.host }}
 {{- $hostMatch = printf "Host(`%s`) && " .Values.ingress.host }}
 {{- end }}
-- match: {{ printf "%s(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/inference/v1`) || PathPrefix(`/video/v1`))" $hostMatch }}
+- match: {{ printf "%s(PathPrefix(`/api/v1`) || PathPrefix(`/mcp`) || PathPrefix(`/ai/v1`) || PathPrefix(`/inference/v1`) || PathPrefix(`/video/v1`))" $hostMatch }}
   kind: Rule
   priority: 100
   services:
     - name: {{ include "appliance-control-plane.fullname" . }}
       port: {{ .Values.service.publicPort }}
 {{- if .Values.ui.enabled }}
-- match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" $hostMatch }}
+- match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/ai`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" $hostMatch }}
   kind: Rule
   priority: 1
   services:

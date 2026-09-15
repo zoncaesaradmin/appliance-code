@@ -7,6 +7,7 @@ CHART_DIR   := deploy/charts/appliance-control-plane
 REGISTRY_CHART_DIR := deploy/charts/appliance-registry
 DNS_CHART_DIR := deploy/charts/appliance-dns
 INFERENCE_CHART_DIR := deploy/charts/appliance-inference
+INFERENCE_MANAGER_DIR := services/inference-manager
 MESSAGE_BROKER_CHART_DIR := deploy/charts/appliance-message-broker
 E2E_DIR     := e2etests
 VERIFY_LOG_DIR := $(CURDIR)/.run/logs
@@ -18,7 +19,7 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR)
 # Product/release version for packaged images and /version. Prefer an explicit
 # CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
 # reachable git tag, not a bare commit SHA from `git describe --always`.
@@ -302,7 +303,9 @@ package-inference-runtime-image-archive:
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
 		$${INFERENCE_SOURCE_IMAGE:+--source-image "$${INFERENCE_SOURCE_IMAGE}"} \
-		$${INFERENCE_VERSION:+--inference-version "$${INFERENCE_VERSION}"}
+		$${INFERENCE_VERSION:+--inference-version "$${INFERENCE_VERSION}"} \
+		$${INFERENCE_ENGINE:+--engine "$${INFERENCE_ENGINE}"} \
+		$${INFERENCE_ARCHITECTURE:+--architecture "$${INFERENCE_ARCHITECTURE}"}
 
 ## package-blob-storage-image-archive: re-export the pinned S3-compatible
 ## runtime with registry.local/blob-storage:bundled annotation.

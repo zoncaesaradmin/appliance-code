@@ -3,8 +3,21 @@
 replicaCount: 1
 
 runtime:
-  variant: cpu
+  # The manager chooses the highest verified package mode. CPU is used only
+  # when no accelerated mode is confirmed; operators do not choose this.
+  mode: auto
   engine: ollama
+  supportedModes: [cpu]
+  # Conservative defaults for small CPU-only validation models. These are
+  # runtime settings, not a hardware or model allow-list.
+  cpuKVCacheSpaceGiB: 2
+  sharedMemorySize: 4Gi
+
+gpu:
+  enabled: false
+  runtimeClassName: nvidia
+  visibleDevices: all
+  driverCapabilities: all
 
 image:
   repository: registry.local/inference-runtime
@@ -51,6 +64,9 @@ networkPolicy:
     app.kubernetes.io/name: controlplane
   # Offline-friendly: allow DNS to kube-system only; no other egress.
   allowDNSToKubeSystem: true
+  # The operator controls the connected window at the appliance/network edge.
+  # The runtime may use HTTPS only to fetch an explicitly requested model.
+  allowModelDownloadHTTPS: true
 
 podSecurityContext:
   runAsNonRoot: true
@@ -66,7 +82,7 @@ containerSecurityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
-# HOME is forced to /home/ollama (emptyDir) in the Deployment: the upstream
+# HOME is forced to /home/runtime (emptyDir) in the Deployment: the upstream
 # ollama image defaults HOME=/ for numeric UIDs, which fails under
 # readOnlyRootFilesystem (mkdir /.ollama).
 
@@ -79,7 +95,7 @@ resources:
     memory: 8Gi
 
 probes:
-  # Ollama serves HTTP on the runtime port; GET / is used for health.
+  # Every packaged runtime exposes a lightweight health endpoint here.
   port: 11434
   path: /
   startupFailureThreshold: 30

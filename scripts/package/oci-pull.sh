@@ -23,12 +23,13 @@ oci_ref_is_dev_registry() {
   [[ "${bare}" == "${host}/"* || "${bare}" == "${host}:"* ]]
 }
 
-# skopeo copy docker://BARE -> containers-storage:DEST (linux/amd64).
+# skopeo copy docker://BARE -> containers-storage:DEST for a target architecture.
 # LAN Artifact Server pulls get --src-tls-verify=false / --src-creds as needed.
 oci_skopeo_prefetch_docker() {
   local bare="$1"
   local dest_storage_ref="$2"
-  local -a args=(copy --override-os linux --override-arch amd64)
+  local architecture="${3:-amd64}"
+  local -a args=(copy --override-os linux --override-arch "${architecture}")
 
   if oci_ref_is_dev_registry "${bare}"; then
     case "$(printf '%s' "${DEV_REGISTRY_TLS_VERIFY:-true}" | tr '[:upper:]' '[:lower:]')" in

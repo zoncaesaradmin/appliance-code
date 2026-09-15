@@ -6,7 +6,10 @@ info:
     REST contract for appliance control-plane APIs used by browser UI,
     CLI, SDKs, and automation clients. The React SPA calls this contract
     directly from the browser; UI static asset routes are intentionally not
-    part of this API contract.
+    part of this API contract. When the inference capability is enabled, the
+    authenticated `/ai/v1/*` prefix is a transparent streaming proxy to every
+    OpenAI-compatible `/v1/*` endpoint implemented by the selected runtime;
+    the control plane removes only the `/ai` prefix.
 servers:
   - url: https://appliance.local
 security:
@@ -1537,6 +1540,91 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/inference/runtime-capabilities:
+    get:
+      summary: Inspect inference runtime capabilities
+      description: Reports package-declared modes and runtime-detected active mode without a vendor or model-specific hardware catalog.
+      operationId: getInferenceRuntimeCapabilities
+      responses:
+        "200":
+          description: Runtime capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InferenceRuntimeStatus"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/inference/status:
+    get:
+      summary: Get inference runtime status
+      operationId: getInferenceStatus
+      responses:
+        "200":
+          description: Runtime status and OpenAI API readiness.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InferenceRuntimeStatus"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/inference/models:
+    get:
+      summary: List locally available inference models
+      operationId: listInferenceModels
+      responses:
+        "200":
+          description: Models reported by the active runtime.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/InferenceModel" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/models/imports:
+    post:
+      summary: Download and install a model
+      description: Runs an administrator-directed, serialized import from an engine-supported source. Model weights are not part of the appliance bundle.
+      operationId: importInferenceModel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InferenceModelImportRequest" }
+      responses:
+        "201": { description: Model installed. }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/ValidationProblem" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/models/{modelId}/load:
+    post:
+      summary: Load an installed model
+      operationId: loadInferenceModel
+      parameters:
+        - $ref: "#/components/parameters/InferenceModelId"
+      responses:
+        "202": { description: Load accepted. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/models/{modelId}:
+    delete:
+      summary: Remove an installed model
+      operationId: deleteInferenceModel
+      parameters:
+        - $ref: "#/components/parameters/InferenceModelId"
+      responses:
+        "204": { description: Model removed. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
 components:
   securitySchemes:
     bearerAuth:
@@ -1544,6 +1632,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
   parameters:
+    InferenceModelId:
+      name: modelId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
     WorkspaceID:
       in: path
       name: workspaceId
@@ -2404,6 +2497,54 @@ components:
         completedAt:
           type: string
           format: date-time
+    InferenceCheck:
+      type: object
+      required: [name, status]
+      properties:
+        name: { type: string }
+        status: { type: string, enum: [pass, fail, pending] }
+        message: { type: string }
+    InferenceRuntimeStatus:
+      type: object
+      required: [package, engine, architecture, hostArchitecture, supportedModes, requestedMode, checks]
+      properties:
+        package: { type: string }
+        engine: { type: string, enum: [ollama, vllm] }
+        architecture: { type: string }
+        hostArchitecture: { type: string }
+        supportedModes:
+          type: array
+          items: { type: string, enum: [cpu, cuda] }
+        requestedMode: { type: string, enum: [auto, cpu, cuda] }
+        activeMode: { type: string, enum: [cpu, cuda] }
+        ready: { type: boolean }
+        checks:
+          type: array
+          items: { $ref: "#/components/schemas/InferenceCheck" }
+    InferenceModel:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        object: { type: string }
+        ownedBy: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+    InferenceModelImportRequest:
+      type: object
+      required: [modelId, source]
+      properties:
+        modelId: { type: string, minLength: 1 }
+        source: { type: string, minLength: 1 }
+        digest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        launchArguments:
+          description: Validated vLLM server arguments, represented as an argv array without shell evaluation.
+          type: array
+          items: { type: string }
+          maxItems: 32
     Problem:
       type: object
       required: [type, title, status, code, instance]

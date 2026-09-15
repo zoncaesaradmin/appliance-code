@@ -322,15 +322,25 @@
             "required": ["enabledCapabilities"]
           },
           "then": {
-            "required": ["inferenceGatewayBaseURL"],
+            "required": ["inferenceGatewayBaseURL", "inferenceRuntimePackage", "inferenceEngine", "inferenceArchitecture", "inferenceSupportedModes", "inferenceMode"],
             "properties": {
               "inferenceGatewayBaseURL": {
                 "type": "string",
                 "pattern": "^https?://[^/]+$"
+              },
+              "inferenceRuntimePackage": {"type": "string", "minLength": 1},
+              "inferenceEngine": {"enum": ["ollama", "vllm"]},
+              "inferenceArchitecture": {"type": "string", "minLength": 1},
+              "inferenceSupportedModes": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {"enum": ["cpu", "cuda"]}
+              },
+              "inferenceMode": {"enum": ["auto", "cpu", "cuda"]}
               }
             }
           }
-        }
       ],
       "properties": {
         "applianceProfile": {
@@ -389,6 +399,15 @@
         "inferenceGatewayBaseURL": {
           "type": "string"
         },
+        "inferenceRuntimePackage": {"type": "string"},
+        "inferenceEngine": {"type": "string"},
+        "inferenceArchitecture": {"type": "string"},
+        "inferenceSupportedModes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["cpu", "cuda"]}
+        },
+        "inferenceMode": {"enum": ["auto", "cpu", "cuda"]},
         "dnsZoneName": {
           "type": "string"
         },

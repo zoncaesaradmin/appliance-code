@@ -153,6 +153,14 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 		cfg.DNSAllowFakeZoneSync = true
 	}
+	if resolved.Capabilities.Enabled(appliance.CapabilityInference) {
+		cfg.InferenceGatewayBaseURL = hostUpstream.URL
+		cfg.InferenceRuntimePackage = "std-llm-amd64"
+		cfg.InferenceEngine = "ollama"
+		cfg.InferenceArchitecture = "amd64"
+		cfg.InferenceSupportedModes = []string{"cpu"}
+		cfg.InferenceMode = "cpu"
+	}
 
 	logger, err := logging.New("error")
 	if err != nil {
@@ -214,6 +222,13 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		Audit:           services.Audit,
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
+	}
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameInferenceRuntime) {
+		deps.AIProxy, err = httpapi.NewAIProxyHandler(logger, cfg.InferenceGatewayBaseURL)
+		if err != nil {
+			t.Fatalf("NewAIProxyHandler: %v", err)
+		}
+		deps.InferenceH = &httpapi.InferenceHandlers{Inference: services.Inference, Audit: services.Audit}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{

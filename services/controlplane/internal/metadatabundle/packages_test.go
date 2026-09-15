@@ -1,6 +1,7 @@
 package metadatabundle_test
 
 import (
+	"reflect"
 	"testing"
 
 	"appliance-code/services/controlplane/internal/metadatabundle"
@@ -22,8 +23,8 @@ func TestCurrentDeliveryPackagesCoverEveryCapability(t *testing.T) {
 			t.Fatalf("%s has no delivery package", capability)
 		}
 	}
-	if len(owners["inference"]) != 2 {
-		t.Fatalf("inference owners = %q, want standard and accelerated packages", owners["inference"])
+	if len(owners["inference"]) != 3 {
+		t.Fatalf("inference owners = %q, want standard amd64 and accelerated amd64/arm64 packages", owners["inference"])
 	}
 	for _, packageID := range []string{"inference", "legacy-inference", "legacy-gpu"} {
 		if _, ok := b.Packages.Packages[packageID]; ok {
@@ -41,6 +42,7 @@ func TestDeliveryPackageCatalogRejectsIncompleteMapping(t *testing.T) {
 		t.Fatal(err)
 	}
 	delete(b.Packages.Packages, "std-llm-amd64")
+	delete(b.Packages.Packages, "acc-llm-amd64")
 	delete(b.Packages.Packages, "acc-llm-arm64")
 	if err := metadatabundle.ValidateBundle(b); err == nil {
 		t.Fatal("catalog without a standard inference package was accepted")
@@ -55,8 +57,14 @@ func TestInferencePackageDeclaresItsEngine(t *testing.T) {
 	if err := metadatabundle.ValidateBundle(b); err != nil {
 		t.Fatal(err)
 	}
-	if b.Packages.Packages["std-llm-amd64"].Runtime.InferenceEngine != "ollama" || b.Packages.Packages["std-llm-amd64"].Runtime.Architecture != "amd64" {
+	if b.Packages.Packages["std-llm-amd64"].Runtime.InferenceEngine != "ollama" || b.Packages.Packages["std-llm-amd64"].Runtime.Architecture != "amd64" || !reflect.DeepEqual(b.Packages.Packages["std-llm-amd64"].Runtime.SupportedModes, []string{"cpu"}) {
 		t.Fatalf("standard inference runtime = %+v", b.Packages.Packages["std-llm-amd64"].Runtime)
+	}
+	if !reflect.DeepEqual(b.Packages.Packages["acc-llm-arm64"].Runtime.SupportedModes, []string{"cpu", "cuda"}) {
+		t.Fatalf("accelerated inference runtime = %+v", b.Packages.Packages["acc-llm-arm64"].Runtime)
+	}
+	if runtime := b.Packages.Packages["acc-llm-amd64"].Runtime; runtime.InferenceEngine != "vllm" || runtime.Architecture != "amd64" || !reflect.DeepEqual(runtime.SupportedModes, []string{"cpu"}) {
+		t.Fatalf("accelerated amd64 inference runtime = %+v", runtime)
 	}
 }
 

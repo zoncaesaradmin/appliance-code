@@ -1109,6 +1109,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inference/runtime-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect inference runtime capabilities
+         * @description Reports package-declared modes and runtime-detected active mode without a vendor or model-specific hardware catalog.
+         */
+        get: operations["getInferenceRuntimeCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get inference runtime status */
+        get: operations["getInferenceStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List locally available inference models */
+        get: operations["listInferenceModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download and install a model
+         * @description Runs an administrator-directed, serialized import from an engine-supported source. Model weights are not part of the appliance bundle.
+         */
+        post: operations["importInferenceModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models/{modelId}/load": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Load an installed model */
+        post: operations["loadInferenceModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models/{modelId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an installed model */
+        delete: operations["deleteInferenceModel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1511,6 +1619,40 @@ export interface components {
             /** Format: date-time */
             completedAt?: string;
         };
+        InferenceCheck: {
+            name: string;
+            /** @enum {string} */
+            status: "pass" | "fail" | "pending";
+            message?: string;
+        };
+        InferenceRuntimeStatus: {
+            package: string;
+            /** @enum {string} */
+            engine: "ollama" | "vllm";
+            architecture: string;
+            hostArchitecture: string;
+            supportedModes: ("cpu" | "cuda")[];
+            /** @enum {string} */
+            requestedMode: "auto" | "cpu" | "cuda";
+            /** @enum {string} */
+            activeMode?: "cpu" | "cuda";
+            ready?: boolean;
+            checks: components["schemas"]["InferenceCheck"][];
+        };
+        InferenceModel: {
+            id: string;
+            object?: string;
+            ownedBy?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        InferenceModelImportRequest: {
+            modelId: string;
+            source: string;
+            digest?: string;
+            launchArguments?: string[];
+        };
         Problem: {
             type: string;
             title: string;
@@ -1573,6 +1715,7 @@ export interface components {
         };
     };
     parameters: {
+        InferenceModelId: string;
         WorkspaceID: string;
         JobID: string;
         TokenID: string;
@@ -3430,6 +3573,148 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getInferenceRuntimeCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime capabilities. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceRuntimeStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getInferenceStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runtime status and OpenAI API readiness. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceRuntimeStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listInferenceModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Models reported by the active runtime. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["InferenceModel"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
+    importInferenceModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InferenceModelImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Model installed. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationProblem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["ValidationProblem"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
+    loadInferenceModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: components["parameters"]["InferenceModelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Load accepted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
+    deleteInferenceModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                modelId: components["parameters"]["InferenceModelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Model removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            502: components["responses"]["ValidationProblem"];
         };
     };
 }

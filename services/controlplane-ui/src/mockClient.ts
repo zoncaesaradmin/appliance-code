@@ -53,7 +53,10 @@ import type {
   ApplicationInstance,
   AuditEvent,
   AuditEventsResult,
-  FocusContent
+  FocusContent,
+  InferenceRuntimeStatus,
+  InferenceModel,
+  ImportInferenceModelRequest
 } from "./types";
 
 function now(): string {
@@ -92,11 +95,12 @@ type MockState = {
   mdns: HostMDNSStatus;
   applications: ApplicationDefinition[];
   applicationInstances: ApplicationInstance[];
+  inferenceModels: InferenceModel[];
 };
 
 const mockState: MockState = {
   initialized: true,
-	capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "video", "guest-access", "focus-content"],
+	capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "inference", "video", "guest-access", "focus-content"],
 	session: {
     userId: "mock-admin",
     username: "admin",
@@ -120,6 +124,8 @@ const mockState: MockState = {
       "host.write",
       "applications.read",
       "applications.manage",
+      "inference.models.read",
+      "inference.admin",
       "video.library.read",
 		"focus.content.manage",
       "video.library.write",
@@ -312,7 +318,8 @@ const mockState: MockState = {
     message: "mdns is not desired"
   },
   applications: [{ name: "jellyfin", version: "10.10.7" }],
-  applicationInstances: []
+  applicationInstances: [],
+  inferenceModels: [{ id: "example-local-model", object: "model", ownedBy: "local" }]
 };
 
 mockState.currentWorkspaceId = mockState.workspaces[0]?.id ?? null;
@@ -1335,6 +1342,28 @@ export class MockControlPlaneClient {
 		instance.updatedAt = now();
 		return { ...instance };
 	}
+
+  async getInferenceStatus(): Promise<InferenceRuntimeStatus> {
+    return {
+      package: "std-llm-amd64", engine: "ollama", architecture: "amd64",
+      hostArchitecture: "amd64", supportedModes: ["cpu"], requestedMode: "auto",
+      activeMode: "cpu", ready: true, checks: [{ name: "runtime-api", status: "pass" }]
+    };
+  }
+
+  async listInferenceModels(): Promise<InferenceModel[]> {
+    return mockState.inferenceModels.map((model) => ({ ...model }));
+  }
+
+  async importInferenceModel(request: ImportInferenceModelRequest): Promise<void> {
+    mockState.inferenceModels = [...mockState.inferenceModels.filter((model) => model.id !== request.modelId), { id: request.modelId, object: "model", ownedBy: "local" }];
+  }
+
+  async loadInferenceModel(_modelId: string): Promise<void> {}
+
+  async deleteInferenceModel(modelId: string): Promise<void> {
+    mockState.inferenceModels = mockState.inferenceModels.filter((model) => model.id !== modelId);
+  }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
     const limit = params?.limit ?? 10;

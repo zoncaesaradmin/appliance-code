@@ -43,6 +43,8 @@ type Deps struct {
 	FocusContentH    *FocusContentHandlers
 	AuditH           *AuditHandlers
 	MCPHandler       http.Handler
+	AIProxy          http.Handler
+	InferenceH       *InferenceHandlers
 	ProxiedServices  []ServiceProxyRegistration
 	Audit            *audit.Recorder
 }
@@ -92,6 +94,23 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 		playback: func(h http.HandlerFunc) http.Handler {
 			return playbackRequired(RequireAnyPermission(roles.PermVideoLibraryRead, roles.PermVideoPlay)(h))
 		},
+	}
+	if capabilities.Enabled(appliance.CapabilityInference) {
+		if deps.AIProxy == nil {
+			return nil, fmt.Errorf("inference capability requires AI proxy")
+		}
+		if deps.InferenceH == nil || deps.InferenceH.Inference == nil {
+			return nil, fmt.Errorf("inference capability requires inference handlers")
+		}
+		mux.Handle("GET /api/v1/inference/runtime-capabilities", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Capabilities))
+		mux.Handle("GET /api/v1/inference/status", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Status))
+		mux.Handle("GET /api/v1/inference/models", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Models))
+		mux.Handle("POST /api/v1/inference/models/imports", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Import))
+		mux.Handle("POST /api/v1/inference/models/{modelId}/load", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Load))
+		mux.Handle("DELETE /api/v1/inference/models/{modelId}", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Delete))
+		mux.Handle("GET /ai/v1/models", w.protectAny(http.HandlerFunc(deps.AIProxy.ServeHTTP), roles.PermInferenceUse, roles.PermInferenceModelsRead))
+		mux.Handle("/ai/v1", w.protect(roles.PermInferenceUse, deps.AIProxy.ServeHTTP))
+		mux.Handle("/ai/v1/", w.protect(roles.PermInferenceUse, deps.AIProxy.ServeHTTP))
 	}
 
 	for _, route := range append(publicRoutes(), proxiedServiceRoutes(deps.ProxiedServices)...) {

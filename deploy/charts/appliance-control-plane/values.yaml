@@ -144,6 +144,11 @@ config:
   # OpenAI-compatible inference gateway base URL (no path). Inference
   # Required when the signed metadata-derived enabledCapabilities includes inference.
   inferenceGatewayBaseURL: ""
+  inferenceRuntimePackage: ""
+  inferenceEngine: ""
+  inferenceArchitecture: ""
+  inferenceSupportedModes: []
+  inferenceMode: "auto"
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.
