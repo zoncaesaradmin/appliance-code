@@ -74,9 +74,27 @@ is mounted at `/workspace` and that's the container's working directory
 — inside the same container image, then exits. Use this for scripted
 reproduction/debugging steps you don't want to babysit interactively.
 
-Both mount the repo read-write at `/workspace` and persist Go's
-build/module caches under `$(DEV_CACHE_DIR)` on the host, so repeated
-invocations don't re-download modules or recompile from scratch.
+Both mount the repo read-write at `/workspace` and persist durable caches
+under `$(DEV_CACHE_DIR)` on the host so repeated invocations do not start
+from an empty nested filesystem:
+
+- Go build/module caches (`go-build`, `go-mod`)
+- Nested containers-storage for Buildah/Podman/Skopeo
+  (`containers/$(DEV_STORAGE_DRIVER)/user` →
+  `/home/devcontainer/.local/share/containers`, and
+  `containers/$(DEV_STORAGE_DRIVER)/system` → `/var/lib/containers`)
+
+Without the containers-storage mounts, graphroot lived only in the outer
+container writable layer and large nested image builds (for example a
+vLLM-based inference runtime) could exhaust nested disk even when the
+host still had free space.
+
+`DEV_RUN` always passes `--privileged` and `--device /dev/fuse`, and
+defaults `STORAGE_DRIVER` / `DEV_STORAGE_DRIVER` to `overlay` so nested
+builds share layers instead of copying them with `vfs`. If overlay fails
+on a given host, fall back with `DEV_STORAGE_DRIVER=vfs` (host paths are
+driver-specific, so the two layouts never mix). The image itself still
+defaults to `vfs` for non-privileged consumers.
 
 ### Git over SSH from inside the container
 
@@ -130,7 +148,9 @@ Every setting below is a Makefile variable — override per-invocation
 | `SERVICE_IMAGE_NAME` | per-service Makefile, else directory name | Image name (e.g. `appliance-control-plane`). Set in the service Makefile or pass on the make CLI. |
 | `DEV_IMAGE` | composed from registry[/repo]/name:tag | Full image reference; set directly to bypass the composed variables above. |
 | `DEV_REGISTRY_AUTH_FILE` | `$(HOME)/.config/containers/auth.json` | Persistent auth file Podman uses to pull the private dev-container image. |
-| `DEV_CONTAINER_HOME` | `/home/devcontainer` | Home path inside the image for Go cache bind-mounts (matches image `USERNAME`). |
+| `DEV_CACHE_DIR` | `$(HOME)/.cache/appliance-code-dev` | Host directory for Go caches and nested containers-storage bind mounts. |
+| `DEV_STORAGE_DRIVER` | `overlay` | Nested Buildah/Podman storage driver (`overlay` or `vfs`). Requires privileged+/dev/fuse for overlay (already true for `DEV_RUN`). |
+| `DEV_CONTAINER_HOME` | `/home/devcontainer` | Home path inside the image for Go cache and user containers-storage bind-mounts (matches image `USERNAME`). |
 | `DEV_VOLUME_OPTS` | *(empty)* | Suffix appended to every bind-mount flag. Set to `:Z` on SELinux-enforcing hosts (Fedora, RHEL, CentOS) so Podman can relabel the mounted directories. |
 
 ## Developer Workstation Setup
@@ -354,3 +374,24 @@ or forget about — the tradeoff is that nothing installed into the
 container beyond the image and the mounted caches survives past one
 invocation, so anything that needs to persist has to live under
 `/workspace` or `DEV_CACHE_DIR`.
+
+### Nested containers-storage growth
+
+Because nested Buildah storage is now bind-mounted into
+`$(DEV_CACHE_DIR)/containers/…`, layers persist across runs (helpful for
+rebuilds) and can grow on the host. When disk is tight, prune from
+inside `make dev-shell`:
+
+```bash
+buildah rm --all || true
+buildah rmi --all || true
+# or:
+podman system prune -af
+```
+
+Or remove a host cache tree outright (safe; the next `dev-shell`/`dev-run`
+recreates empty dirs):
+
+```bash
+rm -rf "${HOME}/.cache/appliance-code-dev/containers"
+```

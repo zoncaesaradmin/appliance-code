@@ -59,6 +59,18 @@ endif
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
 DEV_CACHE_DIR    ?= $(HOME)/.cache/appliance-code-dev
 DEV_VOLUME_OPTS  ?=
+# Nested Buildah/Podman/Skopeo storage inside the ephemeral outer
+# container. Default overlay (DEV_RUN is always --privileged with
+# /dev/fuse) so large image builds do not multiply layers via vfs.
+# Escape hatch: DEV_STORAGE_DRIVER=vfs if overlay fails on a host.
+# Host paths are driver-specific so switching drivers never mixes
+# incompatible on-disk layouts.
+DEV_STORAGE_DRIVER ?= overlay
+ifeq ($(filter $(DEV_STORAGE_DRIVER),overlay vfs),)
+$(error DEV_STORAGE_DRIVER must be "overlay" or "vfs" (got "$(DEV_STORAGE_DRIVER)"))
+endif
+DEV_CONTAINERS_USER_DIR   := $(DEV_CACHE_DIR)/containers/$(DEV_STORAGE_DRIVER)/user
+DEV_CONTAINERS_SYSTEM_DIR := $(DEV_CACHE_DIR)/containers/$(DEV_STORAGE_DRIVER)/system
 # Rootful Podman is required for `make -C services/controlplane image` to work
 # from inside dev-shell: a rootless outer container has only one, fully
 # consumed user-namespace mapping, so a nested Buildah build inside it
@@ -164,6 +176,13 @@ verify:
 		exit 1; \
 	fi; \
 	echo "verify stage: catalog pack→artifact resolver passed"; \
+	echo "verify stage: dev-run storage mounts"; \
+	if ! bash ./scripts/test-dev-run-storage-mounts.sh >"$(VERIFY_LOG_DIR)/verify-dev-run-storage.log" 2>&1; then \
+		echo "verify: dev-run storage mounts failed"; \
+		echo "verify: inspect $(VERIFY_LOG_DIR)/verify-dev-run-storage.log"; \
+		exit 1; \
+	fi; \
+	echo "verify stage: dev-run storage mounts passed"; \
 	echo "verify stage: backend curl checks"; \
 	if ! $(MAKE) --no-print-directory test-curl >"$(VERIFY_CURL_LOG)" 2>&1; then \
 		echo "verify: backend curl checks failed"; \
@@ -512,8 +531,11 @@ DEV_ENSURE_VIM := command -v vim >/dev/null 2>&1 || { \
 # over the development-container tag — otherwise `make dev-shell` dies
 # before bash runs. Always pass an explicit command after $(DEV_IMAGE).
 #
-# Go caches mount into the image non-root home (not /root/…): the
-# development-container image runs as USERNAME=devcontainer.
+# Go caches and nested containers-storage mount into the image non-root
+# home (not /root/…): the development-container image runs as
+# USERNAME=devcontainer. Without the containers bind mounts, Buildah
+# graphroot (~/.local/share/containers) lived only in the outer
+# container writable layer and exhausted nested disk on large builds.
 DEV_CONTAINER_HOME ?= /home/devcontainer
 # Forward host Git SSH credentials into the container when available.
 # Prefer the running ssh-agent socket; also mount ~/.ssh read-only so
@@ -535,10 +557,13 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	$(DEV_ENGINE_TLS_FLAGS) \
 	$(DEV_ENGINE_PULL_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
+	-e STORAGE_DRIVER="$(DEV_STORAGE_DRIVER)" \
 	$(DEV_SSH_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:$(DEV_CONTAINER_HOME)/.cache/go-build$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-mod:$(DEV_CONTAINER_HOME)/go/pkg/mod$(DEV_VOLUME_OPTS)" \
+	-v "$(DEV_CONTAINERS_USER_DIR):$(DEV_CONTAINER_HOME)/.local/share/containers$(DEV_VOLUME_OPTS)" \
+	-v "$(DEV_CONTAINERS_SYSTEM_DIR):/var/lib/containers$(DEV_VOLUME_OPTS)" \
 	-w /workspace
 
 ## dev-sudo-setup: one-time, idempotent host bootstrap for rootful nested
@@ -624,7 +649,8 @@ dev-sudo-setup: dev-registry-auth-check
 
 ## dev-shell: interactive shell in the shared dev-container image, this repo mounted at /workspace
 dev-shell: dev-sudo-setup
-	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod"
+	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod" \
+		"$(DEV_CONTAINERS_USER_DIR)" "$(DEV_CONTAINERS_SYSTEM_DIR)"
 	$(DEV_RUN) -it $(DEV_IMAGE) bash -c '$(DEV_ENSURE_VIM); exec bash'
 
 ## dev-run: run one script (SCRIPT=path) inside the dev container, then exit — the automation counterpart to dev-shell
@@ -633,5 +659,6 @@ dev-run: dev-sudo-setup
 		echo "dev-run: pass SCRIPT=<path-to-script-under-the-repo>, e.g. make dev-run SCRIPT=scripts/build-and-push.sh" >&2; \
 		exit 2; \
 	fi
-	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod"
+	@mkdir -p "$(DEV_CACHE_DIR)/go-build" "$(DEV_CACHE_DIR)/go-mod" \
+		"$(DEV_CONTAINERS_USER_DIR)" "$(DEV_CONTAINERS_SYSTEM_DIR)"
 	$(DEV_RUN) $(DEV_IMAGE) bash "$(SCRIPT)"
