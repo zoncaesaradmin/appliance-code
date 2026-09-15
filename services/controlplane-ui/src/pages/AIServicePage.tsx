@@ -206,7 +206,9 @@ export function AIServicePage(): React.JSX.Element {
               message={
                 catalog?.refreshing
                   ? "Discovering models…"
-                  : "No models are available yet. Discovery needs internet; downloaded models still appear here."
+                  : (catalog?.items?.length ?? 0) > 0
+                    ? "No catalog models currently fit this appliance's estimated memory or storage. Downloaded models still appear here."
+                    : "No models are available yet. Discovery needs internet; downloaded models still appear here."
               }
             />
           ) : (

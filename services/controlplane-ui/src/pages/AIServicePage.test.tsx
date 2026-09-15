@@ -98,6 +98,20 @@ it("keeps downloaded models in the dropdown when catalog discovery fails", async
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Load")).toBe(true);
 });
 
+it("explains when catalog items exist but none are eligible", async () => {
+  api.listInferenceModels.mockResolvedValue([]);
+  api.getInferenceCatalog.mockResolvedValue({
+    lastSuccess: "2026-09-15T00:00:00Z",
+    stale: false,
+    refreshing: false,
+    scope: "Popular models",
+    items: [{ id: "too-large:100b", source: "too-large:100b", downloadBytes: 1000, memoryBytes: 2000, eligible: false }]
+  });
+  await act(async () => root.render(<AIServicePage />));
+  expect(element.querySelector("select")).toBeNull();
+  expect(element.textContent).toContain("No catalog models currently fit this appliance");
+});
+
 it("clears a stale downloaded-models refresh error after a successful post-download refresh", async () => {
   api.listInferenceModels
     .mockRejectedValueOnce(new Error("temporary timeout"))

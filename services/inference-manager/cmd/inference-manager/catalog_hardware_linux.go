@@ -12,13 +12,19 @@ import (
 	"time"
 )
 
-func readMemoryValue(path string) uint64 {
-	b, err := os.ReadFile(path)
+func hostMemAvailable() uint64 {
+	b, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
 		return 0
 	}
-	n, _ := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 64)
-	return n
+	for _, line := range strings.Split(string(b), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "MemAvailable:" {
+			n, _ := strconv.ParseUint(fields[1], 10, 64)
+			return n * 1024
+		}
+	}
+	return 0
 }
 
 func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
@@ -31,27 +37,11 @@ func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 	if mode == "" {
 		return 0, freeDisk
 	}
-	var memory uint64
-	if b, err := os.ReadFile("/proc/meminfo"); err == nil {
-		for _, line := range strings.Split(string(b), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 && fields[0] == "MemAvailable:" {
-				memory, _ = strconv.ParseUint(fields[1], 10, 64)
-				memory *= 1024
-			}
-		}
-	}
-	for _, paths := range [][2]string{{"/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.current"}, {"/sys/fs/cgroup/memory/memory.limit_in_bytes", "/sys/fs/cgroup/memory/memory.usage_in_bytes"}} {
-		limit, used := readMemoryValue(paths[0]), readMemoryValue(paths[1])
-		if limit > 0 {
-			if used >= limit {
-				return 0, freeDisk
-			}
-			if limit-used < memory {
-				memory = limit - used
-			}
-		}
-	}
+	// Catalog eligibility estimates whether a *model* can fit on this appliance.
+	// Do not clamp to the manager container's memory limit: the thin manager is
+	// intentionally small (API/proxy only); the engine sidecar / host holds the
+	// model. Host MemAvailable is the conservative capacity signal for CPU mode.
+	memory := hostMemAvailable()
 	// Leave room for existing appliance workloads and transient allocations.
 	memory = memory / 4 * 3
 	if mode == "cuda" {
@@ -65,7 +55,7 @@ func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 		}
 		gpu, _ := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 64)
 		gpu = gpu / 5 * 4
-		if gpu < memory {
+		if memory == 0 || gpu < memory {
 			memory = gpu
 		}
 	}
