@@ -72,6 +72,27 @@ func TestEmptyFailedCatalogRetriesImmediatelyOnRestart(t *testing.T) {
 	}
 }
 
+func TestFailedCatalogRetriesOnlyOncePerProcessStart(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	fail := func(context.Context) ([]catalogEntry, error) { return nil, errors.New("network disconnected") }
+	c.discover = fail
+	c.refresh(context.Background())
+	if delay := c.nextRefreshDelay(); delay < 23*time.Hour {
+		t.Fatalf("first failure must wait until next daily refresh: %s", delay)
+	}
+	restarted := newModelCatalog(m)
+	if delay := restarted.nextRefreshDelay(); delay != 0 {
+		t.Fatalf("failed empty catalog should retry on restart: %s", delay)
+	}
+	restarted.discover = fail
+	restarted.refresh(context.Background())
+	if delay := restarted.nextRefreshDelay(); delay < 23*time.Hour {
+		t.Fatalf("restart retry failure must not spin: %s", delay)
+	}
+}
+
 func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
 	m := testManager(t)
 	m.engine = "vllm"

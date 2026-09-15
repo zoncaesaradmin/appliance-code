@@ -19,8 +19,9 @@ separate server-side call from the UI service to the control plane.
 ### AI Services model catalog
 
 The `/admin/ai-services` React page uses the existing authenticated API proxy.
-Its single table joins catalog candidates and downloaded models by model ID.
-Downloaded models remain visible when discovery fails or removes a candidate.
+It presents one model dropdown that joins eligible catalog candidates with
+downloaded models by ID. Downloaded entries are labeled in the dropdown and
+remain visible when discovery fails or removes a candidate.
 
 | Browser/API method and route | UI client method | Control-plane behavior |
 | --- | --- | --- |

@@ -84,6 +84,30 @@ func TestAutoModePrefersConfirmedCUDA(t *testing.T) {
 	}
 }
 
+func TestVLLMServingIsOfflineWithoutChangingManagerEnvironment(t *testing.T) {
+	base := []string{"HF_HUB_OFFLINE=0", "VLLM_NO_USAGE_STATS=0", "HF_HOME=/models/.cache/huggingface", "CUDA_VISIBLE_DEVICES=0"}
+	child := vllmProcessEnvironment(base)
+	for _, want := range []string{"HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "VLLM_NO_USAGE_STATS=1", "DO_NOT_TRACK=1", "HF_HOME=/models/.cache/huggingface", "CUDA_VISIBLE_DEVICES=0"} {
+		count := 0
+		for _, entry := range child {
+			if entry == want {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Fatalf("child environment must contain %q exactly once: %v", want, child)
+		}
+	}
+	for _, entry := range child {
+		if entry == "HF_HUB_OFFLINE=0" || entry == "VLLM_NO_USAGE_STATS=0" {
+			t.Fatalf("conflicting override retained: %s", entry)
+		}
+	}
+	if base[0] != "HF_HUB_OFFLINE=0" {
+		t.Fatal("manager environment was mutated")
+	}
+}
+
 func TestAutoModeFallsBackToCPUWhenCUDANotConfirmed(t *testing.T) {
 	m := testManager(t)
 	t.Setenv("INFERENCE_MODE", "auto")

@@ -647,7 +647,7 @@ func (m *manager) startVLLM(_ context.Context, item model) (*exec.Cmd, error) {
 	args := m.vllmCommandArguments(item, mode)
 	cmd := exec.Command(env("INFERENCE_VLLM_COMMAND", "vllm"), args...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	cmd.Env = os.Environ()
+	cmd.Env = vllmProcessEnvironment(os.Environ())
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -661,6 +661,24 @@ func (m *manager) vllmCommandArguments(item model, mode string) []string {
 		args = append(args, "--served-model-name", item.ID)
 	}
 	return append(args, "--host", "127.0.0.1", "--port", strings.TrimPrefix(m.backend.Port(), ":"), "--device", mode)
+}
+
+// Scope offline serving to the runtime child. The manager's catalog job and
+// user-directed downloader still need their explicitly permitted network access.
+func vllmProcessEnvironment(base []string) []string {
+	overrides := []string{"HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "VLLM_NO_USAGE_STATS=1", "DO_NOT_TRACK=1"}
+	result := make([]string, 0, len(base)+len(overrides))
+	for _, entry := range base {
+		key, _, _ := strings.Cut(entry, "=")
+		replaced := false
+		for _, override := range overrides {
+			replaced = replaced || strings.HasPrefix(override, key+"=")
+		}
+		if !replaced {
+			result = append(result, entry)
+		}
+	}
+	return append(result, overrides...)
 }
 
 func argumentPresent(arguments []string, wanted string) bool {

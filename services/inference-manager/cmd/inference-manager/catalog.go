@@ -39,12 +39,13 @@ type catalogState struct {
 }
 
 type modelCatalog struct {
-	mu       sync.Mutex
-	state    catalogState
-	m        *manager
-	discover func(context.Context) ([]catalogEntry, error)
-	budget   func(context.Context) (uint64, uint64)
-	path     string
+	mu                sync.Mutex
+	state             catalogState
+	m                 *manager
+	discover          func(context.Context) ([]catalogEntry, error)
+	budget            func(context.Context) (uint64, uint64)
+	path              string
+	retryEmptyOnStart bool
 }
 
 func newModelCatalog(m *manager) *modelCatalog {
@@ -55,6 +56,7 @@ func newModelCatalog(m *manager) *modelCatalog {
 		if json.Unmarshal(b, &saved) == nil && saved.Engine == m.engine {
 			c.state = saved
 			c.state.Refreshing = false
+			c.retryEmptyOnStart = (saved.LastSuccess.IsZero() || len(saved.Items) == 0) && saved.LastError != ""
 		}
 	}
 	c.discover = m.discoverModels
@@ -69,7 +71,7 @@ func (c *modelCatalog) nextRefreshDelay() time.Duration {
 	// restarts do not hammer upstream. A never-successful / empty failed
 	// catalog must retry on the next start; otherwise a one-time probe bug
 	// hides behind a 24h lock after the fix is deployed.
-	if !c.state.LastAttempt.IsZero() && (c.state.LastSuccess.IsZero() || len(c.state.Items) == 0) && c.state.LastError != "" {
+	if c.retryEmptyOnStart {
 		return 0
 	}
 	return time.Until(c.state.LastAttempt.Add(catalogInterval))
@@ -101,6 +103,7 @@ func (c *modelCatalog) refresh(ctx context.Context) {
 		return
 	}
 	c.state.Refreshing = true
+	c.retryEmptyOnStart = false
 	c.state.LastAttempt = time.Now().UTC()
 	c.mu.Unlock()
 	refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)

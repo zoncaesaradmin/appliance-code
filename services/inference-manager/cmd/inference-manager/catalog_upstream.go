@@ -19,20 +19,44 @@ import (
 var vllmArchitectureProbe string
 
 var libraryLink = regexp.MustCompile(`href="/library/([a-zA-Z0-9._:-]+)"`)
+var sha1RE = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-func upstreamRead(ctx context.Context, address string, target any) error {
-	client := &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+// upstreamTransport is overridden in unit tests so discovery runs against a
+// local TLS fixture instead of the public internet.
+var upstreamTransport http.RoundTripper
+
+func huggingfaceBase() string {
+	return strings.TrimRight(env("INFERENCE_CATALOG_HF_BASE", "https://huggingface.co"), "/")
+}
+
+func ollamaLibraryBase() string {
+	return strings.TrimRight(env("INFERENCE_CATALOG_OLLAMA_BASE", "https://ollama.com"), "/")
+}
+
+func ollamaRegistryBase() string {
+	return strings.TrimRight(env("INFERENCE_CATALOG_OLLAMA_REGISTRY_BASE", "https://registry.ollama.ai"), "/")
+}
+
+func upstreamClient() *http.Client {
+	transport := upstreamTransport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	return &http.Client{Timeout: 20 * time.Second, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 3 || req.URL.Scheme != "https" || req.URL.Host != via[0].URL.Host {
 			return fmt.Errorf("unexpected catalog redirect")
 		}
 		return nil
 	}}
+}
+
+func upstreamRead(ctx context.Context, address string, target any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("User-Agent", "appliance-model-catalog/1")
-	resp, err := client.Do(req)
+	resp, err := upstreamClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("upstream metadata unavailable: %w", err)
 	}
@@ -80,7 +104,7 @@ func (m *manager) discoverModels(ctx context.Context) ([]catalogEntry, error) {
 
 func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 	var page string
-	if err := upstreamRead(ctx, "https://ollama.com/library?sort=popular", &page); err != nil {
+	if err := upstreamRead(ctx, ollamaLibraryBase()+"/library?sort=popular", &page); err != nil {
 		return nil, err
 	}
 	families := libraryReferences(page, false, 24)
@@ -89,7 +113,7 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 	}
 	var entries []catalogEntry
 	for _, family := range families {
-		if err := upstreamRead(ctx, "https://ollama.com/library/"+family+"/tags", &page); err != nil {
+		if err := upstreamRead(ctx, ollamaLibraryBase()+"/library/"+family+"/tags", &page); err != nil {
 			return nil, err
 		}
 		refs := libraryReferences(page, true, 8)
@@ -101,7 +125,7 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 					MediaType string `json:"mediaType"`
 				} `json:"layers"`
 			}
-			if err := upstreamRead(ctx, "https://registry.ollama.ai/v2/library/"+parts[0]+"/manifests/"+parts[1], &manifest); err != nil {
+			if err := upstreamRead(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], &manifest); err != nil {
 				return nil, err
 			}
 			var weights, total uint64
@@ -178,12 +202,12 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 		Gated   any    `json:"gated"`
 		Private bool   `json:"private"`
 	}
-	if err := upstreamRead(ctx, "https://huggingface.co/api/models?filter=text-generation&sort=downloads&direction=-1&limit=40&full=true", &models); err != nil {
+	if err := upstreamRead(ctx, huggingfaceBase()+"/api/models?filter=text-generation&sort=downloads&direction=-1&limit=40&full=true", &models); err != nil {
 		return nil, err
 	}
 	var entries []catalogEntry
 	for _, item := range models {
-		if item.Private || (item.Gated != nil && item.Gated != false) || !modelRefRE.MatchString(item.ID) || !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(item.SHA) {
+		if item.Private || (item.Gated != nil && item.Gated != false) || !modelRefRE.MatchString(item.ID) || !sha1RE.MatchString(item.SHA) {
 			continue
 		}
 		var config struct {
@@ -191,7 +215,7 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 			Quantization  json.RawMessage `json:"quantization_config"`
 			AutoMap       json.RawMessage `json:"auto_map"`
 		}
-		address := "https://huggingface.co/" + item.ID + "/resolve/" + item.SHA + "/config.json"
+		address := huggingfaceBase() + "/" + item.ID + "/resolve/" + item.SHA + "/config.json"
 		// Hugging Face resolve redirects to its same-host metadata cache.
 		if err := upstreamRead(ctx, address, &config); err != nil {
 			continue
@@ -211,7 +235,7 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 				Size uint64 `json:"size"`
 			} `json:"siblings"`
 		}
-		if err := upstreamRead(ctx, "https://huggingface.co/api/models/"+item.ID+"/revision/"+url.PathEscape(item.SHA)+"?blobs=true", &info); err != nil {
+		if err := upstreamRead(ctx, huggingfaceBase()+"/api/models/"+item.ID+"/revision/"+url.PathEscape(item.SHA)+"?blobs=true", &info); err != nil {
 			return nil, err
 		}
 		var total, weights uint64

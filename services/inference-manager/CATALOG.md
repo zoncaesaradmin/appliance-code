@@ -33,8 +33,28 @@ unavailable upstream; report a download error without changing installed models.
 
 A successful catalog (or a retained non-empty one) refreshes at most once per day
 so restarts do not hammer upstream. If discovery has never succeeded and the
-cached list is empty, the next process start retries immediately so a fixed
-runtime image is not blocked for 24 hours by a prior failed attempt.
+cached list is empty, the next process start retries immediately once so a fixed
+runtime image is not blocked for 24 hours by a prior failed attempt. After that
+retry, failures return to the daily schedule.
+That immediate retry is allowed only once per process start. If it fails again,
+the process returns to the daily schedule; loss of connectivity cannot create
+a tight retry loop.
+
+## Registry and offline boundaries
+
+The upstream model catalog is independent of the appliance OCI registry.
+`registry.ollama.ai` provides model manifests, while Hugging Face provides model
+metadata and snapshots. Neither is used to fetch runtime container images.
+Runtime images continue through the existing seeded LAN/online build policy,
+signed bundle, digest verification, and K3s preload path. Catalog metadata and
+downloaded weights persist on the inference PVC, not the OCI registry.
+
+The vLLM serving child uses local model paths with `HF_HUB_OFFLINE=1` and
+`TRANSFORMERS_OFFLINE=1`; usage reporting is disabled with
+`HF_HUB_DISABLE_TELEMETRY=1`, `VLLM_NO_USAGE_STATS=1`, and `DO_NOT_TRACK=1`.
+These overrides apply only to serving, preserving upstream catalog refreshes
+and administrator-triggered model downloads in the manager. An offline refresh
+failure retains the previous catalog and never removes installed models.
 
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
 `GET /v1/models` independently lists downloaded models. The control plane exposes
@@ -42,6 +62,10 @@ the catalog as `GET /api/v1/inference/models/catalog`. Catalog imports include
 `catalogId` alongside matching `modelId` and `source`; the manager revalidates
 capacity and takes launch arguments from the cache. Explicit imports retain
 the existing administrator API for advanced uses.
+
+Unit tests exercise the real `discoverVLLM` / `discoverOllama` path against a
+local HTTPS fixture (no public network required) and prove architecture probing
+parses the installed registry without importing the vLLM runtime.
 
 UI download state is derived from the runtime inventory, never inferred from
 catalog membership. Removing or losing a catalog entry does not remove its
