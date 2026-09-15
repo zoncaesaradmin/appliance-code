@@ -49,7 +49,7 @@ type manager struct {
 	modelsDir   string
 	backend     *url.URL
 	proxy       *httputil.ReverseProxy
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	processMu   sync.Mutex
 	process     *exec.Cmd
 	processDone chan struct{}
@@ -256,8 +256,9 @@ func (m *manager) listModels(w http.ResponseWriter, _ *http.Request) {
 		m.listOllamaModels(w)
 		return
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Read lock so inventory stays available while a download holds the write lock.
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	items := make([]model, 0, len(m.reg.Models))
 	for _, item := range m.reg.Models {
 		item.Path = ""
@@ -683,7 +684,11 @@ func (m *manager) vllmCommandArguments(item model, mode string) []string {
 	if !argumentPresent(item.LaunchArguments, "--served-model-name") {
 		args = append(args, "--served-model-name", item.ID)
 	}
-	return append(args, "--host", "127.0.0.1", "--port", strings.TrimPrefix(m.backend.Port(), ":"), "--device", mode)
+	// Device is fixed by the packaged vLLM image (cpu vs CUDA build). Current
+	// vLLM CPU images reject --device, and CUDA images select the platform at
+	// import time. Mode still gates whether load is allowed.
+	_ = mode
+	return append(args, "--host", "127.0.0.1", "--port", strings.TrimPrefix(m.backend.Port(), ":"))
 }
 
 // Scope offline serving to the runtime child. The manager's catalog job and

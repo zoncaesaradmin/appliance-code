@@ -98,6 +98,29 @@ it("keeps downloaded models in the dropdown when catalog discovery fails", async
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Load")).toBe(true);
 });
 
+it("clears a stale downloaded-models refresh error after a successful post-download refresh", async () => {
+  api.listInferenceModels
+    .mockRejectedValueOnce(new Error("temporary timeout"))
+    .mockResolvedValue([{ id: "retired:1b" }, { id: "available:1b" }]);
+  await act(async () => root.render(<AIServicePage />));
+  expect(element.textContent).toContain("Could not refresh downloaded models");
+
+  const select = element.querySelector("select")!;
+  await act(async () => {
+    select.value = "available:1b";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const download = [...element.querySelectorAll("button")].find((button) => button.textContent === "Download")!;
+  await act(async () => {
+    download.click();
+  });
+  expect(element.textContent).not.toContain("Could not refresh downloaded models");
+  expect(element.textContent).toContain("available:1b downloaded");
+  expect([...element.querySelectorAll("option")].map((option) => option.textContent)).toContain(
+    "available:1b (downloaded)"
+  );
+});
+
 it("summarizes parameter and memory capacity for the selected model", async () => {
   const { modelCapacitySummary } = await import("./AIServicePage");
   expect(

@@ -149,12 +149,19 @@ func TestValidatedVLLMArgumentsMatchSupportedDockerInvocation(t *testing.T) {
 	m := testManager(t)
 	got := m.vllmCommandArguments(model{ID: "internal", Path: "/models/model", LaunchArguments: arguments}, "cuda")
 	joined := strings.Join(got, " ")
-	for _, expected := range []string{"serve /models/model", "--quantization modelopt_fp4", "--max-model-len 262144", "--gpu-memory-utilization 0.8", "--cudagraph-capture-sizes 4", "--no-enable-flashinfer-autotune", "--enable-auto-tool-choice", "--served-model-name qwen3.6", "--tool-call-parser qwen3_coder", "--host 127.0.0.1", "--port 1", "--device cuda"} {
+	for _, expected := range []string{"serve /models/model", "--quantization modelopt_fp4", "--max-model-len 262144", "--gpu-memory-utilization 0.8", "--cudagraph-capture-sizes 4", "--no-enable-flashinfer-autotune", "--enable-auto-tool-choice", "--served-model-name qwen3.6", "--tool-call-parser qwen3_coder", "--host 127.0.0.1", "--port 1"} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("command %q missing %q", joined, expected)
 		}
 	}
-	for _, forbidden := range [][]string{{"--model", "/tmp/model"}, {"--host", "0.0.0.0"}, {"--port", "9000"}} {
+	if strings.Contains(joined, "--device") {
+		t.Fatalf("command unexpectedly includes deprecated --device: %q", joined)
+	}
+	cpuJoined := strings.Join(m.vllmCommandArguments(model{ID: "cpu-model", Path: "/models/cpu"}, "cpu"), " ")
+	if strings.Contains(cpuJoined, "--device") {
+		t.Fatalf("cpu command unexpectedly includes --device: %q", cpuJoined)
+	}
+	for _, forbidden := range [][]string{{"--model", "/tmp/model"}, {"--host", "0.0.0.0"}, {"--port", "9000"}, {"--device", "cpu"}} {
 		if err := validateVLLMArguments(forbidden); err == nil {
 			t.Fatalf("manager-owned argument %v was accepted", forbidden)
 		}

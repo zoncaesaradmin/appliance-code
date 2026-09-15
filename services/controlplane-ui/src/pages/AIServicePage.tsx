@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, EmptyState, PageFrame } from "../components";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
 import type { InferenceCatalog, InferenceCatalogEntry, InferenceModel, InferenceRuntimeStatus } from "../types";
 
 const PARAM_HINT = /(\d+(?:\.\d+)?)\s*([MmBb])(?:[-_]|\b)/;
+const MODELS_REFRESH_ERROR = "Could not refresh downloaded models. Displayed download status may be outdated.";
 
 function formatGiB(bytes: number): string {
   if (bytes <= 0) {
@@ -62,6 +63,8 @@ export function AIServicePage(): React.JSX.Element {
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const busyRef = useRef("");
+  busyRef.current = busy;
 
   async function refresh() {
     const [runtime, installed, available] = await Promise.allSettled([
@@ -74,8 +77,10 @@ export function AIServicePage(): React.JSX.Element {
     }
     if (installed.status === "fulfilled") {
       setModels(installed.value);
-    } else {
-      setError("Could not refresh downloaded models. Displayed download status may be outdated.");
+      setError((current) => (current === MODELS_REFRESH_ERROR ? "" : current));
+    } else if (!busyRef.current) {
+      // Avoid noisy stale errors while download/load holds the runtime write lock.
+      setError(MODELS_REFRESH_ERROR);
     }
     if (available.status === "fulfilled") {
       setCatalog(available.value);
@@ -87,7 +92,12 @@ export function AIServicePage(): React.JSX.Element {
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 30000);
+    const timer = window.setInterval(() => {
+      if (busyRef.current) {
+        return;
+      }
+      void refresh();
+    }, 30000);
     return () => window.clearInterval(timer);
   }, []);
 

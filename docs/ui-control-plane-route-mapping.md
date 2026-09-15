@@ -34,8 +34,10 @@ shows a short capacity line (parameter hint, download size, estimated RAM).
 | `POST /api/v1/inference/models/delete` | `deleteInferenceModel` | Remove local model, retaining catalog candidate |
 
 Catalog reads require `inference.models.read`; mutations require inference
-administration permission. The UI polls local state every 30 seconds. Import,
-load, and delete continue through the existing authenticated and audited routes.
+administration permission. The UI polls local state every 30 seconds while idle. Polling pauses during
+download, load, and delete. Inventory reads on the inference manager use a
+shared lock so downloads do not block the downloaded-model list. Import, load,
+and delete continue through the existing authenticated and audited routes.
 
 ### General tracing
 

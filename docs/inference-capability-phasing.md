@@ -73,8 +73,10 @@ vLLM launch configuration is stored with the imported model as a validated
 argv array—never shell text. The current contract accepts quantization,
 maximum model length, GPU-memory utilization, CUDA graph capture size,
 FlashInfer autotune disablement, automatic tool choice, served model name, and
-tool-call parser. The manager owns the model path, bind address, port, and
-device arguments so callers cannot bypass the appliance boundary.
+tool-call parser. The manager owns the model path, bind address, and port so
+callers cannot bypass the appliance boundary. Device selection is owned by the
+packaged runtime image and mode detection (CPU vs CUDA build / visible GPU),
+not by a `--device` CLI flag—current vLLM CPU images reject `--device`.
 
 The tested Docker invocation maps to the pod without rebuilding the vLLM
 environment:
