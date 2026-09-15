@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["replicaCount", "image", "service", "persistence", "runtime", "gpu"],
+  "required": ["replicaCount", "image", "managerImage", "service", "persistence", "runtime", "gpu"],
   "properties": {
     "runtime": {
       "type": "object",
@@ -59,6 +59,30 @@
       }
     },
     "image": {
+      "type": "object",
+      "required": ["repository", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string"},
+        "digest": {"type": "string", "pattern": "^$|^sha256:[0-9a-f]{64}$"},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          },
+          "required": ["digest"]
+        },
+        {
+          "properties": {
+            "tag": {"type": "string", "minLength": 1}
+          },
+          "required": ["tag"]
+        }
+      ]
+    },
+    "managerImage": {
       "type": "object",
       "required": ["repository", "pullPolicy"],
       "properties": {

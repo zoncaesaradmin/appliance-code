@@ -45,6 +45,7 @@ class ResolvePackArtifactsTest(unittest.TestCase):
     def test_foundation_plus_acc_llm_arm64(self):
         arts = self._resolve("foundation", "acc-llm-arm64")
         self.assertIn("inference-runtime-image", arts)
+        self.assertIn("inference-manager-image", arts)
         self.assertIn("appliance-inference-chart", arts)
         self.assertNotIn("artifact-server-image", arts)
         self.assertNotIn("host-agent-image", arts)
@@ -80,6 +81,7 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertIn("NEED_HOST_AGENT_IMAGE=0", out)
         self.assertIn("NEED_HOST_AGENT_BINARY=1", out)
         self.assertIn("NEED_INFERENCE_RUNTIME_IMAGE=1", out)
+        self.assertIn("NEED_INFERENCE_MANAGER_IMAGE=1", out)
         self.assertIn("NEED_CONTROL_PLANE_IMAGE=1", out)
 
 

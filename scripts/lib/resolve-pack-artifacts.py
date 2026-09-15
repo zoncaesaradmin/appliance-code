@@ -38,6 +38,7 @@ KNOWN_ARTIFACTS = (
     "coredns-image",
     "appliance-dns-chart",
     "inference-runtime-image",
+    "inference-manager-image",
     "appliance-inference-chart",
     "workspace-provisioner-image",
     "workflows-chart",

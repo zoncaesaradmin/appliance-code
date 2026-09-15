@@ -54,6 +54,48 @@ spec:
       storage: {{ .Values.persistence.size }}
 ---
 {{- end }}
+{{- if eq .Values.runtime.engine "vllm" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}-engine-launcher
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+data:
+  run.sh: |
+    #!/bin/sh
+    set -eu
+    CONTROL="${INFERENCE_CONTROL_DIR:-/control}"
+    CHILD=""
+    LAST=""
+    cleanup() {
+      if [ -n "${CHILD}" ]; then
+        kill "${CHILD}" 2>/dev/null || true
+        wait "${CHILD}" 2>/dev/null || true
+        CHILD=""
+      fi
+    }
+    trap cleanup EXIT INT TERM
+    while true; do
+      GEN="$(cat "${CONTROL}/generation" 2>/dev/null || true)"
+      if [ -n "${GEN}" ] && [ -f "${CONTROL}/argv.json" ] && [ "${GEN}" != "${LAST}" ]; then
+        cleanup
+        LAST="${GEN}"
+        python3 -c 'import json,os,sys; args=json.load(open(sys.argv[1],encoding="utf-8")); os.execvp(args[0], args)' "${CONTROL}/argv.json" &
+        CHILD="$!"
+      elif [ -z "${GEN}" ]; then
+        cleanup
+        LAST=""
+      fi
+      if [ -n "${CHILD}" ] && ! kill -0 "${CHILD}" 2>/dev/null; then
+        wait "${CHILD}" 2>/dev/null || true
+        CHILD=""
+      fi
+      sleep 1
+    done
+---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -101,25 +143,19 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: inference-runtime
-          image: {{ include "appliance-inference.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+        - name: inference-manager
+          image: {{ include "appliance-inference.managerImage" . }}
+          imagePullPolicy: {{ .Values.managerImage.pullPolicy }}
           ports:
             - name: runtime
               containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
           env:
-            {{- include "appliance-inference.runtimeEnv" . | nindent 12 }}
-            {{- if .Values.gpu.enabled }}
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: {{ .Values.gpu.visibleDevices | quote }}
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: {{ .Values.gpu.driverCapabilities | quote }}
-            {{- end }}
+            {{- include "appliance-inference.managerEnv" . | nindent 12 }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.managerResources | nindent 12 }}
           livenessProbe:
             httpGet:
               path: {{ .Values.probes.path }}
@@ -142,6 +178,42 @@ spec:
             - name: runtime-home
               mountPath: /home/runtime
             {{- if eq .Values.runtime.engine "vllm" }}
+            - name: control
+              mountPath: /control
+            {{- end }}
+        - name: inference-engine
+          image: {{ include "appliance-inference.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if eq .Values.runtime.engine "ollama" }}
+          command: ["ollama", "serve"]
+          {{- else if eq .Values.runtime.engine "vllm" }}
+          command: ["/bin/sh", "/launcher/run.sh"]
+          {{- end }}
+          env:
+            {{- include "appliance-inference.engineEnv" . | nindent 12 }}
+            {{- if .Values.gpu.enabled }}
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: {{ .Values.gpu.visibleDevices | quote }}
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: {{ .Values.gpu.driverCapabilities | quote }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+            - name: runtime-home
+              mountPath: /home/runtime
+            {{- if eq .Values.runtime.engine "vllm" }}
+            - name: control
+              mountPath: /control
+            - name: launcher
+              mountPath: /launcher
+              readOnly: true
             - name: shared-memory
               mountPath: /dev/shm
             {{- end }}
@@ -154,6 +226,12 @@ spec:
         - name: runtime-home
           emptyDir: {}
         {{- if eq .Values.runtime.engine "vllm" }}
+        - name: control
+          emptyDir: {}
+        - name: launcher
+          configMap:
+            name: {{ include "appliance-inference.fullname" . }}-engine-launcher
+            defaultMode: 0755
         - name: shared-memory
           emptyDir:
             medium: Memory

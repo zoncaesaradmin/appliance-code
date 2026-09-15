@@ -26,6 +26,12 @@ image:
   digest: ""
   pullPolicy: IfNotPresent
 
+managerImage:
+  repository: registry.local/inference-manager
+  tag: "0.6.5"
+  digest: ""
+  pullPolicy: IfNotPresent
+
 # Installer-injected LAN registry pull credentials (see zonctl image-pull).
 imagePullSecrets: []
 
@@ -37,7 +43,7 @@ namespace:
   name: inference
 
 service:
-  # ClusterIP for in-cluster control-plane proxy; container listens on 11434.
+  # ClusterIP for in-cluster control-plane proxy; manager listens on 11434.
   port: 8080
   targetPort: 11434
 
@@ -94,8 +100,16 @@ resources:
     cpu: "4"
     memory: 8Gi
 
+managerResources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
 probes:
-  # Every packaged runtime exposes a lightweight health endpoint here.
+  # Manager exposes a lightweight health endpoint here.
   port: 11434
   path: /
   startupFailureThreshold: 30

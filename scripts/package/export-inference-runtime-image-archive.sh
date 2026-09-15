@@ -5,8 +5,9 @@ usage() {
   cat <<'EOF'
 usage: export-inference-runtime-image-archive.sh --out-file PATH [options]
 
-Builds or exports the selected inference runtime as an OCI archive under the
-appliance install contract.
+Re-exports the selected upstream inference engine image as an OCI archive
+under the appliance install contract. The appliance manager is NOT layered
+into this image; it ships separately as inference-manager.
 
 The archive annotation is registry.local/inference-runtime:bundled and the
 emitted workload reference is
@@ -36,7 +37,7 @@ INFERENCE_VERSION=""
 ENGINE="ollama"
 ARCHITECTURE="amd64"
 LOCAL_IMAGE_PREFIX="localhost"
-IMAGE_NAME="appliance-inference-runtime"
+IMAGE_NAME="inference-runtime"
 PREFETCH_RETRIES=5
 
 retry() {
@@ -83,10 +84,6 @@ for tool in skopeo python3 tar; do
     exit 1
   }
 done
-if ! command -v buildah >/dev/null 2>&1; then
-  echo "export-inference-runtime-image-archive: buildah is required for the managed inference image" >&2
-  exit 1
-fi
 
 if [[ -z "${INFERENCE_VERSION}" && "${ENGINE}" == "ollama" ]]; then
   INFERENCE_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${CHART_YAML}")"
@@ -125,31 +122,16 @@ OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}-${ENGINE}:${IMAGE_TAG}"
 
 # Prefetch the selected Linux architecture into local storage, then re-label under the
-# canonical :bundled annotation (same finalize pattern as dns-server export).
+# canonical :bundled annotation. Do not layer the appliance manager into this image.
 retry "${PREFETCH_RETRIES}" \
   oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${LOCAL_REF}" "${ARCHITECTURE}"
-
-EXPORT_REF="${LOCAL_REF}"
-if [[ "${ENGINE}" == "vllm" || "${ENGINE}" == "ollama" ]]; then
-  BUILD_ENGINE_COMMAND="buildah bud --pull-never"
-  if [[ "${ARCHITECTURE}" == "arm64" ]]; then
-    BUILD_ENGINE_COMMAND="buildah bud --pull-never --arch arm64"
-  fi
-  make -C "${REPO_ROOT}/services/inference-manager" image-local \
-    BUILD_ENGINE="${BUILD_ENGINE_COMMAND}" \
-    GOARCH="${ARCHITECTURE}" \
-    BASE_IMAGE="${LOCAL_REF}" \
-    SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
-    SERVICE_IMAGE_TAG="${IMAGE_TAG}"
-  EXPORT_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
-fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 LAYOUT="${TMP_DIR}/oci"
 
 skopeo copy --override-os linux --override-arch "${ARCHITECTURE}" \
-  "containers-storage:${EXPORT_REF}" "oci:${LAYOUT}:registry.local/inference-runtime:bundled"
+  "containers-storage:${LOCAL_REF}" "oci:${LAYOUT}:registry.local/inference-runtime:bundled"
 
 DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'
 import json, sys
@@ -169,7 +151,6 @@ PY
 REFERENCE="registry.local/inference-runtime@${DIGEST}"
 
 rm -f "${OUT_FILE}"
-# Pack explicit OCI layout members so the tar has index.json (not ./index.json).
 tar -C "${LAYOUT}" -cf "${OUT_FILE}" oci-layout index.json blobs
 if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
   mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"

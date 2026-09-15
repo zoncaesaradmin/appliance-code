@@ -1,8 +1,14 @@
-ARG BASE_IMAGE=docker.io/vllm/vllm-openai-cpu:v0.17.1-x86_64
+ARG BASE_IMAGE=docker.io/library/alpine:3.24.1
 FROM ${BASE_IMAGE}
+
+RUN apk add --no-cache python3 py3-pip \
+  && pip3 install --no-cache-dir --break-system-packages huggingface_hub \
+  && addgroup -g 10006 runtime \
+  && adduser -D -u 10006 -G runtime -h /home/runtime runtime
 
 COPY bin/inference-manager /usr/local/bin/inference-manager
 COPY download_model.py /usr/local/libexec/inference-manager/download_model.py
 
 USER 10006:10006
+WORKDIR /home/runtime
 ENTRYPOINT ["/usr/local/bin/inference-manager"]

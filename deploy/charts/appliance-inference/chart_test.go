@@ -24,7 +24,8 @@ func render(t *testing.T, args ...string) string {
 	}
 	command := append([]string{
 		"template", "inference", chartDir(t), "--namespace", "inference",
-		"--set", "image.digest=sha256:" + strings.Repeat("a", 64),
+		"--set", "image.digest=sha256:"+strings.Repeat("a", 64),
+		"--set", "managerImage.digest=sha256:"+strings.Repeat("c", 64),
 	}, args...)
 	out, err := exec.Command("helm", command...).CombinedOutput()
 	if err != nil {
@@ -38,6 +39,9 @@ func TestInferenceGatewayRender(t *testing.T) {
 	for _, want := range []string{
 		"kind: Service\nmetadata:\n  name: inference-gateway",
 		"runAsUser: 10006",
+		"name: inference-manager",
+		"name: inference-engine",
+		"command: [\"ollama\", \"serve\"]",
 		"name: CUDA_VISIBLE_DEVICES\n              value: \"-1\"",
 		"name: ROCR_VISIBLE_DEVICES\n              value: \"-1\"",
 		"name: HOME",
@@ -120,9 +124,13 @@ func TestInferenceEgressCanBeClosedAfterConnectedWindow(t *testing.T) {
 
 func TestImageDigestWins(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("b", 64)
-	out := render(t, "--set", "image.digest="+digest)
+	managerDigest := "sha256:" + strings.Repeat("d", 64)
+	out := render(t, "--set", "image.digest="+digest, "--set", "managerImage.digest="+managerDigest)
 	if !strings.Contains(out, "image: registry.local/inference-runtime@"+digest) {
-		t.Fatalf("digest-pinned image not rendered")
+		t.Fatalf("digest-pinned runtime image not rendered")
+	}
+	if !strings.Contains(out, "image: registry.local/inference-manager@"+managerDigest) {
+		t.Fatalf("digest-pinned manager image not rendered")
 	}
 }
 
@@ -131,7 +139,12 @@ func TestVLLMRuntimeContractRenders(t *testing.T) {
 		t.Skip("helm not installed")
 	}
 	out := render(t, "--set", "runtime.engine=vllm", "--set", "runtime.supportedModes={cpu,cuda}")
-	for _, want := range []string{"name: INFERENCE_ENGINE", "value: \"vllm\"", "name: INFERENCE_MODE", "value: \"auto\"", "name: INFERENCE_SUPPORTED_MODES", "value: \"cpu,cuda\"", "name: VLLM_CPU_KVCACHE_SPACE", "mountPath: /dev/shm", "sizeLimit: 4Gi"} {
+	for _, want := range []string{
+		"name: INFERENCE_ENGINE", "value: \"vllm\"", "name: INFERENCE_MODE", "value: \"auto\"",
+		"name: INFERENCE_SUPPORTED_MODES", "value: \"cpu,cuda\"", "name: VLLM_CPU_KVCACHE_SPACE",
+		"mountPath: /dev/shm", "sizeLimit: 4Gi", "name: inference-gateway-engine-launcher",
+		"mountPath: /control", "command: [\"/bin/sh\", \"/launcher/run.sh\"]",
+	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("vLLM runtime contract missing %q: %s", want, out)
 		}

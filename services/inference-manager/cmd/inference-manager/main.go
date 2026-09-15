@@ -47,6 +47,7 @@ type registry struct {
 type manager struct {
 	engine      string
 	modelsDir   string
+	controlDir  string
 	backend     *url.URL
 	proxy       *httputil.ReverseProxy
 	mu          sync.RWMutex
@@ -54,9 +55,10 @@ type manager struct {
 	process     *exec.Cmd
 	processDone chan struct{}
 	active      string
+	generation  string
 	reg         registry
 	download    func(context.Context, string, string) error
-	start       func(context.Context, model) (*exec.Cmd, error)
+	start       func(context.Context, model) error
 	cudaProbe   func(context.Context) bool
 	catalog     *modelCatalog
 }
@@ -64,8 +66,9 @@ type manager struct {
 func main() {
 	engine := strings.ToLower(env("INFERENCE_ENGINE", "vllm"))
 	modelsDir := env("INFERENCE_MODELS_DIR", "/models")
+	controlDir := env("INFERENCE_CONTROL_DIR", "/control")
 	backend, _ := url.Parse(env("INFERENCE_BACKEND_URL", "http://127.0.0.1:8001"))
-	m := &manager{engine: engine, modelsDir: modelsDir, backend: backend, proxy: httputil.NewSingleHostReverseProxy(backend)}
+	m := &manager{engine: engine, modelsDir: modelsDir, controlDir: controlDir, backend: backend, proxy: httputil.NewSingleHostReverseProxy(backend)}
 	m.download = m.downloadModel
 	if engine == "ollama" {
 		m.start = m.startOllamaModel
@@ -77,8 +80,8 @@ func main() {
 		log.Fatalf("load model registry: %v", err)
 	}
 	if engine == "ollama" {
-		if err := m.startOllama(); err != nil {
-			log.Fatalf("start Ollama: %v", err)
+		if err := m.waitEngineReady(context.Background()); err != nil {
+			log.Fatalf("wait for Ollama engine sidecar: %v", err)
 		}
 	}
 
@@ -94,7 +97,7 @@ func main() {
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
-	log.Printf("inference manager listening on %s", server.Addr)
+	log.Printf("inference manager listening on %s (engine=%s)", server.Addr, engine)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
@@ -228,7 +231,21 @@ func (m *manager) selectMode(ctx context.Context) ([]string, string, []map[strin
 }
 
 func cudaAvailable(ctx context.Context) bool {
-	cmd := exec.CommandContext(ctx, env("INFERENCE_PYTHON", "python3"), "-c", "import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)")
+	// The manager no longer embeds torch. Prefer an explicit install-time GPU
+	// enablement signal, then fall back to a visible NVIDIA device node.
+	switch strings.ToLower(strings.TrimSpace(env("INFERENCE_GPU_ENABLED", ""))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	}
+	if visible := strings.TrimSpace(env("NVIDIA_VISIBLE_DEVICES", "")); visible == "" || visible == "void" || visible == "none" {
+		return false
+	}
+	if _, err := os.Stat("/dev/nvidia0"); err == nil {
+		return true
+	}
+	cmd := exec.CommandContext(ctx, "nvidia-smi")
 	return cmd.Run() == nil
 }
 
@@ -400,28 +417,14 @@ func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.stopProcess()
-	cmd, err := m.start(context.Background(), item)
-	if err != nil {
+	if err := m.start(context.Background(), item); err != nil {
 		writeError(w, http.StatusBadGateway, "start vLLM: "+err.Error())
 		return
 	}
-	done := make(chan struct{})
 	m.processMu.Lock()
-	m.process, m.processDone, m.active = cmd, done, id
+	m.active = id
 	m.processMu.Unlock()
-	go func() {
-		err := cmd.Wait()
-		m.processMu.Lock()
-		if m.process == cmd {
-			m.process, m.processDone, m.active = nil, nil, ""
-		}
-		m.processMu.Unlock()
-		close(done)
-		if err != nil {
-			log.Printf("vLLM model %q exited: %v", id, err)
-		}
-	}()
-	if err := m.waitBackend(r.Context(), done); err != nil {
+	if err := m.waitBackend(r.Context(), nil); err != nil {
 		m.stopProcess()
 		writeError(w, http.StatusBadGateway, "vLLM did not become ready: "+err.Error())
 		return
@@ -452,12 +455,24 @@ func (m *manager) waitBackendPath(ctx context.Context, done <-chan struct{}, hea
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-done:
-			return errors.New("runtime process exited")
+			if done != nil {
+				return errors.New("runtime process exited")
+			}
 		case <-deadline.C:
 			return errors.New("startup timed out")
 		case <-ticker.C:
 		}
 	}
+}
+
+func (m *manager) waitEngineReady(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	healthPath := "/health"
+	if m.engine == "ollama" {
+		healthPath = "/"
+	}
+	return m.waitBackendPath(ctx, nil, healthPath)
 }
 
 func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
@@ -512,36 +527,8 @@ func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
 	m.proxy.ServeHTTP(w, r)
 }
 
-func (m *manager) startOllama() error {
-	cmd := exec.Command(env("INFERENCE_OLLAMA_COMMAND", "ollama"), "serve")
-	cmd.Env = append(os.Environ(), "OLLAMA_HOST="+m.backend.Host, "OLLAMA_MODELS="+m.modelsDir)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	done := make(chan struct{})
-	m.processMu.Lock()
-	m.process, m.processDone = cmd, done
-	m.processMu.Unlock()
-	go func() {
-		err := cmd.Wait()
-		m.processMu.Lock()
-		if m.process == cmd {
-			m.process, m.processDone = nil, nil
-		}
-		m.processMu.Unlock()
-		close(done)
-		if err != nil {
-			log.Printf("Ollama exited: %v", err)
-		}
-	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	return m.waitBackendPath(ctx, done, "/")
-}
-
-func (m *manager) startOllamaModel(context.Context, model) (*exec.Cmd, error) {
-	return nil, errors.New("Ollama models are loaded through the running Ollama API")
+func (m *manager) startOllamaModel(context.Context, model) error {
+	return errors.New("Ollama models are loaded through the running Ollama API")
 }
 
 func (m *manager) importOllama(w http.ResponseWriter, r *http.Request, modelID, source, digest string) {
@@ -662,20 +649,34 @@ func (m *manager) downloadModel(ctx context.Context, source, destination string)
 	return cmd.Run()
 }
 
-func (m *manager) startVLLM(_ context.Context, item model) (*exec.Cmd, error) {
+func (m *manager) startVLLM(_ context.Context, item model) error {
 	_, mode, _ := m.selectMode(context.Background())
 	if mode == "" {
-		return nil, errors.New("no usable inference mode")
+		return errors.New("no usable inference mode")
 	}
-	applyVLLMRlimits()
+	if err := os.MkdirAll(m.controlDir, 0o750); err != nil {
+		return err
+	}
 	args := m.vllmCommandArguments(item, mode)
-	cmd := exec.Command(env("INFERENCE_VLLM_COMMAND", "vllm"), args...)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	cmd.Env = vllmProcessEnvironment(os.Environ())
-	if err := cmd.Start(); err != nil {
-		return nil, err
+	command := append([]string{env("INFERENCE_VLLM_COMMAND", "vllm")}, args...)
+	payload, err := json.Marshal(command)
+	if err != nil {
+		return err
 	}
-	return cmd, nil
+	argvPath := filepath.Join(m.controlDir, "argv.json")
+	generation := fmt.Sprintf("%d", time.Now().UnixNano())
+	if err := os.WriteFile(argvPath, payload, 0o640); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(m.controlDir, "generation"), []byte(generation), 0o640); err != nil {
+		return err
+	}
+	m.processMu.Lock()
+	m.generation = generation
+	m.process, m.processDone = nil, nil
+	m.processMu.Unlock()
+	_ = mode
+	return nil
 }
 
 func (m *manager) vllmCommandArguments(item model, mode string) []string {
@@ -688,7 +689,11 @@ func (m *manager) vllmCommandArguments(item model, mode string) []string {
 	// vLLM CPU images reject --device, and CUDA images select the platform at
 	// import time. Mode still gates whether load is allowed.
 	_ = mode
-	return append(args, "--host", "127.0.0.1", "--port", strings.TrimPrefix(m.backend.Port(), ":"))
+	port := m.backend.Port()
+	if port == "" {
+		port = "8001"
+	}
+	return append(args, "--host", "127.0.0.1", "--port", port)
 }
 
 // Scope offline serving to the runtime child. The manager's catalog job and
@@ -735,19 +740,30 @@ func argumentPresent(arguments []string, wanted string) bool {
 
 func (m *manager) stopProcess() {
 	m.processMu.Lock()
-	if m.process == nil || m.process.Process == nil {
-		m.process, m.processDone, m.active = nil, nil, ""
-		m.processMu.Unlock()
+	generation := m.generation
+	process := m.process
+	done := m.processDone
+	m.generation = ""
+	m.active = ""
+	m.process, m.processDone = nil, nil
+	m.processMu.Unlock()
+
+	if m.engine == "vllm" && m.controlDir != "" {
+		_ = os.WriteFile(filepath.Join(m.controlDir, "generation"), []byte(""), 0o640)
+		_ = os.Remove(filepath.Join(m.controlDir, "argv.json"))
+		_ = generation
+	}
+	if process == nil || process.Process == nil {
 		return
 	}
-	process := m.process.Process
-	done := m.processDone
-	_ = process.Signal(syscall.SIGTERM)
-	m.processMu.Unlock()
+	_ = process.Process.Signal(syscall.SIGTERM)
+	if done == nil {
+		return
+	}
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		_ = process.Kill()
+		_ = process.Process.Kill()
 		<-done
 	}
 }

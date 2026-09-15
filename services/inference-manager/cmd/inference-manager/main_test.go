@@ -8,7 +8,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -256,14 +255,18 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 	m.backend, _ = url.Parse(backend.URL)
 	item := model{ID: "test/tiny", Path: filepath.Join(m.modelsDir, "tiny")}
 	m.reg.Models[item.ID] = item
-	m.start = func(_ context.Context, _ model) (*exec.Cmd, error) {
-		cmd := exec.Command("sh", "-c", "sleep 2")
-		return cmd, cmd.Start()
+	started := false
+	m.start = func(_ context.Context, _ model) error {
+		started = true
+		return nil
 	}
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`))
 	w := httptest.NewRecorder()
 	m.loadModel(w, req)
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("load status %d: %s", w.Code, w.Body.String())
+	}
+	if !started {
+		t.Fatal("expected start callback for loaded model")
 	}
 }

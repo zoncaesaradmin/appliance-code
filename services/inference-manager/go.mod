@@ -1,3 +1,3 @@
 module appliance-code/services/inference-manager
 
-go 1.26.0
+go 1.26.4

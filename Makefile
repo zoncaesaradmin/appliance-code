@@ -102,7 +102,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -332,6 +332,15 @@ package-inference-runtime-image-archive:
 		$${INFERENCE_VERSION:+--inference-version "$${INFERENCE_VERSION}"} \
 		$${INFERENCE_ENGINE:+--engine "$${INFERENCE_ENGINE}"} \
 		$${INFERENCE_ARCHITECTURE:+--architecture "$${INFERENCE_ARCHITECTURE}"}
+
+## package-inference-manager-image-archive: build the thin inference-manager
+## image with registry.local/inference-manager:bundled annotation.
+package-inference-manager-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/inference-manager.tar}"; \
+	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	bash ./scripts/package/export-inference-manager-image-archive.sh \
+		--out-file "$$out_file" \
+		--reference-out-file "$$reference_file"
 
 ## package-blob-storage-image-archive: re-export the pinned S3-compatible
 ## runtime with registry.local/blob-storage:bundled annotation.

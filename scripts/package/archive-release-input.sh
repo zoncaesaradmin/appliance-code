@@ -60,6 +60,11 @@ Options:
                                    Canonical
                                    registry.local/inference-runtime@sha256:...
                                    platform-manifest reference.
+  --inference-manager-image PATH   Pinned thin inference-manager OCI archive.
+  --inference-manager-image-reference REF
+                                   Canonical
+                                   registry.local/inference-manager@sha256:...
+                                   platform-manifest reference.
   --inference-version VERSION      Inference compatibility version. Defaults to
                                    the appliance-inference chart appVersion.
   --extra-oci-image PATH           Repeatable additional OCI image archive to
@@ -130,6 +135,8 @@ BLOB_STORAGE_IMAGE=""
 BLOB_STORAGE_IMAGE_REFERENCE=""
 INFERENCE_RUNTIME_IMAGE=""
 INFERENCE_RUNTIME_IMAGE_REFERENCE=""
+INFERENCE_MANAGER_IMAGE=""
+INFERENCE_MANAGER_IMAGE_REFERENCE=""
 INFERENCE_VERSION=""
 WORKFLOWS_VERSION=""
 WORKFLOW_CONTROLLER_IMAGE=""
@@ -242,6 +249,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --inference-runtime-image-reference)
       INFERENCE_RUNTIME_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --inference-manager-image)
+      INFERENCE_MANAGER_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --inference-manager-image-reference)
+      INFERENCE_MANAGER_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
     --inference-version)
@@ -574,13 +589,21 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" && ! -f "${INFERENCE_RUNTIME_IMAGE}" ]]; t
   echo "archive-release-input: inference-runtime image not found: ${INFERENCE_RUNTIME_IMAGE}" >&2
   exit 1
 fi
-if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" || -n "${INFERENCE_VERSION}" ]]; then
-  if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" ]]; then
-    echo "archive-release-input: --inference-runtime-image and --inference-runtime-image-reference must be provided together" >&2
+if [[ -n "${INFERENCE_MANAGER_IMAGE}" && ! -f "${INFERENCE_MANAGER_IMAGE}" ]]; then
+  echo "archive-release-input: inference-manager image not found: ${INFERENCE_MANAGER_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" || -n "${INFERENCE_MANAGER_IMAGE}" || -n "${INFERENCE_MANAGER_IMAGE_REFERENCE}" || -n "${INFERENCE_VERSION}" ]]; then
+  if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" || -z "${INFERENCE_MANAGER_IMAGE}" || -z "${INFERENCE_MANAGER_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: --inference-runtime-image/--inference-runtime-image-reference and --inference-manager-image/--inference-manager-image-reference must be provided together" >&2
     exit 2
   fi
   if [[ ! "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" =~ ^registry\.local/inference-runtime@sha256:[0-9a-f]{64}$ ]]; then
     echo "archive-release-input: --inference-runtime-image-reference must be registry.local/inference-runtime@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  if [[ ! "${INFERENCE_MANAGER_IMAGE_REFERENCE}" =~ ^registry\.local/inference-manager@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --inference-manager-image-reference must be registry.local/inference-manager@sha256:<64 lowercase hex>" >&2
     exit 2
   fi
   if [[ ! -d "${INFERENCE_CHART_DIR}" ]]; then
@@ -597,7 +620,7 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE
     exit 1
   fi
   if ! command -v python3 >/dev/null 2>&1; then
-    echo "archive-release-input: python3 is required to validate the inference-runtime OCI archive contract" >&2
+    echo "archive-release-input: python3 is required to validate the inference OCI archive contracts" >&2
     exit 1
   fi
   python3 - "${INFERENCE_RUNTIME_IMAGE}" "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" <<'PY'
@@ -625,11 +648,40 @@ digest = descriptor.get("digest", "")
 if reference != "registry.local/inference-runtime@" + digest:
     raise SystemExit(f"archive-release-input: inference-runtime image reference {reference!r} does not match index digest {digest!r}")
 PY
+  python3 - "${INFERENCE_MANAGER_IMAGE}" "${INFERENCE_MANAGER_IMAGE_REFERENCE}" <<'PY'
+import json
+import sys
+import tarfile
+
+archive, reference = sys.argv[1:]
+with tarfile.open(archive, "r:*") as tf:
+    member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
+    if member is None:
+        raise SystemExit("archive-release-input: inference-manager OCI archive has no index.json")
+    stream = tf.extractfile(member)
+    if stream is None:
+        raise SystemExit("archive-release-input: inference-manager OCI index.json is not a regular file")
+    index = json.load(stream)
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"archive-release-input: inference-manager OCI index must contain one platform manifest, found {len(manifests)}")
+descriptor = manifests[0]
+annotation = descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name")
+if annotation != "registry.local/inference-manager:bundled":
+    raise SystemExit(f"archive-release-input: inference-manager OCI annotation is {annotation!r}, want 'registry.local/inference-manager:bundled'")
+digest = descriptor.get("digest", "")
+if reference != "registry.local/inference-manager@" + digest:
+    raise SystemExit(f"archive-release-input: inference-manager image reference {reference!r} does not match index digest {digest!r}")
+PY
 fi
 # Pack-selective builds may omit inference inputs (inference pack not selected).
-# Never ship inferenceVersion/chart without the runtime image.
-if [[ -z "${INFERENCE_RUNTIME_IMAGE}" ]]; then
+# Never ship inferenceVersion/chart without the runtime and manager images.
+if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_MANAGER_IMAGE}" ]]; then
   INFERENCE_VERSION=""
+  INFERENCE_RUNTIME_IMAGE=""
+  INFERENCE_RUNTIME_IMAGE_REFERENCE=""
+  INFERENCE_MANAGER_IMAGE=""
+  INFERENCE_MANAGER_IMAGE_REFERENCE=""
 fi
 if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" && ! -f "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
   echo "archive-release-input: workflow controller image not found: ${WORKFLOW_CONTROLLER_IMAGE}" >&2
@@ -782,6 +834,7 @@ HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
 ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 INFERENCE_RUNTIME_BASENAME=""
+INFERENCE_MANAGER_BASENAME=""
 BLOB_STORAGE_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 MESSAGE_BROKER_CHART_ARCHIVE="appliance-message-broker-${CODE_VERSION}.tgz"
@@ -831,6 +884,10 @@ cp "${BLOB_STORAGE_IMAGE}" "${RELEASE_INPUT_DIR}/${BLOB_STORAGE_BASENAME}"
 if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   INFERENCE_RUNTIME_BASENAME="$(basename "${INFERENCE_RUNTIME_IMAGE}")"
   cp "${INFERENCE_RUNTIME_IMAGE}" "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}"
+fi
+if [[ -n "${INFERENCE_MANAGER_IMAGE}" ]]; then
+  INFERENCE_MANAGER_BASENAME="$(basename "${INFERENCE_MANAGER_IMAGE}")"
+  cp "${INFERENCE_MANAGER_IMAGE}" "${RELEASE_INPUT_DIR}/${INFERENCE_MANAGER_BASENAME}"
 fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
@@ -965,6 +1022,9 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}" | sed 's/^sha256://')" "${INFERENCE_RUNTIME_BASENAME}"
   fi
+  if [[ -n "${INFERENCE_MANAGER_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${INFERENCE_MANAGER_BASENAME}" | sed 's/^sha256://')" "${INFERENCE_MANAGER_BASENAME}"
+  fi
   if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_CONTROLLER_BASENAME}"
   fi
@@ -1069,6 +1129,10 @@ if [[ -n "${INFERENCE_CHART_BASENAME}" ]]; then
   if [[ -n "${INFERENCE_RUNTIME_BASENAME}" ]]; then
     OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
     "inferenceRuntimeImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_RUNTIME_BASENAME}" "${INFERENCE_RUNTIME_BASENAME}" "${INFERENCE_RUNTIME_IMAGE_REFERENCE}")"
+  fi
+  if [[ -n "${INFERENCE_MANAGER_BASENAME}" ]]; then
+    OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
+    "inferenceManagerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_MANAGER_BASENAME}" "${INFERENCE_MANAGER_BASENAME}" "${INFERENCE_MANAGER_IMAGE_REFERENCE}")"
   fi
 fi
 
