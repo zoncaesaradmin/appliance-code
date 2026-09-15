@@ -46,6 +46,32 @@ func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestEmptyFailedCatalogRetriesImmediatelyOnRestart(t *testing.T) {
+	m := testManager(t)
+	m.engine = "vllm"
+	c := newModelCatalog(m)
+	c.discover = func(context.Context) ([]catalogEntry, error) {
+		return nil, errors.New("cannot determine installed vLLM model architectures: exit status 1")
+	}
+	c.refresh(context.Background())
+	if len(c.state.Items) != 0 || c.state.LastError == "" || c.state.LastAttempt.IsZero() {
+		t.Fatalf("failed empty catalog not recorded: %+v", c.state)
+	}
+	restarted := newModelCatalog(m)
+	if d := restarted.nextRefreshDelay(); d != 0 {
+		t.Fatalf("empty failed catalog should retry immediately, delay=%s", d)
+	}
+	called := false
+	restarted.discover = func(context.Context) ([]catalogEntry, error) {
+		called = true
+		return []catalogEntry{{ID: "org/model", Source: "org/model@abc", DownloadBytes: 1, MemoryBytes: 2}}, nil
+	}
+	restarted.refresh(context.Background())
+	if !called || len(restarted.state.Items) != 1 || restarted.state.LastError != "" {
+		t.Fatalf("empty failed catalog did not recover: called=%v state=%+v", called, restarted.state)
+	}
+}
+
 func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
 	m := testManager(t)
 	m.engine = "vllm"

@@ -31,6 +31,11 @@ vLLM catalog launches use a 2048-token context. Estimates are recomputed locally
 on every catalog read and selection. Cached Hugging Face revisions can become
 unavailable upstream; report a download error without changing installed models.
 
+A successful catalog (or a retained non-empty one) refreshes at most once per day
+so restarts do not hammer upstream. If discovery has never succeeded and the
+cached list is empty, the next process start retries immediately so a fixed
+runtime image is not blocked for 24 hours by a prior failed attempt.
+
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
 `GET /v1/models` independently lists downloaded models. The control plane exposes
 the catalog as `GET /api/v1/inference/models/catalog`. Catalog imports include

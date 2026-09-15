@@ -62,12 +62,22 @@ func newModelCatalog(m *manager) *modelCatalog {
 	return c
 }
 
+func (c *modelCatalog) nextRefreshDelay() time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Successful catalogs (or retained good ones) keep the daily schedule so
+	// restarts do not hammer upstream. A never-successful / empty failed
+	// catalog must retry on the next start; otherwise a one-time probe bug
+	// hides behind a 24h lock after the fix is deployed.
+	if !c.state.LastAttempt.IsZero() && (c.state.LastSuccess.IsZero() || len(c.state.Items) == 0) && c.state.LastError != "" {
+		return 0
+	}
+	return time.Until(c.state.LastAttempt.Add(catalogInterval))
+}
+
 func (c *modelCatalog) run(ctx context.Context) {
-	// Persisted attempt time prevents pod restarts from hammering upstream.
 	for {
-		c.mu.Lock()
-		delay := time.Until(c.state.LastAttempt.Add(catalogInterval))
-		c.mu.Unlock()
+		delay := c.nextRefreshDelay()
 		if delay > 0 {
 			timer := time.NewTimer(delay)
 			select {
