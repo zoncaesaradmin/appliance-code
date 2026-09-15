@@ -6,7 +6,13 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.base
     artifacts:
-      required: [control-plane-image, control-plane-chart]
+      required:
+        - control-plane-image
+        - control-plane-chart
+        - ui-image
+        - blob-storage-image
+        - message-broker-image
+        - message-broker-chart
   lan-discovery:
     displayName: LAN Discovery
     requires: [base]
@@ -38,7 +44,11 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.workflows
     artifacts:
-      required: [workflow-templates]
+      required:
+        - workflows-chart
+        - workflows-crds
+        - workflow-controller-image
+        - workflow-executor-image
   build:
     displayName: Build
     requires: [base, host, workflows, artifact]
@@ -46,7 +56,7 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.build
     artifacts:
-      required: [workspace-provisioner-image, workflow-templates]
+      required: [workspace-provisioner-image]
   artifact:
     displayName: Artifact
     requires: [base]
@@ -102,7 +112,7 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.applications
     artifacts:
-      required: [host-agent-image]
+      required: [host-agent-image, jellyfin-image]
   plaintext-http:
     displayName: Plaintext HTTP
     requires: [base]

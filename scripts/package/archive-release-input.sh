@@ -21,11 +21,11 @@ Options:
   --ui-image PATH                  Appliance UI image archive. Required.
   --ui-image-reference REF         Canonical UI image reference contained in
                                    the OCI archive.
-  --host-agent-image PATH          Pinned appliance host-agent OCI archive.
-  --host-agent-image-reference REF
-                                   Canonical
+  --host-agent-image PATH          Optional pinned appliance host-agent OCI archive
+                                   (deviceuser / host+applications capabilities).
+  --host-agent-image-reference REF Optional companion digest pin for --host-agent-image:
                                    registry.local/appliance-host-agent@sha256:...
-                                   platform-manifest reference. Required.
+                                   Required together with --host-agent-image.
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
                                    Defaults to services/hostagent/bin/appliance-host-agentd.
   --host-packages-dir DIR          Offline host package directory to copy into
@@ -370,7 +370,7 @@ require_host_packages_baseline() {
   fi
 }
 
-if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" || -z "${K3S_VERSION}" ]]; then
+if [[ -z "${OUT_FILE}" || -z "${CODE_VERSION}" || -z "${CONTROL_PLANE_IMAGE}" || -z "${UI_IMAGE}" || -z "${K3S_VERSION}" ]]; then
   echo "archive-release-input: missing required arguments" >&2
   usage >&2
   exit 2
@@ -388,9 +388,15 @@ if [[ ! -f "${UI_IMAGE}" ]]; then
   echo "archive-release-input: UI image not found: ${UI_IMAGE}" >&2
   exit 1
 fi
-if [[ ! -f "${HOST_AGENT_IMAGE}" ]]; then
-  echo "archive-release-input: host-agent image not found: ${HOST_AGENT_IMAGE}" >&2
-  exit 1
+if [[ -n "${HOST_AGENT_IMAGE}" || -n "${HOST_AGENT_IMAGE_REFERENCE}" ]]; then
+  if [[ -z "${HOST_AGENT_IMAGE}" || -z "${HOST_AGENT_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: --host-agent-image and --host-agent-image-reference must be provided together" >&2
+    exit 2
+  fi
+  if [[ ! -f "${HOST_AGENT_IMAGE}" ]]; then
+    echo "archive-release-input: host-agent image not found: ${HOST_AGENT_IMAGE}" >&2
+    exit 1
+  fi
 fi
 if [[ ! -f "${HOST_AGENT_BINARY}" ]]; then
   echo "archive-release-input: host-agent binary not found: ${HOST_AGENT_BINARY}" >&2
@@ -405,11 +411,12 @@ if [[ -z "${HOST_PACKAGES_OS_VERSION}" ]]; then
   exit 2
 fi
 require_host_packages_baseline "${HOST_PACKAGES_DIR}" "${HOST_PACKAGES_OS_VERSION}"
-if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
-  echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
-  exit 2
-fi
-python3 - "${HOST_AGENT_IMAGE}" "${HOST_AGENT_IMAGE_REFERENCE}" <<'PY'
+if [[ -n "${HOST_AGENT_IMAGE}" ]]; then
+  if [[ ! "${HOST_AGENT_IMAGE_REFERENCE}" =~ ^registry\.local/appliance-host-agent@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --host-agent-image-reference must be registry.local/appliance-host-agent@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  python3 - "${HOST_AGENT_IMAGE}" "${HOST_AGENT_IMAGE_REFERENCE}" <<'PY'
 import json, sys, tarfile
 
 archive_path, expected_ref = sys.argv[1], sys.argv[2]
@@ -435,6 +442,7 @@ if digest != expected_digest:
         f"does not match archive index.json digest {digest}"
     )
 PY
+fi
 if [[ -n "${ARTIFACT_SERVER_IMAGE}" && ! -f "${ARTIFACT_SERVER_IMAGE}" ]]; then
   echo "archive-release-input: artifact-server image not found: ${ARTIFACT_SERVER_IMAGE}" >&2
   exit 1
@@ -477,10 +485,10 @@ digest = descriptor.get("digest", "")
 if reference != "registry.local/artifact-server@" + digest:
     raise SystemExit(f"archive-release-input: artifact-server image reference {reference!r} does not match index digest {digest!r}")
 PY
-fi
-if [[ ! -d "${ARTIFACT_SERVER_CHART_DIR}" ]]; then
-  echo "archive-release-input: missing appliance-registry chart: ${ARTIFACT_SERVER_CHART_DIR}" >&2
-  exit 1
+  if [[ ! -d "${ARTIFACT_SERVER_CHART_DIR}" ]]; then
+    echo "archive-release-input: missing appliance-registry chart: ${ARTIFACT_SERVER_CHART_DIR}" >&2
+    exit 1
+  fi
 fi
 if [[ -n "${DNS_IMAGE}" && ! -f "${DNS_IMAGE}" ]]; then
   echo "archive-release-input: CoreDNS image not found: ${DNS_IMAGE}" >&2
@@ -557,10 +565,10 @@ digest = descriptor.get("digest", "")
 if reference != "registry.local/coredns@" + digest:
     raise SystemExit(f"archive-release-input: CoreDNS image reference {reference!r} does not match index digest {digest!r}")
 PY
-fi
-if [[ ! -d "${DNS_CHART_DIR}" ]]; then
-  echo "archive-release-input: missing appliance-dns chart: ${DNS_CHART_DIR}" >&2
-  exit 1
+  if [[ ! -d "${DNS_CHART_DIR}" ]]; then
+    echo "archive-release-input: missing appliance-dns chart: ${DNS_CHART_DIR}" >&2
+    exit 1
+  fi
 fi
 if [[ -n "${INFERENCE_RUNTIME_IMAGE}" && ! -f "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   echo "archive-release-input: inference-runtime image not found: ${INFERENCE_RUNTIME_IMAGE}" >&2
@@ -675,23 +683,31 @@ fi
 if [[ -z "${CHART_VERSION}" ]]; then
   CHART_VERSION="${CODE_VERSION}"
 fi
-if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
-  ARTIFACT_SERVER_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${ARTIFACT_SERVER_CHART_DIR}/Chart.yaml")"
+if [[ -n "${ARTIFACT_SERVER_IMAGE}" ]]; then
+  if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
+    ARTIFACT_SERVER_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${ARTIFACT_SERVER_CHART_DIR}/Chart.yaml")"
+  fi
+  # compatibility.artifactServerVersion is unprefixed; Chart.yaml appVersion may be v2.1.8.
+  ARTIFACT_SERVER_VERSION="${ARTIFACT_SERVER_VERSION#v}"
+  if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
+    echo "archive-release-input: unable to derive artifactServerVersion from ${ARTIFACT_SERVER_CHART_DIR}/Chart.yaml" >&2
+    exit 1
+  fi
+else
+  ARTIFACT_SERVER_VERSION=""
 fi
-# compatibility.artifactServerVersion is unprefixed; Chart.yaml appVersion may be v2.1.8.
-ARTIFACT_SERVER_VERSION="${ARTIFACT_SERVER_VERSION#v}"
-if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
-  echo "archive-release-input: unable to derive artifactServerVersion from ${ARTIFACT_SERVER_CHART_DIR}/Chart.yaml" >&2
-  exit 1
-fi
-if [[ -z "${DNS_VERSION}" ]]; then
-  DNS_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${DNS_CHART_DIR}/Chart.yaml")"
-fi
-# compatibility.dnsVersion is unprefixed; Chart.yaml appVersion may be v1.14.4.
-DNS_VERSION="${DNS_VERSION#v}"
-if [[ -z "${DNS_VERSION}" ]]; then
-  echo "archive-release-input: unable to derive dnsVersion from ${DNS_CHART_DIR}/Chart.yaml" >&2
-  exit 1
+if [[ -n "${DNS_IMAGE}" ]]; then
+  if [[ -z "${DNS_VERSION}" ]]; then
+    DNS_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${DNS_CHART_DIR}/Chart.yaml")"
+  fi
+  # compatibility.dnsVersion is unprefixed; Chart.yaml appVersion may be v1.14.4.
+  DNS_VERSION="${DNS_VERSION#v}"
+  if [[ -z "${DNS_VERSION}" ]]; then
+    echo "archive-release-input: unable to derive dnsVersion from ${DNS_CHART_DIR}/Chart.yaml" >&2
+    exit 1
+  fi
+else
+  DNS_VERSION=""
 fi
 if [[ -z "${RELEASE_ID}" ]]; then
   RELEASE_ID="local-${CODE_VERSION}-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -761,7 +777,7 @@ copy_dir_or_empty() {
 
 CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 UI_BASENAME="$(basename "${UI_IMAGE}")"
-HOST_AGENT_IMAGE_BASENAME="$(basename "${HOST_AGENT_IMAGE}")"
+HOST_AGENT_IMAGE_BASENAME=""
 HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
 ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
@@ -794,7 +810,10 @@ if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then MESSAGE_BROKER_BASENAME="$(basename 
 
 cp "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 cp "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
-cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
+if [[ -n "${HOST_AGENT_IMAGE}" ]]; then
+  HOST_AGENT_IMAGE_BASENAME="$(basename "${HOST_AGENT_IMAGE}")"
+  cp "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
+fi
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
 cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
 if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then cp "${MESSAGE_BROKER_IMAGE}" "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}"; fi
@@ -842,13 +861,21 @@ mkdir -p "${TMP_DIR}/appliance-message-broker-chart"
 cp -R "${MESSAGE_BROKER_CHART_DIR}/." "${TMP_DIR}/appliance-message-broker-chart/"
 tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" appliance-message-broker-chart
 
-mkdir -p "${TMP_DIR}/appliance-registry-chart"
-cp -R "${ARTIFACT_SERVER_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
-tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" appliance-registry-chart
+ARTIFACT_SERVER_CHART_BASENAME=""
+if [[ -n "${ARTIFACT_SERVER_IMAGE}" ]]; then
+  mkdir -p "${TMP_DIR}/appliance-registry-chart"
+  cp -R "${ARTIFACT_SERVER_CHART_DIR}/." "${TMP_DIR}/appliance-registry-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" appliance-registry-chart
+  ARTIFACT_SERVER_CHART_BASENAME="${ARTIFACT_SERVER_CHART_ARCHIVE}"
+fi
 
-mkdir -p "${TMP_DIR}/appliance-dns-chart"
-cp -R "${DNS_CHART_DIR}/." "${TMP_DIR}/appliance-dns-chart/"
-tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" appliance-dns-chart
+DNS_CHART_BASENAME=""
+if [[ -n "${DNS_IMAGE}" ]]; then
+  mkdir -p "${TMP_DIR}/appliance-dns-chart"
+  cp -R "${DNS_CHART_DIR}/." "${TMP_DIR}/appliance-dns-chart/"
+  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" appliance-dns-chart
+  DNS_CHART_BASENAME="${DNS_CHART_ARCHIVE}"
+fi
 
 INFERENCE_CHART_BASENAME=""
 if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
@@ -857,7 +884,6 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${INFERENCE_CHART_ARCHIVE}" appliance-inference-chart
   INFERENCE_CHART_BASENAME="${INFERENCE_CHART_ARCHIVE}"
 fi
-
 
 if [[ -n "${WORKFLOWS_CRDS_DIR}" && -d "${WORKFLOWS_CHART_DIR}" ]]; then
   mkdir -p "${TMP_DIR}/workflows-chart"
@@ -870,8 +896,12 @@ fi
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
-  printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
-  printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
+  if [[ -n "${ARTIFACT_SERVER_VERSION}" ]]; then
+    printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
+  fi
+  if [[ -n "${DNS_VERSION}" ]]; then
+    printf ',\n  "dnsVersion": "%s"' "${DNS_VERSION}"
+  fi
   if [[ -n "${INFERENCE_VERSION}" ]]; then
     printf ',\n  "inferenceVersion": "%s"' "${INFERENCE_VERSION}"
   fi
@@ -902,11 +932,8 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   for file in \
     "${CONTROL_PLANE_BASENAME}" \
     "${UI_BASENAME}" \
-    "${HOST_AGENT_IMAGE_BASENAME}" \
     "${HOST_AGENT_BINARY_BASENAME}" \
     "${CHART_ARCHIVE}" \
-    "${ARTIFACT_SERVER_CHART_ARCHIVE}" \
-    "${DNS_CHART_ARCHIVE}" \
     "${BLOB_STORAGE_BASENAME}" \
     "${METADATA_BUNDLE_BASENAME}" \
     "${CONFIG_SCHEMA_BASENAME}" \
@@ -914,6 +941,15 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   do
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${file}" | sed 's/^sha256://')" "${file}"
   done
+  if [[ -n "${HOST_AGENT_IMAGE_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" | sed 's/^sha256://')" "${HOST_AGENT_IMAGE_BASENAME}"
+  fi
+  if [[ -n "${ARTIFACT_SERVER_CHART_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_BASENAME}" | sed 's/^sha256://')" "${ARTIFACT_SERVER_CHART_BASENAME}"
+  fi
+  if [[ -n "${DNS_CHART_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${DNS_CHART_BASENAME}" | sed 's/^sha256://')" "${DNS_CHART_BASENAME}"
+  fi
   if [[ -f "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" | sed 's/^sha256://')" "${WORKFLOWS_CHART_ARCHIVE}"
   fi
@@ -980,11 +1016,23 @@ WORKFLOWS_COMPATIBILITY_JSON=""
 if [[ -n "${WORKFLOWS_VERSION}" ]]; then
   WORKFLOWS_COMPATIBILITY_JSON=', "workflowsVersion": "'"${WORKFLOWS_VERSION}"'"'
 fi
-ARTIFACT_SERVER_COMPATIBILITY_JSON=', "artifactServerVersion": "'"${ARTIFACT_SERVER_VERSION}"'"'
-DNS_COMPATIBILITY_JSON=', "dnsVersion": "'"${DNS_VERSION}"'"'
+ARTIFACT_SERVER_COMPATIBILITY_JSON=""
+if [[ -n "${ARTIFACT_SERVER_VERSION}" ]]; then
+  ARTIFACT_SERVER_COMPATIBILITY_JSON=', "artifactServerVersion": "'"${ARTIFACT_SERVER_VERSION}"'"'
+fi
+DNS_COMPATIBILITY_JSON=""
+if [[ -n "${DNS_VERSION}" ]]; then
+  DNS_COMPATIBILITY_JSON=', "dnsVersion": "'"${DNS_VERSION}"'"'
+fi
 INFERENCE_COMPATIBILITY_JSON=""
 if [[ -n "${INFERENCE_VERSION}" ]]; then
   INFERENCE_COMPATIBILITY_JSON=', "inferenceVersion": "'"${INFERENCE_VERSION}"'"'
+fi
+
+OPTIONAL_HOST_AGENT_IMAGE_JSON=""
+if [[ -n "${HOST_AGENT_IMAGE_BASENAME}" ]]; then
+  OPTIONAL_HOST_AGENT_IMAGE_JSON=',
+    "hostAgentImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}")"
 fi
 
 OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=""
@@ -993,10 +1041,22 @@ if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
     "artifactServerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_BASENAME}" "${ARTIFACT_SERVER_BASENAME}" "${ARTIFACT_SERVER_IMAGE_REFERENCE}")"
 fi
 
+OPTIONAL_ARTIFACT_SERVER_CHART_JSON=""
+if [[ -n "${ARTIFACT_SERVER_CHART_BASENAME}" ]]; then
+  OPTIONAL_ARTIFACT_SERVER_CHART_JSON=',
+    "artifactServerChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_BASENAME}" "${ARTIFACT_SERVER_CHART_BASENAME}")"
+fi
+
 OPTIONAL_DNS_IMAGE_JSON=""
 if [[ -n "${DNS_BASENAME}" ]]; then
   OPTIONAL_DNS_IMAGE_JSON=',
     "dnsImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_BASENAME}" "${DNS_BASENAME}" "${DNS_IMAGE_REFERENCE}")"
+fi
+
+OPTIONAL_DNS_CHART_JSON=""
+if [[ -n "${DNS_CHART_BASENAME}" ]]; then
+  OPTIONAL_DNS_CHART_JSON=',
+    "dnsChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_BASENAME}" "${DNS_CHART_BASENAME}")"
 fi
 
 BLOB_STORAGE_IMAGE_JSON=',
@@ -1058,12 +1118,9 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   "artifacts": {
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
     "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
-    "hostAgentImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}"),
-    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${HOST_PACKAGES_JSON},
+    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${OPTIONAL_HOST_AGENT_IMAGE_JSON}${HOST_PACKAGES_JSON},
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
-    "messageBrokerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" "${MESSAGE_BROKER_CHART_ARCHIVE}"),
-    "artifactServerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_CHART_ARCHIVE}" "${ARTIFACT_SERVER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON},
-    "dnsChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${DNS_CHART_ARCHIVE}" "${DNS_CHART_ARCHIVE}")${OPTIONAL_DNS_IMAGE_JSON}${BLOB_STORAGE_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
+    "messageBrokerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" "${MESSAGE_BROKER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_CHART_JSON}${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON}${OPTIONAL_DNS_CHART_JSON}${OPTIONAL_DNS_IMAGE_JSON}${BLOB_STORAGE_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
 $(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": %s,\n' "$(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_IMAGE_REFERENCE}")"; fi)
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),

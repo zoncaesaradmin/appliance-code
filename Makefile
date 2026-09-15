@@ -157,6 +157,13 @@ verify:
 		exit 1; \
 	fi; \
 	echo "verify stage: unit/module tests passed"; \
+	echo "verify stage: catalog pack→artifact resolver"; \
+	if ! python3 ./scripts/lib/resolve_pack_artifacts_test.py >"$(VERIFY_LOG_DIR)/verify-pack-artifacts.log" 2>&1; then \
+		echo "verify: catalog pack→artifact resolver failed"; \
+		echo "verify: inspect $(VERIFY_LOG_DIR)/verify-pack-artifacts.log"; \
+		exit 1; \
+	fi; \
+	echo "verify stage: catalog pack→artifact resolver passed"; \
 	echo "verify stage: backend curl checks"; \
 	if ! $(MAKE) --no-print-directory test-curl >"$(VERIFY_CURL_LOG)" 2>&1; then \
 		echo "verify: backend curl checks failed"; \
