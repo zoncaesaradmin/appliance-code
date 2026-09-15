@@ -34,7 +34,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/models":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "tiny:latest", "object": "model"}}})
-		case "/internal/v1/models/imports", "/internal/v1/models/tiny:latest/load", "/internal/v1/models/tiny:latest":
+		case "/internal/v1/models/imports", "/internal/v1/models/load", "/internal/v1/models/delete":
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		default:
 			http.NotFound(w, r)

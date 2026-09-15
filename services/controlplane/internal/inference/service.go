@@ -281,7 +281,7 @@ func (s *Service) Load(ctx context.Context, modelID string) error {
 	if modelID == "" {
 		return fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
-	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/"+url.PathEscape(modelID)+"/load", map[string]any{})
+	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID})
 }
 
 func (s *Service) Delete(ctx context.Context, modelID string) error {
@@ -293,7 +293,7 @@ func (s *Service) Delete(ctx context.Context, modelID string) error {
 	if modelID == "" {
 		return fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
-	return s.callJSON(ctx, http.MethodDelete, "/internal/v1/models/"+url.PathEscape(modelID), nil)
+	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/delete", map[string]any{"modelId": modelID})
 }
 
 func (s *Service) callJSON(ctx context.Context, method, path string, body any) error {

@@ -1616,23 +1616,39 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/ValidationProblem" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
-  /api/v1/inference/models/{modelId}/load:
+  /api/v1/inference/models/load:
     post:
       summary: Load an installed model
+      description: Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
       operationId: loadInferenceModel
-      parameters:
-        - $ref: "#/components/parameters/InferenceModelId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [modelId]
+              properties:
+                modelId: { type: string, minLength: 1 }
       responses:
         "202": { description: Load accepted. }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
-  /api/v1/inference/models/{modelId}:
-    delete:
+  /api/v1/inference/models/delete:
+    post:
       summary: Remove an installed model
+      description: Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
       operationId: deleteInferenceModel
-      parameters:
-        - $ref: "#/components/parameters/InferenceModelId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [modelId]
+              properties:
+                modelId: { type: string, minLength: 1 }
       responses:
         "204": { description: Model removed. }
         "401": { $ref: "#/components/responses/Unauthorized" }

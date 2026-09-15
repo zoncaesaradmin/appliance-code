@@ -4,6 +4,55 @@ import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
 import type { InferenceCatalog, InferenceCatalogEntry, InferenceModel, InferenceRuntimeStatus } from "../types";
 
+const PARAM_HINT = /(\d+(?:\.\d+)?)\s*([MmBb])(?:[-_]|\b)/;
+
+function formatGiB(bytes: number): string {
+  if (bytes <= 0) {
+    return "unknown";
+  }
+  const value = bytes / 1024 ** 3;
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} GiB`;
+}
+
+function formatParamCount(params: number): string {
+  if (params >= 1e9) {
+    const billions = params / 1e9;
+    return `${billions >= 10 ? billions.toFixed(0) : billions.toFixed(1)}B`;
+  }
+  if (params >= 1e6) {
+    const millions = params / 1e6;
+    return `${millions >= 10 ? millions.toFixed(0) : millions.toFixed(1)}M`;
+  }
+  return `${Math.max(1, Math.round(params))}`;
+}
+
+/** Best-effort size line for the selected catalog entry. */
+export function modelCapacitySummary(entry: InferenceCatalogEntry, limit = 120): string {
+  const parts: string[] = [];
+  const named = entry.id.match(PARAM_HINT);
+  if (named) {
+    const amount = Number(named[1]);
+    const unit = named[2].toUpperCase();
+    if (Number.isFinite(amount) && amount > 0) {
+      parts.push(`~${amount % 1 === 0 ? amount.toFixed(0) : amount}${unit} params`);
+    }
+  } else if (entry.downloadBytes > 0) {
+    // FP16 weights are roughly 2 bytes/parameter; download size is a usable stand-in.
+    parts.push(`~${formatParamCount(entry.downloadBytes / 2)} params (est.)`);
+  }
+  if (entry.downloadBytes > 0) {
+    parts.push(`download ${formatGiB(entry.downloadBytes)}`);
+  }
+  if (entry.memoryBytes > 0) {
+    parts.push(`est. RAM ${formatGiB(entry.memoryBytes)}`);
+  }
+  if (parts.length === 0) {
+    return "Capacity details unavailable for this model.";
+  }
+  const summary = parts.join(" · ");
+  return summary.length <= limit ? summary : `${summary.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+}
+
 export function AIServicePage(): React.JSX.Element {
   const [status, setStatus] = useState<InferenceRuntimeStatus | null>(null);
   const [models, setModels] = useState<InferenceModel[]>([]);
@@ -94,6 +143,7 @@ export function AIServicePage(): React.JSX.Element {
 
   const selected = options.find((entry) => entry.id === selectedId) ?? null;
   const selectedDownloaded = selected ? downloaded.has(selected.id) : false;
+  const selectedSummary = selected ? modelCapacitySummary(selected) : "";
 
   return (
     <PageFrame
@@ -167,50 +217,55 @@ export function AIServicePage(): React.JSX.Element {
                 </select>
               </label>
               {selected ? (
-                <div className="button-row">
-                  {selectedDownloaded ? (
-                    <>
+                <>
+                  <p className="text-sm text-slate-600" role="status" aria-live="polite">
+                    {selectedSummary}
+                  </p>
+                  <div className="button-row">
+                    {selectedDownloaded ? (
+                      <>
+                        <Button
+                          type="button"
+                          disabled={busy !== ""}
+                          onClick={() =>
+                            void run(`load:${selected.id}`, () => client.loadInferenceModel(selected.id), `${selected.id} loaded successfully.`)
+                          }
+                        >
+                          {busy === `load:${selected.id}` ? "Loading…" : "Load"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={busy !== ""}
+                          onClick={() =>
+                            void run(`remove:${selected.id}`, () => client.deleteInferenceModel(selected.id), `${selected.id} was removed.`)
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         type="button"
-                        disabled={busy !== ""}
+                        disabled={busy !== "" || !selected.eligible}
                         onClick={() =>
-                          void run(`load:${selected.id}`, () => client.loadInferenceModel(selected.id), `${selected.id} loaded successfully.`)
+                          void run(
+                            `download:${selected.id}`,
+                            () =>
+                              client.importInferenceModel({
+                                catalogId: selected.id,
+                                modelId: selected.id,
+                                source: selected.source
+                              }),
+                            `${selected.id} downloaded. Load it to verify runtime compatibility.`
+                          )
                         }
                       >
-                        {busy === `load:${selected.id}` ? "Loading…" : "Load"}
+                        {busy === `download:${selected.id}` ? "Downloading…" : "Download"}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={busy !== ""}
-                        onClick={() =>
-                          void run(`remove:${selected.id}`, () => client.deleteInferenceModel(selected.id), `${selected.id} was removed.`)
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      disabled={busy !== "" || !selected.eligible}
-                      onClick={() =>
-                        void run(
-                          `download:${selected.id}`,
-                          () =>
-                            client.importInferenceModel({
-                              catalogId: selected.id,
-                              modelId: selected.id,
-                              source: selected.source
-                            }),
-                          `${selected.id} downloaded. Load it to verify runtime compatibility.`
-                        )
-                      }
-                    >
-                      {busy === `download:${selected.id}` ? "Downloading…" : "Download"}
-                    </Button>
-                  )}
-                </div>
+                    )}
+                  </div>
+                </>
               ) : null}
             </div>
           )}

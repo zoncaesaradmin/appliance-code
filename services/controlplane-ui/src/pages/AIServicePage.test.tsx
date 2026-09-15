@@ -78,6 +78,8 @@ it("offers one model dropdown with downloaded marks and no search controls", asy
     select!.value = "available:1b";
     select!.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  expect(element.textContent).toMatch(/~1B params/);
+  expect(element.textContent).toMatch(/est\. RAM/);
   const download = [...element.querySelectorAll("button")].find((button) => button.textContent === "Download")!;
   await act(async () => download.click());
   expect(api.importInferenceModel).toHaveBeenCalledWith({
@@ -94,4 +96,26 @@ it("keeps downloaded models in the dropdown when catalog discovery fails", async
   const select = element.querySelector("select");
   expect([...select!.options].map((option) => option.textContent)).toContain("retired:1b (downloaded)");
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Load")).toBe(true);
+});
+
+it("summarizes parameter and memory capacity for the selected model", async () => {
+  const { modelCapacitySummary } = await import("./AIServicePage");
+  expect(
+    modelCapacitySummary({
+      id: "Qwen/Qwen2.5-0.5B-Instruct",
+      source: "Qwen/Qwen2.5-0.5B-Instruct@abc",
+      downloadBytes: 999_604_126,
+      memoryBytes: 6_271_162_944,
+      eligible: true
+    })
+  ).toBe("~0.5B params · download 0.9 GiB · est. RAM 5.8 GiB");
+  expect(
+    modelCapacitySummary({
+      id: "openai-community/gpt2",
+      source: "openai-community/gpt2@abc",
+      downloadBytes: 1_000_000_000,
+      memoryBytes: 4_000_000_000,
+      eligible: true
+    })
+  ).toContain("params (est.)");
 });

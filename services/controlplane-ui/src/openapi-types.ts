@@ -1200,7 +1200,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inference/models/{modelId}/load": {
+    "/api/v1/inference/models/load": {
         parameters: {
             query?: never;
             header?: never;
@@ -1209,7 +1209,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Load an installed model */
+        /**
+         * Load an installed model
+         * @description Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
+         */
         post: operations["loadInferenceModel"];
         delete?: never;
         options?: never;
@@ -1217,7 +1220,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inference/models/{modelId}": {
+    "/api/v1/inference/models/delete": {
         parameters: {
             query?: never;
             header?: never;
@@ -1226,9 +1229,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        /** Remove an installed model */
-        delete: operations["deleteInferenceModel"];
+        /**
+         * Remove an installed model
+         * @description Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
+         */
+        post: operations["deleteInferenceModel"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3738,12 +3744,16 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                modelId: components["parameters"]["InferenceModelId"];
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    modelId: string;
+                };
+            };
+        };
         responses: {
             /** @description Load accepted. */
             202: {
@@ -3761,12 +3771,16 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                modelId: components["parameters"]["InferenceModelId"];
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    modelId: string;
+                };
+            };
+        };
         responses: {
             /** @description Model removed. */
             204: {

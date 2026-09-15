@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/inference"
@@ -54,7 +55,13 @@ func (h *InferenceHandlers) Import(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InferenceHandlers) Load(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("modelId")
+	var req struct {
+		ModelID string `json:"modelId"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	id := strings.TrimSpace(req.ModelID)
 	if err := h.Inference.Load(r.Context(), id); err != nil {
 		h.writeError(w, r, err)
 		return
@@ -64,7 +71,13 @@ func (h *InferenceHandlers) Load(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InferenceHandlers) Delete(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("modelId")
+	var req struct {
+		ModelID string `json:"modelId"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		return
+	}
+	id := strings.TrimSpace(req.ModelID)
 	if err := h.Inference.Delete(r.Context(), id); err != nil {
 		h.writeError(w, r, err)
 		return

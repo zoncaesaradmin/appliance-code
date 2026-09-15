@@ -21,7 +21,8 @@ separate server-side call from the UI service to the control plane.
 The `/admin/ai-services` React page uses the existing authenticated API proxy.
 It presents one model dropdown that joins eligible catalog candidates with
 downloaded models by ID. Downloaded entries are labeled in the dropdown and
-remain visible when discovery fails or removes a candidate.
+remain visible when discovery fails or removes a candidate. Selecting a model
+shows a short capacity line (parameter hint, download size, estimated RAM).
 
 | Browser/API method and route | UI client method | Control-plane behavior |
 | --- | --- | --- |
@@ -29,8 +30,8 @@ remain visible when discovery fails or removes a candidate.
 | `GET /api/v1/inference/models/catalog` | `getInferenceCatalog` | Cached candidates and current capacity estimates; never triggers upstream fetch |
 | `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
 | `POST /api/v1/inference/models/imports` | `importInferenceModel` | Recheck catalog selection and download on request |
-| `POST /api/v1/inference/models/{id}/load` | `loadInferenceModel` | Load and report runtime success/failure |
-| `DELETE /api/v1/inference/models/{id}` | `deleteInferenceModel` | Remove local model, retaining catalog candidate |
+| `POST /api/v1/inference/models/load` | `loadInferenceModel` | Load and report runtime success/failure |
+| `POST /api/v1/inference/models/delete` | `deleteInferenceModel` | Remove local model, retaining catalog candidate |
 
 Catalog reads require `inference.models.read`; mutations require inference
 administration permission. The UI polls local state every 30 seconds. Import,

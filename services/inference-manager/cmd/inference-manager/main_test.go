@@ -87,7 +87,21 @@ func TestAutoModePrefersConfirmedCUDA(t *testing.T) {
 func TestVLLMServingIsOfflineWithoutChangingManagerEnvironment(t *testing.T) {
 	base := []string{"HF_HUB_OFFLINE=0", "VLLM_NO_USAGE_STATS=0", "HF_HOME=/models/.cache/huggingface", "CUDA_VISIBLE_DEVICES=0"}
 	child := vllmProcessEnvironment(base)
-	for _, want := range []string{"HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "VLLM_NO_USAGE_STATS=1", "DO_NOT_TRACK=1", "HF_HOME=/models/.cache/huggingface", "CUDA_VISIBLE_DEVICES=0"} {
+	for _, want := range []string{
+		"HF_HUB_OFFLINE=1",
+		"TRANSFORMERS_OFFLINE=1",
+		"HF_HUB_DISABLE_TELEMETRY=1",
+		"VLLM_NO_USAGE_STATS=1",
+		"DO_NOT_TRACK=1",
+		"USER=runtime",
+		"LOGNAME=runtime",
+		"HOME=/home/runtime",
+		"TORCHINDUCTOR_CACHE_DIR=/home/runtime/.cache/torch/inductor",
+		"TRITON_CACHE_DIR=/home/runtime/.cache/triton",
+		"XDG_CACHE_HOME=/home/runtime/.cache",
+		"HF_HOME=/models/.cache/huggingface",
+		"CUDA_VISIBLE_DEVICES=0",
+	} {
 		count := 0
 		for _, entry := range child {
 			if entry == want {
@@ -198,8 +212,7 @@ func TestImportListDelete(t *testing.T) {
 		t.Fatal("internal model path leaked")
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/internal/v1/models/test%2Ftiny", nil)
-	req.SetPathValue("model", "test/tiny")
+	req = httptest.NewRequest(http.MethodPost, "/internal/v1/models/delete", strings.NewReader(`{"modelId":"test/tiny"}`))
 	w = httptest.NewRecorder()
 	m.deleteModel(w, req)
 	if w.Code != http.StatusNoContent {
@@ -240,8 +253,7 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 		cmd := exec.Command("sh", "-c", "sleep 2")
 		return cmd, cmd.Start()
 	}
-	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/test%2Ftiny/load", nil)
-	req.SetPathValue("model", item.ID)
+	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`))
 	w := httptest.NewRecorder()
 	m.loadModel(w, req)
 	if w.Code != http.StatusAccepted {

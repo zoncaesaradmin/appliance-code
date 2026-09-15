@@ -759,11 +759,11 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
   }
 
   async loadInferenceModel(modelId: string): Promise<void> {
-	await this.request(`/api/v1/inference/models/${encodeURIComponent(modelId)}/load`, { method: "POST" });
+    await this.request(`/api/v1/inference/models/load`, { method: "POST", body: { modelId } });
   }
 
   async deleteInferenceModel(modelId: string): Promise<void> {
-	await this.request(`/api/v1/inference/models/${encodeURIComponent(modelId)}`, { method: "DELETE" });
+    await this.request(`/api/v1/inference/models/delete`, { method: "POST", body: { modelId } });
   }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {

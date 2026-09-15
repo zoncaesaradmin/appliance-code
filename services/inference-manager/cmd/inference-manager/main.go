@@ -106,8 +106,9 @@ func (m *manager) handler() http.Handler {
 	mux.HandleFunc("GET /{$}", m.health)
 	mux.HandleFunc("GET /internal/v1/runtime/capabilities", m.capabilities)
 	mux.HandleFunc("POST /internal/v1/models/imports", m.importModel)
-	mux.HandleFunc("POST /internal/v1/models/{model}/load", m.loadModel)
-	mux.HandleFunc("DELETE /internal/v1/models/{model}", m.deleteModel)
+	// Body-based actions: Hugging Face ids contain "/", which breaks single-segment path params.
+	mux.HandleFunc("POST /internal/v1/models/load", m.loadModel)
+	mux.HandleFunc("POST /internal/v1/models/delete", m.deleteModel)
 	mux.HandleFunc("GET /v1/models", m.listModels)
 	mux.HandleFunc("GET /internal/v1/models/catalog", m.modelCatalog)
 	mux.HandleFunc("/v1/", m.proxyOpenAI)
@@ -358,13 +359,32 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
+func readModelID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	var req struct {
+		ModelID string `json:"modelId"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return "", false
+	}
+	id := strings.TrimSpace(req.ModelID)
+	if id == "" || !modelRefRE.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "modelId must be a repository model reference")
+		return "", false
+	}
+	return id, true
+}
+
 func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
 	if !m.mu.TryLock() {
 		writeError(w, http.StatusConflict, "another model operation is in progress")
 		return
 	}
 	defer m.mu.Unlock()
-	id := r.PathValue("model")
+	id, ok := readModelID(w, r)
+	if !ok {
+		return
+	}
 	if m.engine == "ollama" {
 		if err := m.callBackend(r.Context(), http.MethodPost, "/api/generate", map[string]any{"model": id, "prompt": "", "stream": false, "keep_alive": "5m"}, nil); err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
@@ -445,7 +465,10 @@ func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer m.mu.Unlock()
-	id := r.PathValue("model")
+	id, ok := readModelID(w, r)
+	if !ok {
+		return
+	}
 	if m.engine == "ollama" {
 		if err := m.callBackend(r.Context(), http.MethodDelete, "/api/delete", map[string]any{"model": id}, nil); err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
@@ -666,7 +689,22 @@ func (m *manager) vllmCommandArguments(item model, mode string) []string {
 // Scope offline serving to the runtime child. The manager's catalog job and
 // user-directed downloader still need their explicitly permitted network access.
 func vllmProcessEnvironment(base []string) []string {
-	overrides := []string{"HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1", "HF_HUB_DISABLE_TELEMETRY=1", "VLLM_NO_USAGE_STATS=1", "DO_NOT_TRACK=1"}
+	// Numeric UIDs have no /etc/passwd entry under Restricted. Torch/vLLM call
+	// getpass.getuser() during import unless USER/LOGNAME and cache dirs are set.
+	const home = "/home/runtime"
+	overrides := []string{
+		"HF_HUB_OFFLINE=1",
+		"TRANSFORMERS_OFFLINE=1",
+		"HF_HUB_DISABLE_TELEMETRY=1",
+		"VLLM_NO_USAGE_STATS=1",
+		"DO_NOT_TRACK=1",
+		"HOME=" + home,
+		"USER=runtime",
+		"LOGNAME=runtime",
+		"TORCHINDUCTOR_CACHE_DIR=" + filepath.Join(home, ".cache", "torch", "inductor"),
+		"TRITON_CACHE_DIR=" + filepath.Join(home, ".cache", "triton"),
+		"XDG_CACHE_HOME=" + filepath.Join(home, ".cache"),
+	}
 	result := make([]string, 0, len(base)+len(overrides))
 	for _, entry := range base {
 		key, _, _ := strings.Cut(entry, "=")
