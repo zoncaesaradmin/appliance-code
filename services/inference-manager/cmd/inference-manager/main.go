@@ -81,16 +81,7 @@ func main() {
 		}
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", m.health)
-	mux.HandleFunc("GET /internal/v1/runtime/capabilities", m.capabilities)
-	mux.HandleFunc("POST /internal/v1/models/imports", m.importModel)
-	mux.HandleFunc("POST /internal/v1/models/{model}/load", m.loadModel)
-	mux.HandleFunc("DELETE /internal/v1/models/{model}", m.deleteModel)
-	mux.HandleFunc("GET /v1/models", m.listModels)
-	mux.HandleFunc("/v1/", m.proxyOpenAI)
-
-	server := &http.Server{Addr: env("INFERENCE_LISTEN_ADDRESS", "0.0.0.0:11434"), Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	server := &http.Server{Addr: env("INFERENCE_LISTEN_ADDRESS", "0.0.0.0:11434"), Handler: m.handler(), ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -104,6 +95,19 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+}
+
+func (m *manager) handler() http.Handler {
+	mux := http.NewServeMux()
+	// Match only the root: a GET subtree conflicts with the all-method proxy.
+	mux.HandleFunc("GET /{$}", m.health)
+	mux.HandleFunc("GET /internal/v1/runtime/capabilities", m.capabilities)
+	mux.HandleFunc("POST /internal/v1/models/imports", m.importModel)
+	mux.HandleFunc("POST /internal/v1/models/{model}/load", m.loadModel)
+	mux.HandleFunc("DELETE /internal/v1/models/{model}", m.deleteModel)
+	mux.HandleFunc("GET /v1/models", m.listModels)
+	mux.HandleFunc("/v1/", m.proxyOpenAI)
+	return mux
 }
 
 func env(name, fallback string) string {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -23,6 +24,53 @@ func testManager(t *testing.T) *manager {
 	}
 	m.cudaProbe = func(context.Context) bool { return false }
 	return m
+}
+
+func TestManagerHTTPRouting(t *testing.T) {
+	for _, engine := range []string{"ollama", "vllm"} {
+		t.Run(engine, func(t *testing.T) {
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Backend-Request", r.Method+" "+r.URL.RequestURI())
+				w.WriteHeader(http.StatusAccepted)
+			}))
+			defer backend.Close()
+			m := testManager(t)
+			m.engine = engine
+			m.active = "test-model"
+			m.backend, _ = url.Parse(backend.URL)
+			m.proxy = httputil.NewSingleHostReverseProxy(m.backend)
+			// Construct the same complete router used by main; conflicting
+			// patterns panic here even if individual handler tests pass.
+			handler := m.handler()
+			for _, tc := range []struct {
+				method, path string
+				status       int
+				proxied      bool
+			}{
+				{"GET", "/", http.StatusOK, false},
+				{"HEAD", "/", http.StatusOK, false},
+				{"POST", "/", http.StatusMethodNotAllowed, false},
+				{"GET", "/unknown", http.StatusNotFound, false},
+				{"GET", "/v1/models", http.StatusOK, false},
+				{"POST", "/v1/chat/completions?stream=true", http.StatusAccepted, true},
+				{"GET", "/v1/responses/example", http.StatusAccepted, true},
+				{"DELETE", "/v1/responses/example", http.StatusAccepted, true},
+			} {
+				// Ollama's model list comes from /api/tags on its backend.
+				if engine == "ollama" && tc.path == "/v1/models" {
+					continue
+				}
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, httptest.NewRequest(tc.method, tc.path, nil))
+				if response.Code != tc.status {
+					t.Fatalf("%s %s: status %d, want %d: %s", tc.method, tc.path, response.Code, tc.status, response.Body.String())
+				}
+				if tc.proxied && response.Header().Get("X-Backend-Request") != tc.method+" "+tc.path {
+					t.Fatalf("request was not forwarded intact: %s %s", tc.method, tc.path)
+				}
+			}
+		})
+	}
 }
 
 func TestAutoModePrefersConfirmedCUDA(t *testing.T) {
