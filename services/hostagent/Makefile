@@ -2,8 +2,10 @@ SHELL := /bin/bash
 
 MODULE      := appliance-code/services/hostagent
 BIN_DIR     := bin
-SERVICE_BINARY := $(BIN_DIR)/appliance-host-agent
-DAEMON_BINARY := $(BIN_DIR)/appliance-host-agentd
+# Cluster pod binary (image builds this via Containerfile; local target: build-agent).
+AGENT_BINARY := $(BIN_DIR)/appliance-host-agent
+# Host OS daemon for lan-discovery / day-2 host apply (packaging: build-agentd).
+AGENTD_BINARY := $(BIN_DIR)/appliance-host-agentd
 COVER_FILE  := coverage.out
 
 SERVICE_IMAGE_NAME ?= appliance-host-agent
@@ -23,12 +25,21 @@ endif
 
 include $(CURDIR)/../../build/service-image.mk
 
-.PHONY: build test lint coverage clean
+.PHONY: build build-agentd build-agent test lint coverage clean
 
-build:
+# Packaging ownership:
+#   build-agentd — foundation lan-discovery (host binary → release-input hostAgentBinary)
+#   build-agent  — local/dev only; in-cluster image builds via Containerfile
+#   build        — both (local verify / day-to-day)
+build-agentd:
 	mkdir -p $(BIN_DIR)
-	go build -o $(SERVICE_BINARY) ./cmd/appliance-host-agent
-	go build -o $(DAEMON_BINARY) ./cmd/appliance-host-agentd
+	go build -o $(AGENTD_BINARY) ./cmd/appliance-host-agentd
+
+build-agent:
+	mkdir -p $(BIN_DIR)
+	go build -o $(AGENT_BINARY) ./cmd/appliance-host-agent
+
+build: build-agentd build-agent
 
 test:
 	go test ./...
