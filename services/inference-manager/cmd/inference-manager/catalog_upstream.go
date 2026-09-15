@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +14,9 @@ import (
 	"strings"
 	"time"
 )
+
+//go:embed list_vllm_archs.py
+var vllmArchitectureProbe string
 
 var libraryLink = regexp.MustCompile(`href="/library/([a-zA-Z0-9._:-]+)"`)
 
@@ -115,22 +120,57 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 	return entries, nil
 }
 
-func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
-	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+func pythonOutput(ctx context.Context, timeout time.Duration, stdin string, args ...string) ([]byte, error) {
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	b, err := exec.CommandContext(probeCtx, env("INFERENCE_PYTHON", "python3"), "-c", "import json; from vllm import ModelRegistry; print(json.dumps(list(ModelRegistry.get_supported_archs())))").Output()
+	cmd := exec.CommandContext(probeCtx, env("INFERENCE_PYTHON", "python3"), args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	if err := cmd.Run(); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			detail = strings.TrimSpace(stdout.String())
+		}
+		if len(detail) > 2048 {
+			detail = detail[len(detail)-2048:]
+		}
+		if detail != "" {
+			return nil, fmt.Errorf("%w: %s", err, detail)
+		}
+		return nil, err
+	}
+	return stdout.Bytes(), nil
+}
+
+func installedVLLMArchitectures(ctx context.Context) (map[string]bool, error) {
+	// Parse the installed registry source. Importing ModelRegistry initializes
+	// CUDA/platform plugins and fails in the Restricted CPU runtime pod.
+	b, err := pythonOutput(ctx, 30*time.Second, vllmArchitectureProbe, "-")
 	if err != nil {
 		return nil, fmt.Errorf("cannot determine installed vLLM model architectures: %w", err)
 	}
 	var architectures []string
-	// Runtime imports may print informational lines before the JSON.
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &architectures); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot determine installed vLLM model architectures: %w", err)
+	}
+	if len(architectures) == 0 {
+		return nil, fmt.Errorf("cannot determine installed vLLM model architectures: empty architecture list")
 	}
 	supported := map[string]bool{}
 	for _, architecture := range architectures {
 		supported[architecture] = true
+	}
+	return supported, nil
+}
+
+func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
+	supported, err := installedVLLMArchitectures(ctx)
+	if err != nil {
+		return nil, err
 	}
 	var models []struct {
 		ID      string `json:"id"`

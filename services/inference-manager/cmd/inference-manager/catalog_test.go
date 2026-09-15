@@ -5,6 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -80,6 +84,49 @@ func TestEmptyRefreshDoesNotEraseCatalog(t *testing.T) {
 	c.refresh(context.Background())
 	if len(c.state.Items) != 1 || c.state.LastError == "" {
 		t.Fatal("empty discovery erased catalog")
+	}
+}
+
+func TestInstalledVLLMArchitecturesReadsRegistryWithoutImportingRuntime(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is required for the vLLM architecture probe")
+	}
+	root := t.TempDir()
+	registry := filepath.Join(root, "vllm", "model_executor", "models", "registry.py")
+	if err := os.MkdirAll(filepath.Dir(registry), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "vllm", "__init__.py"), []byte("raise RuntimeError('vllm import is forbidden')\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(registry, []byte(`_TEXT_GENERATION_MODELS = {
+    "LlamaForCausalLM": ("llama", "LlamaForCausalLM"),
+    "Qwen2ForCausalLM": ("qwen2", "Qwen2ForCausalLM"),
+}
+_EMBEDDING_MODELS = {"BertModel": ("bert", "BertModel")}
+_VLLM_MODELS = {**_TEXT_GENERATION_MODELS, **_EMBEDDING_MODELS}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PYTHONPATH", root)
+	supported, err := installedVLLMArchitectures(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, architecture := range []string{"LlamaForCausalLM", "Qwen2ForCausalLM", "BertModel"} {
+		if !supported[architecture] {
+			t.Fatalf("missing %s: %v", architecture, supported)
+		}
+	}
+}
+
+func TestPythonOutputIncludesStderr(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is required for the vLLM architecture probe")
+	}
+	_, err := pythonOutput(context.Background(), 5*time.Second, "import sys; sys.stderr.write('probe exploded\\n'); raise SystemExit(1)", "-")
+	if err == nil || !strings.Contains(err.Error(), "probe exploded") {
+		t.Fatalf("stderr lost: %v", err)
 	}
 }
 

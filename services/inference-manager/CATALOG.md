@@ -13,9 +13,11 @@ The limits avoid mirroring huge registries daily. This is not an exhaustive
 supported-model matrix. Ollama's HTML library adapter fails closed if discovery
 breaks; its registry manifests provide actual layer sizes. Hugging Face uses
 repository metadata with pinned commit revisions. vLLM candidates must match
-the installed ModelRegistry and use non-quantized safetensors with no custom-code
-configuration; gated/private repositories are excluded. Advanced quantized
-models remain available through the existing explicit import API.
+architectures declared in the installed ModelRegistry source (parsed without
+importing the vLLM runtime, which is unsafe in the Restricted CPU pod) and use
+non-quantized safetensors with no custom-code configuration; gated/private
+repositories are excluded. Advanced quantized models remain available through
+the existing explicit import API.
 
 Eligibility is an estimate, not a guarantee of runtime compatibility, especially
 for new model families in older Ollama versions. The UI states that a load is
