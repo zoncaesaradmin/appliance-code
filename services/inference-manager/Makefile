@@ -10,6 +10,10 @@ BASE_IMAGE ?= $(VLLM_AMD64_IMAGE)
 BUILD_ENGINE ?= buildah bud --pull-never
 GOARCH ?= amd64
 
+# Use the compiler shipped in dev-build; packaging must not download toolchains.
+export GOTOOLCHAIN := local
+export GOWORK := off
+
 build:
 	mkdir -p bin
 	GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -trimpath -ldflags='-s -w' -o bin/inference-manager ./cmd/inference-manager
