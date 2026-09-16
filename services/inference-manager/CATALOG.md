@@ -61,9 +61,13 @@ failure retains the previous catalog and never removes installed models.
 
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
 `GET /internal/v1/models` returns the manager's downloaded inventory (admin).
-`GET /v1/models` (and the rest of `/v1/*`) is blindly proxied to the inference
-engine for OpenAI-compatible clients. Control-plane admin APIs use the
-`/internal/v1/...` surface only:
+`GET /v1/models` (and the rest of `/v1/*`) is proxied to the inference
+engine for OpenAI-compatible clients. For `POST /v1/responses`, the manager
+first rewrites OpenAI `text.format.type=json_schema` so streaming clients do
+not hit the known `response.created` schema alias crash on older CPU runtime
+images: schema-only requests use constrained generation / JSON mode; requests
+that also carry tools keep tool calling and move schema guidance into
+instructions. Control-plane admin APIs use the `/internal/v1/...` surface only:
 
 | Control plane | Inference manager |
 |---|---|

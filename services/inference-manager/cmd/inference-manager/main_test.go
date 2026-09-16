@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -50,7 +49,7 @@ func TestManagerHTTPRouting(t *testing.T) {
 			m.engine = engine
 			m.active = "test-model"
 			m.backend, _ = url.Parse(backend.URL)
-			m.proxy = httputil.NewSingleHostReverseProxy(m.backend)
+			m.proxy = newOpenAIReverseProxy(m.backend)
 			// Construct the same complete router used by main; conflicting
 			// patterns panic here even if individual handler tests pass.
 			handler := m.handler()

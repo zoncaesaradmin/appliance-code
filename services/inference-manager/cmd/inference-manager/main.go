@@ -85,7 +85,7 @@ func main() {
 		engine:     engine,
 		modelsDir:  modelsDir,
 		backend:    backend,
-		proxy:      httputil.NewSingleHostReverseProxy(backend),
+		proxy:      newOpenAIReverseProxy(backend),
 		engineOrch: orch,
 	}
 	m.download = m.downloadModel
@@ -821,6 +821,10 @@ func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
 			message = "inference engine unavailable"
 		}
 		writeError(w, http.StatusServiceUnavailable, message)
+		return
+	}
+	if err := prepareOpenAIProxyRequest(r); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid OpenAI request body: "+err.Error())
 		return
 	}
 	m.proxy.ServeHTTP(w, r)

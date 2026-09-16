@@ -40,9 +40,18 @@ that supplies it. Merely including a package never enables the capability.
 
 The public OpenAI-compatible prefix is `/inference/{path...}`. The control plane
 authenticates and authorizes the request, strips `/inference`, and streams the
-remainder to the inference manager `/v1/*`, which blind-proxies to the selected
-engine. Engine-native management endpoints are never exposed under this prefix.
-(Legacy `/ai/v1/*` remains as an alias where still configured.)
+remainder to the inference manager `/v1/*`, which proxies to the selected
+engine. Before proxying `POST /v1/responses`, the manager normalizes OpenAI
+`text.format.type=json_schema` so packaged runtimes can stream safely. When the
+request has no tools, the schema is remapped to constrained generation
+(`structured_outputs.json`) or OpenAI JSON mode (`text.format=json_object`).
+When tools are present (typical for coding agents on the Responses wire API),
+the broken `json_schema` format is stripped and the schema is preserved only as
+instruction guidance so tool-call tokens remain expressible. That keeps
+Responses streaming healthy for Codex (`wire_api = "responses"`), Continue,
+custom SDKs, and similar OpenAI-compatible clients. Engine-native management
+endpoints are never exposed under this prefix. (Legacy `/ai/v1/*` remains as an
+alias where still configured.)
 
 Administrators use a separate engine-neutral lifecycle API on the control plane,
 which calls manager-owned `/internal/v1/...` routes (not the OpenAI proxy):
