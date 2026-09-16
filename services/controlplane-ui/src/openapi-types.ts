@@ -1714,11 +1714,9 @@ export interface components {
             engine: "ollama" | "vllm";
             architecture: string;
             hostArchitecture: string;
-            supportedModes: ("cpu" | "cuda")[];
             /** @enum {string} */
-            requestedMode: "auto" | "cpu" | "cuda";
-            /** @enum {string} */
-            activeMode?: "cpu" | "cuda";
+            acceleration: "standard" | "accelerated";
+            gpuAvailable?: boolean;
             ready?: boolean;
             loadedModelId?: string;
             /**

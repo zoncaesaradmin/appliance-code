@@ -8,26 +8,27 @@ stable API, persistent model storage, lifecycle checks, and upgrade contract.
 
 Package metadata carries only the minimum runtime contract:
 
-| Package | Engine | Architecture | Package modes |
+| Package | Engine | Architecture | Acceleration |
 | --- | --- | --- | --- |
-| `std-llm-amd64` | Ollama | `amd64` | `cpu` |
-| `acc-llm-amd64` | vLLM | `amd64` | `cpu` |
-| `acc-llm-arm64` | vLLM | `arm64` | `cpu`, `cuda` |
+| `std-llm-amd64` | Ollama | `amd64` | standard |
+| `acc-llm-amd64` | vLLM | `amd64` | accelerated (GPU required) |
+| `acc-llm-arm64` | vLLM | `arm64` | accelerated (GPU required) |
 
 These entries are not a supported-model or hardware-vendor catalog. The package
-declares modes its runtime can implement; runtime capability checks report the
-host architecture and the actually selected mode. Installation requests `auto`.
-The manager prefers CUDA when the signed package allows it and its own CUDA
-backend can use a visible device; otherwise it selects CPU. It never infers
-CUDA from ARM, a machine name, or a vendor string. The API reports both
-`availableModes` and `activeMode`, including why a CUDA probe was rejected.
+declares `{inferenceEngine, architecture}` only. Runtime capability checks report
+the host architecture, acceleration class (`standard` or `accelerated`), and
+optional `gpuAvailable`. There is no product-level `supportedModes`,
+`inferenceMode`, or CPU/CUDA mode switch.
 
-For a future CUDA-capable package, install-time hardware discovery must first
-confirm that Kubernetes can advertise a GPU resource and configure the pod to
-request it. The manager then performs the final in-container CUDA probe before
-loading a model. If either check fails, the deployment uses CPU. There is no
-normal user-facing mode picker; an explicit non-`auto` mode is reserved for a
-future controlled diagnostic or policy override.
+- **Standard** (`std-llm-*`): Ollama. Install does not require a GPU. At runtime
+  the manager may use a host GPU when one is present; otherwise it serves on CPU.
+- **Accelerated** (`acc-llm-*`): vLLM. Install fails closed without a usable
+  NVIDIA GPU on the host. `gpu.enabled` in Helm values follows that host check.
+
+The control-plane API exposes `RuntimeCapabilities` with `package`, `engine`,
+`architecture`, `hostArchitecture`, `acceleration`, optional `gpuAvailable`, and
+`checks`. It does not expose `supportedModes`, `requestedMode`, or `activeMode`.
+
 More architecture-specific packages can be added later without changing the
 profile or public API.
 
@@ -42,7 +43,7 @@ The public OpenAI-compatible prefix is `/inference/{path...}`. The control plane
 authenticates and authorizes the request, strips `/inference`, and streams the
 remainder to the inference manager `/v1/*`, which proxies to the selected
 engine. Before proxying `POST /v1/responses`, the manager normalizes OpenAI
-`text.format.type=json_schema` so packaged runtimes can stream safely. On CUDA,
+`text.format.type=json_schema` so packaged runtimes can stream safely. On GPU,
 schema-only requests remap to constrained generation (`structured_outputs.json`)
 or OpenAI JSON mode. On CPU, structured_outputs is never forwarded: vLLM's
 xgrammar bitmask path calls `pin_memory` and fatally kills EngineCore
@@ -92,14 +93,14 @@ maximum model length, GPU-memory utilization, CUDA graph capture size,
 FlashInfer autotune disablement, automatic tool choice, served model name, and
 tool-call parser. `--max-model-len`, engine memory, and engine CPU are planned
 together with catalog eligibility from the model card, remaining host/GPU
-memory for KV, host CPU capacity, and the mode prefill ceiling (CPU uses a few
+memory for KV, host CPU capacity, and the device prefill ceiling (CPU uses a few
 chunked-prefill steps so interactive agents stay responsive). Load rewrites
 legacy fixed-2048 caps and oversized card-only windows to that planned value
 and persists it for client copy settings. The manager owns the
 model path, bind address, and port so
 callers cannot bypass the appliance boundary. Device selection is owned by the
-packaged runtime image and mode detection (CPU vs CUDA build / visible GPU),
-not by a `--device` CLI flag—current vLLM CPU images reject `--device`.
+manager (`resolveDevice` / `gpuProbe` / internal `gpu|cpu` labels); charts do
+not expose `runtime.mode` or `supportedModes`.
 
 The tested Docker invocation maps to the on-demand engine pod without rebuilding
 the vLLM environment:
@@ -108,7 +109,7 @@ the vLLM environment:
 | --- | --- |
 | official `vllm/vllm-openai` image | pinned `registry.local/inference-runtime@sha256:…` |
 | `docker run … --model …` | engine Deployment `command`/`args` set on Load |
-| `--gpus all` | `runtimeClassName: nvidia` plus `NVIDIA_VISIBLE_DEVICES=all` when GPU package |
+| `--gpus all` | `runtimeClassName: nvidia` plus `NVIDIA_VISIBLE_DEVICES=all` when GPU enabled |
 | `--ipc=host` | isolated, memory-backed `/dev/shm` emptyDir (not host IPC) |
 | memlock/stack ulimits | inherited container defaults under Restricted PSA |
 | port `8000`/`8001` | in-namespace `inference-engine` Service; manager proxies `/v1/*` |
@@ -129,22 +130,20 @@ and disconnect it again. The inference NetworkPolicy permits DNS plus outbound
 HTTPS for that administrator-directed fetch. It does not download engines,
 drivers, plugins, updates, or models in the background.
 
-The admin UI is available at **Admin → AI Services**. It shows runtime readiness
-and detected mode, lists installed models, accepts an engine-supported model
-reference, and provides load and remove actions.
+The admin UI is available at **Admin → AI Services**. It shows runtime readiness,
+acceleration class, and optional GPU availability, lists installed models,
+accepts an engine-supported model reference, and provides load and remove
+actions.
 
 ## Accelerated package completion gate
 
-`acc-llm-amd64` packages the pinned x86 CPU vLLM image with the appliance
-runtime manager. It can start without a model, validates the host's minimum CPU
-instruction capability, downloads an explicitly requested Hugging Face
-snapshot, verifies its deterministic content digest, and starts one selected
-model behind the stable OpenAI proxy. It remains intentionally CPU-only.
+`acc-llm-amd64` and `acc-llm-arm64` package pinned vLLM images with the appliance
+runtime manager. They require a usable GPU at install time and again when the
+manager confirms `gpuAvailable`. They can start without a model, download an
+explicitly requested Hugging Face snapshot, verify its deterministic content
+digest, and start one selected model behind the stable OpenAI proxy.
 
-`acc-llm-arm64` packages a pinned arm64 vLLM image and the same non-root
-manager. Its package is selected explicitly; it is not included by `all` while
-we maintain the standard AMD64 delivery baseline. CUDA is still contingent on
-Kubernetes GPU-resource exposure and the manager's in-container confirmation.
-Each release must validate OpenAI streaming, model switching, persistence,
-rollback, backup/restore, and interrupted-download cleanup for the exact image
-digest it publishes.
+`acc-llm-arm64` is selected explicitly; it is not included by `all` while we
+maintain the standard AMD64 delivery baseline. Each release must validate OpenAI
+streaming, model switching, persistence, rollback, backup/restore, and
+interrupted-download cleanup for the exact image digest it publishes.

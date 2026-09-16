@@ -7,24 +7,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "mode",
         "engine",
-        "supportedModes",
         "cpuKVCacheSpaceGiB",
         "sharedMemorySize"
       ],
       "properties": {
-        "mode": {
-          "enum": ["auto", "cpu", "cuda"]
-        },
         "engine": {
           "enum": ["ollama", "vllm"]
-        },
-        "supportedModes": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {"enum": ["cpu", "cuda"]}
         },
         "cpuKVCacheSpaceGiB": {
           "type": "integer",

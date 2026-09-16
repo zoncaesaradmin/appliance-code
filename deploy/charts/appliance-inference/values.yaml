@@ -3,12 +3,8 @@
 replicaCount: 1
 
 runtime:
-  # The manager chooses the highest verified package mode. CPU is used only
-  # when no accelerated mode is confirmed; operators do not choose this.
-  mode: auto
   engine: ollama
-  supportedModes: [cpu]
-  # Conservative defaults for small CPU-only validation models. These are
+  # Conservative defaults for small standard validation models. These are
   # runtime settings, not a hardware or model allow-list.
   cpuKVCacheSpaceGiB: 2
   sharedMemorySize: 4Gi

@@ -14,8 +14,8 @@ import (
 
 const maxOpenAIProxyBody = 32 << 20
 
-// openaiCompatOptions controls request rewrites for the active engine mode.
-type openaiCompatOptions struct {
+// openaiCompatConfig controls request rewrites for the active engine mode.
+type openaiCompatConfig struct {
 	// DisableStructuredOutputs avoids vLLM xgrammar / apply_grammar_bitmask on
 	// CPU builds. Those paths call pin_memory and fatally kill EngineCore:
 	// "pin_memory=True requires a CUDA or other accelerator backend".
@@ -32,7 +32,7 @@ type openaiCompatOptions struct {
 // response.created (schema field alias dump bug). Remap that shape onto the
 // runtime-supported constrained-generation path and keep streaming healthy.
 // On CPU, never enable structured_outputs — use instruction guidance only.
-func normalizeOpenAIUpstreamBody(path string, body []byte, opts openaiCompatOptions) ([]byte, bool) {
+func normalizeOpenAIUpstreamBody(path string, body []byte, opts openaiCompatConfig) ([]byte, bool) {
 	path = strings.TrimSpace(path)
 	switch {
 	case path == "/v1/responses" || strings.HasPrefix(path, "/v1/responses?"):
@@ -42,7 +42,7 @@ func normalizeOpenAIUpstreamBody(path string, body []byte, opts openaiCompatOpti
 	}
 }
 
-func normalizeResponsesBody(body []byte, opts openaiCompatOptions) ([]byte, bool) {
+func normalizeResponsesBody(body []byte, opts openaiCompatConfig) ([]byte, bool) {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return body, false
 	}
@@ -70,7 +70,7 @@ func normalizeResponsesBody(body []byte, opts openaiCompatOptions) ([]byte, bool
 	return out, true
 }
 
-func normalizeResponsesTextFormat(payload map[string]any, opts openaiCompatOptions) bool {
+func normalizeResponsesTextFormat(payload map[string]any, opts openaiCompatConfig) bool {
 	text, _ := payload["text"].(map[string]any)
 	if text == nil {
 		return false
@@ -183,7 +183,7 @@ func jsonSchemaInstruction(name string, schema any) string {
 	return "Respond with a single JSON object that validates against this JSON Schema:\n" + string(encoded)
 }
 
-func prepareOpenAIProxyRequest(r *http.Request, opts openaiCompatOptions) error {
+func prepareOpenAIProxyRequest(r *http.Request, opts openaiCompatConfig) error {
 	if r == nil || r.Body == nil {
 		return nil
 	}
@@ -214,11 +214,11 @@ func prepareOpenAIProxyRequest(r *http.Request, opts openaiCompatOptions) error 
 	return nil
 }
 
-// openaiCompatOptionsForMode returns rewrite policy for the active runtime mode.
-// Non-CUDA (including unknown) stays fail-closed against structured_outputs.
-func openaiCompatOptionsForMode(mode string) openaiCompatOptions {
-	return openaiCompatOptions{
-		DisableStructuredOutputs: !strings.EqualFold(strings.TrimSpace(mode), "cuda"),
+// openaiCompatOptions returns rewrite policy for the active device.
+// CPU paths stay fail-closed against structured_outputs (grammar pin_memory).
+func openaiCompatOptions(usingGPU bool) openaiCompatConfig {
+	return openaiCompatConfig{
+		DisableStructuredOutputs: !usingGPU,
 	}
 }
 

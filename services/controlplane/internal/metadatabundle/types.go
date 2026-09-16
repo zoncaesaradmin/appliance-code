@@ -72,9 +72,8 @@ type PackageCatalog struct {
 }
 
 type PackageRuntime struct {
-	InferenceEngine string   `yaml:"inferenceEngine" json:"inferenceEngine"`
-	Architecture    string   `yaml:"architecture" json:"architecture"`
-	SupportedModes  []string `yaml:"supportedModes" json:"supportedModes"`
+	InferenceEngine string `yaml:"inferenceEngine" json:"inferenceEngine"`
+	Architecture    string `yaml:"architecture" json:"architecture"`
 }
 
 type PackageDef struct {

@@ -59,7 +59,8 @@ beforeEach(() => {
   api.getInferenceStatus.mockResolvedValue({
     engine: "ollama",
     architecture: "amd64",
-    activeMode: "cpu",
+    acceleration: "standard",
+    gpuAvailable: false,
     ready: true,
     servingState: "inactive"
   });
@@ -259,7 +260,8 @@ it("shows serving ready-for-use and disables Load when the selected model is alr
   api.getInferenceStatus.mockResolvedValue({
     engine: "vllm",
     architecture: "amd64",
-    activeMode: "cuda",
+    acceleration: "accelerated",
+    gpuAvailable: true,
     ready: true,
     servingState: "ready",
     loadedModelId: "retired:1b",
@@ -361,14 +363,16 @@ it("polls load progress while an async load runs", async () => {
     .mockResolvedValueOnce({
       engine: "vllm",
       architecture: "amd64",
-      activeMode: "cuda",
+      acceleration: "accelerated",
+      gpuAvailable: true,
       ready: true,
       servingState: "inactive"
     })
     .mockResolvedValue({
       engine: "vllm",
       architecture: "amd64",
-      activeMode: "cuda",
+      acceleration: "accelerated",
+      gpuAvailable: true,
       ready: true,
       servingState: "ready",
       loadedModelId: "retired:1b"

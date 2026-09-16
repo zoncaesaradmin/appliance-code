@@ -99,7 +99,7 @@ func TestFailedCatalogRetriesOnlyOncePerProcessStart(t *testing.T) {
 func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
 	m := testManager(t)
 	m.engine = "vllm"
-	m.cudaProbe = func(context.Context) bool { return false }
+	m.gpuProbe = func(context.Context) bool { return true }
 	c := newModelCatalog(m)
 	c.state.Items = []catalogEntry{{
 		ID: "org/model", Source: "org/model@revision", DownloadBytes: 10, MemoryBytes: 20,
@@ -107,7 +107,7 @@ func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
 	}}
 	c.state.LastSuccess = time.Now()
 	fit, err := planServe(serveWindowInput{
-		Engine: "vllm", Mode: "cpu", ModelEstimateBytes: 20, AvailableBytes: 16 << 30,
+		Engine: "vllm", Mode: "gpu", ModelEstimateBytes: 20, AvailableBytes: 16 << 30,
 		ModelContextLimit: 4096, KVBytesPerToken: 1024,
 	})
 	if err != nil {

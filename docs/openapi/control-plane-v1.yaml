@@ -2615,17 +2615,19 @@ components:
         message: { type: string }
     InferenceRuntimeStatus:
       type: object
-      required: [package, engine, architecture, hostArchitecture, supportedModes, requestedMode, checks]
+      required: [package, engine, architecture, hostArchitecture, acceleration, checks]
       properties:
         package: { type: string }
         engine: { type: string, enum: [ollama, vllm] }
         architecture: { type: string }
         hostArchitecture: { type: string }
-        supportedModes:
-          type: array
-          items: { type: string, enum: [cpu, cuda] }
-        requestedMode: { type: string, enum: [auto, cpu, cuda] }
-        activeMode: { type: string, enum: [cpu, cuda] }
+        acceleration:
+          type: string
+          enum: [standard, accelerated]
+          description: Product category — standard uses Ollama; accelerated uses vLLM and requires a GPU.
+        gpuAvailable:
+          type: boolean
+          description: Whether the runtime currently sees a usable host GPU.
         ready: { type: boolean }
         loadedModelId: { type: string }
         servingState:

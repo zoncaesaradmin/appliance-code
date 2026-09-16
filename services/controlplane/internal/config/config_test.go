@@ -190,8 +190,6 @@ func TestInferenceProfilesRequireInferenceGatewayBaseURL(t *testing.T) {
 			cfg.InferenceRuntimePackage = "std-llm-amd64"
 			cfg.InferenceEngine = "ollama"
 			cfg.InferenceArchitecture = "amd64"
-			cfg.InferenceSupportedModes = []string{"cpu"}
-			cfg.InferenceMode = "auto"
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("Validate with inference gateway URL: %v", err)
 			}

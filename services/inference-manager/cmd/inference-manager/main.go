@@ -60,7 +60,7 @@ type manager struct {
 	active     string
 	reg        registry
 	download   func(context.Context, string, string) error
-	cudaProbe  func(context.Context) bool
+	gpuProbe   func(context.Context) bool
 	catalog    *modelCatalog
 }
 
@@ -89,7 +89,7 @@ func main() {
 		engineOrch: orch,
 	}
 	m.download = m.downloadModel
-	m.cudaProbe = cudaAvailable
+	m.gpuProbe = gpuAvailable
 	if err := m.loadRegistry(); err != nil {
 		log.Fatalf("load model registry: %v", err)
 	}
@@ -262,62 +262,51 @@ func (m *manager) probeEngineMaxModelLen(ctx context.Context) uint64 {
 }
 
 func (m *manager) capabilities(w http.ResponseWriter, _ *http.Request) {
-	available, mode, checks := m.selectMode(context.Background())
-	writeJSON(w, http.StatusOK, map[string]any{"availableModes": available, "activeMode": mode, "checks": checks})
+	usingGPU, checks := m.resolveDevice(context.Background())
+	writeJSON(w, http.StatusOK, map[string]any{"gpuAvailable": usingGPU, "checks": checks})
 }
 
-// selectMode is package- and runtime-driven. Auto prefers a verified CUDA
-// backend, then CPU. It never derives GPU support from an architecture, vendor,
-// or machine name.
-func (m *manager) selectMode(ctx context.Context) ([]string, string, []map[string]string) {
-	supported := map[string]bool{}
-	for _, mode := range strings.Split(env("INFERENCE_SUPPORTED_MODES", "cpu"), ",") {
-		supported[strings.ToLower(strings.TrimSpace(mode))] = true
-	}
-	available := make([]string, 0, 2)
+// resolveDevice decides whether a host GPU is usable for this package.
+// Accelerated (vLLM) packages require a GPU. Standard (Ollama) packages may
+// use a GPU when present, otherwise CPU.
+func (m *manager) resolveDevice(ctx context.Context) (bool, []map[string]string) {
 	checks := make([]map[string]string, 0, 2)
-	if supported["cuda"] {
-		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		cuda := m.cudaProbe(probeCtx)
-		cancel()
-		if cuda {
-			available = append(available, "cuda")
-			checks = append(checks, map[string]string{"name": "cuda-runtime", "status": "pass", "message": "CUDA backend and visible device confirmed"})
-		} else {
-			checks = append(checks, map[string]string{"name": "cuda-runtime", "status": "fail", "message": "CUDA backend or visible device is unavailable"})
-		}
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	gpuOK := m.gpuProbe(probeCtx)
+	cancel()
+	if gpuOK {
+		checks = append(checks, map[string]string{"name": "gpu", "status": "pass", "message": "GPU backend and visible device confirmed"})
+	} else {
+		checks = append(checks, map[string]string{"name": "gpu", "status": "fail", "message": "GPU backend or visible device is unavailable"})
 	}
-	if supported["cpu"] {
-		if runtime.GOARCH != "amd64" || cpuHasFeature("avx2") {
-			available = append(available, "cpu")
-			checks = append(checks, map[string]string{"name": "cpu-runtime", "status": "pass", "message": runtime.GOARCH})
-		} else {
-			checks = append(checks, map[string]string{"name": "cpu-runtime", "status": "fail", "message": "x86 CPU does not report AVX2"})
+	if m.engine == "vllm" {
+		if !gpuOK {
+			checks = append(checks, map[string]string{"name": "accelerated-runtime", "status": "fail", "message": "accelerated inference requires a usable GPU"})
+			return false, checks
 		}
+		checks = append(checks, map[string]string{"name": "accelerated-runtime", "status": "pass", "message": "vLLM with GPU"})
+		return true, checks
 	}
-	requested := strings.ToLower(env("INFERENCE_MODE", "auto"))
-	if requested == "auto" {
-		for _, preferred := range []string{"cuda", "cpu"} {
-			for _, mode := range available {
-				if mode == preferred {
-					return available, mode, checks
-				}
-			}
-		}
-		return available, "", checks
+	// Standard Ollama: GPU optional; CPU always acceptable when AVX2 (amd64) or non-x86.
+	if runtime.GOARCH == "amd64" && !cpuHasFeature("avx2") {
+		checks = append(checks, map[string]string{"name": "cpu-runtime", "status": "fail", "message": "x86 CPU does not report AVX2"})
+		return false, checks
 	}
-	for _, mode := range available {
-		if mode == requested {
-			return available, mode, checks
-		}
-	}
-	checks = append(checks, map[string]string{"name": "requested-mode", "status": "fail", "message": "requested mode is not usable"})
-	return available, "", checks
+	checks = append(checks, map[string]string{"name": "standard-runtime", "status": "pass", "message": runtime.GOARCH})
+	return gpuOK, checks
 }
 
-func cudaAvailable(ctx context.Context) bool {
-	// The manager no longer embeds torch. Prefer an explicit install-time GPU
-	// enablement signal, then fall back to a visible NVIDIA device node.
+func (m *manager) deviceLabel(ctx context.Context) string {
+	usingGPU, _ := m.resolveDevice(ctx)
+	if usingGPU {
+		return "gpu"
+	}
+	return "cpu"
+}
+
+func gpuAvailable(ctx context.Context) bool {
+	// Prefer an explicit install-time GPU enablement signal, then fall back to
+	// a visible NVIDIA device node. Product copy says "GPU", not a vendor mode.
 	switch strings.ToLower(strings.TrimSpace(env("INFERENCE_GPU_ENABLED", ""))) {
 	case "1", "true", "yes", "on":
 		return true
@@ -596,10 +585,11 @@ func (m *manager) runLoad(ctx context.Context, id string) {
 }
 
 func (m *manager) deployVLLMEngine(ctx context.Context, item model) error {
-	_, mode, _ := m.selectMode(ctx)
-	if mode == "" {
-		return errors.New("no usable inference mode")
+	usingGPU, _ := m.resolveDevice(ctx)
+	if !usingGPU {
+		return errors.New("accelerated inference requires a usable GPU")
 	}
+	mode := "gpu"
 	memoryBytes := m.memoryBytesForModel(ctx, item.ID, item.Path)
 	budget, _ := m.catalogBudget(ctx)
 	arch := modelArchFromModelDir(item.Path)
@@ -904,8 +894,8 @@ func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, message)
 		return
 	}
-	_, mode, _ := m.selectMode(r.Context())
-	if err := prepareOpenAIProxyRequest(r, openaiCompatOptionsForMode(mode)); err != nil {
+	usingGPU, _ := m.resolveDevice(r.Context())
+	if err := prepareOpenAIProxyRequest(r, openaiCompatOptions(usingGPU)); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid OpenAI request body: "+err.Error())
 		return
 	}

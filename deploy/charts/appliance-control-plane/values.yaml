@@ -147,8 +147,6 @@ config:
   inferenceRuntimePackage: ""
   inferenceEngine: ""
   inferenceArchitecture: ""
-  inferenceSupportedModes: []
-  inferenceMode: "auto"
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.

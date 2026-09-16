@@ -158,8 +158,6 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		cfg.InferenceRuntimePackage = "std-llm-amd64"
 		cfg.InferenceEngine = "ollama"
 		cfg.InferenceArchitecture = "amd64"
-		cfg.InferenceSupportedModes = []string{"cpu"}
-		cfg.InferenceMode = "cpu"
 	}
 
 	logger, err := logging.New("error")

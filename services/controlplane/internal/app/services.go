@@ -214,7 +214,6 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		inferenceSvc, err = inference.New(inference.Config{
 			BaseURL: cfg.InferenceGatewayBaseURL, Package: cfg.InferenceRuntimePackage,
 			Engine: cfg.InferenceEngine, Architecture: cfg.InferenceArchitecture,
-			SupportedModes: cfg.InferenceSupportedModes, RequestedMode: cfg.InferenceMode,
 		}, nil)
 		if err != nil {
 			db.Close()

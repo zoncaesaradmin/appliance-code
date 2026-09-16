@@ -37,8 +37,6 @@ data:
   APPLIANCE_INFERENCE_RUNTIME_PACKAGE: {{ .Values.config.inferenceRuntimePackage | quote }}
   APPLIANCE_INFERENCE_ENGINE: {{ .Values.config.inferenceEngine | quote }}
   APPLIANCE_INFERENCE_ARCHITECTURE: {{ .Values.config.inferenceArchitecture | quote }}
-  APPLIANCE_INFERENCE_SUPPORTED_MODES: {{ join "," (.Values.config.inferenceSupportedModes | default list) | quote }}
-  APPLIANCE_INFERENCE_MODE: {{ .Values.config.inferenceMode | default "auto" | quote }}
   APPLIANCE_BLOB_STORAGE_ENDPOINT: {{ .Values.blobStorage.endpoint | quote }}
   APPLIANCE_BLOB_STORAGE_BUCKET: {{ .Values.blobStorage.bucket | quote }}
   APPLIANCE_BLOB_STORAGE_REGION: {{ .Values.blobStorage.region | quote }}

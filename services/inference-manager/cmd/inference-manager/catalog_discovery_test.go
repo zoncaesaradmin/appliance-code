@@ -187,6 +187,7 @@ func TestDiscoverModelsRoutesVLLMThroughCatalogRefresh(t *testing.T) {
 
 	m := testManager(t)
 	m.engine = "vllm"
+	m.gpuProbe = func(context.Context) bool { return true }
 	c := newModelCatalog(m)
 	c.budget = func(context.Context) (uint64, uint64) { return 1 << 40, 1 << 40 }
 	c.refresh(context.Background())

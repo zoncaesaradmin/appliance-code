@@ -123,7 +123,7 @@ func fallbackKVBytesPerToken(modelEstimateBytes uint64) uint64 {
 // interactive clients stall with no tokens.
 func modePrefillContextCap(mode string) uint64 {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "cuda":
+	case "gpu", "cuda": // cuda kept as alias for older test fixtures during transition
 		return chunkedPrefillTokens * 64 // 131072; memory/KV usually dominates
 	case "cpu", "":
 		// 4 × 2048 = 8192: enough for agent prompts without multi-minute first token.
@@ -200,7 +200,7 @@ func planCPUCores(mode string, availableCPUs uint64) (cores uint64, limit, reque
 	}
 
 	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "cuda":
+	case "gpu", "cuda":
 		// GPU does the heavy math; keep a modest host CPU reservation.
 		cores = availableCPUs / 4
 		if cores < 2 {

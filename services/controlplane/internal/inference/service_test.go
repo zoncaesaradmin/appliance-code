@@ -67,7 +67,7 @@ func TestListModelsPreservesLaunchArguments(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "vllm", Architecture: "amd64", SupportedModes: []string{"cpu"}, RequestedMode: "cpu"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "vllm", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,13 +93,13 @@ func TestStatusReportsServedMaxModelLen(t *testing.T) {
 		case "/internal/v1/models/load/progress":
 			_ = json.NewEncoder(w).Encode(map[string]any{"state": "ready", "modelId": "Qwen/Qwen2.5-3B-Instruct"})
 		case "/internal/v1/runtime/capabilities":
-			_ = json.NewEncoder(w).Encode(map[string]any{"availableModes": []string{"cpu"}, "activeMode": "cpu"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"gpuAvailable": false, "checks": []map[string]string{}})
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "vllm", Architecture: "amd64", SupportedModes: []string{"cpu"}, RequestedMode: "cpu"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64", SupportedModes: []string{"cpu"}, RequestedMode: "cpu"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,49 +155,66 @@ func TestOllamaModelLifecycle(t *testing.T) {
 	}
 }
 
-func TestAutoModeUsesRuntimeDetectionForVLLM(t *testing.T) {
+func TestAcceleratedCapabilitiesReportGPUAvailability(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/internal/v1/runtime/capabilities" {
 			http.NotFound(w, r)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"availableModes": []string{"cpu", "cuda"}, "activeMode": "cuda"})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"gpuAvailable": true,
+			"checks":       []map[string]string{{"name": "gpu", "status": "pass"}},
+		})
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64", SupportedModes: []string{"cpu", "cuda"}, RequestedMode: "auto"}, server.Client())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := service.Capabilities(t.Context()).ActiveMode; got != "cuda" {
-		t.Fatalf("activeMode=%q", got)
-	}
-}
-
-func TestExplicitVLLMModeMustMatchRuntimeDetection(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"availableModes": []string{"cpu", "cuda"}, "activeMode": "cpu"})
-	}))
-	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64", SupportedModes: []string{"cpu", "cuda"}, RequestedMode: "cuda"}, server.Client())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := service.Capabilities(t.Context()).ActiveMode; got != "" {
-		t.Fatalf("activeMode=%q, want unconfirmed", got)
-	}
-}
-
-func TestEmptyRequestedModeDefaultsToAuto(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"availableModes": []string{"cpu", "cuda"}, "activeMode": "cpu"})
-	}))
-	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64", SupportedModes: []string{"cpu", "cuda"}}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
 	capabilities := service.Capabilities(t.Context())
-	if capabilities.RequestedMode != "auto" || capabilities.ActiveMode != "cpu" {
+	if capabilities.Acceleration != "accelerated" {
+		t.Fatalf("acceleration=%q", capabilities.Acceleration)
+	}
+	if capabilities.GPUAvailable == nil || !*capabilities.GPUAvailable {
+		t.Fatalf("gpuAvailable=%v", capabilities.GPUAvailable)
+	}
+}
+
+func TestAcceleratedCapabilitiesFailWithoutGPU(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"gpuAvailable": false, "checks": []map[string]string{}})
+	}))
+	defer server.Close()
+	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64"}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	capabilities := service.Capabilities(t.Context())
+	if capabilities.Acceleration != "accelerated" {
+		t.Fatalf("acceleration=%q", capabilities.Acceleration)
+	}
+	found := false
+	for _, check := range capabilities.Checks {
+		if check.Name == "gpu" && check.Status == "fail" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected gpu fail check, got %+v", capabilities.Checks)
+	}
+}
+
+func TestStandardCapabilitiesReportStandardAcceleration(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"gpuAvailable": false, "checks": []map[string]string{}})
+	}))
+	defer server.Close()
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64"}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	capabilities := service.Capabilities(t.Context())
+	if capabilities.Acceleration != "standard" || capabilities.Engine != "ollama" {
 		t.Fatalf("capabilities=%+v", capabilities)
 	}
 }

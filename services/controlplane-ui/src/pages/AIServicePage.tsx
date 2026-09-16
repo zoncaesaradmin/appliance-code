@@ -773,7 +773,7 @@ export function AIServicePage(): React.JSX.Element {
           <Card
             className="ai-services-layout__status"
             title="Inference runtime"
-            subtitle="Engine, mode, and serving status."
+            subtitle="Engine, acceleration, and serving status."
           >
             {status ? (
               <div className="stack">
@@ -785,8 +785,15 @@ export function AIServicePage(): React.JSX.Element {
                     </strong>
                   </div>
                   <div>
-                    <span>Mode</span>
-                    <strong>{status.activeMode || "Detection pending"}</strong>
+                    <span>Acceleration</span>
+                    <strong>
+                      {status.acceleration || "unknown"}
+                      {typeof status.gpuAvailable === "boolean"
+                        ? status.gpuAvailable
+                          ? " · GPU available"
+                          : " · GPU unavailable"
+                        : ""}
+                    </strong>
                   </div>
                   <div>
                     <span>Serving</span>

@@ -174,13 +174,22 @@ func (c *modelCatalog) snapshot(ctx context.Context) catalogState {
 	mode := ""
 	if c.m != nil {
 		engine = c.m.engine
-		_, mode, _ = c.m.selectMode(ctx)
+		mode = c.m.deviceLabel(ctx)
+		if engine == "vllm" {
+			usingGPU, _ := c.m.resolveDevice(ctx)
+			if !usingGPU {
+				mode = ""
+			}
+		}
 	}
 	for i := range state.Items {
 		item := &state.Items[i]
 		item.Eligible = false
 		var planErr error
 		if engine == "vllm" {
+			if mode == "" {
+				continue
+			}
 			serve, err := planServe(serveWindowInput{
 				Engine:             engine,
 				Mode:               mode,

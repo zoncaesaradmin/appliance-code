@@ -33,18 +33,18 @@ func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 		return 0, 0
 	}
 	freeDisk := disk.Bavail * uint64(disk.Bsize)
-	_, mode, _ := m.selectMode(ctx)
-	if mode == "" {
+	usingGPU, _ := m.resolveDevice(ctx)
+	if m.engine == "vllm" && !usingGPU {
 		return 0, freeDisk
 	}
 	// Catalog eligibility estimates whether a *model* can fit on this appliance.
 	// Do not clamp to the manager container's memory limit: the thin manager is
 	// intentionally small (API/proxy only); the on-demand engine pod holds the
-	// model. Host MemAvailable is the conservative capacity signal for CPU mode.
+	// model. Host MemAvailable is the conservative capacity signal for CPU path.
 	memory := hostMemAvailable()
 	// Leave room for existing appliance workloads and transient allocations.
 	memory = memory / 4 * 3
-	if mode == "cuda" {
+	if usingGPU {
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		// Conservative single-device capacity: do not add GPU memories together

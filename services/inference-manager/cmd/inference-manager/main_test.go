@@ -29,7 +29,7 @@ func testManager(t *testing.T) *manager {
 	m.download = func(_ context.Context, source, destination string) error {
 		return os.WriteFile(filepath.Join(destination, "config.json"), []byte(source), 0o660)
 	}
-	m.cudaProbe = func(context.Context) bool { return false }
+	m.gpuProbe = func(context.Context) bool { return false }
 	return m
 }
 
@@ -86,14 +86,16 @@ func TestManagerHTTPRouting(t *testing.T) {
 	}
 }
 
-func TestAutoModePrefersConfirmedCUDA(t *testing.T) {
+func TestResolveDevicePrefersConfirmedGPU(t *testing.T) {
 	m := testManager(t)
-	m.cudaProbe = func(context.Context) bool { return true }
-	t.Setenv("INFERENCE_MODE", "auto")
-	t.Setenv("INFERENCE_SUPPORTED_MODES", "cpu,cuda")
-	available, active, _ := m.selectMode(context.Background())
-	if active != "cuda" || len(available) == 0 || available[0] != "cuda" {
-		t.Fatalf("available=%v active=%q, want CUDA selected", available, active)
+	m.engine = "vllm"
+	m.gpuProbe = func(context.Context) bool { return true }
+	usingGPU, checks := m.resolveDevice(context.Background())
+	if !usingGPU {
+		t.Fatalf("usingGPU=false checks=%v", checks)
+	}
+	if m.deviceLabel(context.Background()) != "gpu" {
+		t.Fatalf("deviceLabel=%q", m.deviceLabel(context.Background()))
 	}
 }
 
@@ -112,13 +114,16 @@ func TestVLLMEnginePodSetsOfflineEnvContract(t *testing.T) {
 	}
 }
 
-func TestAutoModeFallsBackToCPUWhenCUDANotConfirmed(t *testing.T) {
+func TestResolveDeviceRejectsAcceleratedWithoutGPU(t *testing.T) {
 	m := testManager(t)
-	t.Setenv("INFERENCE_MODE", "auto")
-	t.Setenv("INFERENCE_SUPPORTED_MODES", "cpu,cuda")
-	_, active, _ := m.selectMode(context.Background())
-	if active != "cpu" {
-		t.Fatalf("active=%q, want CPU fallback", active)
+	m.engine = "vllm"
+	m.gpuProbe = func(context.Context) bool { return false }
+	usingGPU, checks := m.resolveDevice(context.Background())
+	if usingGPU {
+		t.Fatalf("usingGPU=true checks=%v", checks)
+	}
+	if m.deviceLabel(context.Background()) != "cpu" {
+		t.Fatalf("deviceLabel=%q", m.deviceLabel(context.Background()))
 	}
 }
 
@@ -137,7 +142,7 @@ func TestValidatedVLLMArgumentsMatchSupportedDockerInvocation(t *testing.T) {
 		t.Fatalf("validate exact vLLM arguments: %v", err)
 	}
 	m := testManager(t)
-	got := m.vllmCommandArguments(model{ID: "internal", Path: "/models/model", LaunchArguments: arguments}, "cuda")
+	got := m.vllmCommandArguments(model{ID: "internal", Path: "/models/model", LaunchArguments: arguments}, "gpu")
 	joined := strings.Join(got, " ")
 	for _, expected := range []string{"serve /models/model", "--quantization modelopt_fp4", "--max-model-len 262144", "--gpu-memory-utilization 0.8", "--cudagraph-capture-sizes 4", "--no-enable-flashinfer-autotune", "--enable-auto-tool-choice", "--served-model-name qwen3.6", "--tool-call-parser qwen3_coder", "--host 0.0.0.0", "--port 1"} {
 		if !strings.Contains(joined, expected) {
@@ -285,15 +290,16 @@ func TestNoLoadedModelFailsOpenAIRequest(t *testing.T) {
 
 func TestLoadStartsInstalledModel(t *testing.T) {
 	m := testManager(t)
+	m.engine = "vllm"
+	m.gpuProbe = func(context.Context) bool { return true }
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	defer backend.Close()
 	m.backend, _ = url.Parse(backend.URL)
 	fake := &fakeEngine{}
 	m.engineOrch = fake
-	t.Setenv("INFERENCE_SUPPORTED_MODES", "cpu")
-	t.Setenv("INFERENCE_MODE", "cpu")
 	t.Setenv("INFERENCE_ENGINE_MAX_MEMORY", "")
 	t.Setenv("INFERENCE_ENGINE_SHARED_MEMORY", "4Gi")
+	t.Setenv("INFERENCE_GPU_ENABLED", "true")
 	modelDir := filepath.Join(m.modelsDir, "tiny")
 	if err := os.MkdirAll(modelDir, 0o770); err != nil {
 		t.Fatal(err)

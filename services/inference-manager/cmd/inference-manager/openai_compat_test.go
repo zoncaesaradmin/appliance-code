@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -30,7 +31,7 @@ func TestNormalizeResponsesJSONSchemaUsesStructuredOutputs(t *testing.T) {
 			}
 		}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -60,7 +61,7 @@ func TestNormalizeResponsesJSONSchemaUsesStructuredOutputs(t *testing.T) {
 
 func TestNormalizeResponsesJSONObjectPassthrough(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"json_object"}},"stream":true}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if changed {
 		t.Fatalf("json_object must pass through unchanged: %s", out)
 	}
@@ -68,7 +69,7 @@ func TestNormalizeResponsesJSONObjectPassthrough(t *testing.T) {
 
 func TestNormalizeResponsesTextPassthrough(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"text"}},"stream":true}`)
-	_, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	_, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if changed {
 		t.Fatal("text format must pass through")
 	}
@@ -76,7 +77,7 @@ func TestNormalizeResponsesTextPassthrough(t *testing.T) {
 
 func TestNormalizeResponsesJSONSchemaWithoutSchemaFallsBackToJSONObject(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"json_schema","name":"x"}},"stream":true}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -96,7 +97,7 @@ func TestNormalizeResponsesJSONSchemaWithoutSchemaFallsBackToJSONObject(t *testi
 
 func TestNormalizeIgnoresNonResponsesPaths(t *testing.T) {
 	in := []byte(`{"messages":[],"response_format":{"type":"json_schema","json_schema":{"name":"x","schema":{"type":"object"}}}}`)
-	_, changed := normalizeOpenAIUpstreamBody("/v1/chat/completions", in, openaiCompatOptions{})
+	_, changed := normalizeOpenAIUpstreamBody("/v1/chat/completions", in, openaiCompatConfig{})
 	if changed {
 		t.Fatal("chat completions path is unchanged in this shim")
 	}
@@ -107,7 +108,7 @@ func TestNormalizeNestedChatStyleSchemaInsideFormat(t *testing.T) {
 		"input":"hi",
 		"text":{"format":{"type":"json_schema","json_schema":{"name":"n","schema":{"type":"object","properties":{"a":{"type":"string"}}}}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -127,7 +128,7 @@ func TestNormalizeKeepsExistingStructuredOutputs(t *testing.T) {
 		"structured_outputs":{"json":{"type":"object","properties":{"b":{"type":"number"}}}},
 		"text":{"format":{"type":"json_schema","name":"x","schema":{"type":"object","properties":{"a":{"type":"string"}}}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -154,7 +155,7 @@ func TestNormalizePreservesToolsAndStream(t *testing.T) {
 		"tools":[{"type":"function","name":"shell","parameters":{"type":"object","properties":{"command":{"type":"string"}}}}],
 		"text":{"format":{"type":"json_schema","name":"plan","schema":{"type":"object","properties":{"steps":{"type":"array"}},"required":["steps"]}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -185,7 +186,7 @@ func TestPrepareOpenAIProxyRequestRewritesBody(t *testing.T) {
 	body := `{"input":"hi","stream":true,"text":{"format":{"type":"json_schema","name":"n","schema":{"type":"object"}}}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	if err := prepareOpenAIProxyRequest(req, openaiCompatOptions{}); err != nil {
+	if err := prepareOpenAIProxyRequest(req, openaiCompatConfig{}); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := io.ReadAll(req.Body)
@@ -210,7 +211,7 @@ func TestNormalizeCPUDisablesStructuredOutputs(t *testing.T) {
 		"structured_outputs":{"json":{"type":"object","properties":{"a":{"type":"string"}}}},
 		"text":{"format":{"type":"json_schema","name":"n","schema":{"type":"object","properties":{"a":{"type":"string"}}}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{DisableStructuredOutputs: true})
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{DisableStructuredOutputs: true})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -230,15 +231,12 @@ func TestNormalizeCPUDisablesStructuredOutputs(t *testing.T) {
 	}
 }
 
-func TestOpenaiCompatOptionsForMode(t *testing.T) {
-	if !openaiCompatOptionsForMode("cpu").DisableStructuredOutputs {
-		t.Fatal("cpu must disable structured outputs")
+func TestOpenaiCompatOptions(t *testing.T) {
+	if !openaiCompatOptions(false).DisableStructuredOutputs {
+		t.Fatal("CPU must disable structured outputs")
 	}
-	if !openaiCompatOptionsForMode("").DisableStructuredOutputs {
-		t.Fatal("unknown mode must disable structured outputs")
-	}
-	if openaiCompatOptionsForMode("cuda").DisableStructuredOutputs {
-		t.Fatal("cuda may use structured outputs")
+	if openaiCompatOptions(true).DisableStructuredOutputs {
+		t.Fatal("GPU may use structured outputs")
 	}
 }
 
@@ -251,9 +249,8 @@ func TestProxyOpenAINormalizesResponsesJSONSchema(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	t.Setenv("INFERENCE_SUPPORTED_MODES", "cpu")
-	t.Setenv("INFERENCE_MODE", "cpu")
 	m := testManager(t)
+	m.gpuProbe = func(context.Context) bool { return false }
 	m.active = "ready-model"
 	m.backend, _ = url.Parse(backend.URL)
 	m.proxy = newOpenAIReverseProxy(m.backend)

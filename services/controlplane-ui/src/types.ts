@@ -525,9 +525,8 @@ export interface InferenceRuntimeStatus {
   engine: "ollama" | "vllm" | string;
   architecture: string;
   hostArchitecture: string;
-  supportedModes: string[];
-  requestedMode: string;
-  activeMode?: string;
+  acceleration: "standard" | "accelerated" | string;
+  gpuAvailable?: boolean;
   checks: InferenceCheck[];
   ready?: boolean;
   loadedModelId?: string;

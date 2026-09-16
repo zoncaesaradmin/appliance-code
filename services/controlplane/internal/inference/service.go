@@ -34,12 +34,10 @@ var (
 )
 
 type Config struct {
-	BaseURL        string
-	Package        string
-	Engine         string
-	Architecture   string
-	SupportedModes []string
-	RequestedMode  string
+	BaseURL      string
+	Package      string
+	Engine       string
+	Architecture string
 }
 
 type Check struct {
@@ -49,14 +47,13 @@ type Check struct {
 }
 
 type RuntimeCapabilities struct {
-	Package          string   `json:"package"`
-	Engine           string   `json:"engine"`
-	Architecture     string   `json:"architecture"`
-	HostArchitecture string   `json:"hostArchitecture"`
-	SupportedModes   []string `json:"supportedModes"`
-	RequestedMode    string   `json:"requestedMode"`
-	ActiveMode       string   `json:"activeMode,omitempty"`
-	Checks           []Check  `json:"checks"`
+	Package          string  `json:"package"`
+	Engine           string  `json:"engine"`
+	Architecture     string  `json:"architecture"`
+	HostArchitecture string  `json:"hostArchitecture"`
+	Acceleration     string  `json:"acceleration"` // standard | accelerated
+	GPUAvailable     *bool   `json:"gpuAvailable,omitempty"`
+	Checks           []Check `json:"checks"`
 }
 
 type RuntimeStatus struct {
@@ -157,10 +154,6 @@ func New(cfg Config, client *http.Client) (*Service, error) {
 		return nil, fmt.Errorf("inference: base URL must be absolute with no path")
 	}
 	cfg.Engine = strings.ToLower(strings.TrimSpace(cfg.Engine))
-	cfg.RequestedMode = strings.ToLower(strings.TrimSpace(cfg.RequestedMode))
-	if cfg.RequestedMode == "" {
-		cfg.RequestedMode = "auto"
-	}
 	if cfg.Engine != "ollama" && cfg.Engine != "vllm" {
 		return nil, fmt.Errorf("inference: unsupported engine %q", cfg.Engine)
 	}
@@ -171,42 +164,48 @@ func New(cfg Config, client *http.Client) (*Service, error) {
 }
 
 func (s *Service) Capabilities(ctx context.Context) RuntimeCapabilities {
-	active := ""
 	checks := []Check{{Name: "architecture", Status: "pass"}}
 	hostArch := normalizeArchitecture(runtime.GOARCH)
 	if want := normalizeArchitecture(s.cfg.Architecture); want != "" && want != hostArch {
 		checks[0] = Check{Name: "architecture", Status: "fail", Message: fmt.Sprintf("runtime package targets %s; process architecture is %s", want, hostArch)}
 	}
-	requestedSupported := s.cfg.RequestedMode == "auto" || contains(s.cfg.SupportedModes, s.cfg.RequestedMode)
-	if requestedSupported && s.cfg.Engine == "ollama" && (s.cfg.RequestedMode == "auto" || s.cfg.RequestedMode == "cpu") && contains(s.cfg.SupportedModes, "cpu") {
-		// The current Ollama package is CPU-only, so this is deterministic.
-		// Multi-mode runtimes must report their selected mode from the runtime
-		// capability endpoint; never infer CUDA from architecture or a vendor.
-		active = "cpu"
-	} else if requestedSupported {
-		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		var detected struct {
-			AvailableModes []string `json:"availableModes"`
-			ActiveMode     string   `json:"activeMode"`
-			Checks         []Check  `json:"checks"`
-		}
-		err := s.getJSON(probeCtx, "/internal/v1/runtime/capabilities", &detected)
-		detectedMode := strings.ToLower(strings.TrimSpace(detected.ActiveMode))
-		modeMatchesRequest := s.cfg.RequestedMode == "auto" || detectedMode == s.cfg.RequestedMode
-		if err == nil && contains(s.cfg.SupportedModes, detectedMode) && contains(detected.AvailableModes, detectedMode) && modeMatchesRequest {
-			active = detectedMode
-			checks = append(checks, detected.Checks...)
+	acceleration := "standard"
+	if s.cfg.Engine == "vllm" {
+		acceleration = "accelerated"
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var detected struct {
+		GPUAvailable bool    `json:"gpuAvailable"`
+		Checks       []Check `json:"checks"`
+	}
+	var gpuAvailable *bool
+	err := s.getJSON(probeCtx, "/internal/v1/runtime/capabilities", &detected)
+	if err == nil {
+		value := detected.GPUAvailable
+		gpuAvailable = &value
+		checks = append(checks, detected.Checks...)
+		if s.cfg.Engine == "vllm" && !detected.GPUAvailable {
+			checks = append(checks, Check{Name: "gpu", Status: "fail", Message: "accelerated inference requires a usable GPU"})
+		} else if s.cfg.Engine == "vllm" {
+			checks = append(checks, Check{Name: "gpu", Status: "pass", Message: "GPU available for accelerated inference"})
 		} else {
-			checks = append(checks, Check{Name: "runtime-detection", Status: "pending", Message: "runtime has not confirmed a compatible active CPU or CUDA mode"})
+			checks = append(checks, Check{Name: "runtime", Status: "pass", Message: "standard inference runtime ready"})
 		}
-	}
-	if active == "" {
-		checks = append(checks, Check{Name: "mode", Status: "fail", Message: "requested mode is not supported by the selected runtime package"})
 	} else {
-		checks = append(checks, Check{Name: "mode", Status: "pass", Message: active})
+		checks = append(checks, Check{Name: "runtime-detection", Status: "pending", Message: "runtime has not confirmed hardware readiness"})
 	}
-	return RuntimeCapabilities{Package: s.cfg.Package, Engine: s.cfg.Engine, Architecture: s.cfg.Architecture, HostArchitecture: hostArch, SupportedModes: append([]string(nil), s.cfg.SupportedModes...), RequestedMode: s.cfg.RequestedMode, ActiveMode: active, Checks: checks}
+
+	return RuntimeCapabilities{
+		Package:          s.cfg.Package,
+		Engine:           s.cfg.Engine,
+		Architecture:     s.cfg.Architecture,
+		HostArchitecture: hostArch,
+		Acceleration:     acceleration,
+		GPUAvailable:     gpuAvailable,
+		Checks:           checks,
+	}
 }
 
 func (s *Service) getJSON(ctx context.Context, path string, target any) error {

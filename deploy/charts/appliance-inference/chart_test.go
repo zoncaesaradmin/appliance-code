@@ -89,7 +89,7 @@ func TestInferenceGatewayRender(t *testing.T) {
 }
 
 func TestGPUEnvPassedToManager(t *testing.T) {
-	out := render(t, "--set", "runtime.engine=vllm", "--set", "runtime.supportedModes={cpu,cuda}", "--set", "gpu.enabled=true")
+	out := render(t, "--set", "runtime.engine=vllm", "--set", "gpu.enabled=true")
 	for _, want := range []string{
 		"name: INFERENCE_GPU_ENABLED\n              value: \"true\"",
 		"name: INFERENCE_GPU_RUNTIME_CLASS\n              value: \"nvidia\"",
@@ -157,10 +157,11 @@ func TestVLLMRuntimeContractRenders(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
 	}
-	out := render(t, "--set", "runtime.engine=vllm", "--set", "runtime.supportedModes={cpu,cuda}")
+	out := render(t, "--set", "runtime.engine=vllm", "--set", "gpu.enabled=true")
 	for _, want := range []string{
-		"name: INFERENCE_ENGINE", "value: \"vllm\"", "name: INFERENCE_MODE", "value: \"auto\"",
-		"name: INFERENCE_SUPPORTED_MODES", "value: \"cpu,cuda\"", "name: VLLM_CPU_KVCACHE_SPACE",
+		"name: INFERENCE_ENGINE", "value: \"vllm\"",
+		"name: INFERENCE_GPU_ENABLED", "value: \"true\"",
+		"name: VLLM_CPU_KVCACHE_SPACE",
 		"name: INFERENCE_ARCH_FILE", "value: \"/models/.zon/vllm-architectures.json\"",
 		"kind: Job", "list_vllm_archs.py", "vllm-architectures.json",
 	} {
@@ -168,7 +169,12 @@ func TestVLLMRuntimeContractRenders(t *testing.T) {
 			t.Fatalf("vLLM runtime contract missing %q: %s", want, out)
 		}
 	}
-	if strings.Contains(out, "mountPath: /control") || strings.Contains(out, "engine-launcher") || strings.Contains(out, "run.sh") {
-		t.Fatal("vLLM chart must not render the old process supervisor")
+	for _, forbidden := range []string{
+		"name: INFERENCE_MODE\n", "INFERENCE_SUPPORTED_MODES", "supportedModes",
+		"mountPath: /control", "engine-launcher", "run.sh",
+	} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("vLLM chart must not render %q", forbidden)
+		}
 	}
 }

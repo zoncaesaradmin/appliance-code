@@ -1008,8 +1008,6 @@ config:
   inferenceRuntimePackage: std-llm-amd64
   inferenceEngine: ollama
   inferenceArchitecture: amd64
-  inferenceSupportedModes: [cpu]
-  inferenceMode: auto
 `)
 	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
 		t.Fatalf("writing test values: %v", err)

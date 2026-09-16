@@ -60,10 +60,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: "/home/runtime"
 - name: INFERENCE_ENGINE
   value: {{ .Values.runtime.engine | quote }}
-- name: INFERENCE_MODE
-  value: {{ .Values.runtime.mode | quote }}
-- name: INFERENCE_SUPPORTED_MODES
-  value: {{ join "," .Values.runtime.supportedModes | quote }}
 - name: INFERENCE_LISTEN_ADDRESS
   value: "0.0.0.0:11434"
 - name: INFERENCE_BACKEND_URL

@@ -43,11 +43,11 @@ func TestPlanServeCPUCapsToPrefillBudget(t *testing.T) {
 	}
 }
 
-func TestPlanServeCUDAAllowsLargerWindow(t *testing.T) {
+func TestPlanServeGPUAllowsLargerWindow(t *testing.T) {
 	t.Setenv("INFERENCE_ENGINE_CPU_LIMIT", "")
 	plan, err := planServe(serveWindowInput{
 		Engine:             "vllm",
-		Mode:               "cuda",
+		Mode:               "gpu",
 		ModelEstimateBytes: 10 << 30,
 		AvailableBytes:     80 << 30,
 		AvailableCPUs:      16,
@@ -61,14 +61,14 @@ func TestPlanServeCUDAAllowsLargerWindow(t *testing.T) {
 		t.Fatalf("MaxModelLen=%d want card 32768", plan.MaxModelLen)
 	}
 	if plan.CPUCores != 4 {
-		t.Fatalf("CUDA CPUCores=%d want 4", plan.CPUCores)
+		t.Fatalf("GPU CPUCores=%d want 4", plan.CPUCores)
 	}
 }
 
 func TestPlanServeMemoryShrinksWindow(t *testing.T) {
 	plan, err := planServe(serveWindowInput{
 		Engine:             "vllm",
-		Mode:               "cuda",
+		Mode:               "gpu",
 		ModelEstimateBytes: 4 << 30,
 		AvailableBytes:     20 << 30,
 		ModelContextLimit:  32768,

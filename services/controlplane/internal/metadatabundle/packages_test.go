@@ -1,7 +1,6 @@
 package metadatabundle_test
 
 import (
-	"reflect"
 	"testing"
 
 	"appliance-code/services/controlplane/internal/metadatabundle"
@@ -57,13 +56,13 @@ func TestInferencePackageDeclaresItsEngine(t *testing.T) {
 	if err := metadatabundle.ValidateBundle(b); err != nil {
 		t.Fatal(err)
 	}
-	if b.Packages.Packages["std-llm-amd64"].Runtime.InferenceEngine != "ollama" || b.Packages.Packages["std-llm-amd64"].Runtime.Architecture != "amd64" || !reflect.DeepEqual(b.Packages.Packages["std-llm-amd64"].Runtime.SupportedModes, []string{"cpu"}) {
+	if b.Packages.Packages["std-llm-amd64"].Runtime.InferenceEngine != "ollama" || b.Packages.Packages["std-llm-amd64"].Runtime.Architecture != "amd64" {
 		t.Fatalf("standard inference runtime = %+v", b.Packages.Packages["std-llm-amd64"].Runtime)
 	}
-	if !reflect.DeepEqual(b.Packages.Packages["acc-llm-arm64"].Runtime.SupportedModes, []string{"cpu", "cuda"}) {
-		t.Fatalf("accelerated inference runtime = %+v", b.Packages.Packages["acc-llm-arm64"].Runtime)
+	if runtime := b.Packages.Packages["acc-llm-arm64"].Runtime; runtime.InferenceEngine != "vllm" || runtime.Architecture != "arm64" {
+		t.Fatalf("accelerated arm64 inference runtime = %+v", runtime)
 	}
-	if runtime := b.Packages.Packages["acc-llm-amd64"].Runtime; runtime.InferenceEngine != "vllm" || runtime.Architecture != "amd64" || !reflect.DeepEqual(runtime.SupportedModes, []string{"cpu"}) {
+	if runtime := b.Packages.Packages["acc-llm-amd64"].Runtime; runtime.InferenceEngine != "vllm" || runtime.Architecture != "amd64" {
 		t.Fatalf("accelerated amd64 inference runtime = %+v", runtime)
 	}
 }

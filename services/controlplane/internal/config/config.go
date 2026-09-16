@@ -61,8 +61,6 @@ type Config struct {
 	InferenceRuntimePackage   string                   `json:"inferenceRuntimePackage"`
 	InferenceEngine           string                   `json:"inferenceEngine"`
 	InferenceArchitecture     string                   `json:"inferenceArchitecture"`
-	InferenceSupportedModes   []string                 `json:"inferenceSupportedModes"`
-	InferenceMode             string                   `json:"inferenceMode"`
 	BlobStorageEndpoint       string                   `json:"blobStorageEndpoint"`
 	BlobStorageBucket         string                   `json:"blobStorageBucket"`
 	BlobStorageAccessKey      string                   `json:"blobStorageAccessKey"`
@@ -237,10 +235,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("INFERENCE_RUNTIME_PACKAGE", &cfg.InferenceRuntimePackage)
 	str("INFERENCE_ENGINE", &cfg.InferenceEngine)
 	str("INFERENCE_ARCHITECTURE", &cfg.InferenceArchitecture)
-	str("INFERENCE_MODE", &cfg.InferenceMode)
-	if raw, ok := env[envPrefix+"INFERENCE_SUPPORTED_MODES"]; ok {
-		cfg.InferenceSupportedModes = splitCSV(raw)
-	}
 	str("BLOB_STORAGE_ENDPOINT", &cfg.BlobStorageEndpoint)
 	str("BLOB_STORAGE_BUCKET", &cfg.BlobStorageBucket)
 	str("BLOB_STORAGE_ACCESS_KEY", &cfg.BlobStorageAccessKey)
@@ -492,24 +486,11 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(c.InferenceArchitecture) == "" {
 			errs = append(errs, "inferenceArchitecture must not be empty when the inference capability is enabled")
 		}
-		if len(c.InferenceSupportedModes) == 0 {
-			errs = append(errs, "inferenceSupportedModes must not be empty when the inference capability is enabled")
-		}
-		seenModes := map[string]bool{}
-		for _, supportedMode := range c.InferenceSupportedModes {
-			supportedMode = strings.ToLower(strings.TrimSpace(supportedMode))
-			if supportedMode != "cpu" && supportedMode != "cuda" {
-				errs = append(errs, "inferenceSupportedModes may contain only cpu or cuda")
-			} else if seenModes[supportedMode] {
-				errs = append(errs, "inferenceSupportedModes must not contain duplicates")
-			}
-			seenModes[supportedMode] = true
-		}
-		mode := strings.ToLower(strings.TrimSpace(c.InferenceMode))
-		if mode != "auto" && mode != "cpu" && mode != "cuda" {
-			errs = append(errs, "inferenceMode must be auto, cpu, or cuda when the inference capability is enabled")
-		} else if mode != "auto" && !seenModes[mode] {
-			errs = append(errs, "inferenceMode must be one of inferenceSupportedModes")
+		switch {
+		case strings.HasPrefix(c.InferenceRuntimePackage, "std-llm-") && engine != "ollama":
+			errs = append(errs, "standard inference packages must use ollama")
+		case strings.HasPrefix(c.InferenceRuntimePackage, "acc-llm-") && engine != "vllm":
+			errs = append(errs, "accelerated inference packages must use vllm")
 		}
 	}
 	if profileErr == nil && videoEnabled {
