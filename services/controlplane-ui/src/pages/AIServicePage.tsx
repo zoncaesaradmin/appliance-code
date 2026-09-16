@@ -114,6 +114,107 @@ export function servingStatusLabel(status: InferenceRuntimeStatus): string {
   }
 }
 
+/** Origin used for OpenAI-compatible client config (no trailing slash). */
+export function inferenceClientOrigin(canonicalOrigin?: string, fallbackOrigin?: string): string {
+  const raw = (canonicalOrigin || fallbackOrigin || "").trim().replace(/\/$/, "");
+  return raw;
+}
+
+/** OpenAI-compatible base URL published by the appliance Traefik route. */
+export function inferenceOpenAIBaseURL(origin: string): string {
+  return `${inferenceClientOrigin(origin)}/inference/v1`;
+}
+
+export function contextWindowFromLaunchArguments(argumentsList?: string[]): number | undefined {
+  if (!argumentsList) {
+    return undefined;
+  }
+  for (let index = 0; index + 1 < argumentsList.length; index++) {
+    if (argumentsList[index] !== "--max-model-len") {
+      continue;
+    }
+    const parsed = Number(argumentsList[index + 1]);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.trunc(parsed);
+    }
+  }
+  return undefined;
+}
+
+export type OpenAIClientSettings = {
+  baseURL: string;
+  modelId: string;
+  contextWindow?: number;
+  providerToml: string;
+  catalogJson: string;
+  instructions: string;
+  copyAll: string;
+};
+
+/** Build copyable OpenAI / Codex client settings from the currently ready model. */
+export function buildOpenAIClientSettings(input: {
+  origin: string;
+  modelId: string;
+  contextWindow?: number;
+}): OpenAIClientSettings {
+  const baseURL = inferenceOpenAIBaseURL(input.origin);
+  const modelId = input.modelId.trim();
+  const contextWindow = input.contextWindow && input.contextWindow > 0 ? input.contextWindow : undefined;
+  const contextLine = contextWindow ? `\nmodel_context_window = ${contextWindow}` : "";
+  const providerToml = `model = "${modelId}"
+model_provider = "appliance"${contextLine}
+model_catalog_json = "/path/to/zon_model_catalog.json"
+
+[model_providers.appliance]
+name = "ZON appliance"
+base_url = "${baseURL}"
+env_key = "APPLIANCE_API_TOKEN"
+wire_api = "responses"`;
+
+  const catalogModel: Record<string, unknown> = {
+    slug: modelId,
+    display_name: modelId,
+    description: `Model currently ready on the ZON appliance (${modelId}).`,
+    supported_in_api: true,
+    visibility: "list",
+    priority: 100,
+    input_modalities: ["text"],
+    supports_parallel_tool_calls: true,
+    reasoning_summary_format: "none",
+    default_reasoning_summary: "none"
+  };
+  if (contextWindow) {
+    catalogModel.context_window = contextWindow;
+  }
+  const catalogJson = JSON.stringify({ models: [catalogModel] }, null, 2);
+
+  const instructions = [
+    "Copy this into your OpenAI-compatible client.",
+    "",
+    "1. Provider / profile config (for example ~/.codex/zon.config.toml):",
+    "   - Set base_url to the value below.",
+    "   - Set model to the served model id below.",
+    "   - Point model_catalog_json at a separate catalog file.",
+    "   - Put an appliance API token in the env var named by env_key (needs inference.use).",
+    "",
+    "2. Model catalog file (for example ~/.codex/zon_model_catalog.json):",
+    "   - Paste the JSON catalog below.",
+    "   - Keep the slug equal to the served model id.",
+    "",
+    "3. After you Load a different model on the appliance, copy these settings again.",
+    "",
+    `Base URL: ${baseURL}`,
+    `Model: ${modelId}`,
+    contextWindow ? `Context window: ${contextWindow}` : "Context window: not reported; use the model card or --max-model-len if known."
+  ].join("\n");
+
+  const copyAll = [instructions, "", "--- provider config ---", providerToml, "", "--- model catalog ---", catalogJson].join(
+    "\n"
+  );
+
+  return { baseURL, modelId, contextWindow, providerToml, catalogJson, instructions, copyAll };
+}
+
 /** Best-effort size line for the selected catalog entry. */
 export function modelCapacitySummary(entry: InferenceCatalogEntry, limit = 120): string {
   const parts: string[] = [];
@@ -152,14 +253,18 @@ export function AIServicePage(): React.JSX.Element {
   const [loadProgress, setLoadProgress] = useState<InferenceLoadProgress | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [clientOrigin, setClientOrigin] = useState("");
+  const [showClientSettings, setShowClientSettings] = useState(false);
+  const [copiedKey, setCopiedKey] = useState("");
   const busyRef = useRef("");
   busyRef.current = busy;
 
   async function refresh() {
-    const [runtime, installed, available] = await Promise.allSettled([
+    const [runtime, installed, available, identity] = await Promise.allSettled([
       client.getInferenceStatus(),
       client.listInferenceModels(),
-      client.getInferenceCatalog({ sort: "parameters", order: "desc" })
+      client.getInferenceCatalog({ sort: "parameters", order: "desc" }),
+      client.getIdentity()
     ]);
     if (runtime.status === "fulfilled") {
       setStatus(runtime.value);
@@ -176,6 +281,11 @@ export function AIServicePage(): React.JSX.Element {
       setCatalogError("");
     } else {
       setCatalogError("Model discovery is unavailable. Downloaded models remain accessible.");
+    }
+    if (identity.status === "fulfilled") {
+      setClientOrigin(inferenceClientOrigin(identity.value.canonicalOrigin, window.location.origin));
+    } else {
+      setClientOrigin((current) => current || inferenceClientOrigin(undefined, window.location.origin));
     }
   }
 
@@ -403,6 +513,37 @@ export function AIServicePage(): React.JSX.Element {
     : loadBusy
       ? "Loading…"
       : "Load";
+  const readyModelId = status?.servingState === "ready" ? status.loadedModelId?.trim() || "" : "";
+  const readyContextWindow = useMemo(() => {
+    if (!readyModelId) {
+      return undefined;
+    }
+    const installed = models.find((model) => model.id === readyModelId);
+    const fromInstalled = contextWindowFromLaunchArguments(installed?.launchArguments);
+    if (fromInstalled) {
+      return fromInstalled;
+    }
+    const fromCatalog = catalog?.items?.find((entry) => entry.id === readyModelId);
+    return contextWindowFromLaunchArguments(fromCatalog?.launchArguments);
+  }, [catalog?.items, models, readyModelId]);
+  const clientSettings =
+    readyModelId && clientOrigin
+      ? buildOpenAIClientSettings({
+          origin: clientOrigin,
+          modelId: readyModelId,
+          contextWindow: readyContextWindow
+        })
+      : null;
+
+  async function copyText(key: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => (current === key ? "" : current)), 2000);
+    } catch {
+      setError("Could not copy to the clipboard. Select the text and copy it manually.");
+    }
+  }
 
   return (
     <PageFrame
@@ -426,21 +567,30 @@ export function AIServicePage(): React.JSX.Element {
         ) : null}
         <Card title="Inference runtime" subtitle="Engine mode and whether a model is ready for use.">
           {status ? (
-            <div className="detail-list">
-              <div>
-                <span>Runtime</span>
-                <strong>
-                  {status.engine} · {status.architecture}
-                </strong>
+            <div className="stack">
+              <div className="detail-list">
+                <div>
+                  <span>Runtime</span>
+                  <strong>
+                    {status.engine} · {status.architecture}
+                  </strong>
+                </div>
+                <div>
+                  <span>Mode</span>
+                  <strong>{status.activeMode || "Detection pending"}</strong>
+                </div>
+                <div>
+                  <span>Serving</span>
+                  <strong>{servingStatusLabel(status)}</strong>
+                </div>
               </div>
-              <div>
-                <span>Mode</span>
-                <strong>{status.activeMode || "Detection pending"}</strong>
-              </div>
-              <div>
-                <span>Serving</span>
-                <strong>{servingStatusLabel(status)}</strong>
-              </div>
+              {clientSettings ? (
+                <div className="button-row">
+                  <Button type="button" variant="ghost" onClick={() => setShowClientSettings(true)}>
+                    Copy OpenAI client settings
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <EmptyState message="Inference runtime status is unavailable." />
@@ -549,6 +699,76 @@ export function AIServicePage(): React.JSX.Element {
           )}
         </Card>
       </div>
+      {showClientSettings && clientSettings ? (
+        <div
+          className="video-modal-scrim"
+          role="presentation"
+          onClick={() => setShowClientSettings(false)}
+        >
+          <div
+            className="video-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="openai-client-settings-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="openai-client-settings-title">Copy OpenAI client settings</h2>
+            <p>
+              Use these values in your OpenAI-compatible client. Put the provider settings in one
+              config file, and the model catalog JSON in a separate catalog file. Create an appliance
+              API token with inference permissions and export it as <code>APPLIANCE_API_TOKEN</code>.
+            </p>
+            <div className="stack">
+              <div>
+                <strong>Base URL</strong>
+                <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-100 p-3 text-xs">{clientSettings.baseURL}</pre>
+              </div>
+              <div>
+                <strong>Model id</strong>
+                <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-100 p-3 text-xs">{clientSettings.modelId}</pre>
+              </div>
+              <div>
+                <strong>Provider config</strong>
+                <p className="video-modal__hint">
+                  Example: paste into <code>~/.codex/zon.config.toml</code> and point{" "}
+                  <code>model_catalog_json</code> at your catalog file.
+                </p>
+                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-slate-100 p-3 text-xs whitespace-pre-wrap">
+                  {clientSettings.providerToml}
+                </pre>
+                <div className="button-row mt-2">
+                  <Button type="button" variant="ghost" onClick={() => void copyText("provider", clientSettings.providerToml)}>
+                    {copiedKey === "provider" ? "Copied" : "Copy provider config"}
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <strong>Model catalog</strong>
+                <p className="video-modal__hint">
+                  Example: save as <code>~/.codex/zon_model_catalog.json</code>. Keep the slug equal
+                  to the served model id.
+                </p>
+                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-slate-100 p-3 text-xs whitespace-pre-wrap">
+                  {clientSettings.catalogJson}
+                </pre>
+                <div className="button-row mt-2">
+                  <Button type="button" variant="ghost" onClick={() => void copyText("catalog", clientSettings.catalogJson)}>
+                    {copiedKey === "catalog" ? "Copied" : "Copy catalog JSON"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="button-row mt-4">
+              <Button type="button" onClick={() => void copyText("all", clientSettings.copyAll)}>
+                {copiedKey === "all" ? "Copied" : "Copy all"}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setShowClientSettings(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </PageFrame>
   );
 }

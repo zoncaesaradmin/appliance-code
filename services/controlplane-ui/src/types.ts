@@ -538,6 +538,9 @@ export interface InferenceModel {
   id: string;
   object?: string;
   ownedBy?: string;
+  source?: string;
+  digest?: string;
+  launchArguments?: string[];
   details?: Record<string, unknown>;
 }
 
@@ -576,6 +579,7 @@ export interface InferenceCatalogEntry {
   memoryBytes: number;
   eligible: boolean;
   reason?: string;
+  launchArguments?: string[];
 }
 
 export interface InferenceCatalog {

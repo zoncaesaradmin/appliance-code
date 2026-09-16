@@ -149,10 +149,12 @@ func TestInferenceRuntimeUsesSharedGateway(t *testing.T) {
 	if !ok || module.PrimaryCapability() != appliance.CapabilityInference {
 		t.Fatalf("standard inference module = %+v", module)
 	}
-	if module.BaseURL != "http://inference-gateway.inference.svc.cluster.local:8080" || len(module.Routes) != 2 {
+	if module.BaseURL != "http://inference-gateway.inference.svc.cluster.local:8080" || len(module.Routes) != 3 {
 		t.Fatalf("inference gateway contract changed: %+v", module)
 	}
-	if module.Routes[0].ExternalPath != "/inference/v1/models" || module.Routes[1].ExternalPath != "/inference/v1/chat/completions" {
+	if module.Routes[0].ExternalPath != "/inference/v1/models" ||
+		module.Routes[1].ExternalPath != "/inference/v1/chat/completions" ||
+		module.Routes[2].ExternalPath != "/inference/v1/responses" {
 		t.Fatalf("inference API changed: %+v", module.Routes)
 	}
 }

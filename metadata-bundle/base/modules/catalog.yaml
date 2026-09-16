@@ -32,3 +32,4 @@ modules:
     routes:
       - {method: GET, externalPath: /inference/v1/models, upstreamPath: /v1/models, permission: inference.models.read}
       - {method: POST, externalPath: /inference/v1/chat/completions, upstreamPath: /v1/chat/completions, permission: inference.use}
+      - {method: POST, externalPath: /inference/v1/responses, upstreamPath: /v1/responses, permission: inference.use}

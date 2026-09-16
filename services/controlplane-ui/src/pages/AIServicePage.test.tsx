@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { AIServicePage } from "./AIServicePage";
+import { AIServicePage, buildOpenAIClientSettings } from "./AIServicePage";
 
 const api = vi.hoisted(() => ({
   getInferenceStatus: vi.fn(),
@@ -11,7 +11,8 @@ const api = vi.hoisted(() => ({
   getInferenceImportProgress: vi.fn(),
   loadInferenceModel: vi.fn(),
   getInferenceLoadProgress: vi.fn(),
-  deleteInferenceModel: vi.fn()
+  deleteInferenceModel: vi.fn(),
+  getIdentity: vi.fn()
 }));
 vi.mock("../lib/api", () => ({ client: api }));
 vi.mock("../lib/navigate", () => ({ navigate: vi.fn() }));
@@ -67,6 +68,9 @@ beforeEach(() => {
   });
   api.getInferenceImportProgress.mockResolvedValue({ state: "idle" });
   api.getInferenceLoadProgress.mockResolvedValue({ state: "idle" });
+  api.getIdentity.mockResolvedValue({
+    canonicalOrigin: "https://zon-appliance.example"
+  });
   api.importInferenceModel.mockResolvedValue({
     modelId: "available:1b",
     source: "available:1b",
@@ -244,6 +248,9 @@ it("shows serving ready-for-use and disables Load when the selected model is alr
     servingState: "ready",
     loadedModelId: "retired:1b"
   });
+  api.listInferenceModels.mockResolvedValue([
+    { id: "retired:1b", launchArguments: ["--max-model-len", "1024"] }
+  ]);
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Ready for use (retired:1b)");
   const select = element.querySelector("select")!;
@@ -254,6 +261,27 @@ it("shows serving ready-for-use and disables Load when the selected model is alr
   const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Ready");
   expect(load).toBeTruthy();
   expect(load).toHaveProperty("disabled", true);
+  const copy = [...element.querySelectorAll("button")].find(
+    (button) => button.textContent === "Copy OpenAI client settings"
+  );
+  expect(copy).toBeTruthy();
+  await act(async () => copy!.click());
+  expect(element.textContent).toContain("https://zon-appliance.example/inference/v1");
+  expect(element.textContent).toContain("retired:1b");
+  expect(element.textContent).toContain("model_context_window = 1024");
+  expect(element.textContent).toContain("zon_model_catalog.json");
+});
+
+it("builds OpenAI client settings from the ready model", () => {
+  const settings = buildOpenAIClientSettings({
+    origin: "https://appliance.example",
+    modelId: "openai-community/gpt2",
+    contextWindow: 1024
+  });
+  expect(settings.baseURL).toBe("https://appliance.example/inference/v1");
+  expect(settings.modelId).toBe("openai-community/gpt2");
+  expect(settings.providerToml).toContain('model = "openai-community/gpt2"');
+  expect(settings.catalogJson).toContain('"slug": "openai-community/gpt2"');
 });
 
 it("polls load progress while an async load runs", async () => {

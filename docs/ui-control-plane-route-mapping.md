@@ -27,6 +27,7 @@ shows a short capacity line (parameter hint, download size, estimated RAM).
 | Browser/API method and route | UI client method | Control-plane behavior |
 | --- | --- | --- |
 | `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability, `servingState`, and `loadedModelId` |
+| `GET /api/v1/appliance/identity` | `getIdentity` | Canonical origin used to build the OpenAI base URL in Copy client settings |
 | `GET /api/v1/inference/models/catalog?sort=parameters&order=desc` | `getInferenceCatalog` | Cached candidates ordered by estimated parameter scale (default); also supports `sort=memory|name` and `order=asc|desc` |
 | `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
 | `POST /api/v1/inference/models/imports` | `importInferenceModel` | Accept download job immediately (202); work continues on the inference manager |
@@ -45,7 +46,13 @@ lives under `/data/zon/inference/models/.downloads/` with
 `.progress.json` for operator inspection. Load progress is written under
 `/data/zon/inference/models/.zon/load-progress.json`. The AI Services runtime
 card shows Serving as Inactive, Loading, Ready for use, or Load failed. Load is
-disabled while busy and when the selected model is already ready.
+disabled while busy and when the selected model is already ready. When Serving is
+Ready for use, **Copy OpenAI client settings** opens a dialog with the public
+base URL (`https://<origin>/inference/v1`), served model id, a sample provider
+config (`wire_api = "responses"` for Codex), and a separate model-catalog JSON
+snippet for clients such as Codex. The appliance publishes
+`/inference/v1/models`, `/inference/v1/chat/completions`, and
+`/inference/v1/responses` for OpenAI-compatible clients.
 
 ### General tracing
 
