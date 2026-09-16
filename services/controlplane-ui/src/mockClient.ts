@@ -425,6 +425,17 @@ export class MockControlPlaneClient {
     };
   }
 
+  async downloadApplianceCA(): Promise<Blob> {
+    return new Blob(
+      [
+        "-----BEGIN CERTIFICATE-----\n",
+        "MIIBmock\n",
+        "-----END CERTIFICATE-----\n"
+      ],
+      { type: "application/x-pem-file" }
+    );
+  }
+
   async listTokens(): Promise<APIToken[]> {
     return mockState.tokens.filter((token) => !token.revokedAt);
   }

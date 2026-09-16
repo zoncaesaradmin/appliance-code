@@ -183,6 +183,12 @@ func publicRoutes() []publicRoute {
 			}
 			return http.HandlerFunc(deps.IdentityH.Get), nil
 		}},
+		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/appliance/tls/ca", build: func(deps Deps, w wrappers) (http.Handler, error) {
+			if deps.IdentityH == nil {
+				return nil, fmt.Errorf("missing identity handlers")
+			}
+			return w.authenticatedOnly(deps.IdentityH.DownloadCA), nil
+		}},
 		{capability: appliance.CapabilityBase, pattern: "POST /api/v1/setup/first-admin", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.SetupH == nil {
 				return nil, fmt.Errorf("missing setup handlers")

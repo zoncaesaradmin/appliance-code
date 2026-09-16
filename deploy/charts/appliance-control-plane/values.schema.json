@@ -431,10 +431,15 @@
     "secrets": {
       "type": "object",
       "required": [
-        "keysSecretName"
+        "keysSecretName",
+        "caSecretName"
       ],
       "properties": {
         "keysSecretName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "caSecretName": {
           "type": "string",
           "minLength": 1
         }

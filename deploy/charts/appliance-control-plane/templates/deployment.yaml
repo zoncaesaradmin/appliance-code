@@ -91,6 +91,9 @@ spec:
             - name: keys
               mountPath: {{ .Values.persistence.dataDir }}/keys
               readOnly: true
+            - name: appliance-ca
+              mountPath: /var/run/appliance/tls
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
@@ -117,4 +120,12 @@ spec:
             # The control-plane runs as non-root, so the mounted key files must
             # be group-readable to the pod fsGroup rather than owner-only.
             defaultMode: 0440
+        - name: appliance-ca
+          secret:
+            secretName: {{ .Values.secrets.caSecretName }}
+            # Public CA only — never mount ca.key into the control-plane pod.
+            defaultMode: 0440
+            items:
+              - key: ca.crt
+                path: ca.crt
 {{- end }}

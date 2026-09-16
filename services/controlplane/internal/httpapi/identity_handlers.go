@@ -14,6 +14,9 @@ type IdentityHandlers struct {
 	DNSZone         string
 	NodeIPv4        string
 	CanonicalOrigin string
+	// CACertPath is the on-disk PEM path for the public appliance CA
+	// (installer Secret appliance-ca key ca.crt). Empty disables export.
+	CACertPath string
 }
 
 type identityResponse struct {

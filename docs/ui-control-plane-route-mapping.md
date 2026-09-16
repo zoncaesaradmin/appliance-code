@@ -107,7 +107,7 @@ Useful event names:
 | `GET /home` | React `HomePage` Overview | `GET /version`, `GET /health/ready`, `GET /api/v1/appliance/identity`, `GET /api/v1/appliance/setup-state` | SPA page |
 | `GET /home/connectivity` | React `HomePage` Connectivity | Same overview fetches as `/home` | SPA page |
 | `GET /home/audit-logs` | React `HomePage` Audit Logs | Session must include `audit.read`; `GET /api/v1/audit/events?limit=10` with optional `cursor` for Next page | SPA page |
-| `GET /account/api-keys` | React `AccountPage` API Keys | `GET /api/v1/tokens`; create uses `POST /api/v1/tokens`; revoke uses `DELETE /api/v1/tokens/{id}` | SPA page; create shows the raw secret once; list shows active (non-revoked) tokens only |
+| `GET /account/api-keys` | React `AccountPage` API Keys | `GET /api/v1/tokens`; create uses `POST /api/v1/tokens`; revoke uses `DELETE /api/v1/tokens/{id}`; CA download uses `GET /api/v1/appliance/tls/ca` | SPA page; create shows the raw secret once; list shows active (non-revoked) tokens only; CA card downloads `appliance-ca.pem` for CLI trust |
 | `GET /manage/artifacts` | React `ArtifactsPage` Catalog | `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional referrers lookup | SPA page with link to Account → API Keys for registry client credentials |
 | `GET /manage/artifacts/grants` | React `ArtifactsPage` Grants | `GET /api/v1/registry/grants`; create `POST /api/v1/registry/grants`; delete `DELETE /api/v1/registry/grants/{id}` | SPA page |
 | `GET /partials/status` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |

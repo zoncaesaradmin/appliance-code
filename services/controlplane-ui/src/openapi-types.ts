@@ -467,6 +467,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/appliance/tls/ca": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the appliance TLS CA certificate
+         * @description Returns the public installer-managed appliance CA certificate as a PEM download (`appliance-ca.pem`). Authenticated users use this file to trust HTTPS from CLI clients (curl, Codex, Podman, and similar). The private CA key is never exposed.
+         */
+        get: operations["downloadApplianceTLSCA"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dns/publish": {
         parameters: {
             query?: never;
@@ -2521,6 +2541,36 @@ export interface operations {
                         /** @example https://registry1.appliance.internal */
                         canonicalOrigin?: string;
                     };
+                };
+            };
+        };
+    };
+    downloadApplianceTLSCA: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Appliance CA certificate PEM. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-pem-file": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description CA certificate is not mounted or not readable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };

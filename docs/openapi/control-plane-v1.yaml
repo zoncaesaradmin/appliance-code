@@ -531,6 +531,31 @@ paths:
                   canonicalOrigin:
                     type: string
                     example: https://registry1.appliance.internal
+  /api/v1/appliance/tls/ca:
+    get:
+      summary: Download the appliance TLS CA certificate
+      description: >
+        Returns the public installer-managed appliance CA certificate as a PEM
+        download (`appliance-ca.pem`). Authenticated users use this file to
+        trust HTTPS from CLI clients (curl, Codex, Podman, and similar). The
+        private CA key is never exposed.
+      operationId: downloadApplianceTLSCA
+      responses:
+        "200":
+          description: Appliance CA certificate PEM.
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: CA certificate is not mounted or not readable.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /api/v1/dns/publish:
     post:
       summary: Publish a DNS name to a remote DNS appliance

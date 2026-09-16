@@ -79,6 +79,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			DNSZone:         cfg.DNSZoneName,
 			NodeIPv4:        cfg.NodeIPv4,
 			CanonicalOrigin: cfg.CanonicalOrigin,
+			CACertPath:      cfg.TLSCACertPath,
 		},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,

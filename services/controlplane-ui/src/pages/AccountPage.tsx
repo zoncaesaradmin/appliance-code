@@ -28,6 +28,9 @@ export function AccountPage(props: {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [caDownloading, setCaDownloading] = useState(false);
+  const [caMessage, setCaMessage] = useState("");
+  const [caMessageTone, setCaMessageTone] = useState<"ok" | "error">("ok");
 
   useEffect(() => {
     if (props.pathname !== "/account/api-keys") {
@@ -104,6 +107,29 @@ export function AccountPage(props: {
     }
   }
 
+  async function downloadApplianceCA() {
+    setCaMessage("");
+    setCaDownloading(true);
+    try {
+      const blob = await client.downloadApplianceCA();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "appliance-ca.pem";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setCaMessageTone("ok");
+      setCaMessage("Downloaded appliance-ca.pem. Point CLI tools at this file (for example CODEX_CA_CERTIFICATE or SSL_CERT_FILE).");
+    } catch (error) {
+      setCaMessageTone("error");
+      setCaMessage(error instanceof Error ? error.message : "Could not download the appliance CA certificate.");
+    } finally {
+      setCaDownloading(false);
+    }
+  }
+
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPasswordError("");
@@ -143,19 +169,28 @@ export function AccountPage(props: {
       {props.pathname === "/account/api-keys" ? (
         <div className="stack">
           <Card
-            title="Artifact server access"
-            subtitle="Use these API tokens as the password when logging registry clients into the appliance artifact server"
+            title="Appliance CA certificate"
+            subtitle="Download the private CA so CLI clients can trust HTTPS to this appliance"
           >
             <p className="m-0 text-sm leading-6 text-slate-600">
-              Clients such as Podman, Skopeo, Helm, and ORAS authenticate with your appliance username and an
-              API token (never your interactive password). Registry path permissions still come from Artifacts →
-              Grants.
+              Browsers can click through an untrusted certificate warning. CLI tools such as Codex, curl,
+              and Podman need this CA file instead. Use it with <code>CODEX_CA_CERTIFICATE</code>,{" "}
+              <code>SSL_CERT_FILE</code>, or your client&apos;s CA bundle setting. Prefer a hostname from
+              the certificate (not a bare IP) when configuring the base URL.
             </p>
             <div className="button-row mt-3">
-              <button className="button button--ghost" type="button" onClick={() => navigate("/manage/artifacts/grants")}>
-                Open registry grants
+              <button
+                className="button button--primary"
+                type="button"
+                disabled={caDownloading}
+                onClick={() => void downloadApplianceCA()}
+              >
+                {caDownloading ? "Downloading..." : "Download CA certificate"}
               </button>
             </div>
+            {caMessage ? (
+              <div className={caMessageTone === "error" ? "message message--error" : "message"}>{caMessage}</div>
+            ) : null}
           </Card>
           <div className="grid-two">
             <Card title="Create API token" subtitle="Shown once at creation; 90-day lifetime; inherits your permissions">
@@ -223,6 +258,21 @@ export function AccountPage(props: {
               )}
             </Card>
           </div>
+          <Card
+            title="Artifact server access"
+            subtitle="Use these API tokens as the password when logging registry clients into the appliance artifact server"
+          >
+            <p className="m-0 text-sm leading-6 text-slate-600">
+              Clients such as Podman, Skopeo, Helm, and ORAS authenticate with your appliance username and an
+              API token (never your interactive password). Registry path permissions still come from Artifacts →
+              Grants.
+            </p>
+            <div className="button-row mt-3">
+              <button className="button button--ghost" type="button" onClick={() => navigate("/manage/artifacts/grants")}>
+                Open registry grants
+              </button>
+            </div>
+          </Card>
         </div>
       ) : props.pathname === "/account/password" ? (
         <Card title="Change password" subtitle="Update your local appliance password">

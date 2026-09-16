@@ -31,9 +31,11 @@ type Config struct {
 	ApplianceName    string                 `json:"applianceName"`
 	NodeIPv4         string                 `json:"nodeIPv4"`
 	CanonicalOrigin  string                 `json:"canonicalOrigin"`
-	PublicAddr       string                 `json:"publicAddr"`
-	InternalAddr     string                 `json:"internalAddr"`
-	DataDir          string                 `json:"dataDir"`
+	// TLSCACertPath is the mounted public appliance CA PEM (ca.crt only).
+	TLSCACertPath string `json:"tlsCACertPath"`
+	PublicAddr    string `json:"publicAddr"`
+	InternalAddr  string `json:"internalAddr"`
+	DataDir       string `json:"dataDir"`
 
 	ApplicationLogPath string `json:"applicationLogPath"`
 	LogLevel           string `json:"logLevel"`
@@ -96,6 +98,7 @@ func Default() Config {
 	return Config{
 		ApplianceProfile:          string(appliance.ProfileCore),
 		CanonicalOrigin:           "http://localhost:8080",
+		TLSCACertPath:             "/var/run/appliance/tls/ca.crt",
 		PublicAddr:                "127.0.0.1:8080",
 		InternalAddr:              "127.0.0.1:8081",
 		DataDir:                   "./data",
@@ -215,6 +218,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("NAME", &cfg.ApplianceName)
 	str("NODE_IPV4", &cfg.NodeIPv4)
 	str("CANONICAL_ORIGIN", &cfg.CanonicalOrigin)
+	str("TLS_CA_CERT_PATH", &cfg.TLSCACertPath)
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
 	str("DATA_DIR", &cfg.DataDir)

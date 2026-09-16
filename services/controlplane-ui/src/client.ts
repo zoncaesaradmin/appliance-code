@@ -132,6 +132,7 @@ export interface ControlPlaneClient {
   getVersion(): Promise<Version>;
   getReady(): Promise<Health>;
   getIdentity(): Promise<ApplianceIdentity>;
+  downloadApplianceCA(): Promise<Blob>;
   listTokens(): Promise<APIToken[]>;
   createToken(request: CreateTokenRequest): Promise<CreateTokenResponse>;
   deleteToken(id: string): Promise<void>;
@@ -312,6 +313,24 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async getIdentity(): Promise<ApplianceIdentity> {
     return this.request("/api/v1/appliance/identity");
+  }
+
+  async downloadApplianceCA(): Promise<Blob> {
+    const auth = loadAuth();
+    const headers: Record<string, string> = {
+      Accept: "application/x-pem-file, application/octet-stream, */*"
+    };
+    if (auth?.accessToken) {
+      headers.Authorization = `Bearer ${auth.accessToken}`;
+    }
+    const response = await fetch(`${this.baseUrl}/api/v1/appliance/tls/ca`, {
+      method: "GET",
+      headers
+    });
+    if (!response.ok) {
+      throw await ApiError.fromResponse(response);
+    }
+    return response.blob();
   }
 
   async listTokens(): Promise<APIToken[]> {

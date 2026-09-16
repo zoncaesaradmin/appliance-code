@@ -305,6 +305,74 @@ func TestKeySecretVolumeIsReadableByNonRootControlPlane(t *testing.T) {
 	t.Fatal("expected keys secret volume on control-plane Deployment")
 }
 
+func TestApplianceCAVolumeMountsPublicCertOnly(t *testing.T) {
+	docs := renderChart(t, defaultRenderArgs()...)
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
+	}
+	volumes, _ := at(dep, "spec", "template", "spec", "volumes").([]any)
+	foundVolume := false
+	for _, raw := range volumes {
+		volume, _ := raw.(map[string]any)
+		if name, _ := volume["name"].(string); name != "appliance-ca" {
+			continue
+		}
+		foundVolume = true
+		mode, _ := at(volume, "secret", "defaultMode").(int)
+		if mode != 0o440 {
+			t.Fatalf("appliance-ca secret defaultMode = %#o, want 0440", mode)
+		}
+		secretName, _ := at(volume, "secret", "secretName").(string)
+		if secretName != "appliance-ca" {
+			t.Fatalf("appliance-ca secretName = %q, want appliance-ca", secretName)
+		}
+		items, _ := at(volume, "secret", "items").([]any)
+		if len(items) != 1 {
+			t.Fatalf("appliance-ca items = %#v, want only ca.crt", items)
+		}
+		item, _ := items[0].(map[string]any)
+		key, _ := at(item, "key").(string)
+		path, _ := at(item, "path").(string)
+		if key != "ca.crt" || path != "ca.crt" {
+			t.Fatalf("appliance-ca item = key=%q path=%q, want ca.crt", key, path)
+		}
+	}
+	if !foundVolume {
+		t.Fatal("expected appliance-ca secret volume on control-plane Deployment")
+	}
+	containers, _ := at(dep, "spec", "template", "spec", "containers").([]any)
+	if len(containers) == 0 {
+		t.Fatal("expected control-plane container")
+	}
+	container, _ := containers[0].(map[string]any)
+	mounts, _ := at(container, "volumeMounts").([]any)
+	foundMount := false
+	for _, raw := range mounts {
+		mount, _ := raw.(map[string]any)
+		if name, _ := mount["name"].(string); name != "appliance-ca" {
+			continue
+		}
+		foundMount = true
+		if mountPath, _ := mount["mountPath"].(string); mountPath != "/var/run/appliance/tls" {
+			t.Fatalf("appliance-ca mountPath = %q, want /var/run/appliance/tls", mountPath)
+		}
+		if ro, _ := mount["readOnly"].(bool); !ro {
+			t.Fatal("appliance-ca volumeMount must be readOnly")
+		}
+	}
+	if !foundMount {
+		t.Fatal("expected appliance-ca volumeMount on control-plane container")
+	}
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneDeploymentName+"-config")
+	if cm == nil {
+		t.Fatal("expected control-plane ConfigMap")
+	}
+	if path, _ := at(cm, "data", "APPLIANCE_TLS_CA_CERT_PATH").(string); path != "/var/run/appliance/tls/ca.crt" {
+		t.Fatalf("APPLIANCE_TLS_CA_CERT_PATH = %q, want /var/run/appliance/tls/ca.crt", path)
+	}
+}
+
 func TestRenderedChartContainsNoExternalHelperImages(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",

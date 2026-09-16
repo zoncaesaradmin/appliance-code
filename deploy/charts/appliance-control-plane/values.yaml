@@ -216,6 +216,9 @@ secrets:
   # read-only at dataDir/keys. zonctl generates every file; pods never write
   # key material at runtime.
   keysSecretName: "appliance-keys"
+  # Installer-managed appliance CA (ca.crt + ca.key). The control plane mounts
+  # ca.crt only for authenticated client download; the private key stays out.
+  caSecretName: "appliance-ca"
 
 persistence:
   enabled: true
