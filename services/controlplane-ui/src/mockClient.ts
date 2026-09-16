@@ -58,7 +58,8 @@ import type {
   InferenceCatalog,
   InferenceModel,
   ImportInferenceModelRequest,
-  InferenceImportProgress
+  InferenceImportProgress,
+  InferenceLoadProgress
 } from "./types";
 
 function now(): string {
@@ -1349,7 +1350,7 @@ export class MockControlPlaneClient {
     return {
       package: "std-llm-amd64", engine: "ollama", architecture: "amd64",
       hostArchitecture: "amd64", supportedModes: ["cpu"], requestedMode: "auto",
-      activeMode: "cpu", ready: true, checks: [{ name: "runtime-api", status: "pass" }]
+      activeMode: "cpu", ready: true, servingState: "inactive", checks: [{ name: "runtime-api", status: "pass" }]
     };
   }
 
@@ -1357,11 +1358,37 @@ export class MockControlPlaneClient {
     return mockState.inferenceModels.map((model) => ({ ...model }));
   }
 
-  async getInferenceCatalog(): Promise<InferenceCatalog> {
-    return { engine: "ollama", lastAttempt: new Date().toISOString(), lastSuccess: new Date().toISOString(), refreshing: false, stale: false, scope: "Mock model catalog", items: [
-      { id: "example-local-model", source: "example-local-model", downloadBytes: 1000000000, memoryBytes: 4000000000, eligible: true, reason: "Estimated fit; verified when loaded" },
-      { id: "example-download-model", source: "example-download-model", downloadBytes: 2000000000, memoryBytes: 6000000000, eligible: true, reason: "Estimated fit; verified when loaded" }
-    ] };
+  async getInferenceCatalog(
+    params: { sort?: "parameters" | "memory" | "name"; order?: "asc" | "desc" } = { sort: "parameters", order: "desc" }
+  ): Promise<InferenceCatalog> {
+    return {
+      engine: "ollama",
+      lastAttempt: new Date().toISOString(),
+      lastSuccess: new Date().toISOString(),
+      refreshing: false,
+      stale: false,
+      scope: "Mock model catalog",
+      sort: params.sort ?? "parameters",
+      order: params.order ?? "desc",
+      items: [
+        {
+          id: "example-local-model",
+          source: "example-local-model",
+          downloadBytes: 1000000000,
+          memoryBytes: 4000000000,
+          eligible: true,
+          reason: "Estimated fit; verified when loaded"
+        },
+        {
+          id: "example-download-model",
+          source: "example-download-model",
+          downloadBytes: 2000000000,
+          memoryBytes: 6000000000,
+          eligible: true,
+          reason: "Estimated fit; verified when loaded"
+        }
+      ]
+    };
   }
 
   async importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress> {
@@ -1380,7 +1407,18 @@ export class MockControlPlaneClient {
     return { state: "idle", updatedAt: now() };
   }
 
-  async loadInferenceModel(_modelId: string): Promise<void> {}
+  async loadInferenceModel(modelId: string): Promise<InferenceLoadProgress> {
+    return {
+      modelId,
+      state: "ready",
+      message: "Model is ready for use",
+      updatedAt: now()
+    };
+  }
+
+  async getInferenceLoadProgress(): Promise<InferenceLoadProgress> {
+    return { state: "idle", updatedAt: now() };
+  }
 
   async deleteInferenceModel(modelId: string): Promise<void> {
     mockState.inferenceModels = mockState.inferenceModels.filter((model) => model.id !== modelId);

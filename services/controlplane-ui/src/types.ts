@@ -530,6 +530,8 @@ export interface InferenceRuntimeStatus {
   activeMode?: string;
   checks: InferenceCheck[];
   ready?: boolean;
+  loadedModelId?: string;
+  servingState?: "inactive" | "loading" | "ready" | "failed";
 }
 
 export interface InferenceModel {
@@ -559,6 +561,14 @@ export interface InferenceImportProgress {
   updatedAt?: string;
 }
 
+export interface InferenceLoadProgress {
+  modelId?: string;
+  state: "idle" | "loading" | "ready" | "failed";
+  message?: string;
+  error?: string;
+  updatedAt?: string;
+}
+
 export interface InferenceCatalogEntry {
   id: string;
   source: string;
@@ -576,5 +586,7 @@ export interface InferenceCatalog {
   refreshing: boolean;
   stale: boolean;
   scope: string;
+  sort?: "parameters" | "memory" | "name";
+  order?: "asc" | "desc";
   items: InferenceCatalogEntry[];
 }

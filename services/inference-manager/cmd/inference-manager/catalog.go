@@ -36,6 +36,8 @@ type catalogState struct {
 	Items       []catalogEntry `json:"items"`
 	// Discovery is deliberately bounded, not an exhaustive upstream mirror.
 	Scope string `json:"scope"`
+	Sort  string `json:"sort,omitempty"`
+	Order string `json:"order,omitempty"`
 }
 
 type modelCatalog struct {
@@ -198,5 +200,14 @@ func (m *manager) modelCatalog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "catalog is initializing")
 		return
 	}
-	writeJSON(w, http.StatusOK, m.catalog.snapshot(r.Context()))
+	sortBy, order, err := normalizeCatalogSort(r.URL.Query().Get("sort"), r.URL.Query().Get("order"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	state := m.catalog.snapshot(r.Context())
+	sortCatalogItems(state.Items, sortBy, order)
+	state.Sort = sortBy
+	state.Order = order
+	writeJSON(w, http.StatusOK, state)
 }

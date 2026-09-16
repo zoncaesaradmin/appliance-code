@@ -6,6 +6,7 @@ import type {
   InferenceCatalog,
   InferenceCatalogEntry,
   InferenceImportProgress,
+  InferenceLoadProgress,
   InferenceModel,
   InferenceRuntimeStatus
 } from "../types";
@@ -34,8 +35,50 @@ function formatParamCount(params: number): string {
   return `${Math.max(1, Math.round(params))}`;
 }
 
+/** Estimated parameter/scale rank used for catalog sorting (matches manager). */
+export function catalogEntrySizeRank(entry: InferenceCatalogEntry): number {
+  const named = entry.id.match(PARAM_HINT);
+  if (named) {
+    const amount = Number(named[1]);
+    const unit = named[2].toUpperCase();
+    if (Number.isFinite(amount) && amount > 0) {
+      return amount * (unit === "B" ? 1e9 : 1e6);
+    }
+  }
+  if (entry.downloadBytes > 0) {
+    return entry.downloadBytes / 2;
+  }
+  return entry.memoryBytes;
+}
+
+export function sortCatalogEntries(
+  entries: InferenceCatalogEntry[],
+  sort: "parameters" | "memory" | "name" = "parameters",
+  order: "asc" | "desc" = "desc"
+): InferenceCatalogEntry[] {
+  const descending = order === "desc";
+  return [...entries].sort((left, right) => {
+    let cmp = 0;
+    if (sort === "memory") {
+      cmp = left.memoryBytes - right.memoryBytes;
+    } else if (sort === "name") {
+      cmp = left.id.localeCompare(right.id);
+    } else {
+      cmp = catalogEntrySizeRank(left) - catalogEntrySizeRank(right);
+    }
+    if (cmp !== 0) {
+      return descending ? -cmp : cmp;
+    }
+    return left.id.localeCompare(right.id);
+  });
+}
+
 function importInFlight(state: InferenceImportProgress["state"] | undefined): boolean {
   return state === "downloading" || state === "verifying" || state === "installing";
+}
+
+function loadInFlight(state: InferenceLoadProgress["state"] | undefined): boolean {
+  return state === "loading";
 }
 
 function progressLabel(progress: InferenceImportProgress): string {
@@ -55,6 +98,19 @@ function progressLabel(progress: InferenceImportProgress): string {
       return progress.error || "Download failed";
     default:
       return "Preparing download";
+  }
+}
+
+export function servingStatusLabel(status: InferenceRuntimeStatus): string {
+  switch (status.servingState) {
+    case "loading":
+      return status.loadedModelId ? `Loading… (${status.loadedModelId})` : "Loading…";
+    case "ready":
+      return status.loadedModelId ? `Ready for use (${status.loadedModelId})` : "Ready for use";
+    case "failed":
+      return status.loadedModelId ? `Load failed (${status.loadedModelId})` : "Load failed";
+    default:
+      return "Inactive";
   }
 }
 
@@ -93,6 +149,7 @@ export function AIServicePage(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState("");
   const [busy, setBusy] = useState("");
   const [importProgress, setImportProgress] = useState<InferenceImportProgress | null>(null);
+  const [loadProgress, setLoadProgress] = useState<InferenceLoadProgress | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const busyRef = useRef("");
@@ -102,7 +159,7 @@ export function AIServicePage(): React.JSX.Element {
     const [runtime, installed, available] = await Promise.allSettled([
       client.getInferenceStatus(),
       client.listInferenceModels(),
-      client.getInferenceCatalog()
+      client.getInferenceCatalog({ sort: "parameters", order: "desc" })
     ]);
     if (runtime.status === "fulfilled") {
       setStatus(runtime.value);
@@ -137,15 +194,26 @@ export function AIServicePage(): React.JSX.Element {
     let cancelled = false;
     void (async () => {
       try {
-        const progress = await client.getInferenceImportProgress();
-        if (cancelled || !importInFlight(progress.state)) {
+        const [download, load] = await Promise.all([
+          client.getInferenceImportProgress(),
+          client.getInferenceLoadProgress()
+        ]);
+        if (cancelled) {
           return;
         }
-        setImportProgress(progress);
-        setBusy(`download:${progress.modelId || "model"}`);
-        setSelectedId((current) => current || progress.modelId || "");
+        if (importInFlight(download.state)) {
+          setImportProgress(download);
+          setBusy(`download:${download.modelId || "model"}`);
+          setSelectedId((current) => current || download.modelId || "");
+          return;
+        }
+        if (loadInFlight(load.state)) {
+          setLoadProgress(load);
+          setBusy(`load:${load.modelId || "model"}`);
+          setSelectedId((current) => current || load.modelId || "");
+        }
       } catch {
-        // Ignore resume failures; the operator can start a fresh download.
+        // Ignore resume failures; the operator can start a fresh action.
       }
     })();
     return () => {
@@ -185,6 +253,40 @@ export function AIServicePage(): React.JSX.Element {
     }, IMPORT_POLL_MS);
     return () => window.clearInterval(timer);
   }, [importProgress?.state]);
+
+  useEffect(() => {
+    if (!loadInFlight(loadProgress?.state)) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const progress = await client.getInferenceLoadProgress();
+          setLoadProgress(progress);
+          if (progress.state === "ready") {
+            setBusy("");
+            setMessage(`${progress.modelId || "Model"} is ready for use.`);
+            await refresh();
+            return;
+          }
+          if (progress.state === "failed") {
+            setBusy("");
+            setError(progress.error || "Model load failed.");
+            await refresh();
+            return;
+          }
+          if (progress.state === "idle") {
+            setBusy("");
+            setLoadProgress(null);
+          }
+        } catch (err) {
+          setBusy("");
+          setError(err instanceof Error ? err.message : "Could not read load progress.");
+        }
+      })();
+    }, IMPORT_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [loadProgress?.state]);
 
   async function run(label: string, operation: () => Promise<void>, success: string) {
     setBusy(label);
@@ -227,6 +329,29 @@ export function AIServicePage(): React.JSX.Element {
     }
   }
 
+  async function startLoad(modelId: string) {
+    setBusy(`load:${modelId}`);
+    setError("");
+    setMessage("");
+    try {
+      const accepted = await client.loadInferenceModel(modelId);
+      setLoadProgress(accepted);
+      if (accepted.state === "ready") {
+        setBusy("");
+        setMessage(`${modelId} is ready for use.`);
+        await refresh();
+      } else if (accepted.state === "failed") {
+        setBusy("");
+        setError(accepted.error || "Model load failed.");
+        await refresh();
+      }
+    } catch (err) {
+      setBusy("");
+      setLoadProgress(null);
+      setError(err instanceof Error ? err.message : "The inference operation failed.");
+    }
+  }
+
   const downloaded = useMemo(() => new Set(models.map((model) => model.id)), [models]);
   const options = useMemo(() => {
     const entries = new Map<string, InferenceCatalogEntry>();
@@ -247,10 +372,12 @@ export function AIServicePage(): React.JSX.Element {
         });
       }
     }
-    return [...entries.values()].sort(
-      (a, b) => Number(downloaded.has(b.id)) - Number(downloaded.has(a.id)) || a.id.localeCompare(b.id)
+    return sortCatalogEntries(
+      [...entries.values()],
+      catalog?.sort ?? "parameters",
+      catalog?.order ?? "desc"
     );
-  }, [catalog?.items, downloaded, models]);
+  }, [catalog?.items, catalog?.order, catalog?.sort, downloaded, models]);
 
   useEffect(() => {
     if (!selectedId && options.length > 0) {
@@ -266,6 +393,16 @@ export function AIServicePage(): React.JSX.Element {
   const selectedDownloaded = selected ? downloaded.has(selected.id) : false;
   const selectedSummary = selected ? modelCapacitySummary(selected) : "";
   const showProgress = importInFlight(importProgress?.state);
+  const selectedAlreadyLoaded =
+    !!selected &&
+    status?.servingState === "ready" &&
+    status.loadedModelId === selected.id;
+  const loadBusy = busy.startsWith("load:");
+  const loadButtonLabel = selectedAlreadyLoaded
+    ? "Ready"
+    : loadBusy
+      ? "Loading…"
+      : "Load";
 
   return (
     <PageFrame
@@ -287,7 +424,7 @@ export function AIServicePage(): React.JSX.Element {
             {message}
           </div>
         ) : null}
-        <Card title="Inference runtime" subtitle="The active engine and automatically selected mode.">
+        <Card title="Inference runtime" subtitle="Engine mode and whether a model is ready for use.">
           {status ? (
             <div className="detail-list">
               <div>
@@ -301,8 +438,8 @@ export function AIServicePage(): React.JSX.Element {
                 <strong>{status.activeMode || "Detection pending"}</strong>
               </div>
               <div>
-                <span>Service</span>
-                <strong>{status.ready ? "Available" : "Not ready"}</strong>
+                <span>Serving</span>
+                <strong>{servingStatusLabel(status)}</strong>
               </div>
             </div>
           ) : (
@@ -366,17 +503,24 @@ export function AIServicePage(): React.JSX.Element {
                       </div>
                     </div>
                   ) : null}
+                  {loadInFlight(loadProgress?.state) ? (
+                    <div className="import-progress" role="status" aria-live="polite">
+                      <div className="import-progress__label">
+                        {loadProgress?.message || "Loading model into the inference engine"}
+                      </div>
+                      <progress className="import-progress__bar" max={100} />
+                      <div className="import-progress__detail">Waiting for the engine to become ready…</div>
+                    </div>
+                  ) : null}
                   <div className="button-row">
                     {selectedDownloaded ? (
                       <>
                         <Button
                           type="button"
-                          disabled={busy !== ""}
-                          onClick={() =>
-                            void run(`load:${selected.id}`, () => client.loadInferenceModel(selected.id), `${selected.id} loaded successfully.`)
-                          }
+                          disabled={busy !== "" || selectedAlreadyLoaded}
+                          onClick={() => void startLoad(selected.id)}
                         >
-                          {busy === `load:${selected.id}` ? "Loading…" : "Load"}
+                          {loadButtonLabel}
                         </Button>
                         <Button
                           type="button"

@@ -299,9 +299,9 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 	m.backend, _ = url.Parse(backend.URL)
 	item := model{ID: "test/tiny", Path: filepath.Join(m.modelsDir, "tiny")}
 	m.reg.Models[item.ID] = item
-	started := false
+	started := make(chan struct{})
 	m.start = func(_ context.Context, _ model) error {
-		started = true
+		close(started)
 		return nil
 	}
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`))
@@ -310,7 +310,57 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("load status %d: %s", w.Code, w.Body.String())
 	}
-	if !started {
+	if !strings.Contains(w.Body.String(), `"state":"loading"`) {
+		t.Fatalf("expected async loading accept: %s", w.Body.String())
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
 		t.Fatal("expected start callback for loaded model")
 	}
+	waitLoadState(t, m, "ready")
+	w = httptest.NewRecorder()
+	m.handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models/load/progress", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"state":"ready"`) {
+		t.Fatalf("progress status %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLoadAlreadyReadyIsIdempotent(t *testing.T) {
+	m := testManager(t)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer backend.Close()
+	m.backend, _ = url.Parse(backend.URL)
+	m.reg.Models["test/tiny"] = model{ID: "test/tiny", Path: filepath.Join(m.modelsDir, "tiny")}
+	m.active = "test/tiny"
+	m.finishLoadProgress("ready", "test/tiny", "Model is ready for use")
+	started := false
+	m.start = func(context.Context, model) error {
+		started = true
+		return nil
+	}
+	w := httptest.NewRecorder()
+	m.loadModel(w, httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`)))
+	if w.Code != http.StatusAccepted || !strings.Contains(w.Body.String(), `"state":"ready"`) {
+		t.Fatalf("status %d body %s", w.Code, w.Body.String())
+	}
+	if started {
+		t.Fatal("already-ready load restarted the engine")
+	}
+}
+
+func waitLoadState(t *testing.T, m *manager, want string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state := m.currentLoadProgress().State
+		if state == want {
+			return
+		}
+		if state == "failed" && want != "failed" {
+			t.Fatalf("load failed: %+v", m.currentLoadProgress())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("load state=%q, want %q (%+v)", m.currentLoadProgress().State, want, m.currentLoadProgress())
 }

@@ -59,7 +59,9 @@ type RuntimeCapabilities struct {
 
 type RuntimeStatus struct {
 	RuntimeCapabilities
-	Ready bool `json:"ready"`
+	Ready         bool   `json:"ready"`
+	LoadedModelID string `json:"loadedModelId,omitempty"`
+	ServingState  string `json:"servingState,omitempty"` // inactive|loading|ready|failed
 }
 
 type Model struct {
@@ -89,10 +91,45 @@ type ImportProgress struct {
 	UpdatedAt       string `json:"updatedAt,omitempty"`
 }
 
+type LoadProgress struct {
+	ModelID   string `json:"modelId,omitempty"`
+	State     string `json:"state"` // idle|loading|ready|failed
+	Message   string `json:"message,omitempty"`
+	Error     string `json:"error,omitempty"`
+	UpdatedAt string `json:"updatedAt,omitempty"`
+}
+
 // Catalog is runtime-owned and cached locally; reading it never refreshes upstream.
-func (s *Service) Catalog(ctx context.Context) (json.RawMessage, error) {
+func (s *Service) Catalog(ctx context.Context, sortBy, order string) (json.RawMessage, error) {
+	sortBy = strings.TrimSpace(sortBy)
+	order = strings.TrimSpace(order)
+	if sortBy != "" {
+		switch strings.ToLower(sortBy) {
+		case "parameters", "memory", "name":
+		default:
+			return nil, fmt.Errorf("%w: unsupported sort %q; use parameters, memory, or name", ErrInvalidRequest, sortBy)
+		}
+	}
+	if order != "" {
+		switch strings.ToLower(order) {
+		case "asc", "desc":
+		default:
+			return nil, fmt.Errorf("%w: unsupported order %q; use asc or desc", ErrInvalidRequest, order)
+		}
+	}
+	path := "/internal/v1/models/catalog"
+	query := url.Values{}
+	if sortBy != "" {
+		query.Set("sort", sortBy)
+	}
+	if order != "" {
+		query.Set("order", order)
+	}
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
 	var catalog json.RawMessage
-	err := s.getJSON(ctx, "/internal/v1/models/catalog", &catalog)
+	err := s.getJSON(ctx, path, &catalog)
 	return catalog, err
 }
 
@@ -189,7 +226,28 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 		status, message = "fail", "OpenAI-compatible runtime API is unavailable"
 	}
 	capabilities.Checks = append(capabilities.Checks, Check{Name: "runtime-api", Status: status, Message: message})
-	return RuntimeStatus{RuntimeCapabilities: capabilities, Ready: ready}
+
+	servingState := "inactive"
+	loadedModelID := ""
+	if progress, progressErr := s.LoadProgress(ctx); progressErr == nil {
+		switch progress.State {
+		case "loading":
+			servingState = "loading"
+			loadedModelID = progress.ModelID
+		case "ready":
+			servingState = "ready"
+			loadedModelID = progress.ModelID
+		case "failed":
+			servingState = "failed"
+			loadedModelID = progress.ModelID
+		}
+	}
+	return RuntimeStatus{
+		RuntimeCapabilities: capabilities,
+		Ready:               ready,
+		LoadedModelID:       loadedModelID,
+		ServingState:        servingState,
+	}
 }
 
 func (s *Service) ListModels(ctx context.Context) ([]Model, error) {
@@ -306,16 +364,37 @@ func validateLaunchArguments(engine string, arguments []string) error {
 	return nil
 }
 
-func (s *Service) Load(ctx context.Context, modelID string) error {
+func (s *Service) Load(ctx context.Context, modelID string) (LoadProgress, error) {
 	if !s.modelOperation.TryLock() {
-		return ErrBusy
+		return LoadProgress{}, ErrBusy
 	}
 	defer s.modelOperation.Unlock()
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
-		return fmt.Errorf("%w: model id is required", ErrInvalidRequest)
+		return LoadProgress{}, fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
-	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID}, nil)
+	var progress LoadProgress
+	if err := s.callJSON(ctx, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID}, &progress); err != nil {
+		return LoadProgress{}, err
+	}
+	if progress.State == "" {
+		progress.State = "loading"
+		progress.ModelID = modelID
+	}
+	return progress, nil
+}
+
+func (s *Service) LoadProgress(ctx context.Context) (LoadProgress, error) {
+	progressCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var progress LoadProgress
+	if err := s.getJSON(progressCtx, "/internal/v1/models/load/progress", &progress); err != nil {
+		return LoadProgress{}, err
+	}
+	if progress.State == "" {
+		progress.State = "idle"
+	}
+	return progress, nil
 }
 
 func (s *Service) Delete(ctx context.Context, modelID string) error {
@@ -375,6 +454,9 @@ func responseError(resp *http.Response) error {
 	text := strings.TrimSpace(string(message))
 	if resp.StatusCode == http.StatusConflict {
 		return fmt.Errorf("%w: %s", ErrBusy, text)
+	}
+	if resp.StatusCode == http.StatusBadRequest {
+		return fmt.Errorf("%w: %s", ErrInvalidRequest, text)
 	}
 	return fmt.Errorf("inference: runtime returned %d: %s", resp.StatusCode, text)
 }

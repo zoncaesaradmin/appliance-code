@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   importInferenceModel: vi.fn(),
   getInferenceImportProgress: vi.fn(),
   loadInferenceModel: vi.fn(),
+  getInferenceLoadProgress: vi.fn(),
   deleteInferenceModel: vi.fn()
 }));
 vi.mock("../lib/api", () => ({ client: api }));
@@ -46,7 +47,13 @@ beforeEach(() => {
   element = document.createElement("div");
   document.body.append(element);
   root = createRoot(element);
-  api.getInferenceStatus.mockResolvedValue({ engine: "ollama", architecture: "amd64", activeMode: "cpu", ready: true });
+  api.getInferenceStatus.mockResolvedValue({
+    engine: "ollama",
+    architecture: "amd64",
+    activeMode: "cpu",
+    ready: true,
+    servingState: "inactive"
+  });
   api.listInferenceModels.mockResolvedValue([{ id: "retired:1b" }]);
   api.getInferenceCatalog.mockResolvedValue({
     lastSuccess: "2026-09-15T00:00:00Z",
@@ -59,12 +66,18 @@ beforeEach(() => {
     ]
   });
   api.getInferenceImportProgress.mockResolvedValue({ state: "idle" });
+  api.getInferenceLoadProgress.mockResolvedValue({ state: "idle" });
   api.importInferenceModel.mockResolvedValue({
     modelId: "available:1b",
     source: "available:1b",
     state: "complete",
     percent: 100,
     message: "Model downloaded"
+  });
+  api.loadInferenceModel.mockResolvedValue({
+    modelId: "retired:1b",
+    state: "ready",
+    message: "Model is ready for use"
   });
 });
 afterEach(async () => {
@@ -198,6 +211,106 @@ it("polls import progress while an async download runs", async () => {
     await vi.advanceTimersByTimeAsync(2000);
   });
   expect(element.textContent).toContain("available:1b downloaded");
+  vi.useRealTimers();
+});
+
+it("sorts the model dropdown by estimated parameters descending", async () => {
+  api.getInferenceCatalog.mockResolvedValue({
+    lastSuccess: "2026-09-15T00:00:00Z",
+    stale: false,
+    refreshing: false,
+    scope: "Popular models",
+    sort: "parameters",
+    order: "desc",
+    items: [
+      { id: "org/tiny-0.5B", source: "org/tiny-0.5B", downloadBytes: 100, memoryBytes: 200, eligible: true },
+      { id: "org/large-7B", source: "org/large-7B", downloadBytes: 100, memoryBytes: 200, eligible: true },
+      { id: "org/mid-3B", source: "org/mid-3B", downloadBytes: 100, memoryBytes: 200, eligible: true }
+    ]
+  });
+  api.listInferenceModels.mockResolvedValue([]);
+  await act(async () => root.render(<AIServicePage />));
+  const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
+  expect(labels).toEqual(["org/large-7B", "org/mid-3B", "org/tiny-0.5B"]);
+  expect(api.getInferenceCatalog).toHaveBeenCalledWith({ sort: "parameters", order: "desc" });
+});
+
+it("shows serving ready-for-use and disables Load when the selected model is already loaded", async () => {
+  api.getInferenceStatus.mockResolvedValue({
+    engine: "vllm",
+    architecture: "amd64",
+    activeMode: "cuda",
+    ready: true,
+    servingState: "ready",
+    loadedModelId: "retired:1b"
+  });
+  await act(async () => root.render(<AIServicePage />));
+  expect(element.textContent).toContain("Ready for use (retired:1b)");
+  const select = element.querySelector("select")!;
+  await act(async () => {
+    select.value = "retired:1b";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Ready");
+  expect(load).toBeTruthy();
+  expect(load).toHaveProperty("disabled", true);
+});
+
+it("polls load progress while an async load runs", async () => {
+  api.loadInferenceModel.mockResolvedValue({
+    modelId: "retired:1b",
+    state: "loading",
+    message: "Loading model into the inference engine"
+  });
+  api.getInferenceLoadProgress
+    .mockResolvedValueOnce({ state: "idle" })
+    .mockResolvedValueOnce({
+      modelId: "retired:1b",
+      state: "loading",
+      message: "Loading model into the inference engine"
+    })
+    .mockResolvedValue({
+      modelId: "retired:1b",
+      state: "ready",
+      message: "Model is ready for use"
+    });
+  api.getInferenceStatus
+    .mockResolvedValueOnce({
+      engine: "vllm",
+      architecture: "amd64",
+      activeMode: "cuda",
+      ready: true,
+      servingState: "inactive"
+    })
+    .mockResolvedValue({
+      engine: "vllm",
+      architecture: "amd64",
+      activeMode: "cuda",
+      ready: true,
+      servingState: "ready",
+      loadedModelId: "retired:1b"
+    });
+
+  await act(async () => root.render(<AIServicePage />));
+  const select = element.querySelector("select")!;
+  await act(async () => {
+    select.value = "retired:1b";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Load");
+  expect(load).toBeTruthy();
+
+  vi.useFakeTimers();
+  await act(async () => load!.click());
+  expect(element.textContent).toContain("Loading model into the inference engine");
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(element.textContent).toContain("retired:1b is ready for use");
   vi.useRealTimers();
 });
 

@@ -51,9 +51,11 @@ type manager struct {
 	backend     *url.URL
 	proxy       *httputil.ReverseProxy
 	mu          sync.RWMutex // protects reg only
-	opMu        sync.Mutex   // single-flight import/load/delete (held for async import lifetime)
+	opMu        sync.Mutex   // single-flight import/load/delete (held for async import/load lifetime)
 	progressMu  sync.RWMutex
 	progress    importProgress
+	loadMu      sync.RWMutex
+	load        loadProgress
 	processMu   sync.Mutex
 	process     *exec.Cmd
 	processDone chan struct{}
@@ -124,6 +126,7 @@ func (m *manager) handler() http.Handler {
 	mux.HandleFunc("GET /internal/v1/models/imports/progress", m.importProgress)
 	// Body-based actions: Hugging Face ids contain "/", which breaks single-segment path params.
 	mux.HandleFunc("POST /internal/v1/models/load", m.loadModel)
+	mux.HandleFunc("GET /internal/v1/models/load/progress", m.loadProgressHandler)
 	mux.HandleFunc("POST /internal/v1/models/delete", m.deleteModel)
 	mux.HandleFunc("GET /v1/models", m.listModels)
 	mux.HandleFunc("GET /internal/v1/models/catalog", m.modelCatalog)
@@ -186,7 +189,13 @@ func (m *manager) saveRegistry() error {
 }
 
 func (m *manager) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "engine": m.engine})
+	servingState, loadedModelID := m.servingSnapshot()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":        "ok",
+		"engine":        m.engine,
+		"loadedModelId": loadedModelID,
+		"servingState":  servingState,
+	})
 }
 
 func (m *manager) capabilities(w http.ResponseWriter, _ *http.Request) {
@@ -454,44 +463,102 @@ func readModelID(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
-	if !m.opMu.TryLock() {
-		writeError(w, http.StatusConflict, "another model operation is in progress")
-		return
-	}
-	defer m.opMu.Unlock()
 	id, ok := readModelID(w, r)
 	if !ok {
 		return
 	}
-	if m.engine == "ollama" {
-		if err := m.callBackend(r.Context(), http.MethodPost, "/api/generate", map[string]any{"model": id, "prompt": "", "stream": false, "keep_alive": "5m"}, nil); err != nil {
-			writeError(w, http.StatusBadGateway, err.Error())
+	if m.isModelReady(r.Context(), id) {
+		m.finishLoadProgress("ready", id, "Model is ready for use")
+		writeJSON(w, http.StatusAccepted, m.currentLoadProgress())
+		return
+	}
+	if !m.opMu.TryLock() {
+		progress := m.currentLoadProgress()
+		if progress.ModelID == id && progress.State == "loading" {
+			writeJSON(w, http.StatusAccepted, progress)
 			return
 		}
-		writeJSON(w, http.StatusAccepted, map[string]any{"modelId": id, "state": "loaded"})
+		writeError(w, http.StatusConflict, "another model operation is in progress")
+		return
+	}
+	if m.engine != "ollama" {
+		m.mu.RLock()
+		_, exists := m.reg.Models[id]
+		m.mu.RUnlock()
+		if !exists {
+			m.opMu.Unlock()
+			writeError(w, http.StatusNotFound, "model is not installed")
+			return
+		}
+	}
+	m.beginLoadProgress(id, "Loading model into the inference engine")
+	go m.runLoad(context.Background(), id)
+	writeJSON(w, http.StatusAccepted, m.currentLoadProgress())
+}
+
+func (m *manager) runLoad(ctx context.Context, id string) {
+	defer m.opMu.Unlock()
+	if m.engine == "ollama" {
+		if err := m.callBackend(ctx, http.MethodPost, "/api/generate", map[string]any{"model": id, "prompt": "", "stream": false, "keep_alive": "5m"}, nil); err != nil {
+			m.finishLoadProgress("failed", id, err.Error())
+			return
+		}
+		m.processMu.Lock()
+		m.active = id
+		m.processMu.Unlock()
+		m.finishLoadProgress("ready", id, "Model is ready for use")
 		return
 	}
 	m.mu.RLock()
 	item, ok := m.reg.Models[id]
 	m.mu.RUnlock()
 	if !ok {
-		writeError(w, http.StatusNotFound, "model is not installed")
+		m.finishLoadProgress("failed", id, "model is not installed")
 		return
 	}
 	m.stopProcess()
-	if err := m.start(context.Background(), item); err != nil {
-		writeError(w, http.StatusBadGateway, "start vLLM: "+err.Error())
+	if err := m.start(ctx, item); err != nil {
+		m.finishLoadProgress("failed", id, "start vLLM: "+err.Error())
 		return
 	}
 	m.processMu.Lock()
 	m.active = id
 	m.processMu.Unlock()
-	if err := m.waitBackend(r.Context(), nil); err != nil {
+	if err := m.waitBackend(ctx, nil); err != nil {
 		m.stopProcess()
-		writeError(w, http.StatusBadGateway, "vLLM did not become ready: "+err.Error())
+		m.finishLoadProgress("failed", id, "vLLM did not become ready: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"modelId": id, "state": "loaded"})
+	m.finishLoadProgress("ready", id, "Model is ready for use")
+}
+
+func (m *manager) isModelReady(ctx context.Context, id string) bool {
+	m.processMu.Lock()
+	active := m.active == id
+	m.processMu.Unlock()
+	if !active {
+		return false
+	}
+	return m.backendHealthy(ctx)
+}
+
+func (m *manager) backendHealthy(ctx context.Context) bool {
+	healthPath := "/health"
+	if m.engine == "ollama" {
+		healthPath = "/"
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, m.backend.ResolveReference(&url.URL{Path: healthPath}).String(), nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
 func (m *manager) waitBackend(ctx context.Context, done <-chan struct{}) error {

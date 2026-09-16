@@ -1230,10 +1230,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Load an installed model
-         * @description Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
+         * Start loading an installed model
+         * @description Accepts a load request and runs it asynchronously on the inference manager. Poll GET /api/v1/inference/models/load/progress for status. Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
          */
         post: operations["loadInferenceModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models/load/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read in-flight or recent model load progress
+         * @description Returns idle when no load has run. Ready means the selected model is serving and ready for use.
+         */
+        get: operations["getInferenceLoadProgress"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1680,6 +1700,12 @@ export interface components {
             /** @enum {string} */
             activeMode?: "cpu" | "cuda";
             ready?: boolean;
+            loadedModelId?: string;
+            /**
+             * @description Whether a model is inactive, currently loading, ready for use, or failed to load.
+             * @enum {string}
+             */
+            servingState?: "inactive" | "loading" | "ready" | "failed";
             checks: components["schemas"]["InferenceCheck"][];
         };
         InferenceModel: {
@@ -1700,6 +1726,16 @@ export interface components {
             refreshing: boolean;
             stale: boolean;
             scope: string;
+            /**
+             * @description Applied sort key (defaults to parameters).
+             * @enum {string}
+             */
+            sort?: "parameters" | "memory" | "name";
+            /**
+             * @description Applied sort order.
+             * @enum {string}
+             */
+            order?: "asc" | "desc";
             items: {
                 id: string;
                 source: string;
@@ -1727,6 +1763,15 @@ export interface components {
             bytesDownloaded?: number;
             bytesTotal?: number;
             percent?: number;
+            message?: string;
+            error?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        InferenceModelLoadProgress: {
+            modelId?: string;
+            /** @enum {string} */
+            state: "idle" | "loading" | "ready" | "failed";
             message?: string;
             error?: string;
             /** Format: date-time */
@@ -3725,14 +3770,19 @@ export interface operations {
     };
     getInferenceCatalog: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Sort key for catalog items. Default parameters (estimated model scale / parameter count). */
+                sort?: "parameters" | "memory" | "name";
+                /** @description Sort order. Default desc for parameters/memory, asc for name. */
+                order?: "asc" | "desc";
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Persistent catalog refreshed at startup when due and every 24 hours. Does not list downloaded state; join with locally available models by id. */
+            /** @description Persistent catalog refreshed at startup when due and every 24 hours. Does not list downloaded state; join with locally available models by id. Items are ordered by the requested sort. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3741,6 +3791,7 @@ export interface operations {
                     "application/json": components["schemas"]["InferenceCatalog"];
                 };
             };
+            400: components["responses"]["ValidationProblem"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             502: components["responses"]["ValidationProblem"];
@@ -3813,12 +3864,38 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Load accepted. */
+            /** @description Load accepted and running asynchronously. */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["InferenceModelLoadProgress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["ValidationProblem"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
+    getInferenceLoadProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current load progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceModelLoadProgress"];
+                };
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

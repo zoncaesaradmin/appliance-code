@@ -33,7 +33,7 @@ func (h *InferenceHandlers) Models(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *InferenceHandlers) Catalog(w http.ResponseWriter, r *http.Request) {
-	catalog, err := h.Inference.Catalog(r.Context())
+	catalog, err := h.Inference.Catalog(r.Context(), r.URL.Query().Get("sort"), r.URL.Query().Get("order"))
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -72,12 +72,22 @@ func (h *InferenceHandlers) Load(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(req.ModelID)
-	if err := h.Inference.Load(r.Context(), id); err != nil {
+	progress, err := h.Inference.Load(r.Context(), id)
+	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 	h.record(r, "inference.model.load", id)
-	writeJSON(w, http.StatusAccepted, map[string]any{"modelId": id, "status": "loaded"})
+	writeJSON(w, http.StatusAccepted, progress)
+}
+
+func (h *InferenceHandlers) LoadProgress(w http.ResponseWriter, r *http.Request) {
+	progress, err := h.Inference.LoadProgress(r.Context())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, progress)
 }
 
 func (h *InferenceHandlers) Delete(w http.ResponseWriter, r *http.Request) {

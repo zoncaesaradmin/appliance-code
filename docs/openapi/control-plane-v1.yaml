@@ -1590,12 +1590,30 @@ paths:
     get:
       summary: Read cached upstream candidates with current hardware eligibility
       operationId: getInferenceCatalog
+      parameters:
+        - name: sort
+          in: query
+          required: false
+          description: Sort key for catalog items. Default parameters (estimated model scale / parameter count).
+          schema:
+            type: string
+            enum: [parameters, memory, name]
+            default: parameters
+        - name: order
+          in: query
+          required: false
+          description: Sort order. Default desc for parameters/memory, asc for name.
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
       responses:
         "200":
-          description: Persistent catalog refreshed at startup when due and every 24 hours. Does not list downloaded state; join with locally available models by id.
+          description: Persistent catalog refreshed at startup when due and every 24 hours. Does not list downloaded state; join with locally available models by id. Items are ordered by the requested sort.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/InferenceCatalog" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
@@ -1636,8 +1654,8 @@ paths:
         "502": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/inference/models/load:
     post:
-      summary: Load an installed model
-      description: Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
+      summary: Start loading an installed model
+      description: Accepts a load request and runs it asynchronously on the inference manager. Poll GET /api/v1/inference/models/load/progress for status. Uses a JSON body so Hugging Face-style ids that contain "/" are not split by path routing.
       operationId: loadInferenceModel
       requestBody:
         required: true
@@ -1649,7 +1667,26 @@ paths:
               properties:
                 modelId: { type: string, minLength: 1 }
       responses:
-        "202": { description: Load accepted. }
+        "202":
+          description: Load accepted and running asynchronously.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InferenceModelLoadProgress" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/ValidationProblem" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/models/load/progress:
+    get:
+      summary: Read in-flight or recent model load progress
+      description: Returns idle when no load has run. Ready means the selected model is serving and ready for use.
+      operationId: getInferenceLoadProgress
+      responses:
+        "200":
+          description: Current load progress.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InferenceModelLoadProgress" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
@@ -2565,6 +2602,11 @@ components:
         requestedMode: { type: string, enum: [auto, cpu, cuda] }
         activeMode: { type: string, enum: [cpu, cuda] }
         ready: { type: boolean }
+        loadedModelId: { type: string }
+        servingState:
+          type: string
+          enum: [inactive, loading, ready, failed]
+          description: Whether a model is inactive, currently loading, ready for use, or failed to load.
         checks:
           type: array
           items: { $ref: "#/components/schemas/InferenceCheck" }
@@ -2589,6 +2631,14 @@ components:
         refreshing: { type: boolean }
         stale: { type: boolean }
         scope: { type: string }
+        sort:
+          type: string
+          enum: [parameters, memory, name]
+          description: Applied sort key (defaults to parameters).
+        order:
+          type: string
+          enum: [asc, desc]
+          description: Applied sort order.
         items:
           type: array
           items:
@@ -2633,6 +2683,17 @@ components:
         bytesDownloaded: { type: integer, minimum: 0 }
         bytesTotal: { type: integer, minimum: 0 }
         percent: { type: integer, minimum: 0, maximum: 100 }
+        message: { type: string }
+        error: { type: string }
+        updatedAt: { type: string, format: date-time }
+    InferenceModelLoadProgress:
+      type: object
+      required: [state]
+      properties:
+        modelId: { type: string }
+        state:
+          type: string
+          enum: [idle, loading, ready, failed]
         message: { type: string }
         error: { type: string }
         updatedAt: { type: string, format: date-time }

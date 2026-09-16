@@ -21,7 +21,7 @@ func TestCatalogReadUsesRuntimeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.Catalog(context.Background())
+	result, err := s.Catalog(context.Background(), "", "")
 	if err != nil || !json.Valid(result) {
 		t.Fatalf("catalog=%s error=%v", result, err)
 	}
@@ -37,7 +37,10 @@ func TestOllamaModelLifecycle(t *testing.T) {
 		case "/internal/v1/models/imports":
 			w.WriteHeader(http.StatusAccepted)
 			_ = json.NewEncoder(w).Encode(map[string]any{"state": "downloading", "modelId": "tiny:latest", "source": "tiny:latest"})
-		case "/internal/v1/models/load", "/internal/v1/models/delete":
+		case "/internal/v1/models/load":
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "loading", "modelId": "tiny:latest"})
+		case "/internal/v1/models/delete":
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		default:
 			http.NotFound(w, r)
@@ -56,7 +59,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 	if _, err := service.Import(t.Context(), ImportRequest{ModelID: "tiny:latest", Source: "tiny:latest"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Load(t.Context(), "tiny:latest"); err != nil {
+	if _, err := service.Load(t.Context(), "tiny:latest"); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Delete(t.Context(), "tiny:latest"); err != nil {

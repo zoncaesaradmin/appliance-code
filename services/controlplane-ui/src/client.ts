@@ -56,7 +56,8 @@ import type {
   InferenceCatalog,
   InferenceModel,
   ImportInferenceModelRequest,
-  InferenceImportProgress
+  InferenceImportProgress,
+  InferenceLoadProgress
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -204,11 +205,12 @@ export interface ControlPlaneClient {
   installApplication(name: string, version: string): Promise<ApplicationInstance>;
   disableApplication(name: string): Promise<ApplicationInstance>;
   getInferenceStatus(): Promise<InferenceRuntimeStatus>;
-  getInferenceCatalog(): Promise<InferenceCatalog>;
+  getInferenceCatalog(params?: { sort?: "parameters" | "memory" | "name"; order?: "asc" | "desc" }): Promise<InferenceCatalog>;
   listInferenceModels(): Promise<InferenceModel[]>;
   importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress>;
   getInferenceImportProgress(): Promise<InferenceImportProgress>;
-  loadInferenceModel(modelId: string): Promise<void>;
+  loadInferenceModel(modelId: string): Promise<InferenceLoadProgress>;
+  getInferenceLoadProgress(): Promise<InferenceLoadProgress>;
   deleteInferenceModel(modelId: string): Promise<void>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
@@ -747,8 +749,13 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 	return this.request("/api/v1/inference/status");
   }
 
-  async getInferenceCatalog(): Promise<InferenceCatalog> {
-    return this.request("/api/v1/inference/models/catalog");
+  async getInferenceCatalog(
+    params: { sort?: "parameters" | "memory" | "name"; order?: "asc" | "desc" } = { sort: "parameters", order: "desc" }
+  ): Promise<InferenceCatalog> {
+    const query = new URLSearchParams();
+    query.set("sort", params.sort ?? "parameters");
+    query.set("order", params.order ?? "desc");
+    return this.request(`/api/v1/inference/models/catalog?${query.toString()}`);
   }
 
   async listInferenceModels(): Promise<InferenceModel[]> {
@@ -764,8 +771,12 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     return this.request("/api/v1/inference/models/imports/progress");
   }
 
-  async loadInferenceModel(modelId: string): Promise<void> {
-    await this.request(`/api/v1/inference/models/load`, { method: "POST", body: { modelId } });
+  async loadInferenceModel(modelId: string): Promise<InferenceLoadProgress> {
+    return this.request(`/api/v1/inference/models/load`, { method: "POST", body: { modelId } });
+  }
+
+  async getInferenceLoadProgress(): Promise<InferenceLoadProgress> {
+    return this.request("/api/v1/inference/models/load/progress");
   }
 
   async deleteInferenceModel(modelId: string): Promise<void> {
