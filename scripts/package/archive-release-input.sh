@@ -1204,7 +1204,19 @@ $(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": 
 }
 JSON
 
-tar -C "${RELEASE_INPUT_DIR}" -czf "${OUT_FILE}" .
+# Persist a durable release-input directory for same-host assemble (hardlink
+# tree). Keep producing the tarball for remote/fetch consumers.
+DIR_OUT="${OUT_FILE%.tar.gz}"
+if [[ "${DIR_OUT}" == "${OUT_FILE}" ]]; then
+  DIR_OUT="${OUT_FILE}.dir"
+fi
+link_or_copy_tree "${RELEASE_INPUT_DIR}" "${DIR_OUT}"
+
+if command -v pigz >/dev/null 2>&1; then
+  tar -C "${RELEASE_INPUT_DIR}" -I pigz -cf "${OUT_FILE}" .
+else
+  tar -C "${RELEASE_INPUT_DIR}" -czf "${OUT_FILE}" .
+fi
 
 if [[ -n "${LATEST_OUT_FILE}" ]]; then
   link_or_copy_file "${OUT_FILE}" "${LATEST_OUT_FILE}"
@@ -1212,6 +1224,8 @@ fi
 
 echo "created release-input tarball:"
 echo "  ${OUT_FILE}"
+echo "release-input directory:"
+echo "  ${DIR_OUT}"
 if [[ -n "${LATEST_OUT_FILE}" ]]; then
   echo "updated latest alias:"
   echo "  ${LATEST_OUT_FILE}"
