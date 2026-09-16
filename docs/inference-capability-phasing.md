@@ -88,10 +88,13 @@ vLLM launch configuration is stored with the imported model as a validated
 argv array—never shell text. The current contract accepts quantization,
 maximum model length, GPU-memory utilization, CUDA graph capture size,
 FlashInfer autotune disablement, automatic tool choice, served model name, and
-tool-call parser. `--max-model-len` comes from the model card
-(`max_position_embeddings` / `n_positions`); Load rewrites legacy fixed-2048
-caps to the installed model window and persists that value for client copy
-settings. The manager owns the model path, bind address, and port so
+tool-call parser. `--max-model-len`, engine memory, and engine CPU are planned
+together with catalog eligibility from the model card, remaining host/GPU
+memory for KV, host CPU capacity, and the mode prefill ceiling (CPU uses a few
+chunked-prefill steps so interactive agents stay responsive). Load rewrites
+legacy fixed-2048 caps and oversized card-only windows to that planned value
+and persists it for client copy settings. The manager owns the
+model path, bind address, and port so
 callers cannot bypass the appliance boundary. Device selection is owned by the
 packaged runtime image and mode detection (CPU vs CUDA build / visible GPU),
 not by a `--device` CLI flag—current vLLM CPU images reject `--device`.

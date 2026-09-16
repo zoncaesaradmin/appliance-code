@@ -114,9 +114,36 @@ export function servingStatusLabel(status: InferenceRuntimeStatus): string {
   }
 }
 
-/** Origin used for OpenAI-compatible client config (no trailing slash). */
+/** Origin used for OpenAI-compatible client config (no trailing slash).
+ * Prefer the LAN mDNS name (<appliance-name>.local) over the internal DNS
+ * zone (*.appliance.internal) so copied settings work from operator laptops
+ * that resolve mDNS but may not use the appliance.internal zone. */
 export function inferenceClientOrigin(canonicalOrigin?: string, fallbackOrigin?: string): string {
   const raw = (canonicalOrigin || fallbackOrigin || "").trim().replace(/\/$/, "");
+  return rewriteApplianceInternalOriginToLocal(raw);
+}
+
+/** Map https://name.appliance.internal[:port] → https://name.local[:port]. */
+export function rewriteApplianceInternalOriginToLocal(origin: string): string {
+  const raw = origin.trim().replace(/\/$/, "");
+  if (!raw) {
+    return raw;
+  }
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    const suffix = ".appliance.internal";
+    if (host.endsWith(suffix) && host.length > suffix.length) {
+      const applianceName = host.slice(0, -suffix.length);
+      if (applianceName && !applianceName.includes(".")) {
+        parsed.hostname = `${applianceName}.local`;
+        // URL#toString keeps a trailing slash for bare origins; strip it.
+        return parsed.toString().replace(/\/$/, "");
+      }
+    }
+  } catch {
+    // Fall through and return the original string when URL parsing fails.
+  }
   return raw;
 }
 

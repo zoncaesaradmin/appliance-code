@@ -99,15 +99,27 @@ func TestFailedCatalogRetriesOnlyOncePerProcessStart(t *testing.T) {
 func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
 	m := testManager(t)
 	m.engine = "vllm"
+	m.cudaProbe = func(context.Context) bool { return false }
 	c := newModelCatalog(m)
-	c.state.Items = []catalogEntry{{ID: "org/model", Source: "org/model@revision", DownloadBytes: 10, MemoryBytes: 20}}
+	c.state.Items = []catalogEntry{{
+		ID: "org/model", Source: "org/model@revision", DownloadBytes: 10, MemoryBytes: 20,
+		ModelContextLimit: 4096, KVBytesPerToken: 1024,
+	}}
 	c.state.LastSuccess = time.Now()
-	fit, _ := planModelMemory(m.engine, 20, 1<<30)
+	fit, err := planServe(serveWindowInput{
+		Engine: "vllm", Mode: "cpu", ModelEstimateBytes: 20, AvailableBytes: 16 << 30,
+		ModelContextLimit: 4096, KVBytesPerToken: 1024,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	c.budget = func(context.Context) (uint64, uint64) { return fit.RequiredBytes, 30 }
 	if _, err := c.selection(context.Background(), "org/model"); err != nil {
 		t.Fatal(err)
 	}
-	c.budget = func(context.Context) (uint64, uint64) { return fit.RequiredBytes - 1, 30 }
+	// Below reserved weights+shm+margin there is no workable context window.
+	reserved := fit.ModelEstimateBytes + fit.ShmBytes + fit.PodMarginBytes
+	c.budget = func(context.Context) (uint64, uint64) { return reserved, 30 }
 	if _, err := c.selection(context.Background(), "org/model"); err == nil {
 		t.Fatal("low-memory model accepted")
 	}

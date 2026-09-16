@@ -40,19 +40,28 @@ func TestPlanModelMemoryOptionalPackageMax(t *testing.T) {
 func TestEngineResourceSpecMatchesPlan(t *testing.T) {
 	t.Setenv("INFERENCE_ENGINE_MAX_MEMORY", "")
 	t.Setenv("INFERENCE_ENGINE_SHARED_MEMORY", "4Gi")
-	t.Setenv("INFERENCE_ENGINE_CPU_LIMIT", "4")
-	t.Setenv("INFERENCE_ENGINE_CPU_REQUEST", "100m")
+	t.Setenv("INFERENCE_ENGINE_CPU_LIMIT", "")
+	t.Setenv("INFERENCE_ENGINE_CPU_REQUEST", "")
 	t.Setenv("INFERENCE_GPU_ENABLED", "false")
-	spec, err := engineResourceSpec("vllm", 4<<30, 32<<30)
+	serve, err := planServe(serveWindowInput{
+		Engine: "vllm", Mode: "cpu", ModelEstimateBytes: 4 << 30, AvailableBytes: 32 << 30,
+		AvailableCPUs: 8, ModelContextLimit: 8192, KVBytesPerToken: 1024,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan, err := planModelMemory("vllm", 4<<30, 32<<30)
+	spec, err := engineResourceSpecFromPlan(serve)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.MemoryLimit.Value() != int64(plan.RequiredBytes) {
-		t.Fatalf("limit=%d required=%d", spec.MemoryLimit.Value(), plan.RequiredBytes)
+	if spec.MemoryLimit.Value() != int64(serve.RequiredBytes) {
+		t.Fatalf("limit=%d required=%d", spec.MemoryLimit.Value(), serve.RequiredBytes)
+	}
+	if spec.CPULimit.Cmp(resource.MustParse("6")) != 0 { // 75% of 8
+		t.Fatalf("cpu limit=%s", spec.CPULimit.String())
+	}
+	if spec.OMPThreads != 6 {
+		t.Fatalf("omp=%d", spec.OMPThreads)
 	}
 	if spec.MemoryReq.Cmp(resource.MustParse("512Mi")) < 0 {
 		t.Fatalf("request too small: %s", spec.MemoryReq.String())

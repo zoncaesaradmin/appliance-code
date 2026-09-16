@@ -541,13 +541,33 @@ func (m *manager) deployVLLMEngine(ctx context.Context, item model) error {
 	}
 	memoryBytes := m.memoryBytesForModel(ctx, item.ID, item.Path)
 	budget, _ := m.catalogBudget(ctx)
-	spec, err := engineResourceSpec(m.engine, memoryBytes, budget)
+	arch := modelArchFromModelDir(item.Path)
+	cardLimit := arch.MaxPosition
+	if cardLimit == 0 {
+		cardLimit = maxModelLenFromArgs(item.LaunchArguments)
+	}
+	serve, err := planServe(serveWindowInput{
+		Engine:             m.engine,
+		Mode:               mode,
+		ModelEstimateBytes: memoryBytes,
+		AvailableBytes:     budget,
+		AvailableCPUs:      hostCPUCount(),
+		ModelContextLimit:  cardLimit,
+		KVBytesPerToken:    arch.kvBytesPerToken(),
+	})
+	if err != nil {
+		return err
+	}
+	spec, err := engineResourceSpecFromPlan(serve)
 	if err != nil {
 		return err
 	}
 	spec.ModelID = item.ID
 	spec.Command = []string{env("INFERENCE_VLLM_COMMAND", "vllm")}
-	effectiveLaunch := clampLaunchMaxModelLen(item.LaunchArguments, item.Path)
+	effectiveLaunch := applyServeWindowMaxModelLen(item.LaunchArguments, serve.MaxModelLen, cardLimit)
+	if serve.MaxModelLen == 0 {
+		effectiveLaunch = clampLaunchMaxModelLen(item.LaunchArguments, item.Path)
+	}
 	spec.Args = m.vllmCommandArguments(model{
 		ID:              item.ID,
 		Path:            item.Path,
@@ -972,7 +992,9 @@ func (m *manager) persistEffectiveLaunchArguments(modelID string, arguments []st
 
 func (m *manager) vllmCommandArguments(item model, mode string) []string {
 	args := []string{"serve", item.Path}
-	args = append(args, clampLaunchMaxModelLen(item.LaunchArguments, item.Path)...)
+	// LaunchArguments are already planned by deployVLLMEngine / catalog snapshot
+	// (model card ∩ memory KV ∩ mode prefill). Do not re-expand to the raw card.
+	args = append(args, item.LaunchArguments...)
 	if !argumentPresent(item.LaunchArguments, "--served-model-name") && !argumentPresent(args, "--served-model-name") {
 		args = append(args, "--served-model-name", item.ID)
 	}

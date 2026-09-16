@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -16,14 +14,7 @@ func launchArgsForCatalog(modelLimit uint64) []string {
 }
 
 func maxPositionFromConfigJSON(data []byte) uint64 {
-	var config struct {
-		MaxPositionEmbeddings json.Number `json:"max_position_embeddings"`
-		NPositions            json.Number `json:"n_positions"`
-	}
-	if err := json.Unmarshal(data, &config); err != nil {
-		return 0
-	}
-	return maxPositionFromNumbers(config.MaxPositionEmbeddings, config.NPositions)
+	return modelArchFromConfigJSON(data).MaxPosition
 }
 
 func maxPositionFromNumbers(values ...json.Number) uint64 {
@@ -39,11 +30,7 @@ func maxPositionFromNumbers(values ...json.Number) uint64 {
 }
 
 func maxPositionFromModelDir(modelDir string) uint64 {
-	data, err := os.ReadFile(filepath.Join(modelDir, "config.json"))
-	if err != nil {
-		return 0
-	}
-	return maxPositionFromConfigJSON(data)
+	return modelArchFromModelDir(modelDir).MaxPosition
 }
 
 func findMaxModelLenIndex(arguments []string) int {
@@ -55,11 +42,51 @@ func findMaxModelLenIndex(arguments []string) int {
 	return -1
 }
 
+func maxModelLenFromArgs(arguments []string) uint64 {
+	if index := findMaxModelLenIndex(arguments); index >= 0 {
+		if parsed, err := strconv.ParseUint(strings.TrimSpace(arguments[index+1]), 10, 64); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func setMaxModelLenArg(arguments []string, maxLen uint64) []string {
+	if maxLen == 0 {
+		return append([]string(nil), arguments...)
+	}
+	out := append([]string(nil), arguments...)
+	value := strconv.FormatUint(maxLen, 10)
+	if index := findMaxModelLenIndex(out); index >= 0 {
+		out[index+1] = value
+		return out
+	}
+	return append(out, "--max-model-len", value)
+}
+
+// applyServeWindowMaxModelLen writes the planned window into launch args.
+// An explicit operator-chosen value below the plan is kept; values above the
+// plan, missing values, zeros, and legacy 2048 caps are replaced by the plan.
+func applyServeWindowMaxModelLen(arguments []string, planned uint64, modelCardLimit uint64) []string {
+	if planned == 0 {
+		return append([]string(nil), arguments...)
+	}
+	out := append([]string(nil), arguments...)
+	index := findMaxModelLenIndex(out)
+	if index < 0 {
+		return setMaxModelLenArg(out, planned)
+	}
+	requested, err := strconv.ParseUint(strings.TrimSpace(out[index+1]), 10, 64)
+	if err != nil || requested == 0 || requested > planned || isLegacyCappedMaxModelLen(requested, modelCardLimit) {
+		out[index+1] = strconv.FormatUint(planned, 10)
+		return out
+	}
+	return out
+}
+
 // clampLaunchMaxModelLen sets --max-model-len from the installed model's
-// config.json when available. That value is authoritative for Load: catalog
-// estimates and older capped defaults must not keep the serve window at 2048
-// when the model card says otherwise. Requests above the model window are
-// clamped down (vLLM rejects oversized values).
+// config.json when available, then applies hardware/mode planning when mode
+// and budget are supplied via planServe at Load time.
 func clampLaunchMaxModelLen(arguments []string, modelDir string) []string {
 	modelLimit := maxPositionFromModelDir(modelDir)
 	out := append([]string(nil), arguments...)
@@ -88,17 +115,15 @@ func clampLaunchMaxModelLen(arguments []string, modelDir string) []string {
 
 // isLegacyCappedMaxModelLen detects the previous product default that forced
 // --max-model-len 2048 even when the model window was larger. Reloading must
-// promote those installs to the real model window.
+// promote those installs to the planned serve window.
 func isLegacyCappedMaxModelLen(requested, modelLimit uint64) bool {
 	return requested == 2048 && modelLimit > 2048
 }
 
 func effectiveMaxModelLen(arguments []string, modelDir string) uint64 {
 	clamped := clampLaunchMaxModelLen(arguments, modelDir)
-	if index := findMaxModelLenIndex(clamped); index >= 0 {
-		if parsed, err := strconv.ParseUint(strings.TrimSpace(clamped[index+1]), 10, 64); err == nil && parsed > 0 {
-			return parsed
-		}
+	if parsed := maxModelLenFromArgs(clamped); parsed > 0 {
+		return parsed
 	}
 	return maxPositionFromModelDir(modelDir)
 }

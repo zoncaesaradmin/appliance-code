@@ -26,13 +26,26 @@ hardcoded. Runtime mode, host available memory, optional package maxMemory,
 GPU free memory for CUDA, and PVC free space determine current eligibility.
 GPU memory is not summed across devices; automatic tensor parallelism is not
 configured. Conservatively reserve 25% of CPU memory (20% of GPU memory). Model
-`memoryBytes` uses twice the weights plus 2 GiB (Ollama) or 4 GiB (vLLM). Load
-and eligibility then add vLLM `/dev/shm` plus a 512 MiB pod margin so the
-catalog “load needs” figure matches the engine Deployment memory limit.
-vLLM catalog/load sets `--max-model-len` from the model card
-(`max_position_embeddings` / `n_positions`), not a fixed 2048 product default.
-Load rewrites legacy capped values and persists the effective launch arguments
-so client copy settings match the running engine.
+`memoryBytes` uses twice the weights plus 2 GiB (Ollama) or 4 GiB (vLLM). For
+vLLM, one planner (`planServe`) decides catalog eligibility, engine memory and
+CPU limits, and `--max-model-len` together:
+
+- model card window (`max_position_embeddings` / `n_positions`)
+- KV bytes that fit in remaining host/GPU memory (architecture-derived
+  bytes/token when config fields are known)
+- mode prefill ceiling from the engine chunked-prefill step (CPU:
+  `4 × 2048 = 8192`; CUDA: memory usually dominates)
+- CPU cores from host capacity (CPU mode ≈ 75% of host CPUs with matching
+  OMP thread budget; CUDA keeps a modest host CPU reservation)
+
+`requiredBytes` therefore includes KV for that planned window, plus vLLM
+`/dev/shm` and a 512 MiB pod margin, so the catalog “load needs” figure matches
+the engine Deployment memory limit. Load persists the effective launch
+arguments so client copy settings match the running engine.
+
+The packaged CPU image may log a benign `vllm._C_AVX2` import warning; upstream
+documents that the AVX2 library still loads. Hosts with AVX2 are expected to
+use those kernels.
 
 A successful catalog (or a retained non-empty one) refreshes at most once per day
 so restarts do not hammer upstream. If discovery has never succeeded and the
@@ -92,19 +105,24 @@ Job publishes `/models/.zon/vllm-architectures.json` for the thin manager; the
 manager falls back to a local registry probe only when that file is unavailable
 (tests and legacy images).
 
-Eligibility and Load share one memory plan:
+Eligibility and Load share one vLLM serve plan (`planServe`):
 
 ```
-requiredBytes = memoryBytes + shmBytes(vLLM only) + 512Mi margin
+MaxModelLen = min(model card, KV memory cap, mode prefill cap)
+requiredBytes = memoryBytes + shmBytes + 512Mi margin + KVBytesPerToken×MaxModelLen
+cpuCores = ~75% host CPUs (CPU mode) or modest reservation (CUDA)
 availableBytes = host MemAvailable × 0.75 (or GPU free × 0.8 in CUDA mode)
 eligible <=> requiredBytes <= availableBytes
-engine pod limit = requiredBytes
+engine pod memory limit = requiredBytes
+engine pod CPU limit/request = cpuCores (OMP_NUM_THREADS matched)
+--max-model-len = MaxModelLen (persisted on Load)
 ```
 
 `memoryBytes` is the catalog model estimate (weights×2 plus engine headroom
-from discovery). Catalog responses also include `requiredBytes` per item and
-`availableMemoryBytes` for the host. An optional `engine.maxMemory` chart value
-may set an absolute ceiling; the default is empty (host budget only).
+from discovery). Catalog responses also include `requiredBytes`,
+`modelContextLimit`, and `availableMemoryBytes`. Optional chart pins
+(`engine.maxMemory`, `engine.cpuLimit`) override planning only when set; the
+defaults are empty (host-derived).
 
 UI download state is derived from the runtime inventory, never inferred from
 catalog membership. Removing or losing a catalog entry does not remove its

@@ -120,7 +120,7 @@ it("offers one model dropdown with downloaded marks and no search controls", asy
     select!.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(element.textContent).toMatch(/~1B params/);
-  expect(element.textContent).toMatch(/est\. RAM/);
+  expect(element.textContent).toMatch(/est\. model/);
   const download = [...element.querySelectorAll("button")].find((button) => button.textContent === "Download")!;
   await act(async () => download.click());
   expect(api.importInferenceModel).toHaveBeenCalledWith({
@@ -315,6 +315,17 @@ it("builds OpenAI client settings from the ready model", () => {
   expect(parsed.models[0].supports_search_tool).toBe(false);
 });
 
+it("rewrites appliance.internal origins to the mDNS .local name for client copy", () => {
+  const settings = buildOpenAIClientSettings({
+    origin: "https://big-machine.appliance.internal",
+    modelId: "Qwen/Qwen2.5-3B-Instruct",
+    contextWindow: 32768
+  });
+  expect(settings.baseURL).toBe("https://big-machine.local/inference/v1");
+  expect(settings.providerToml).toContain('base_url = "https://big-machine.local/inference/v1"');
+  expect(settings.instructions).toContain("Base URL: https://big-machine.local/inference/v1");
+});
+
 it("omits a fake context window when the loaded model does not report one", () => {
   const settings = buildOpenAIClientSettings({
     origin: "https://appliance.example",
@@ -394,7 +405,7 @@ it("summarizes parameter and memory capacity for the selected model", async () =
       memoryBytes: 6_271_162_944,
       eligible: true
     })
-  ).toBe("~0.5B params · download 0.9 GiB · est. RAM 5.8 GiB");
+  ).toBe("~0.5B params · download 0.9 GiB · est. model 5.8 GiB");
   expect(
     modelCapacitySummary({
       id: "openai-community/gpt2",

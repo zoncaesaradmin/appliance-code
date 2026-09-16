@@ -39,7 +39,7 @@
     "engine": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["serviceName", "servicePort", "cpuLimit", "cpuRequest", "sharedMemorySize"],
+      "required": ["serviceName", "servicePort", "sharedMemorySize"],
       "properties": {
         "serviceName": {"type": "string", "const": "inference-engine"},
         "servicePort": {"type": "integer", "minimum": 1},
@@ -48,8 +48,16 @@
           "description": "Optional absolute ceiling. Empty means host-derived budget only.",
           "pattern": "^$|^[1-9][0-9]*(Mi|Gi)$"
         },
-        "cpuLimit": {"type": "string", "minLength": 1},
-        "cpuRequest": {"type": "string", "minLength": 1},
+        "cpuLimit": {
+          "type": "string",
+          "description": "Optional CPU pin. Empty means plan from host CPUs at Load.",
+          "pattern": "^$|^([0-9]+(\\.[0-9]+)?|([0-9]+)m)$"
+        },
+        "cpuRequest": {
+          "type": "string",
+          "description": "Optional CPU request pin. Empty means plan with cpuLimit.",
+          "pattern": "^$|^([0-9]+(\\.[0-9]+)?|([0-9]+)m)$"
+        },
         "sharedMemorySize": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$"}
       }
     },

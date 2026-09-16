@@ -23,7 +23,9 @@ import (
 
 // Resource accounting (single contract for catalog eligibility and Load):
 //
-//	requiredBytes = modelEstimateBytes + shmBytes + podMarginBytes
+//	vLLM: planServe() → requiredBytes = modelEstimate + shm + margin + KV(planned window)
+//	      MaxModelLen = min(model card, KV memory cap, mode prefill cap)
+//	ollama / idle: planModelMemory() → requiredBytes = modelEstimate + shm + margin
 //	availableBytes = host usable memory (MemAvailable*0.75, or GPU free*0.8)
 //	eligible <=> requiredBytes > 0 && requiredBytes <= availableBytes
 //	engine limit  = requiredBytes (BinarySI)
@@ -54,6 +56,7 @@ type enginePodSpec struct {
 	MemoryReq   resource.Quantity
 	CPULimit    resource.Quantity
 	CPURequest  resource.Quantity
+	OMPThreads  int // CPU-mode OMP/vLLM thread budget; 0 leaves runtime default
 	GPURequest  bool
 }
 
@@ -273,6 +276,11 @@ func (e *k8sEngine) ApplyEngine(ctx context.Context, spec enginePodSpec) error {
 			corev1.EnvVar{Name: "VLLM_CPU_OMP_THREADS_BIND", Value: "auto"},
 			corev1.EnvVar{Name: "VLLM_CPU_NUM_OF_RESERVED_CPU", Value: "1"},
 		)
+		if spec.OMPThreads > 0 {
+			envVars = append(envVars,
+				corev1.EnvVar{Name: "OMP_NUM_THREADS", Value: strconv.Itoa(spec.OMPThreads)},
+			)
+		}
 	}
 
 	mounts := []corev1.VolumeMount{
@@ -532,47 +540,20 @@ func configuredShmBytes(engine string) uint64 {
 	return uint64(shm.Value())
 }
 
-// planModelMemory is the single function used by catalog eligibility and Load.
-func planModelMemory(engine string, modelEstimateBytes, availableBytes uint64) (memoryPlan, error) {
-	plan := memoryPlan{
-		ModelEstimateBytes: modelEstimateBytes,
-		ShmBytes:           configuredShmBytes(engine),
-		PodMarginBytes:     podMarginBytes,
-		AvailableBytes:     availableBytes,
-	}
-	if modelEstimateBytes == 0 {
-		return plan, errors.New("model memory estimate is unavailable")
-	}
-	plan.RequiredBytes = modelEstimateBytes + plan.ShmBytes + plan.PodMarginBytes
-	if availableBytes > 0 && plan.RequiredBytes > availableBytes {
-		return plan, fmt.Errorf("model needs %d bytes (estimate %d + shm %d + margin %d); only %d bytes available",
-			plan.RequiredBytes, modelEstimateBytes, plan.ShmBytes, plan.PodMarginBytes, availableBytes)
-	}
-	if max := packageMaxMemoryBytes(); max > 0 && plan.RequiredBytes > max {
-		return plan, fmt.Errorf("model needs %d bytes; configured package max is %d bytes", plan.RequiredBytes, max)
-	}
-	return plan, nil
-}
-
 func engineResourceSpec(engine string, modelEstimateBytes, budgetMemory uint64) (enginePodSpec, error) {
 	plan, err := planModelMemory(engine, modelEstimateBytes, budgetMemory)
 	if err != nil {
 		return enginePodSpec{}, err
 	}
-	cpuLimit := parseQuantity(env("INFERENCE_ENGINE_CPU_LIMIT", "4"), "4")
-	cpuReq := parseQuantity(env("INFERENCE_ENGINE_CPU_REQUEST", "100m"), "100m")
-	limit := *resource.NewQuantity(int64(plan.RequiredBytes), resource.BinarySI)
-	req := *resource.NewQuantity(limit.Value()/2, resource.BinarySI)
-	if req.Cmp(resource.MustParse("512Mi")) < 0 {
-		req = resource.MustParse("512Mi")
-	}
-	return enginePodSpec{
-		MemoryLimit: limit,
-		MemoryReq:   req,
-		CPULimit:    cpuLimit,
-		CPURequest:  cpuReq,
-		GPURequest:  strings.EqualFold(env("INFERENCE_GPU_ENABLED", "false"), "true"),
-	}, nil
+	return engineResourceSpecFromRequired(plan.RequiredBytes)
+}
+
+func engineResourceSpecFromRequired(requiredBytes uint64) (enginePodSpec, error) {
+	// Legacy helper for ollama/idle paths: memory from caller, CPU from planner
+	// with empty mode (CPU defaults) unless env pins are set.
+	serve := servePlan{RequiredBytes: requiredBytes}
+	serve.CPUCores, serve.CPULimit, serve.CPURequest = planCPUCores("", 0)
+	return engineResourceSpecFromPlan(serve)
 }
 
 // packageMaxMemoryBytes returns an optional operator/package ceiling.

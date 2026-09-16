@@ -277,6 +277,13 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 			AutoMap               json.RawMessage `json:"auto_map"`
 			MaxPositionEmbeddings json.Number     `json:"max_position_embeddings"`
 			NPositions            json.Number     `json:"n_positions"`
+			NumHiddenLayers       json.Number     `json:"num_hidden_layers"`
+			NLayer                json.Number     `json:"n_layer"`
+			NumKeyValueHeads      json.Number     `json:"num_key_value_heads"`
+			NumAttentionHeads     json.Number     `json:"num_attention_heads"`
+			NHead                 json.Number     `json:"n_head"`
+			HiddenSize            json.Number     `json:"hidden_size"`
+			NEmbd                 json.Number     `json:"n_embd"`
 		}
 		address := huggingfaceBase() + "/" + item.ID + "/resolve/" + item.SHA + "/config.json"
 		// Hugging Face resolve redirects to its same-host metadata cache.
@@ -284,15 +291,21 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 			continue
 		}
 		compatible := false
-		for _, arch := range config.Architectures {
-			compatible = compatible || supported[arch]
+		for _, architecture := range config.Architectures {
+			compatible = compatible || supported[architecture]
 		}
 		// Quantized/custom-code models need mode-specific recipes; do not
 		// automatically recommend them based on architecture alone.
 		if !compatible || len(config.Quantization) > 0 || len(config.AutoMap) > 0 {
 			continue
 		}
-		modelLimit := maxPositionFromNumbers(config.MaxPositionEmbeddings, config.NPositions)
+		raw, _ := json.Marshal(config)
+		arch := modelArchFromConfigJSON(raw)
+		modelLimit := arch.MaxPosition
+		if modelLimit == 0 {
+			modelLimit = maxPositionFromNumbers(config.MaxPositionEmbeddings, config.NPositions)
+			arch.MaxPosition = modelLimit
+		}
 		var info struct {
 			Siblings []struct {
 				Name string `json:"rfilename"`
@@ -312,7 +325,16 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 		if weights == 0 || total > 1<<40 || weights > 1<<40 {
 			continue
 		}
-		entries = append(entries, catalogEntry{ID: item.ID, Source: item.ID + "@" + item.SHA, DownloadBytes: total, MemoryBytes: weights*2 + (4 << 30), LaunchArguments: launchArgsForCatalog(modelLimit)})
+		// LaunchArguments are filled at catalog snapshot time from planServe so
+		// they always reflect current mode + host memory, not discovery-time guess.
+		entries = append(entries, catalogEntry{
+			ID:                item.ID,
+			Source:            item.ID + "@" + item.SHA,
+			DownloadBytes:     total,
+			MemoryBytes:       weights*2 + (4 << 30),
+			ModelContextLimit: modelLimit,
+			KVBytesPerToken:   arch.kvBytesPerToken(),
+		})
 	}
 	return entries, nil
 }

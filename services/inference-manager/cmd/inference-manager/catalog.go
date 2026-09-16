@@ -17,14 +17,16 @@ import (
 const catalogInterval = 24 * time.Hour
 
 type catalogEntry struct {
-	ID              string   `json:"id"`
-	Source          string   `json:"source"`
-	DownloadBytes   uint64   `json:"downloadBytes"`
-	MemoryBytes     uint64   `json:"memoryBytes"`
-	RequiredBytes   uint64   `json:"requiredBytes"`
-	LaunchArguments []string `json:"launchArguments,omitempty"`
-	Eligible        bool     `json:"eligible"`
-	Reason          string   `json:"reason,omitempty"`
+	ID                string   `json:"id"`
+	Source            string   `json:"source"`
+	DownloadBytes     uint64   `json:"downloadBytes"`
+	MemoryBytes       uint64   `json:"memoryBytes"`
+	RequiredBytes     uint64   `json:"requiredBytes"`
+	ModelContextLimit uint64   `json:"modelContextLimit,omitempty"`
+	KVBytesPerToken   uint64   `json:"kvBytesPerToken,omitempty"`
+	LaunchArguments   []string `json:"launchArguments,omitempty"`
+	Eligible          bool     `json:"eligible"`
+	Reason            string   `json:"reason,omitempty"`
 }
 
 type catalogState struct {
@@ -169,14 +171,37 @@ func (c *modelCatalog) snapshot(ctx context.Context) catalogState {
 	memory, disk := c.budget(ctx)
 	state.AvailableMemoryBytes = memory
 	engine := ""
+	mode := ""
 	if c.m != nil {
 		engine = c.m.engine
+		_, mode, _ = c.m.selectMode(ctx)
 	}
 	for i := range state.Items {
 		item := &state.Items[i]
 		item.Eligible = false
-		plan, planErr := planModelMemory(engine, item.MemoryBytes, memory)
-		item.RequiredBytes = plan.RequiredBytes
+		var planErr error
+		if engine == "vllm" {
+			serve, err := planServe(serveWindowInput{
+				Engine:             engine,
+				Mode:               mode,
+				ModelEstimateBytes: item.MemoryBytes,
+				AvailableBytes:     memory,
+				AvailableCPUs:      hostCPUCount(),
+				ModelContextLimit:  item.ModelContextLimit,
+				KVBytesPerToken:    item.KVBytesPerToken,
+			})
+			planErr = err
+			item.RequiredBytes = serve.RequiredBytes
+			if serve.MaxModelLen > 0 {
+				item.LaunchArguments = launchArgsForCatalog(serve.MaxModelLen)
+			} else if item.ModelContextLimit > 0 {
+				item.LaunchArguments = launchArgsForCatalog(item.ModelContextLimit)
+			}
+		} else {
+			plan, err := planModelMemory(engine, item.MemoryBytes, memory)
+			planErr = err
+			item.RequiredBytes = plan.RequiredBytes
+		}
 		switch {
 		case memory == 0:
 			item.Reason = "Usable runtime memory could not be confirmed"

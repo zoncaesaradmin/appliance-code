@@ -86,10 +86,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: INFERENCE_ENGINE_MAX_MEMORY
   value: {{ .Values.engine.maxMemory | quote }}
 {{- end }}
+{{- if .Values.engine.cpuLimit }}
 - name: INFERENCE_ENGINE_CPU_LIMIT
   value: {{ .Values.engine.cpuLimit | quote }}
+{{- end }}
+{{- if .Values.engine.cpuRequest }}
 - name: INFERENCE_ENGINE_CPU_REQUEST
   value: {{ .Values.engine.cpuRequest | quote }}
+{{- end }}
 - name: INFERENCE_ENGINE_SHARED_MEMORY
   value: {{ .Values.engine.sharedMemorySize | default .Values.runtime.sharedMemorySize | quote }}
 - name: INFERENCE_RELEASE_INSTANCE

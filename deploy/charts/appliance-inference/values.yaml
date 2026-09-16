@@ -20,9 +20,10 @@ engine:
   # Optional absolute ceiling. Empty = host-derived budget only (recommended).
   # Set only for lab hosts that must refuse models above a fixed package cap.
   maxMemory: ""
-  # Fixed CPU budget for the on-demand engine pod.
-  cpuLimit: "4"
-  cpuRequest: 100m
+  # Optional CPU pin. Empty = plan from host CPUs at Load (recommended).
+  # When set, both limit and request are applied as a lab override.
+  cpuLimit: ""
+  cpuRequest: ""
   # emptyDir /dev/shm for vLLM (counts against the engine memory limit).
   sharedMemorySize: 4Gi
 

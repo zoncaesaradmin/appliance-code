@@ -27,7 +27,7 @@ shows a short capacity line (parameter hint, download size, estimated RAM).
 | Browser/API method and route | UI client method | Control-plane behavior |
 | --- | --- | --- |
 | `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability, `servingState`, and `loadedModelId` |
-| `GET /api/v1/appliance/identity` | `getIdentity` | Canonical origin used to build the OpenAI base URL in Copy client settings |
+| `GET /api/v1/appliance/identity` | `getIdentity` | Canonical origin rewritten to `<appliance-name>.local` for the OpenAI base URL in Copy client settings |
 | `GET /api/v1/inference/models/catalog?sort=parameters&order=desc` | `getInferenceCatalog` | Cached candidates ordered by estimated parameter scale (default); also supports `sort=memory|name` and `order=asc|desc` |
 | `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
 | `POST /api/v1/inference/models/imports` | `importInferenceModel` | Accept download job immediately (202); work continues on the inference manager |

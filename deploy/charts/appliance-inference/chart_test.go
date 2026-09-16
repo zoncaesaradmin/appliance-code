@@ -61,6 +61,9 @@ func TestInferenceGatewayRender(t *testing.T) {
 	if strings.Contains(out, "name: INFERENCE_ENGINE_MAX_MEMORY") {
 		t.Error("default chart must not set a hard-coded engine maxMemory ceiling")
 	}
+	if strings.Contains(out, "name: INFERENCE_ENGINE_CPU_LIMIT") || strings.Contains(out, "name: INFERENCE_ENGINE_CPU_REQUEST") {
+		t.Error("default chart must not pin engine CPU; manager plans from host capacity")
+	}
 	if strings.Contains(out, "command: [\"ollama\", \"serve\"]") {
 		t.Error("ollama serve belongs on the on-demand engine Deployment, not the manager chart")
 	}
