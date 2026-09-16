@@ -23,6 +23,7 @@ type ServiceProxyRoute struct {
 	Method       string
 	ExternalPath string
 	UpstreamPath string
+	StripPrefix  string
 	Permission   string
 }
 
@@ -47,6 +48,7 @@ func RegistrationsFromRegistry(registry serviceregistry.Registry) []ServiceProxy
 				Method:       strings.ToUpper(strings.TrimSpace(route.Method)),
 				ExternalPath: strings.TrimSpace(route.ExternalPath),
 				UpstreamPath: strings.TrimSpace(route.UpstreamPath),
+				StripPrefix:  strings.TrimSpace(route.StripPrefix),
 				Permission:   strings.TrimSpace(route.Permission),
 			})
 		}
@@ -64,7 +66,7 @@ func proxiedServiceRoutes(registrations []ServiceProxyRegistration) []publicRout
 			routes = append(routes, publicRoute{
 				capability: reg.Capability,
 				moduleName: reg.Name,
-				pattern:    rt.Method + " " + rt.ExternalPath,
+				pattern:    proxyPattern(rt),
 				build: func(deps Deps, w wrappers) (http.Handler, error) {
 					handler, err := newServiceProxyHandler(deps.Logger, deps.Audit, reg, rt)
 					if err != nil {
@@ -80,6 +82,15 @@ func proxiedServiceRoutes(registrations []ServiceProxyRegistration) []publicRout
 	return routes
 }
 
+func proxyPattern(route ServiceProxyRoute) string {
+	method := strings.ToUpper(strings.TrimSpace(route.Method))
+	path := strings.TrimSpace(route.ExternalPath)
+	if method == "" || method == "ANY" || method == "*" {
+		return path
+	}
+	return method + " " + path
+}
+
 func newServiceProxyHandler(logger logging.Logger, recorder *audit.Recorder, registration ServiceProxyRegistration, route ServiceProxyRoute) (http.Handler, error) {
 	target, err := url.Parse(strings.TrimSpace(registration.BaseURL))
 	if err != nil {
@@ -92,15 +103,19 @@ func newServiceProxyHandler(logger logging.Logger, recorder *audit.Recorder, reg
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
-			pr.Out.URL.Path = route.UpstreamPath
-			pr.Out.URL.RawPath = route.UpstreamPath
+			upstreamPath := route.UpstreamPath
+			if route.StripPrefix != "" {
+				upstreamPath = stripProxyPrefix(pr.In.URL.Path, route.StripPrefix)
+			}
+			pr.Out.URL.Path = upstreamPath
+			pr.Out.URL.RawPath = upstreamPath
 			pr.Out.Host = target.Host
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			logger.WithContext(r.Context()).Warnw("proxied service call failed",
 				"service", registration.Name,
-				"method", route.Method,
-				"path", route.ExternalPath,
+				"method", r.Method,
+				"path", r.URL.Path,
 				"error", err,
 			)
 			WriteProblem(w, r, http.StatusBadGateway, "upstream_unavailable", "The upstream service is unavailable", "")
@@ -144,15 +159,34 @@ func newServiceProxyHandler(logger logging.Logger, recorder *audit.Recorder, reg
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		proxy.ServeHTTP(rec, r)
 
-		if recorder != nil && isMutatingProxyMethod(route.Method) && rec.status >= 200 && rec.status < 300 {
-			action, targetType := proxiedMutationAudit(route.ExternalPath)
+		if recorder != nil && isMutatingProxyMethod(r.Method) && rec.status >= 200 && rec.status < 300 {
+			action, targetType := proxiedMutationAudit(r.URL.Path)
 			_ = recorder.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
-				Action: action, TargetType: targetType, TargetID: route.ExternalPath,
+				Action: action, TargetType: targetType, TargetID: r.URL.Path,
 				Outcome: storage.AuditOutcomeSuccess,
-				Details: map[string]any{"method": route.Method, "service": registration.Name, "status": rec.status},
+				Details: map[string]any{"method": r.Method, "service": registration.Name, "status": rec.status},
 			})
 		}
 	}), nil
+}
+
+func stripProxyPrefix(path, prefix string) string {
+	path = strings.TrimSpace(path)
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return path
+	}
+	if path == prefix {
+		return "/"
+	}
+	if strings.HasPrefix(path, prefix+"/") {
+		out := strings.TrimPrefix(path, prefix)
+		if out == "" {
+			return "/"
+		}
+		return out
+	}
+	return path
 }
 
 func isMutatingProxyMethod(method string) bool {
@@ -166,6 +200,8 @@ func isMutatingProxyMethod(method string) bool {
 
 func proxiedMutationAudit(externalPath string) (action, targetType string) {
 	switch {
+	case strings.HasPrefix(externalPath, "/inference/"):
+		return "inference.proxy.mutate", "inference"
 	case strings.HasSuffix(externalPath, "/host/wifi/enable"):
 		return "host.wifi.enable", "host_wifi"
 	case strings.HasSuffix(externalPath, "/host/wifi"):
@@ -175,6 +211,6 @@ func proxiedMutationAudit(externalPath string) (action, targetType string) {
 	case strings.HasSuffix(externalPath, "/host/mdns"):
 		return "host.mdns.update", "host_mdns"
 	default:
-		return "host.proxy.mutate", "host_proxy"
+		return "service.proxy.mutate", "service_proxy"
 	}
 }

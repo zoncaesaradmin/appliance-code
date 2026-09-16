@@ -107,7 +107,11 @@ type ModuleRoute struct {
 	Method       string `yaml:"method" json:"method"`
 	ExternalPath string `yaml:"externalPath" json:"externalPath"`
 	UpstreamPath string `yaml:"upstreamPath" json:"upstreamPath"`
-	Permission   string `yaml:"permission" json:"permission"`
+	// StripPrefix, when set, forwards the request path with this prefix
+	// removed (OpenAI catch-all under /inference → /v1/...). UpstreamPath
+	// may be empty in that mode.
+	StripPrefix string `yaml:"stripPrefix,omitempty" json:"stripPrefix,omitempty"`
+	Permission  string `yaml:"permission" json:"permission"`
 }
 
 // ApplicationCatalog is preserved as raw YAML so the application subsystem

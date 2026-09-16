@@ -43,6 +43,7 @@ type ModuleRoute struct {
 	Method       string
 	ExternalPath string
 	UpstreamPath string
+	StripPrefix  string
 	Permission   string
 }
 
@@ -93,7 +94,7 @@ func ModuleCatalogFromMetadata(catalog metadatabundle.ModuleCatalog) ([]ModuleDe
 	for _, module := range catalog.Modules {
 		routes := make([]ModuleRoute, len(module.Routes))
 		for i, route := range module.Routes {
-			routes[i] = ModuleRoute{Method: route.Method, ExternalPath: route.ExternalPath, UpstreamPath: route.UpstreamPath, Permission: route.Permission}
+			routes[i] = ModuleRoute{Method: route.Method, ExternalPath: route.ExternalPath, UpstreamPath: route.UpstreamPath, StripPrefix: route.StripPrefix, Permission: route.Permission}
 		}
 		caps := make([]Capability, len(module.RequiredCapabilities))
 		for i, capability := range module.RequiredCapabilities {
@@ -173,6 +174,7 @@ func normalizeModule(module ModuleDescriptor) ModuleDescriptor {
 		module.Routes[i].Method = strings.ToUpper(strings.TrimSpace(module.Routes[i].Method))
 		module.Routes[i].ExternalPath = strings.TrimSpace(module.Routes[i].ExternalPath)
 		module.Routes[i].UpstreamPath = strings.TrimSpace(module.Routes[i].UpstreamPath)
+		module.Routes[i].StripPrefix = strings.TrimSpace(module.Routes[i].StripPrefix)
 		module.Routes[i].Permission = strings.TrimSpace(module.Routes[i].Permission)
 	}
 	return module

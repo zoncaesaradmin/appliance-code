@@ -51,15 +51,11 @@ func TestManagerHTTPRouting(t *testing.T) {
 				{"HEAD", "/", http.StatusOK, false},
 				{"POST", "/", http.StatusMethodNotAllowed, false},
 				{"GET", "/unknown", http.StatusNotFound, false},
-				{"GET", "/v1/models", http.StatusOK, false},
+				{"GET", "/v1/models", http.StatusAccepted, true},
 				{"POST", "/v1/chat/completions?stream=true", http.StatusAccepted, true},
 				{"GET", "/v1/responses/example", http.StatusAccepted, true},
 				{"DELETE", "/v1/responses/example", http.StatusAccepted, true},
 			} {
-				// Ollama's model list comes from /api/tags on its backend.
-				if engine == "ollama" && tc.path == "/v1/models" {
-					continue
-				}
 				response := httptest.NewRecorder()
 				handler.ServeHTTP(response, httptest.NewRequest(tc.method, tc.path, nil))
 				if response.Code != tc.status {

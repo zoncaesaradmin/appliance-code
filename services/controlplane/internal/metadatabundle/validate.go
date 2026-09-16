@@ -89,7 +89,21 @@ func ValidateBundle(b *Bundle) error {
 			}
 		}
 		for _, route := range module.Routes {
-			if strings.TrimSpace(route.Method) == "" || !strings.HasPrefix(strings.TrimSpace(route.ExternalPath), "/") || !strings.HasPrefix(strings.TrimSpace(route.UpstreamPath), "/") || strings.TrimSpace(route.Permission) == "" {
+			method := strings.TrimSpace(route.Method)
+			externalPath := strings.TrimSpace(route.ExternalPath)
+			upstreamPath := strings.TrimSpace(route.UpstreamPath)
+			stripPrefix := strings.TrimSpace(route.StripPrefix)
+			permission := strings.TrimSpace(route.Permission)
+			if method == "" || !strings.HasPrefix(externalPath, "/") || permission == "" {
+				return fmt.Errorf("metadatabundle: module %q has an invalid route", name)
+			}
+			if stripPrefix != "" {
+				if !strings.HasPrefix(stripPrefix, "/") || upstreamPath != "" || !strings.Contains(externalPath, "{path...") {
+					return fmt.Errorf("metadatabundle: module %q has an invalid strip-prefix route", name)
+				}
+				continue
+			}
+			if !strings.HasPrefix(upstreamPath, "/") {
 				return fmt.Errorf("metadatabundle: module %q has an invalid route", name)
 			}
 		}

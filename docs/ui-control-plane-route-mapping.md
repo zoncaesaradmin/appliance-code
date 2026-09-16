@@ -50,9 +50,10 @@ viewports the status card stacks under Models. When Serving is
 Ready for use, **Copy OpenAI client settings** opens a dialog with the public
 base URL (`https://<origin>/inference/v1`), served model id, a sample provider
 config (`wire_api = "responses"` for Codex), and a separate model-catalog JSON
-snippet for clients such as Codex. The appliance publishes
-`/inference/v1/models`, `/inference/v1/chat/completions`, and
-`/inference/v1/responses` for OpenAI-compatible clients.
+snippet for clients such as Codex. Externally, `/inference/{path...}` is
+authenticated and proxied by stripping the `/inference` prefix so the OpenAI
+surface (`/v1/models`, `/v1/chat/completions`, `/v1/responses`, and any other
+engine-supported path) reaches the inference gateway without a per-path allowlist.
 
 ### General tracing
 
@@ -108,6 +109,7 @@ Useful event names:
 | `GET /home/connectivity` | React `HomePage` Connectivity | Same overview fetches as `/home` | SPA page |
 | `GET /home/audit-logs` | React `HomePage` Audit Logs | Session must include `audit.read`; `GET /api/v1/audit/events?limit=10` with optional `cursor` for Next page | SPA page |
 | `GET /account/api-keys` | React `AccountPage` API Keys | `GET /api/v1/tokens`; create uses `POST /api/v1/tokens`; revoke uses `DELETE /api/v1/tokens/{id}`; CA download uses `GET /api/v1/appliance/tls/ca` | SPA page; create shows the raw secret once; list shows active (non-revoked) tokens only; CA card downloads `appliance-ca.pem` for CLI trust |
+
 | `GET /manage/artifacts` | React `ArtifactsPage` Catalog | `GET /api/v1/registry/repositories`; `GET /api/v1/registry/repositories/{repository}/tags`; optional referrers lookup | SPA page with link to Account → API Keys for registry client credentials |
 | `GET /manage/artifacts/grants` | React `ArtifactsPage` Grants | `GET /api/v1/registry/grants`; create `POST /api/v1/registry/grants`; delete `DELETE /api/v1/registry/grants/{id}` | SPA page |
 | `GET /partials/status` | `dashboardData` | Same downstream calls as `GET /dashboard` | `200` HTML partial |

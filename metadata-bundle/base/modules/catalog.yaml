@@ -30,6 +30,10 @@ modules:
     baseURL: http://inference-gateway.inference.svc.cluster.local:8080
     securityClass: restricted
     routes:
-      - {method: GET, externalPath: /inference/v1/models, upstreamPath: /v1/models, permission: inference.models.read}
-      - {method: POST, externalPath: /inference/v1/chat/completions, upstreamPath: /v1/chat/completions, permission: inference.use}
-      - {method: POST, externalPath: /inference/v1/responses, upstreamPath: /v1/responses, permission: inference.use}
+      # OpenAI-compatible surface: strip /inference and forward the remainder to
+      # the inference gateway (engine APIs under /v1/...). Do not enumerate
+      # individual OpenAI paths here.
+      - method: ANY
+        externalPath: "/inference/{path...}"
+        stripPrefix: /inference
+        permission: inference.use

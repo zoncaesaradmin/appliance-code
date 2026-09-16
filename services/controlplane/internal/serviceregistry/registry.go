@@ -23,7 +23,8 @@ type Service struct {
 type Route struct {
 	Method       string `json:"method"`
 	ExternalPath string `json:"externalPath"`
-	UpstreamPath string `json:"upstreamPath"`
+	UpstreamPath string `json:"upstreamPath,omitempty"`
+	StripPrefix  string `json:"stripPrefix,omitempty"`
 	Permission   string `json:"permission"`
 }
 
@@ -44,6 +45,7 @@ func RegistryFromModules(modules []appliance.ModuleDescriptor) Registry {
 				Method:       strings.ToUpper(strings.TrimSpace(route.Method)),
 				ExternalPath: strings.TrimSpace(route.ExternalPath),
 				UpstreamPath: strings.TrimSpace(route.UpstreamPath),
+				StripPrefix:  strings.TrimSpace(route.StripPrefix),
 				Permission:   strings.TrimSpace(route.Permission),
 			})
 		}
@@ -82,17 +84,30 @@ func (r Registry) Validate(enabled appliance.Set) error {
 			} else if !validMethod(method) {
 				errs = append(errs, fmt.Sprintf("%s.method %q is not supported", routeLabel, route.Method))
 			}
-			if !strings.HasPrefix(strings.TrimSpace(route.ExternalPath), "/") {
+			externalPath := strings.TrimSpace(route.ExternalPath)
+			if !strings.HasPrefix(externalPath, "/") {
 				errs = append(errs, routeLabel+".externalPath must start with /")
 			}
-			if !strings.HasPrefix(strings.TrimSpace(route.UpstreamPath), "/") {
+			stripPrefix := strings.TrimSpace(route.StripPrefix)
+			upstreamPath := strings.TrimSpace(route.UpstreamPath)
+			if stripPrefix != "" {
+				if !strings.HasPrefix(stripPrefix, "/") {
+					errs = append(errs, routeLabel+".stripPrefix must start with /")
+				}
+				if upstreamPath != "" {
+					errs = append(errs, routeLabel+".upstreamPath must be empty when stripPrefix is set")
+				}
+				if !strings.Contains(externalPath, "{path...") {
+					errs = append(errs, routeLabel+".externalPath must use {path...} when stripPrefix is set")
+				}
+			} else if !strings.HasPrefix(upstreamPath, "/") {
 				errs = append(errs, routeLabel+".upstreamPath must start with /")
 			}
 			if strings.TrimSpace(route.Permission) == "" {
 				errs = append(errs, routeLabel+".permission must not be empty")
 			}
-			if method != "" && strings.HasPrefix(strings.TrimSpace(route.ExternalPath), "/") {
-				key := method + " " + strings.TrimSpace(route.ExternalPath)
+			if method != "" && strings.HasPrefix(externalPath, "/") {
+				key := method + " " + externalPath
 				if existing, ok := seen[key]; ok {
 					errs = append(errs, fmt.Sprintf("%s duplicates route %s already owned by %s", routeLabel, key, existing))
 				} else {
@@ -109,7 +124,7 @@ func (r Registry) Validate(enabled appliance.Set) error {
 
 func validMethod(method string) bool {
 	switch method {
-	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodHead, http.MethodOptions:
+	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodHead, http.MethodOptions, "ANY", "*":
 		return true
 	default:
 		return false

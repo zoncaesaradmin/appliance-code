@@ -57,8 +57,10 @@ and administrator-triggered model downloads in the manager. An offline refresh
 failure retains the previous catalog and never removes installed models.
 
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
-`GET /v1/models` independently lists downloaded models. The control plane exposes
-the catalog as `GET /api/v1/inference/models/catalog`. Catalog imports include
+`GET /v1/models` is forwarded to the inference engine (OpenAI-compatible). Downloaded
+model inventory for administrators remains on the control-plane
+`GET /api/v1/inference/models` surface. The control plane exposes the catalog as
+`GET /api/v1/inference/models/catalog`. Catalog imports include
 `catalogId` alongside matching `modelId` and `source`; the manager revalidates
 capacity and takes launch arguments from the cache. Explicit imports retain
 the existing administrator API for advanced uses.

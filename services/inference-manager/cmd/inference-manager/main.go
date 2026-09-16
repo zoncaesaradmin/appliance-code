@@ -130,8 +130,8 @@ func (m *manager) handler() http.Handler {
 	mux.HandleFunc("POST /internal/v1/models/load", m.loadModel)
 	mux.HandleFunc("GET /internal/v1/models/load/progress", m.loadProgressHandler)
 	mux.HandleFunc("POST /internal/v1/models/delete", m.deleteModel)
-	mux.HandleFunc("GET /v1/models", m.listModels)
 	mux.HandleFunc("GET /internal/v1/models/catalog", m.modelCatalog)
+	// OpenAI-compatible surface: forward /v1/* to the engine (vLLM/Ollama).
 	mux.HandleFunc("/v1/", m.proxyOpenAI)
 	return mux
 }
