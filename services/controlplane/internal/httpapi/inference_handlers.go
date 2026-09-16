@@ -46,12 +46,22 @@ func (h *InferenceHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &req); err != nil {
 		return
 	}
-	if err := h.Inference.Import(r.Context(), req); err != nil {
+	progress, err := h.Inference.Import(r.Context(), req)
+	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
 	h.record(r, "inference.model.import", req.ModelID)
-	writeJSON(w, http.StatusCreated, map[string]any{"modelId": req.ModelID, "status": "installed"})
+	writeJSON(w, http.StatusAccepted, progress)
+}
+
+func (h *InferenceHandlers) ImportProgress(w http.ResponseWriter, r *http.Request) {
+	progress, err := h.Inference.ImportProgress(r.Context())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, progress)
 }
 
 func (h *InferenceHandlers) Load(w http.ResponseWriter, r *http.Request) {

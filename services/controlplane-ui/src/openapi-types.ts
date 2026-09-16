@@ -1190,10 +1190,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Download and install a model
-         * @description Runs an administrator-directed, serialized import from an engine-supported source. Model weights are not part of the appliance bundle.
+         * Start a model download
+         * @description Accepts an administrator-directed import and runs it asynchronously on the inference manager. Poll GET /api/v1/inference/models/imports/progress for status. Model weights are not part of the appliance bundle.
          */
         post: operations["importInferenceModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inference/models/imports/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read in-flight or recent model import progress
+         * @description Returns idle when no import has run. During download the manager updates bytes from the on-disk staging directory under the inference models volume.
+         */
+        get: operations["getInferenceImportProgress"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1698,6 +1718,19 @@ export interface components {
             digest?: string;
             /** @description Validated vLLM server arguments, represented as an argv array without shell evaluation. */
             launchArguments?: string[];
+        };
+        InferenceModelImportProgress: {
+            modelId?: string;
+            source?: string;
+            /** @enum {string} */
+            state: "idle" | "downloading" | "verifying" | "installing" | "complete" | "failed";
+            bytesDownloaded?: number;
+            bytesTotal?: number;
+            percent?: number;
+            message?: string;
+            error?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
         Problem: {
             type: string;
@@ -3726,17 +3759,42 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Model installed. */
-            201: {
+            /** @description Import accepted and running asynchronously. */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["InferenceModelImportProgress"];
+                };
             };
             400: components["responses"]["ValidationProblem"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["ValidationProblem"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
+    getInferenceImportProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current import progress. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InferenceModelImportProgress"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             502: components["responses"]["ValidationProblem"];
         };
     };

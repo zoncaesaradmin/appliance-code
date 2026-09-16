@@ -1601,8 +1601,8 @@ paths:
         "502": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/inference/models/imports:
     post:
-      summary: Download and install a model
-      description: Runs an administrator-directed, serialized import from an engine-supported source. Model weights are not part of the appliance bundle.
+      summary: Start a model download
+      description: Accepts an administrator-directed import and runs it asynchronously on the inference manager. Poll GET /api/v1/inference/models/imports/progress for status. Model weights are not part of the appliance bundle.
       operationId: importInferenceModel
       requestBody:
         required: true
@@ -1610,11 +1610,29 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/InferenceModelImportRequest" }
       responses:
-        "201": { description: Model installed. }
+        "202":
+          description: Import accepted and running asynchronously.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InferenceModelImportProgress" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/ValidationProblem" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/models/imports/progress:
+    get:
+      summary: Read in-flight or recent model import progress
+      description: Returns idle when no import has run. During download the manager updates bytes from the on-disk staging directory under the inference models volume.
+      operationId: getInferenceImportProgress
+      responses:
+        "200":
+          description: Current import progress.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InferenceModelImportProgress" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/inference/models/load:
     post:
@@ -2603,6 +2621,21 @@ components:
           type: array
           items: { type: string }
           maxItems: 32
+    InferenceModelImportProgress:
+      type: object
+      required: [state]
+      properties:
+        modelId: { type: string }
+        source: { type: string }
+        state:
+          type: string
+          enum: [idle, downloading, verifying, installing, complete, failed]
+        bytesDownloaded: { type: integer, minimum: 0 }
+        bytesTotal: { type: integer, minimum: 0 }
+        percent: { type: integer, minimum: 0, maximum: 100 }
+        message: { type: string }
+        error: { type: string }
+        updatedAt: { type: string, format: date-time }
     Problem:
       type: object
       required: [type, title, status, code, instance]

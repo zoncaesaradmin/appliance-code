@@ -29,15 +29,19 @@ shows a short capacity line (parameter hint, download size, estimated RAM).
 | `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability |
 | `GET /api/v1/inference/models/catalog` | `getInferenceCatalog` | Cached candidates and current capacity estimates; never triggers upstream fetch |
 | `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
-| `POST /api/v1/inference/models/imports` | `importInferenceModel` | Recheck catalog selection and download on request |
+| `POST /api/v1/inference/models/imports` | `importInferenceModel` | Accept download job immediately (202); work continues on the inference manager |
+| `GET /api/v1/inference/models/imports/progress` | `getInferenceImportProgress` | Bytes/state for the active or most recent import; polled about every 2 seconds while downloading |
 | `POST /api/v1/inference/models/load` | `loadInferenceModel` | Load and report runtime success/failure |
 | `POST /api/v1/inference/models/delete` | `deleteInferenceModel` | Remove local model, retaining catalog candidate |
 
 Catalog reads require `inference.models.read`; mutations require inference
-administration permission. The UI polls local state every 30 seconds while idle. Polling pauses during
-download, load, and delete. Inventory reads on the inference manager use a
-shared lock so downloads do not block the downloaded-model list. Import, load,
-and delete continue through the existing authenticated and audited routes.
+administration permission. The UI polls local state every 30 seconds while idle.
+During download it polls import progress every 2 seconds instead of holding one
+long HTTP request. Inventory reads on the inference manager use a shared lock so
+downloads do not block the downloaded-model list. Import, load, and delete
+continue through the existing authenticated and audited routes. On-disk staging
+lives under `/data/zon/inference/models/.downloads/` with
+`.progress.json` for operator inspection.
 
 ### General tracing
 

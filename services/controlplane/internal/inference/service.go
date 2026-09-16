@@ -77,6 +77,18 @@ type ImportRequest struct {
 	LaunchArguments []string `json:"launchArguments,omitempty"`
 }
 
+type ImportProgress struct {
+	ModelID         string `json:"modelId,omitempty"`
+	Source          string `json:"source,omitempty"`
+	State           string `json:"state"`
+	BytesDownloaded uint64 `json:"bytesDownloaded,omitempty"`
+	BytesTotal      uint64 `json:"bytesTotal,omitempty"`
+	Percent         *int   `json:"percent,omitempty"`
+	Message         string `json:"message,omitempty"`
+	Error           string `json:"error,omitempty"`
+	UpdatedAt       string `json:"updatedAt,omitempty"`
+}
+
 // Catalog is runtime-owned and cached locally; reading it never refreshes upstream.
 func (s *Service) Catalog(ctx context.Context) (json.RawMessage, error) {
 	var catalog json.RawMessage
@@ -203,34 +215,56 @@ func (s *Service) ListModels(ctx context.Context) ([]Model, error) {
 	return body.Data, nil
 }
 
-func (s *Service) Import(ctx context.Context, req ImportRequest) error {
+func (s *Service) Import(ctx context.Context, req ImportRequest) (ImportProgress, error) {
 	if !s.modelOperation.TryLock() {
-		return ErrBusy
+		return ImportProgress{}, ErrBusy
 	}
 	defer s.modelOperation.Unlock()
 	req.ModelID = strings.TrimSpace(req.ModelID)
 	req.Source = strings.TrimSpace(req.Source)
 	if req.ModelID == "" || req.Source == "" {
-		return fmt.Errorf("%w: modelId and source are required", ErrInvalidRequest)
+		return ImportProgress{}, fmt.Errorf("%w: modelId and source are required", ErrInvalidRequest)
 	}
 	if !modelReferenceRE.MatchString(req.ModelID) || !modelReferenceRE.MatchString(req.Source) {
-		return fmt.Errorf("%w: modelId and source must be engine model references, not URLs or filesystem paths", ErrInvalidRequest)
+		return ImportProgress{}, fmt.Errorf("%w: modelId and source must be engine model references, not URLs or filesystem paths", ErrInvalidRequest)
 	}
 	if req.Digest != "" && !digestRE.MatchString(strings.TrimSpace(req.Digest)) {
-		return fmt.Errorf("%w: digest must be a lowercase sha256 digest", ErrInvalidRequest)
+		return ImportProgress{}, fmt.Errorf("%w: digest must be a lowercase sha256 digest", ErrInvalidRequest)
 	}
 	if err := validateLaunchArguments(s.cfg.Engine, req.LaunchArguments); err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidRequest, err)
+		return ImportProgress{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
 	}
 	if s.cfg.Engine == "ollama" {
 		if req.ModelID != req.Source {
-			return fmt.Errorf("%w: Ollama modelId must equal source", ErrInvalidRequest)
+			return ImportProgress{}, fmt.Errorf("%w: Ollama modelId must equal source", ErrInvalidRequest)
 		}
 		if req.Digest != "" {
-			return fmt.Errorf("%w: expected-digest verification requires an inference manager and is not available for direct Ollama pulls", ErrUnsupported)
+			return ImportProgress{}, fmt.Errorf("%w: expected-digest verification requires an inference manager and is not available for direct Ollama pulls", ErrUnsupported)
 		}
 	}
-	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/imports", req)
+	var progress ImportProgress
+	if err := s.callJSON(ctx, http.MethodPost, "/internal/v1/models/imports", req, &progress); err != nil {
+		return ImportProgress{}, err
+	}
+	if progress.State == "" {
+		progress.State = "downloading"
+		progress.ModelID = req.ModelID
+		progress.Source = req.Source
+	}
+	return progress, nil
+}
+
+func (s *Service) ImportProgress(ctx context.Context) (ImportProgress, error) {
+	progressCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var progress ImportProgress
+	if err := s.getJSON(progressCtx, "/internal/v1/models/imports/progress", &progress); err != nil {
+		return ImportProgress{}, err
+	}
+	if progress.State == "" {
+		progress.State = "idle"
+	}
+	return progress, nil
 }
 
 func validateLaunchArguments(engine string, arguments []string) error {
@@ -281,7 +315,7 @@ func (s *Service) Load(ctx context.Context, modelID string) error {
 	if modelID == "" {
 		return fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
-	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID})
+	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID}, nil)
 }
 
 func (s *Service) Delete(ctx context.Context, modelID string) error {
@@ -293,10 +327,10 @@ func (s *Service) Delete(ctx context.Context, modelID string) error {
 	if modelID == "" {
 		return fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
-	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/delete", map[string]any{"modelId": modelID})
+	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/delete", map[string]any{"modelId": modelID}, nil)
 }
 
-func (s *Service) callJSON(ctx context.Context, method, path string, body any) error {
+func (s *Service) callJSON(ctx context.Context, method, path string, body any, target any) error {
 	resp, err := s.do(ctx, method, path, body)
 	if err != nil {
 		return err
@@ -305,7 +339,10 @@ func (s *Service) callJSON(ctx context.Context, method, path string, body any) e
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return responseError(resp)
 	}
-	return nil
+	if target == nil {
+		return nil
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(target)
 }
 
 func (s *Service) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
@@ -335,7 +372,11 @@ func (s *Service) do(ctx context.Context, method, path string, body any) (*http.
 
 func responseError(resp *http.Response) error {
 	message, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return fmt.Errorf("inference: runtime returned %d: %s", resp.StatusCode, strings.TrimSpace(string(message)))
+	text := strings.TrimSpace(string(message))
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("%w: %s", ErrBusy, text)
+	}
+	return fmt.Errorf("inference: runtime returned %d: %s", resp.StatusCode, text)
 }
 
 func contains(values []string, want string) bool {

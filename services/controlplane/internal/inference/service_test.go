@@ -34,7 +34,10 @@ func TestOllamaModelLifecycle(t *testing.T) {
 		switch r.URL.Path {
 		case "/v1/models":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "tiny:latest", "object": "model"}}})
-		case "/internal/v1/models/imports", "/internal/v1/models/load", "/internal/v1/models/delete":
+		case "/internal/v1/models/imports":
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "downloading", "modelId": "tiny:latest", "source": "tiny:latest"})
+		case "/internal/v1/models/load", "/internal/v1/models/delete":
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 		default:
 			http.NotFound(w, r)
@@ -50,7 +53,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 	if err != nil || len(models) != 1 || models[0].ID != "tiny:latest" {
 		t.Fatalf("models=%v err=%v", models, err)
 	}
-	if err := service.Import(t.Context(), ImportRequest{ModelID: "tiny:latest", Source: "tiny:latest"}); err != nil {
+	if _, err := service.Import(t.Context(), ImportRequest{ModelID: "tiny:latest", Source: "tiny:latest"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Load(t.Context(), "tiny:latest"); err != nil {
@@ -122,7 +125,7 @@ func TestImportRejectsUnsafeOrUnverifiableInput(t *testing.T) {
 		{ModelID: "model:latest", Source: "model:latest", Digest: "sha256:nope"},
 		{ModelID: "model:latest", Source: "model:latest", Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 	} {
-		if err := service.Import(t.Context(), request); err == nil {
+		if _, err := service.Import(t.Context(), request); err == nil {
 			t.Fatalf("request unexpectedly accepted: %+v", request)
 		}
 	}
@@ -133,7 +136,7 @@ func TestVLLMLaunchArgumentsAreValidatedBeforeRuntimeCall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.Import(t.Context(), ImportRequest{ModelID: "model", Source: "org/model", LaunchArguments: []string{"--host", "0.0.0.0"}}); err == nil || !errors.Is(err, ErrInvalidRequest) {
+	if _, err := service.Import(t.Context(), ImportRequest{ModelID: "model", Source: "org/model", LaunchArguments: []string{"--host", "0.0.0.0"}}); err == nil || !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("manager-owned argument error=%v", err)
 	}
 }

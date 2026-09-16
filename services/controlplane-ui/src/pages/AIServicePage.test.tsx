@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   listInferenceModels: vi.fn(),
   getInferenceCatalog: vi.fn(),
   importInferenceModel: vi.fn(),
+  getInferenceImportProgress: vi.fn(),
   loadInferenceModel: vi.fn(),
   deleteInferenceModel: vi.fn()
 }));
@@ -57,7 +58,14 @@ beforeEach(() => {
       { id: "too-large:100b", source: "too-large:100b", downloadBytes: 1000, memoryBytes: 2000, eligible: false }
     ]
   });
-  api.importInferenceModel.mockResolvedValue(undefined);
+  api.getInferenceImportProgress.mockResolvedValue({ state: "idle" });
+  api.importInferenceModel.mockResolvedValue({
+    modelId: "available:1b",
+    source: "available:1b",
+    state: "complete",
+    percent: 100,
+    message: "Model downloaded"
+  });
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -133,6 +141,64 @@ it("clears a stale downloaded-models refresh error after a successful post-downl
   expect([...element.querySelectorAll("option")].map((option) => option.textContent)).toContain(
     "available:1b (downloaded)"
   );
+});
+
+it("polls import progress while an async download runs", async () => {
+  api.importInferenceModel.mockResolvedValue({
+    modelId: "available:1b",
+    source: "available:1b",
+    state: "downloading",
+    percent: 10,
+    bytesDownloaded: 10,
+    bytesTotal: 100,
+    message: "Downloading model files"
+  });
+  api.getInferenceImportProgress
+    .mockResolvedValueOnce({ state: "idle" })
+    .mockResolvedValueOnce({
+      modelId: "available:1b",
+      state: "downloading",
+      percent: 55,
+      bytesDownloaded: 55,
+      bytesTotal: 100,
+      message: "Downloading model files"
+    })
+    .mockResolvedValue({
+      modelId: "available:1b",
+      state: "complete",
+      percent: 100,
+      bytesDownloaded: 100,
+      bytesTotal: 100,
+      message: "Model downloaded"
+    });
+  api.listInferenceModels
+    .mockResolvedValueOnce([{ id: "retired:1b" }])
+    .mockResolvedValue([{ id: "retired:1b" }, { id: "available:1b" }]);
+
+  await act(async () => root.render(<AIServicePage />));
+  const select = element.querySelector("select")!;
+  await act(async () => {
+    select.value = "available:1b";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const download = [...element.querySelectorAll("button")].find((button) => button.textContent === "Download");
+  expect(download).toBeTruthy();
+
+  vi.useFakeTimers();
+  await act(async () => download!.click());
+  expect(element.textContent).toContain("Downloading model files");
+  expect(element.querySelector("progress")).not.toBeNull();
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(element.textContent).toContain("55%");
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(element.textContent).toContain("available:1b downloaded");
+  vi.useRealTimers();
 });
 
 it("summarizes parameter and memory capacity for the selected model", async () => {

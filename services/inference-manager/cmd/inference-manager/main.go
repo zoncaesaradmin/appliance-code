@@ -51,7 +51,9 @@ type manager struct {
 	backend     *url.URL
 	proxy       *httputil.ReverseProxy
 	mu          sync.RWMutex // protects reg only
-	opMu        sync.Mutex   // single-flight import/load/delete (not held across reads)
+	opMu        sync.Mutex   // single-flight import/load/delete (held for async import lifetime)
+	progressMu  sync.RWMutex
+	progress    importProgress
 	processMu   sync.Mutex
 	process     *exec.Cmd
 	processDone chan struct{}
@@ -62,6 +64,15 @@ type manager struct {
 	start       func(context.Context, model) error
 	cudaProbe   func(context.Context) bool
 	catalog     *modelCatalog
+}
+
+type importRequest struct {
+	ModelID         string
+	Source          string
+	Digest          string
+	LaunchArguments []string
+	CatalogID       string
+	BytesTotal      uint64
 }
 
 func main() {
@@ -110,6 +121,7 @@ func (m *manager) handler() http.Handler {
 	mux.HandleFunc("GET /{$}", m.health)
 	mux.HandleFunc("GET /internal/v1/runtime/capabilities", m.capabilities)
 	mux.HandleFunc("POST /internal/v1/models/imports", m.importModel)
+	mux.HandleFunc("GET /internal/v1/models/imports/progress", m.importProgress)
 	// Body-based actions: Hugging Face ids contain "/", which breaks single-segment path params.
 	mux.HandleFunc("POST /internal/v1/models/load", m.loadModel)
 	mux.HandleFunc("POST /internal/v1/models/delete", m.deleteModel)
@@ -291,7 +303,6 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "another model operation is in progress")
 		return
 	}
-	defer m.opMu.Unlock()
 	var req struct {
 		ModelID         string
 		Source          string
@@ -300,80 +311,119 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 		CatalogID       string   `json:"catalogId"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		m.opMu.Unlock()
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if !modelRefRE.MatchString(req.ModelID) || !modelRefRE.MatchString(req.Source) {
+		m.opMu.Unlock()
 		writeError(w, http.StatusBadRequest, "modelId and source must be repository model references")
 		return
 	}
+	job := importRequest{ModelID: req.ModelID, Source: req.Source, Digest: req.Digest, LaunchArguments: append([]string(nil), req.LaunchArguments...), CatalogID: req.CatalogID}
 	if req.CatalogID != "" {
 		if m.catalog == nil {
+			m.opMu.Unlock()
 			writeError(w, http.StatusServiceUnavailable, "model catalog is not ready")
 			return
 		}
 		entry, err := m.catalog.selection(r.Context(), req.CatalogID)
 		if err != nil {
+			m.opMu.Unlock()
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
 		if req.ModelID != entry.ID || req.Source != entry.Source {
+			m.opMu.Unlock()
 			writeError(w, http.StatusConflict, "catalog selection changed; refresh the model list")
 			return
 		}
-		req.LaunchArguments = entry.LaunchArguments
+		job.LaunchArguments = append([]string(nil), entry.LaunchArguments...)
+		job.BytesTotal = entry.DownloadBytes
 	}
 	m.mu.RLock()
 	_, exists := m.reg.Models[req.ModelID]
 	m.mu.RUnlock()
 	if exists {
+		m.opMu.Unlock()
 		writeError(w, http.StatusConflict, "model is already installed")
 		return
 	}
+	if m.engine != "ollama" {
+		if err := validateVLLMArguments(job.LaunchArguments); err != nil {
+			m.opMu.Unlock()
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else if job.Digest != "" {
+		m.opMu.Unlock()
+		writeError(w, http.StatusUnprocessableEntity, "expected aggregate digest is not supported for Ollama pulls")
+		return
+	} else if job.ModelID != job.Source {
+		m.opMu.Unlock()
+		writeError(w, http.StatusBadRequest, "Ollama modelId must equal source")
+		return
+	}
+	message := "Downloading model files"
 	if m.engine == "ollama" {
-		m.importOllama(w, r, req.ModelID, req.Source, req.Digest)
+		message = "Pulling model from the Ollama registry"
+	}
+	m.beginImportProgress(job.ModelID, job.Source, job.BytesTotal, message)
+	// Request context ends when this handler returns; the job must outlive it.
+	go m.runImport(context.Background(), job)
+	writeJSON(w, http.StatusAccepted, m.currentImportProgress())
+}
+
+func (m *manager) runImport(ctx context.Context, req importRequest) {
+	defer m.opMu.Unlock()
+	if m.engine == "ollama" {
+		m.runOllamaImport(ctx, req)
 		return
 	}
-	if err := validateVLLMArguments(req.LaunchArguments); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
+	m.runVLLMImport(ctx, req)
+}
+
+func (m *manager) runVLLMImport(ctx context.Context, req importRequest) {
 	keySum := sha256.Sum256([]byte(req.ModelID))
 	key := hex.EncodeToString(keySum[:16])
 	downloadRoot := filepath.Join(m.modelsDir, ".downloads")
 	if err := os.MkdirAll(downloadRoot, 0o770); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		m.finishImportProgress("failed", err.Error())
 		return
 	}
 	tmp, err := os.MkdirTemp(downloadRoot, key+"-")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		m.finishImportProgress("failed", err.Error())
 		return
 	}
 	defer os.RemoveAll(tmp)
-	// Download without holding the registry lock so catalog/list stay available.
-	if err := m.download(r.Context(), req.Source, tmp); err != nil {
-		writeError(w, http.StatusBadGateway, "model download failed: "+err.Error())
+	stopWatch := m.watchDownloadDir(tmp, req.BytesTotal)
+	defer stopWatch()
+	if err := m.download(ctx, req.Source, tmp); err != nil {
+		m.finishImportProgress("failed", "model download failed: "+err.Error())
 		return
 	}
+	stopWatch()
+	m.setImportProgressState("verifying", "Verifying downloaded model")
 	digest, err := directoryDigest(tmp)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "model verification failed: "+err.Error())
+		m.finishImportProgress("failed", "model verification failed: "+err.Error())
 		return
 	}
 	if req.Digest != "" && req.Digest != digest {
-		writeError(w, http.StatusUnprocessableEntity, fmt.Sprintf("model digest mismatch: got %s", digest))
+		m.finishImportProgress("failed", fmt.Sprintf("model digest mismatch: got %s", digest))
 		return
 	}
 	destination := filepath.Join(m.modelsDir, key)
+	m.setImportProgressState("installing", "Installing model")
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.reg.Models[req.ModelID]; exists {
-		writeError(w, http.StatusConflict, "model is already installed")
+		m.finishImportProgress("failed", "model is already installed")
 		return
 	}
 	if err := os.Rename(tmp, destination); err != nil {
-		writeError(w, http.StatusInternalServerError, "install model: "+err.Error())
+		m.finishImportProgress("failed", "install model: "+err.Error())
 		return
 	}
 	item := model{ID: req.ModelID, Object: "model", OwnedBy: "appliance", OpenAIOwnedBy: "appliance", Source: req.Source, Digest: digest, Path: destination, InstalledAt: time.Now().UTC(), LaunchArguments: append([]string(nil), req.LaunchArguments...)}
@@ -381,11 +431,10 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 	if err := m.saveRegistry(); err != nil {
 		delete(m.reg.Models, item.ID)
 		_ = os.RemoveAll(destination)
-		writeError(w, http.StatusInternalServerError, "save model registry: "+err.Error())
+		m.finishImportProgress("failed", "save model registry: "+err.Error())
 		return
 	}
-	item.Path = ""
-	writeJSON(w, http.StatusCreated, item)
+	m.finishImportProgress("complete", "Model downloaded")
 }
 
 func readModelID(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -546,20 +595,12 @@ func (m *manager) startOllamaModel(context.Context, model) error {
 	return errors.New("Ollama models are loaded through the running Ollama API")
 }
 
-func (m *manager) importOllama(w http.ResponseWriter, r *http.Request, modelID, source, digest string) {
-	if modelID != source {
-		writeError(w, http.StatusBadRequest, "Ollama modelId must equal source")
+func (m *manager) runOllamaImport(ctx context.Context, req importRequest) {
+	if err := m.callBackend(ctx, http.MethodPost, "/api/pull", map[string]any{"model": req.Source, "stream": false}, nil); err != nil {
+		m.finishImportProgress("failed", err.Error())
 		return
 	}
-	if digest != "" {
-		writeError(w, http.StatusUnprocessableEntity, "expected aggregate digest is not supported for Ollama pulls")
-		return
-	}
-	if err := m.callBackend(r.Context(), http.MethodPost, "/api/pull", map[string]any{"model": source, "stream": false}, nil); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": modelID, "object": "model", "ownedBy": "ollama", "owned_by": "ollama"})
+	m.finishImportProgress("complete", "Model downloaded")
 }
 
 func (m *manager) listOllamaModels(w http.ResponseWriter) {

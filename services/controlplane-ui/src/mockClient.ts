@@ -57,7 +57,8 @@ import type {
   InferenceRuntimeStatus,
   InferenceCatalog,
   InferenceModel,
-  ImportInferenceModelRequest
+  ImportInferenceModelRequest,
+  InferenceImportProgress
 } from "./types";
 
 function now(): string {
@@ -1363,8 +1364,20 @@ export class MockControlPlaneClient {
     ] };
   }
 
-  async importInferenceModel(request: ImportInferenceModelRequest): Promise<void> {
+  async importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress> {
     mockState.inferenceModels = [...mockState.inferenceModels.filter((model) => model.id !== request.modelId), { id: request.modelId, object: "model", ownedBy: "local" }];
+    return {
+      modelId: request.modelId,
+      source: request.source,
+      state: "complete",
+      percent: 100,
+      message: "Model downloaded",
+      updatedAt: now()
+    };
+  }
+
+  async getInferenceImportProgress(): Promise<InferenceImportProgress> {
+    return { state: "idle", updatedAt: now() };
   }
 
   async loadInferenceModel(_modelId: string): Promise<void> {}

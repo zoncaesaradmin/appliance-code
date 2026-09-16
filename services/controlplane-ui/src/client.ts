@@ -55,7 +55,8 @@ import type {
   InferenceRuntimeStatus,
   InferenceCatalog,
   InferenceModel,
-  ImportInferenceModelRequest
+  ImportInferenceModelRequest,
+  InferenceImportProgress
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -205,7 +206,8 @@ export interface ControlPlaneClient {
   getInferenceStatus(): Promise<InferenceRuntimeStatus>;
   getInferenceCatalog(): Promise<InferenceCatalog>;
   listInferenceModels(): Promise<InferenceModel[]>;
-  importInferenceModel(request: ImportInferenceModelRequest): Promise<void>;
+  importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress>;
+  getInferenceImportProgress(): Promise<InferenceImportProgress>;
   loadInferenceModel(modelId: string): Promise<void>;
   deleteInferenceModel(modelId: string): Promise<void>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
@@ -754,8 +756,12 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 	return result.items || [];
   }
 
-  async importInferenceModel(request: ImportInferenceModelRequest): Promise<void> {
-	await this.request("/api/v1/inference/models/imports", { method: "POST", body: request });
+  async importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress> {
+	return this.request("/api/v1/inference/models/imports", { method: "POST", body: request });
+  }
+
+  async getInferenceImportProgress(): Promise<InferenceImportProgress> {
+    return this.request("/api/v1/inference/models/imports/progress");
   }
 
   async loadInferenceModel(modelId: string): Promise<void> {

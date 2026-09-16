@@ -547,6 +547,18 @@ export interface ImportInferenceModelRequest {
   launchArguments?: string[];
 }
 
+export interface InferenceImportProgress {
+  modelId?: string;
+  source?: string;
+  state: "idle" | "downloading" | "verifying" | "installing" | "complete" | "failed";
+  bytesDownloaded?: number;
+  bytesTotal?: number;
+  percent?: number;
+  message?: string;
+  error?: string;
+  updatedAt?: string;
+}
+
 export interface InferenceCatalogEntry {
   id: string;
   source: string;

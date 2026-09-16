@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func testManager(t *testing.T) *manager {
@@ -184,15 +185,16 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	m.importModel(w, httptest.NewRequest(http.MethodPost, "/internal/v1/models/imports", strings.NewReader(`{"ModelID":"tiny:latest","Source":"tiny:latest"}`)))
-	if w.Code != http.StatusCreated {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("import status %d: %s", w.Code, w.Body.String())
 	}
+	waitImportState(t, m, "complete")
 	w = httptest.NewRecorder()
 	m.listModels(w, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tiny:latest") {
 		t.Fatalf("list status %d: %s", w.Code, w.Body.String())
 	}
-	if len(calls) != 2 || calls[0] != "POST /api/pull" || calls[1] != "GET /api/tags" {
+	if len(calls) < 1 || calls[0] != "POST /api/pull" {
 		t.Fatalf("engine calls=%v", calls)
 	}
 }
@@ -202,9 +204,10 @@ func TestImportListDelete(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/imports", strings.NewReader(`{"ModelID":"test/tiny","Source":"test/tiny"}`))
 	w := httptest.NewRecorder()
 	m.importModel(w, req)
-	if w.Code != http.StatusCreated {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("import status %d: %s", w.Code, w.Body.String())
 	}
+	waitImportState(t, m, "complete")
 
 	w = httptest.NewRecorder()
 	m.listModels(w, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
@@ -231,12 +234,53 @@ func TestImportExpectedDigestFailsClosed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/imports", strings.NewReader(`{"ModelID":"test/tiny","Source":"test/tiny","Digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`))
 	w := httptest.NewRecorder()
 	m.importModel(w, req)
-	if w.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("digest mismatch status %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("digest mismatch accept status %d: %s", w.Code, w.Body.String())
 	}
+	waitImportState(t, m, "failed")
 	if len(m.reg.Models) != 0 {
 		t.Fatal("digest-mismatched model was registered")
 	}
+}
+
+func TestImportProgressEndpoint(t *testing.T) {
+	m := testManager(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	m.download = func(_ context.Context, source, destination string) error {
+		close(started)
+		<-release
+		return os.WriteFile(filepath.Join(destination, "config.json"), []byte(source), 0o660)
+	}
+	w := httptest.NewRecorder()
+	m.importModel(w, httptest.NewRequest(http.MethodPost, "/internal/v1/models/imports", strings.NewReader(`{"ModelID":"test/tiny","Source":"test/tiny"}`)))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("import status %d: %s", w.Code, w.Body.String())
+	}
+	<-started
+	w = httptest.NewRecorder()
+	m.handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models/imports/progress", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"state":"downloading"`) {
+		t.Fatalf("progress status %d: %s", w.Code, w.Body.String())
+	}
+	close(release)
+	waitImportState(t, m, "complete")
+}
+
+func waitImportState(t *testing.T, m *manager, want string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state := m.currentImportProgress().State
+		if state == want {
+			return
+		}
+		if state == "failed" && want != "failed" {
+			t.Fatalf("import failed: %+v", m.currentImportProgress())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("import state=%q, want %q (%+v)", m.currentImportProgress().State, want, m.currentImportProgress())
 }
 
 func TestNoLoadedModelFailsOpenAIRequest(t *testing.T) {

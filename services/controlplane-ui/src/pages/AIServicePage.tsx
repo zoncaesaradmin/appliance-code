@@ -2,10 +2,17 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, EmptyState, PageFrame } from "../components";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
-import type { InferenceCatalog, InferenceCatalogEntry, InferenceModel, InferenceRuntimeStatus } from "../types";
+import type {
+  InferenceCatalog,
+  InferenceCatalogEntry,
+  InferenceImportProgress,
+  InferenceModel,
+  InferenceRuntimeStatus
+} from "../types";
 
 const PARAM_HINT = /(\d+(?:\.\d+)?)\s*([MmBb])(?:[-_]|\b)/;
 const MODELS_REFRESH_ERROR = "Could not refresh downloaded models. Displayed download status may be outdated.";
+const IMPORT_POLL_MS = 2000;
 
 function formatGiB(bytes: number): string {
   if (bytes <= 0) {
@@ -25,6 +32,30 @@ function formatParamCount(params: number): string {
     return `${millions >= 10 ? millions.toFixed(0) : millions.toFixed(1)}M`;
   }
   return `${Math.max(1, Math.round(params))}`;
+}
+
+function importInFlight(state: InferenceImportProgress["state"] | undefined): boolean {
+  return state === "downloading" || state === "verifying" || state === "installing";
+}
+
+function progressLabel(progress: InferenceImportProgress): string {
+  if (progress.message) {
+    return progress.message;
+  }
+  switch (progress.state) {
+    case "downloading":
+      return "Downloading model files";
+    case "verifying":
+      return "Verifying downloaded model";
+    case "installing":
+      return "Installing model";
+    case "complete":
+      return "Model downloaded";
+    case "failed":
+      return progress.error || "Download failed";
+    default:
+      return "Preparing download";
+  }
 }
 
 /** Best-effort size line for the selected catalog entry. */
@@ -61,6 +92,7 @@ export function AIServicePage(): React.JSX.Element {
   const [catalogError, setCatalogError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [busy, setBusy] = useState("");
+  const [importProgress, setImportProgress] = useState<InferenceImportProgress | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const busyRef = useRef("");
@@ -101,6 +133,59 @@ export function AIServicePage(): React.JSX.Element {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const progress = await client.getInferenceImportProgress();
+        if (cancelled || !importInFlight(progress.state)) {
+          return;
+        }
+        setImportProgress(progress);
+        setBusy(`download:${progress.modelId || "model"}`);
+        setSelectedId((current) => current || progress.modelId || "");
+      } catch {
+        // Ignore resume failures; the operator can start a fresh download.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!importInFlight(importProgress?.state)) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const progress = await client.getInferenceImportProgress();
+          setImportProgress(progress);
+          if (progress.state === "complete") {
+            setBusy("");
+            setMessage(`${progress.modelId || "Model"} downloaded. Load it to verify runtime compatibility.`);
+            await refresh();
+            return;
+          }
+          if (progress.state === "failed") {
+            setBusy("");
+            setError(progress.error || "Model download failed.");
+            return;
+          }
+          if (progress.state === "idle") {
+            setBusy("");
+            setImportProgress(null);
+          }
+        } catch (err) {
+          setBusy("");
+          setError(err instanceof Error ? err.message : "Could not read download progress.");
+        }
+      })();
+    }, IMPORT_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [importProgress?.state]);
+
   async function run(label: string, operation: () => Promise<void>, success: string) {
     setBusy(label);
     setError("");
@@ -113,6 +198,32 @@ export function AIServicePage(): React.JSX.Element {
       setError(err instanceof Error ? err.message : "The inference operation failed.");
     } finally {
       setBusy("");
+    }
+  }
+
+  async function startDownload(entry: InferenceCatalogEntry) {
+    setBusy(`download:${entry.id}`);
+    setError("");
+    setMessage("");
+    try {
+      const accepted = await client.importInferenceModel({
+        catalogId: entry.id,
+        modelId: entry.id,
+        source: entry.source
+      });
+      setImportProgress(accepted);
+      if (accepted.state === "complete") {
+        setBusy("");
+        setMessage(`${entry.id} downloaded. Load it to verify runtime compatibility.`);
+        await refresh();
+      } else if (accepted.state === "failed") {
+        setBusy("");
+        setError(accepted.error || "Model download failed.");
+      }
+    } catch (err) {
+      setBusy("");
+      setImportProgress(null);
+      setError(err instanceof Error ? err.message : "The inference operation failed.");
     }
   }
 
@@ -154,6 +265,7 @@ export function AIServicePage(): React.JSX.Element {
   const selected = options.find((entry) => entry.id === selectedId) ?? null;
   const selectedDownloaded = selected ? downloaded.has(selected.id) : false;
   const selectedSummary = selected ? modelCapacitySummary(selected) : "";
+  const showProgress = importInFlight(importProgress?.state);
 
   return (
     <PageFrame
@@ -220,6 +332,7 @@ export function AIServicePage(): React.JSX.Element {
                   value={selectedId}
                   onChange={(event) => setSelectedId(event.target.value)}
                   aria-label="Select model"
+                  disabled={busy !== ""}
                 >
                   {options.map((entry) => (
                     <option key={entry.id} value={entry.id}>
@@ -233,6 +346,26 @@ export function AIServicePage(): React.JSX.Element {
                   <p className="text-sm text-slate-600" role="status" aria-live="polite">
                     {selectedSummary}
                   </p>
+                  {showProgress && importProgress ? (
+                    <div className="import-progress" role="status" aria-live="polite">
+                      <div className="import-progress__label">{progressLabel(importProgress)}</div>
+                      {typeof importProgress.percent === "number" ? (
+                        <progress className="import-progress__bar" max={100} value={importProgress.percent} />
+                      ) : (
+                        <progress className="import-progress__bar" max={100} />
+                      )}
+                      <div className="import-progress__detail">
+                        {typeof importProgress.percent === "number"
+                          ? `${importProgress.percent}%`
+                          : "Progress updating…"}
+                        {importProgress.bytesDownloaded || importProgress.bytesTotal
+                          ? ` · ${formatGiB(importProgress.bytesDownloaded || 0)}${
+                              importProgress.bytesTotal ? ` / ${formatGiB(importProgress.bytesTotal)}` : ""
+                            }`
+                          : ""}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="button-row">
                     {selectedDownloaded ? (
                       <>
@@ -260,18 +393,7 @@ export function AIServicePage(): React.JSX.Element {
                       <Button
                         type="button"
                         disabled={busy !== "" || !selected.eligible}
-                        onClick={() =>
-                          void run(
-                            `download:${selected.id}`,
-                            () =>
-                              client.importInferenceModel({
-                                catalogId: selected.id,
-                                modelId: selected.id,
-                                source: selected.source
-                              }),
-                            `${selected.id} downloaded. Load it to verify runtime compatibility.`
-                          )
-                        }
+                        onClick={() => void startDownload(selected)}
                       >
                         {busy === `download:${selected.id}` ? "Downloading…" : "Download"}
                       </Button>
