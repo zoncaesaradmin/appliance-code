@@ -50,8 +50,12 @@ viewports the status card stacks under Models. When Serving is
 Ready for use, **Copy OpenAI client settings** opens a dialog with the public
 base URL (`https://<origin>/inference/v1`), served model id, a sample provider
 config (`wire_api = "responses"` for Codex), and a separate model-catalog JSON
-snippet for clients such as Codex. Externally, `/inference/{path...}` is
-authenticated and proxied by stripping the `/inference` prefix so the OpenAI
+snippet for clients such as Codex. The catalog JSON is a complete Codex
+`model_catalog_json` entry (including `supported_reasoning_levels`,
+`base_instructions`, `shell_type`, truncation policy, and related fields) so a
+paste into `~/.codex/*.json` parses on current Codex CLI versions. Externally,
+`/inference/{path...}` is authenticated and proxied by stripping the `/inference`
+prefix so the OpenAI
 surface (`/v1/models`, `/v1/chat/completions`, `/v1/responses`, and any other
 engine-supported path) reaches the inference gateway without a per-path allowlist.
 The inference manager owns `/internal/v1/...` (inventory, catalog, import/load/delete)

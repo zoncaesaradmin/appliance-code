@@ -159,10 +159,12 @@ export function buildOpenAIClientSettings(input: {
 }): OpenAIClientSettings {
   const baseURL = inferenceOpenAIBaseURL(input.origin);
   const modelId = input.modelId.trim();
-  const contextWindow = input.contextWindow && input.contextWindow > 0 ? input.contextWindow : undefined;
-  const contextLine = contextWindow ? `\nmodel_context_window = ${contextWindow}` : "";
+  const contextWindow =
+    input.contextWindow && input.contextWindow > 0 ? input.contextWindow : 8192;
+  const truncationLimit = Math.max(256, Math.min(10000, Math.floor(contextWindow / 2)));
   const providerToml = `model = "${modelId}"
-model_provider = "appliance"${contextLine}
+model_provider = "appliance"
+model_context_window = ${contextWindow}
 model_catalog_json = "/path/to/zon_model_catalog.json"
 
 [model_providers.appliance]
@@ -171,21 +173,47 @@ base_url = "${baseURL}"
 env_key = "APPLIANCE_API_TOKEN"
 wire_api = "responses"`;
 
-  const catalogModel: Record<string, unknown> = {
+  // Codex 0.154+ requires a full catalog entry shape (not a minimal slug map).
+  // Keep this aligned with a known-working local vLLM profile catalog.
+  const catalogModel = {
     slug: modelId,
     display_name: modelId,
     description: `Model currently ready on the ZON appliance (${modelId}).`,
-    supported_in_api: true,
+    base_instructions: `You are Codex, a coding agent using ${modelId} on the ZON appliance. You and the user share the same workspace. Help the user inspect, modify, test, and understand code. Use the available tools to inspect files, edit code, run commands, and verify changes. Be concise, accurate, and pragmatic.`,
+    default_reasoning_level: "medium",
+    supported_reasoning_levels: [
+      {
+        effort: "medium",
+        description: "Default reasoning level"
+      }
+    ],
+    shell_type: "shell_command",
     visibility: "list",
+    supported_in_api: true,
     priority: 100,
+    minimal_client_version: "0.130.0",
+    availability_nux: null,
+    upgrade: null,
+    support_verbosity: false,
+    default_verbosity: null,
+    apply_patch_tool_type: "freeform",
+    web_search_tool_type: "text",
     input_modalities: ["text"],
+    supports_image_detail_original: false,
+    truncation_policy: {
+      mode: "tokens",
+      limit: truncationLimit
+    },
     supports_parallel_tool_calls: true,
+    context_window: contextWindow,
+    auto_compact_token_limit: null,
     reasoning_summary_format: "none",
-    default_reasoning_summary: "none"
+    default_reasoning_summary: "none",
+    experimental_supported_tools: [],
+    available_in_plans: [],
+    supports_search_tool: false,
+    supports_reasoning_summaries: false
   };
-  if (contextWindow) {
-    catalogModel.context_window = contextWindow;
-  }
   const catalogJson = JSON.stringify({ models: [catalogModel] }, null, 2);
 
   const instructions = [
@@ -198,21 +226,31 @@ wire_api = "responses"`;
     "   - Put an appliance API token in the env var named by env_key (needs inference.use).",
     "",
     "2. Model catalog file (for example ~/.codex/zon_model_catalog.json):",
-    "   - Paste the JSON catalog below.",
+    "   - Paste the JSON catalog below (complete Codex catalog entry).",
     "   - Keep the slug equal to the served model id.",
     "",
     "3. After you Load a different model on the appliance, copy these settings again.",
     "",
     `Base URL: ${baseURL}`,
     `Model: ${modelId}`,
-    contextWindow ? `Context window: ${contextWindow}` : "Context window: not reported; use the model card or --max-model-len if known."
+    `Context window: ${contextWindow}${
+      input.contextWindow && input.contextWindow > 0 ? "" : " (default; replace if the model card differs)"
+    }`
   ].join("\n");
 
   const copyAll = [instructions, "", "--- provider config ---", providerToml, "", "--- model catalog ---", catalogJson].join(
     "\n"
   );
 
-  return { baseURL, modelId, contextWindow, providerToml, catalogJson, instructions, copyAll };
+  return {
+    baseURL,
+    modelId,
+    contextWindow: input.contextWindow && input.contextWindow > 0 ? contextWindow : undefined,
+    providerToml,
+    catalogJson,
+    instructions,
+    copyAll
+  };
 }
 
 /** Best-effort size line for the selected catalog entry. */
