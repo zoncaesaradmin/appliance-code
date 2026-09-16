@@ -676,6 +676,29 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.ai-services-layout {
+  display: grid;
+  gap: 18px;
+  align-items: start;
+  grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+}
+
+.ai-services-layout__models {
+  min-width: 0;
+}
+
+.ai-services-layout__status {
+  min-width: 0;
+}
+
+.ai-services-layout__status .detail-list {
+  gap: 10px;
+}
+
+.ai-services-layout__status .button-row {
+  flex-wrap: wrap;
+}
+
 .host-services-stack {
   display: grid;
   gap: 18px;
@@ -1704,6 +1727,10 @@ body:has(.video-player) {
   }
 
   .grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-services-layout {
     grid-template-columns: 1fr;
   }
 }

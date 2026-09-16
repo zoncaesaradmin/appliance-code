@@ -18,8 +18,16 @@ vi.mock("../lib/api", () => ({ client: api }));
 vi.mock("../lib/navigate", () => ({ navigate: vi.fn() }));
 vi.mock("../components", () => ({
   PageFrame: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
-  Card: ({ title, children }: { title: string; children: React.ReactNode }) => (
-    <section>
+  Card: ({
+    title,
+    children,
+    className
+  }: {
+    title: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <section className={className}>
       <h2>{title}</h2>
       {children}
     </section>
@@ -87,6 +95,14 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   element.remove();
+});
+
+it("puts Models ahead of Inference runtime in the page layout", async () => {
+  await act(async () => root.render(<AIServicePage />));
+  const headings = [...element.querySelectorAll("h2")].map((node) => node.textContent);
+  expect(headings.indexOf("Models")).toBeLessThan(headings.indexOf("Inference runtime"));
+  expect(element.querySelector(".ai-services-layout__models")).not.toBeNull();
+  expect(element.querySelector(".ai-services-layout__status")).not.toBeNull();
 });
 
 it("offers one model dropdown with downloaded marks and no search controls", async () => {

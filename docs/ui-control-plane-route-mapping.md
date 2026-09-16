@@ -44,9 +44,9 @@ downloads do not block the downloaded-model list. Import, load, and delete
 continue through the existing authenticated and audited routes. On-disk staging
 lives under `/data/zon/inference/models/.downloads/` with
 `.progress.json` for operator inspection. Load progress is written under
-`/data/zon/inference/models/.zon/load-progress.json`. The AI Services runtime
-card shows Serving as Inactive, Loading, Ready for use, or Load failed. Load is
-disabled while busy and when the selected model is already ready. When Serving is
+`/data/zon/inference/models/.zon/load-progress.json`. The AI Services page puts **Models** first (primary card) and
+**Inference runtime** beside it on wide layouts (~75% / ~25%). On narrow
+viewports the status card stacks under Models. When Serving is
 Ready for use, **Copy OpenAI client settings** opens a dialog with the public
 base URL (`https://<origin>/inference/v1`), served model id, a sample provider
 config (`wire_api = "responses"` for Codex), and a separate model-catalog JSON

@@ -565,139 +565,149 @@ export function AIServicePage(): React.JSX.Element {
             {message}
           </div>
         ) : null}
-        <Card title="Inference runtime" subtitle="Engine mode and whether a model is ready for use.">
-          {status ? (
-            <div className="stack">
-              <div className="detail-list">
-                <div>
-                  <span>Runtime</span>
-                  <strong>
-                    {status.engine} · {status.architecture}
-                  </strong>
-                </div>
-                <div>
-                  <span>Mode</span>
-                  <strong>{status.activeMode || "Detection pending"}</strong>
-                </div>
-                <div>
-                  <span>Serving</span>
-                  <strong>{servingStatusLabel(status)}</strong>
-                </div>
-              </div>
-              {clientSettings ? (
-                <div className="button-row">
-                  <Button type="button" variant="ghost" onClick={() => setShowClientSettings(true)}>
-                    Copy OpenAI client settings
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <EmptyState message="Inference runtime status is unavailable." />
-          )}
-        </Card>
-        <Card title="Models" subtitle="Models are discovered for this runtime and current capacity. Load verifies actual compatibility.">
-          {catalogError || catalog?.lastError ? (
-            <p className="message message--error">{catalogError || catalog?.lastError}</p>
-          ) : null}
-          {options.length === 0 ? (
-            <EmptyState
-              message={
-                catalog?.refreshing
-                  ? "Discovering models…"
-                  : (catalog?.items?.length ?? 0) > 0
-                    ? "No catalog models currently fit this appliance's estimated memory or storage. Downloaded models still appear here."
-                    : "No models are available yet. Discovery needs internet; downloaded models still appear here."
-              }
-            />
-          ) : (
-            <div className="stack">
-              <label className="flex flex-col gap-1">
-                Model
-                <select
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  value={selectedId}
-                  onChange={(event) => setSelectedId(event.target.value)}
-                  aria-label="Select model"
-                  disabled={busy !== ""}
-                >
-                  {options.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {downloaded.has(entry.id) ? `${entry.id} (downloaded)` : entry.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selected ? (
-                <>
-                  <p className="text-sm text-slate-600" role="status" aria-live="polite">
-                    {selectedSummary}
-                  </p>
-                  {showProgress && importProgress ? (
-                    <div className="import-progress" role="status" aria-live="polite">
-                      <div className="import-progress__label">{progressLabel(importProgress)}</div>
-                      {typeof importProgress.percent === "number" ? (
-                        <progress className="import-progress__bar" max={100} value={importProgress.percent} />
-                      ) : (
+        <div className="ai-services-layout">
+          <Card
+            className="ai-services-layout__models"
+            title="Models"
+            subtitle="Models are discovered for this runtime and current capacity. Load verifies actual compatibility."
+          >
+            {catalogError || catalog?.lastError ? (
+              <p className="message message--error">{catalogError || catalog?.lastError}</p>
+            ) : null}
+            {options.length === 0 ? (
+              <EmptyState
+                message={
+                  catalog?.refreshing
+                    ? "Discovering models…"
+                    : (catalog?.items?.length ?? 0) > 0
+                      ? "No catalog models currently fit this appliance's estimated memory or storage. Downloaded models still appear here."
+                      : "No models are available yet. Discovery needs internet; downloaded models still appear here."
+                }
+              />
+            ) : (
+              <div className="stack">
+                <label className="flex flex-col gap-1">
+                  Model
+                  <select
+                    className="rounded-lg border border-slate-300 px-3 py-2"
+                    value={selectedId}
+                    onChange={(event) => setSelectedId(event.target.value)}
+                    aria-label="Select model"
+                    disabled={busy !== ""}
+                  >
+                    {options.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {downloaded.has(entry.id) ? `${entry.id} (downloaded)` : entry.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selected ? (
+                  <>
+                    <p className="text-sm text-slate-600" role="status" aria-live="polite">
+                      {selectedSummary}
+                    </p>
+                    {showProgress && importProgress ? (
+                      <div className="import-progress" role="status" aria-live="polite">
+                        <div className="import-progress__label">{progressLabel(importProgress)}</div>
+                        {typeof importProgress.percent === "number" ? (
+                          <progress className="import-progress__bar" max={100} value={importProgress.percent} />
+                        ) : (
+                          <progress className="import-progress__bar" max={100} />
+                        )}
+                        <div className="import-progress__detail">
+                          {typeof importProgress.percent === "number"
+                            ? `${importProgress.percent}%`
+                            : "Progress updating…"}
+                          {importProgress.bytesDownloaded || importProgress.bytesTotal
+                            ? ` · ${formatGiB(importProgress.bytesDownloaded || 0)}${
+                                importProgress.bytesTotal ? ` / ${formatGiB(importProgress.bytesTotal)}` : ""
+                              }`
+                            : ""}
+                        </div>
+                      </div>
+                    ) : null}
+                    {loadInFlight(loadProgress?.state) ? (
+                      <div className="import-progress" role="status" aria-live="polite">
+                        <div className="import-progress__label">
+                          {loadProgress?.message || "Loading model into the inference engine"}
+                        </div>
                         <progress className="import-progress__bar" max={100} />
+                        <div className="import-progress__detail">Waiting for the engine to become ready…</div>
+                      </div>
+                    ) : null}
+                    <div className="button-row">
+                      {selectedDownloaded ? (
+                        <>
+                          <Button
+                            type="button"
+                            disabled={busy !== "" || selectedAlreadyLoaded}
+                            onClick={() => void startLoad(selected.id)}
+                          >
+                            {loadButtonLabel}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={busy !== ""}
+                            onClick={() =>
+                              void run(`remove:${selected.id}`, () => client.deleteInferenceModel(selected.id), `${selected.id} was removed.`)
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          disabled={busy !== "" || !selected.eligible}
+                          onClick={() => void startDownload(selected)}
+                        >
+                          {busy === `download:${selected.id}` ? "Downloading…" : "Download"}
+                        </Button>
                       )}
-                      <div className="import-progress__detail">
-                        {typeof importProgress.percent === "number"
-                          ? `${importProgress.percent}%`
-                          : "Progress updating…"}
-                        {importProgress.bytesDownloaded || importProgress.bytesTotal
-                          ? ` · ${formatGiB(importProgress.bytesDownloaded || 0)}${
-                              importProgress.bytesTotal ? ` / ${formatGiB(importProgress.bytesTotal)}` : ""
-                            }`
-                          : ""}
-                      </div>
                     </div>
-                  ) : null}
-                  {loadInFlight(loadProgress?.state) ? (
-                    <div className="import-progress" role="status" aria-live="polite">
-                      <div className="import-progress__label">
-                        {loadProgress?.message || "Loading model into the inference engine"}
-                      </div>
-                      <progress className="import-progress__bar" max={100} />
-                      <div className="import-progress__detail">Waiting for the engine to become ready…</div>
-                    </div>
-                  ) : null}
-                  <div className="button-row">
-                    {selectedDownloaded ? (
-                      <>
-                        <Button
-                          type="button"
-                          disabled={busy !== "" || selectedAlreadyLoaded}
-                          onClick={() => void startLoad(selected.id)}
-                        >
-                          {loadButtonLabel}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          disabled={busy !== ""}
-                          onClick={() =>
-                            void run(`remove:${selected.id}`, () => client.deleteInferenceModel(selected.id), `${selected.id} was removed.`)
-                          }
-                        >
-                          Remove
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        type="button"
-                        disabled={busy !== "" || !selected.eligible}
-                        onClick={() => void startDownload(selected)}
-                      >
-                        {busy === `download:${selected.id}` ? "Downloading…" : "Download"}
-                      </Button>
-                    )}
+                  </>
+                ) : null}
+              </div>
+            )}
+          </Card>
+          <Card
+            className="ai-services-layout__status"
+            title="Inference runtime"
+            subtitle="Engine, mode, and serving status."
+          >
+            {status ? (
+              <div className="stack">
+                <div className="detail-list">
+                  <div>
+                    <span>Runtime</span>
+                    <strong>
+                      {status.engine} · {status.architecture}
+                    </strong>
                   </div>
-                </>
-              ) : null}
-            </div>
-          )}
-        </Card>
+                  <div>
+                    <span>Mode</span>
+                    <strong>{status.activeMode || "Detection pending"}</strong>
+                  </div>
+                  <div>
+                    <span>Serving</span>
+                    <strong>{servingStatusLabel(status)}</strong>
+                  </div>
+                </div>
+                {clientSettings ? (
+                  <div className="button-row">
+                    <Button type="button" variant="ghost" onClick={() => setShowClientSettings(true)}>
+                      Copy OpenAI client settings
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <EmptyState message="Inference runtime status is unavailable." />
+            )}
+          </Card>
+        </div>
       </div>
       {showClientSettings && clientSettings ? (
         <div
