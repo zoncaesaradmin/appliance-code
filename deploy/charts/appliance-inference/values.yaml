@@ -101,12 +101,13 @@ resources:
     memory: 8Gi
 
 managerResources:
+  # HF snapshot downloads run in this container; 512Mi OOMs mid-fetch.
   requests:
     cpu: 50m
-    memory: 128Mi
-  limits:
-    cpu: "1"
     memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
 
 probes:
   # Manager exposes a lightweight health endpoint here.

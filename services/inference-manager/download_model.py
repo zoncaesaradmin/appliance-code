@@ -14,9 +14,10 @@ repo_id, separator, revision = args.source.rpartition("@")
 if not separator:
     repo_id, revision = args.source, None
 
+# max_workers=2 keeps peak RSS lower in the thin manager container.
 snapshot_download(
     repo_id=repo_id,
     revision=revision,
     local_dir=args.destination,
-    local_dir_use_symlinks=False,
+    max_workers=2,
 )

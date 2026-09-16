@@ -50,7 +50,8 @@ type manager struct {
 	controlDir  string
 	backend     *url.URL
 	proxy       *httputil.ReverseProxy
-	mu          sync.RWMutex
+	mu          sync.RWMutex // protects reg only
+	opMu        sync.Mutex   // single-flight import/load/delete (not held across reads)
 	processMu   sync.Mutex
 	process     *exec.Cmd
 	processDone chan struct{}
@@ -273,7 +274,7 @@ func (m *manager) listModels(w http.ResponseWriter, _ *http.Request) {
 		m.listOllamaModels(w)
 		return
 	}
-	// Read lock so inventory stays available while a download holds the write lock.
+	// Registry read lock only — must not wait on import/download.
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	items := make([]model, 0, len(m.reg.Models))
@@ -286,11 +287,11 @@ func (m *manager) listModels(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
-	if !m.mu.TryLock() {
+	if !m.opMu.TryLock() {
 		writeError(w, http.StatusConflict, "another model operation is in progress")
 		return
 	}
-	defer m.mu.Unlock()
+	defer m.opMu.Unlock()
 	var req struct {
 		ModelID         string
 		Source          string
@@ -322,7 +323,10 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 		}
 		req.LaunchArguments = entry.LaunchArguments
 	}
-	if _, exists := m.reg.Models[req.ModelID]; exists {
+	m.mu.RLock()
+	_, exists := m.reg.Models[req.ModelID]
+	m.mu.RUnlock()
+	if exists {
 		writeError(w, http.StatusConflict, "model is already installed")
 		return
 	}
@@ -347,6 +351,7 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.RemoveAll(tmp)
+	// Download without holding the registry lock so catalog/list stay available.
 	if err := m.download(r.Context(), req.Source, tmp); err != nil {
 		writeError(w, http.StatusBadGateway, "model download failed: "+err.Error())
 		return
@@ -361,6 +366,12 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	destination := filepath.Join(m.modelsDir, key)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.reg.Models[req.ModelID]; exists {
+		writeError(w, http.StatusConflict, "model is already installed")
+		return
+	}
 	if err := os.Rename(tmp, destination); err != nil {
 		writeError(w, http.StatusInternalServerError, "install model: "+err.Error())
 		return
@@ -394,11 +405,11 @@ func readModelID(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
-	if !m.mu.TryLock() {
+	if !m.opMu.TryLock() {
 		writeError(w, http.StatusConflict, "another model operation is in progress")
 		return
 	}
-	defer m.mu.Unlock()
+	defer m.opMu.Unlock()
 	id, ok := readModelID(w, r)
 	if !ok {
 		return
@@ -411,7 +422,9 @@ func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, map[string]any{"modelId": id, "state": "loaded"})
 		return
 	}
+	m.mu.RLock()
 	item, ok := m.reg.Models[id]
+	m.mu.RUnlock()
 	if !ok {
 		writeError(w, http.StatusNotFound, "model is not installed")
 		return
@@ -476,11 +489,11 @@ func (m *manager) waitEngineReady(ctx context.Context) error {
 }
 
 func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
-	if !m.mu.TryLock() {
+	if !m.opMu.TryLock() {
 		writeError(w, http.StatusConflict, "another model operation is in progress")
 		return
 	}
-	defer m.mu.Unlock()
+	defer m.opMu.Unlock()
 	id, ok := readModelID(w, r)
 	if !ok {
 		return
@@ -493,6 +506,8 @@ func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	item, ok := m.reg.Models[id]
 	if !ok {
 		writeError(w, http.StatusNotFound, "model is not installed")
@@ -646,6 +661,11 @@ func validateVLLMArguments(arguments []string) error {
 func (m *manager) downloadModel(ctx context.Context, source, destination string) error {
 	cmd := exec.CommandContext(ctx, env("INFERENCE_PYTHON", "python3"), "/usr/local/libexec/inference-manager/download_model.py", "--source", source, "--destination", destination)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	// Keep HF metadata/cache on the models volume, not the tiny emptyDir home.
+	cmd.Env = append(os.Environ(),
+		"HF_HOME="+filepath.Join(m.modelsDir, ".cache", "huggingface"),
+		"HUGGINGFACE_HUB_CACHE="+filepath.Join(m.modelsDir, ".cache", "huggingface", "hub"),
+	)
 	return cmd.Run()
 }
 

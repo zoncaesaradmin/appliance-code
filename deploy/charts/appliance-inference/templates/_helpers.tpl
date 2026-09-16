@@ -59,6 +59,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: "/models"
 - name: INFERENCE_CONTROL_DIR
   value: "/control"
+- name: HF_HOME
+  value: "/models/.cache/huggingface"
+- name: HUGGINGFACE_HUB_CACHE
+  value: "/models/.cache/huggingface/hub"
 - name: INFERENCE_GPU_ENABLED
   value: {{ .Values.gpu.enabled | quote }}
 {{- if eq .Values.runtime.engine "vllm" }}
