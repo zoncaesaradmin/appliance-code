@@ -63,6 +63,8 @@ metadata:
   labels:
     {{- include "appliance-inference.labels" . | nindent 4 }}
 data:
+  list_vllm_archs.py: |
+{{ .Files.Get "files/list_vllm_archs.py" | indent 4 }}
   run.sh: |
     #!/bin/sh
     set -eu
@@ -77,6 +79,10 @@ data:
       fi
     }
     trap cleanup EXIT INT TERM
+    # Publish supported architectures for the thin manager catalog probe.
+    # The manager image does not ship vLLM; the engine sidecar does.
+    python3 /launcher/list_vllm_archs.py > "${CONTROL}/vllm-architectures.json.tmp"
+    mv "${CONTROL}/vllm-architectures.json.tmp" "${CONTROL}/vllm-architectures.json"
     while true; do
       GEN="$(cat "${CONTROL}/generation" 2>/dev/null || true)"
       if [ -n "${GEN}" ] && [ -f "${CONTROL}/argv.json" ] && [ "${GEN}" != "${LAST}" ]; then

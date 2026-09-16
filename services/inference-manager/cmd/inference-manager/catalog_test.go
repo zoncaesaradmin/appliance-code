@@ -134,6 +134,22 @@ func TestEmptyRefreshDoesNotEraseCatalog(t *testing.T) {
 	}
 }
 
+func TestInstalledVLLMArchitecturesUsesControlFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "vllm-architectures.json")
+	if err := os.WriteFile(path, []byte(`["LlamaForCausalLM","Qwen2ForCausalLM"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("INFERENCE_VLLM_ARCHITECTURES_FILE", path)
+	supported, err := installedVLLMArchitectures(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !supported["LlamaForCausalLM"] || !supported["Qwen2ForCausalLM"] {
+		t.Fatalf("supported=%v", supported)
+	}
+}
+
 func TestInstalledVLLMArchitecturesReadsRegistryWithoutImportingRuntime(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is required for the vLLM architecture probe")

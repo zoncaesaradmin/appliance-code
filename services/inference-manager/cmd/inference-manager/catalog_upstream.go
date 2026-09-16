@@ -9,7 +9,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -170,12 +172,65 @@ func pythonOutput(ctx context.Context, timeout time.Duration, stdin string, args
 }
 
 func installedVLLMArchitectures(ctx context.Context) (map[string]bool, error) {
-	// Parse the installed registry source. Importing ModelRegistry initializes
-	// CUDA/platform plugins and fails in the Restricted CPU runtime pod.
-	b, err := pythonOutput(ctx, 30*time.Second, vllmArchitectureProbe, "-")
-	if err != nil {
-		return nil, fmt.Errorf("cannot determine installed vLLM model architectures: %w", err)
+	// Fast path: engine sidecar (or test) already published the architecture list.
+	if supported, err := readVLLMArchitecturesFile(vllmArchitecturesFile()); err == nil {
+		return supported, nil
 	}
+	// Local package probe for tests and legacy mono-images. Importing ModelRegistry
+	// initializes CUDA/platform plugins and fails in Restricted pods, so the probe
+	// parses registry.py without importing vLLM.
+	b, err := pythonOutput(ctx, 30*time.Second, vllmArchitectureProbe, "-")
+	if err == nil {
+		return decodeVLLMArchitecturesJSON(b)
+	}
+	probeErr := err
+	// Dual-image layout: thin manager has no vLLM package. Wait for the engine
+	// sidecar to publish /control/vllm-architectures.json.
+	if supported, waitErr := waitVLLMArchitecturesFile(ctx); waitErr == nil {
+		return supported, nil
+	}
+	return nil, fmt.Errorf("cannot determine installed vLLM model architectures: %w", probeErr)
+}
+
+func vllmArchitecturesFile() string {
+	if path := strings.TrimSpace(env("INFERENCE_VLLM_ARCHITECTURES_FILE", "")); path != "" {
+		return path
+	}
+	return filepath.Join(env("INFERENCE_CONTROL_DIR", "/control"), "vllm-architectures.json")
+}
+
+func waitVLLMArchitecturesFile(ctx context.Context) (map[string]bool, error) {
+	path := vllmArchitecturesFile()
+	deadline := time.Now().Add(60 * time.Second)
+	var lastErr error
+	for {
+		supported, err := readVLLMArchitecturesFile(path)
+		if err == nil {
+			return supported, nil
+		}
+		lastErr = err
+		if time.Now().After(deadline) {
+			return nil, lastErr
+		}
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func readVLLMArchitecturesFile(path string) (map[string]bool, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return decodeVLLMArchitecturesJSON(b)
+}
+
+func decodeVLLMArchitecturesJSON(b []byte) (map[string]bool, error) {
 	var architectures []string
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &architectures); err != nil {

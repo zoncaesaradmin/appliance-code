@@ -65,7 +65,10 @@ the existing administrator API for advanced uses.
 
 Unit tests exercise the real `discoverVLLM` / `discoverOllama` path against a
 local HTTPS fixture (no public network required) and prove architecture probing
-parses the installed registry without importing the vLLM runtime.
+parses the installed registry without importing the vLLM runtime. In the dual-image
+layout the engine sidecar publishes `/control/vllm-architectures.json` for the
+thin manager; the manager falls back to a local registry probe only when that
+file is unavailable (tests and legacy images).
 
 UI download state is derived from the runtime inventory, never inferred from
 catalog membership. Removing or losing a catalog entry does not remove its
