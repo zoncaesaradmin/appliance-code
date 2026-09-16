@@ -25,10 +25,12 @@ var (
 )
 
 var (
-	ErrInvalidRequest = errors.New("inference: invalid request")
-	ErrUnsupported    = errors.New("inference: operation unsupported by runtime")
-	ErrUnavailable    = errors.New("inference: runtime unavailable")
-	ErrBusy           = errors.New("inference: another model operation is in progress")
+	ErrInvalidRequest   = errors.New("inference: invalid request")
+	ErrUnsupported      = errors.New("inference: operation unsupported by runtime")
+	ErrUnavailable      = errors.New("inference: runtime unavailable")
+	ErrBusy             = errors.New("inference: another model operation is in progress")
+	ErrAlreadyInstalled = errors.New("inference: model is already installed")
+	ErrConflict         = errors.New("inference: conflict")
 )
 
 type Config struct {
@@ -215,6 +217,7 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 	ready := false
 	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	// Probe the OpenAI surface (manager → engine), not the admin inventory.
 	resp, err := s.do(statusCtx, http.MethodGet, "/v1/models", nil)
 	if err == nil {
 		ready = resp.StatusCode >= 200 && resp.StatusCode < 300
@@ -253,7 +256,8 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 func (s *Service) ListModels(ctx context.Context) ([]Model, error) {
 	listCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	resp, err := s.do(listCtx, http.MethodGet, "/v1/models", nil)
+	// Downloaded inventory is manager-owned; /v1/models is the OpenAI engine proxy.
+	resp, err := s.do(listCtx, http.MethodGet, "/internal/v1/models", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -455,13 +459,37 @@ func (s *Service) do(ctx context.Context, method, path string, body any) (*http.
 func responseError(resp *http.Response) error {
 	message, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	text := strings.TrimSpace(string(message))
-	if resp.StatusCode == http.StatusConflict {
-		return fmt.Errorf("%w: %s", ErrBusy, text)
+	detail := managerErrorMessage(text)
+	lower := strings.ToLower(detail)
+	switch resp.StatusCode {
+	case http.StatusConflict:
+		switch {
+		case strings.Contains(lower, "another model operation is in progress"):
+			return fmt.Errorf("%w: %s", ErrBusy, detail)
+		case strings.Contains(lower, "model is already installed"):
+			return fmt.Errorf("%w: %s", ErrAlreadyInstalled, detail)
+		default:
+			return fmt.Errorf("%w: %s", ErrConflict, detail)
+		}
+	case http.StatusBadRequest:
+		return fmt.Errorf("%w: %s", ErrInvalidRequest, detail)
+	default:
+		return fmt.Errorf("inference: runtime returned %d: %s", resp.StatusCode, text)
 	}
-	if resp.StatusCode == http.StatusBadRequest {
-		return fmt.Errorf("%w: %s", ErrInvalidRequest, text)
+}
+
+func managerErrorMessage(body string) string {
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
 	}
-	return fmt.Errorf("inference: runtime returned %d: %s", resp.StatusCode, text)
+	if err := json.Unmarshal([]byte(body), &payload); err == nil {
+		if msg := strings.TrimSpace(payload.Error.Message); msg != "" {
+			return msg
+		}
+	}
+	return body
 }
 
 func contains(values []string, want string) bool {

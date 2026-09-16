@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -56,7 +58,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
 		switch r.URL.Path {
-		case "/v1/models":
+		case "/internal/v1/models":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "tiny:latest", "object": "model"}}})
 		case "/internal/v1/models/imports":
 			w.WriteHeader(http.StatusAccepted)
@@ -165,5 +167,42 @@ func TestVLLMLaunchArgumentsAreValidatedBeforeRuntimeCall(t *testing.T) {
 	}
 	if _, err := service.Import(t.Context(), ImportRequest{ModelID: "model", Source: "org/model", LaunchArguments: []string{"--host", "0.0.0.0"}}); err == nil || !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("manager-owned argument error=%v", err)
+	}
+}
+
+func TestResponseErrorClassifiesConflicts(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name   string
+		body   string
+		wantIs error
+	}{
+		{
+			name:   "busy",
+			body:   `{"error":{"message":"another model operation is in progress","type":"inference_manager_error"}}`,
+			wantIs: ErrBusy,
+		},
+		{
+			name:   "already installed",
+			body:   `{"error":{"message":"model is already installed","type":"inference_manager_error"}}`,
+			wantIs: ErrAlreadyInstalled,
+		},
+		{
+			name:   "catalog changed",
+			body:   `{"error":{"message":"catalog selection changed; refresh the model list","type":"inference_manager_error"}}`,
+			wantIs: ErrConflict,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := &http.Response{
+				StatusCode: http.StatusConflict,
+				Body:       io.NopCloser(strings.NewReader(tc.body)),
+			}
+			err := responseError(resp)
+			if !errors.Is(err, tc.wantIs) {
+				t.Fatalf("error=%v want %v", err, tc.wantIs)
+			}
+		})
 	}
 }

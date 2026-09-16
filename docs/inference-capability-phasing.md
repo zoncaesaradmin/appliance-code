@@ -38,21 +38,24 @@ that supplies it. Merely including a package never enables the capability.
 
 ## Public and administrative APIs
 
-The stable inference prefix is `/ai/v1/*`. The control plane authenticates and
-authorizes the request, removes only `/ai`, and streams the request and response
-to the internal runtime `/v1/*`. This exposes the OpenAI-compatible endpoints
-implemented by the selected engine without creating an appliance-specific copy
-of every OpenAI operation. Engine-native management endpoints are never exposed
-under this prefix.
+The public OpenAI-compatible prefix is `/inference/{path...}`. The control plane
+authenticates and authorizes the request, strips `/inference`, and streams the
+remainder to the inference manager `/v1/*`, which blind-proxies to the selected
+engine. Engine-native management endpoints are never exposed under this prefix.
+(Legacy `/ai/v1/*` remains as an alias where still configured.)
 
-Administrators use a separate engine-neutral lifecycle API:
+Administrators use a separate engine-neutral lifecycle API on the control plane,
+which calls manager-owned `/internal/v1/...` routes (not the OpenAI proxy):
 
 - `GET /api/v1/inference/runtime-capabilities`
 - `GET /api/v1/inference/status`
-- `GET /api/v1/inference/models`
+- `GET /api/v1/inference/models` → manager `GET /internal/v1/models` (downloaded inventory)
+- `GET /api/v1/inference/models/catalog`
 - `POST /api/v1/inference/models/imports`
-- `POST /api/v1/inference/models/{modelId}/load`
-- `DELETE /api/v1/inference/models/{modelId}`
+- `GET /api/v1/inference/models/imports/progress`
+- `POST /api/v1/inference/models/load`
+- `GET /api/v1/inference/models/load/progress`
+- `POST /api/v1/inference/models/delete`
 
 Reads require `inference.models.read`, mutations require `inference.admin`, and
 OpenAI inference calls require `inference.use`. Mutations are audited. The first
@@ -62,12 +65,12 @@ would make storage and memory admission unpredictable. A later job-backed
 implementation may queue multiple requests without changing these resources.
 
 Every inference image now uses the appliance manager as its entrypoint. The
-manager starts the packaged engine process, owns the stable health/OpenAI/model
-lifecycle endpoints, and delegates to an engine adapter. The Ollama adapter
-maps to pull, tags, generate/keep-alive, and delete. The vLLM adapter downloads
-and verifies a source, records installed models, and restarts/switches the
-single active vLLM server when `load` is requested. Multiple models may be
-stored, but one vLLM base model is active per runtime pod.
+manager starts the packaged engine process, owns health plus `/internal/v1`
+admin lifecycle endpoints, and blind-proxies only `/v1/*` to the engine. The
+Ollama adapter maps to pull, tags, generate/keep-alive, and delete. The vLLM
+adapter downloads and verifies a source, records installed models, and
+restarts/switches the single active vLLM server when `load` is requested.
+Multiple models may be stored, but one vLLM base model is active per runtime pod.
 
 vLLM launch configuration is stored with the imported model as a validated
 argv array—never shell text. The current contract accepts quantization,

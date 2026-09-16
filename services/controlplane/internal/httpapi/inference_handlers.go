@@ -119,6 +119,14 @@ func (h *InferenceHandlers) writeError(w http.ResponseWriter, r *http.Request, e
 		WriteProblem(w, r, http.StatusConflict, "inference_operation_in_progress", err.Error(), "")
 		return
 	}
+	if errors.Is(err, inference.ErrAlreadyInstalled) {
+		WriteProblem(w, r, http.StatusConflict, "inference_model_already_installed", err.Error(), "")
+		return
+	}
+	if errors.Is(err, inference.ErrConflict) {
+		WriteProblem(w, r, http.StatusConflict, "inference_conflict", err.Error(), "")
+		return
+	}
 	WriteProblem(w, r, http.StatusBadGateway, "inference_operation_failed", "The inference runtime rejected the operation", "")
 }
 

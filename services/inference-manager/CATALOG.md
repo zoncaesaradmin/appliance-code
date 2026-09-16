@@ -57,13 +57,26 @@ and administrator-triggered model downloads in the manager. An offline refresh
 failure retains the previous catalog and never removes installed models.
 
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
-`GET /v1/models` is forwarded to the inference engine (OpenAI-compatible). Downloaded
-model inventory for administrators remains on the control-plane
-`GET /api/v1/inference/models` surface. The control plane exposes the catalog as
-`GET /api/v1/inference/models/catalog`. Catalog imports include
-`catalogId` alongside matching `modelId` and `source`; the manager revalidates
-capacity and takes launch arguments from the cache. Explicit imports retain
-the existing administrator API for advanced uses.
+`GET /internal/v1/models` returns the manager's downloaded inventory (admin).
+`GET /v1/models` (and the rest of `/v1/*`) is blindly proxied to the inference
+engine for OpenAI-compatible clients. Control-plane admin APIs use the
+`/internal/v1/...` surface only:
+
+| Control plane | Inference manager |
+|---|---|
+| `GET /api/v1/inference/models` | `GET /internal/v1/models` |
+| `GET /api/v1/inference/models/catalog` | `GET /internal/v1/models/catalog` |
+| `POST /api/v1/inference/models/imports` | `POST /internal/v1/models/imports` |
+| `GET /api/v1/inference/models/imports/progress` | `GET /internal/v1/models/imports/progress` |
+| `POST /api/v1/inference/models/load` | `POST /internal/v1/models/load` |
+| `GET /api/v1/inference/models/load/progress` | `GET /internal/v1/models/load/progress` |
+| `POST /api/v1/inference/models/delete` | `POST /internal/v1/models/delete` |
+| `GET /api/v1/inference/runtime-capabilities` | `GET /internal/v1/runtime/capabilities` |
+| External `/inference/{path...}` (strip `/inference`) | `/v1/*` → engine proxy |
+
+Catalog imports include `catalogId` alongside matching `modelId` and `source`;
+the manager revalidates capacity and takes launch arguments from the cache.
+Explicit imports retain the existing administrator API for advanced uses.
 
 Unit tests exercise the real `discoverVLLM` / `discoverOllama` path against a
 local HTTPS fixture (no public network required) and prove architecture probing

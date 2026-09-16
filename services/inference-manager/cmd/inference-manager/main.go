@@ -121,7 +121,8 @@ func main() {
 
 func (m *manager) handler() http.Handler {
 	mux := http.NewServeMux()
-	// Match only the root: a GET subtree conflicts with the all-method proxy.
+	// Manager-owned admin/control surface (never proxy these to the engine):
+	// health, capabilities, downloaded inventory, catalog, import/load/delete.
 	mux.HandleFunc("GET /{$}", m.health)
 	mux.HandleFunc("GET /internal/v1/runtime/capabilities", m.capabilities)
 	mux.HandleFunc("POST /internal/v1/models/imports", m.importModel)
@@ -130,8 +131,10 @@ func (m *manager) handler() http.Handler {
 	mux.HandleFunc("POST /internal/v1/models/load", m.loadModel)
 	mux.HandleFunc("GET /internal/v1/models/load/progress", m.loadProgressHandler)
 	mux.HandleFunc("POST /internal/v1/models/delete", m.deleteModel)
+	mux.HandleFunc("GET /internal/v1/models", m.listModels)
 	mux.HandleFunc("GET /internal/v1/models/catalog", m.modelCatalog)
-	// OpenAI-compatible surface: forward /v1/* to the engine (vLLM/Ollama).
+	// OpenAI-compatible client surface only: blind-proxy /v1/* to the engine
+	// (vLLM/Ollama), including GET /v1/models for the currently served model.
 	mux.HandleFunc("/v1/", m.proxyOpenAI)
 	return mux
 }

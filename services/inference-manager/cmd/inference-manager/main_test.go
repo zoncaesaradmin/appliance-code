@@ -30,6 +30,10 @@ func TestManagerHTTPRouting(t *testing.T) {
 	for _, engine := range []string{"ollama", "vllm"} {
 		t.Run(engine, func(t *testing.T) {
 			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/tags" {
+					_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{}})
+					return
+				}
 				w.Header().Set("X-Backend-Request", r.Method+" "+r.URL.RequestURI())
 				w.WriteHeader(http.StatusAccepted)
 			}))
@@ -51,6 +55,9 @@ func TestManagerHTTPRouting(t *testing.T) {
 				{"HEAD", "/", http.StatusOK, false},
 				{"POST", "/", http.StatusMethodNotAllowed, false},
 				{"GET", "/unknown", http.StatusNotFound, false},
+				{"GET", "/internal/v1/models", http.StatusOK, false},
+				{"GET", "/internal/v1/models/catalog", http.StatusServiceUnavailable, false},
+				{"GET", "/internal/v1/runtime/capabilities", http.StatusOK, false},
 				{"GET", "/v1/models", http.StatusAccepted, true},
 				{"POST", "/v1/chat/completions?stream=true", http.StatusAccepted, true},
 				{"GET", "/v1/responses/example", http.StatusAccepted, true},
@@ -63,6 +70,9 @@ func TestManagerHTTPRouting(t *testing.T) {
 				}
 				if tc.proxied && response.Header().Get("X-Backend-Request") != tc.method+" "+tc.path {
 					t.Fatalf("request was not forwarded intact: %s %s", tc.method, tc.path)
+				}
+				if !tc.proxied && response.Header().Get("X-Backend-Request") != "" {
+					t.Fatalf("manager-owned path was proxied: %s %s", tc.method, tc.path)
 				}
 			}
 		})
@@ -186,7 +196,7 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 	}
 	waitImportState(t, m, "complete")
 	w = httptest.NewRecorder()
-	m.listModels(w, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	m.listModels(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models", nil))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tiny:latest") {
 		t.Fatalf("list status %d: %s", w.Code, w.Body.String())
 	}
@@ -206,7 +216,7 @@ func TestImportListDelete(t *testing.T) {
 	waitImportState(t, m, "complete")
 
 	w = httptest.NewRecorder()
-	m.listModels(w, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	m.listModels(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models", nil))
 	var listed struct {
 		Data []model `json:"data"`
 	}

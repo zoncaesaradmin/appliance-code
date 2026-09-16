@@ -54,6 +54,10 @@ snippet for clients such as Codex. Externally, `/inference/{path...}` is
 authenticated and proxied by stripping the `/inference` prefix so the OpenAI
 surface (`/v1/models`, `/v1/chat/completions`, `/v1/responses`, and any other
 engine-supported path) reaches the inference gateway without a per-path allowlist.
+The inference manager owns `/internal/v1/...` (inventory, catalog, import/load/delete)
+and only blind-proxies `/v1/*` to the engine. UI download status comes from
+`GET /api/v1/inference/models` → manager `GET /internal/v1/models`, not from the
+OpenAI `/v1/models` proxy.
 
 ### General tracing
 
