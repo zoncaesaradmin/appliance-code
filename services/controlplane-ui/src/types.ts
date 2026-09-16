@@ -532,6 +532,8 @@ export interface InferenceRuntimeStatus {
   ready?: boolean;
   loadedModelId?: string;
   servingState?: "inactive" | "loading" | "ready" | "failed";
+  /** Served engine context window (max_model_len), not the model-card limit. */
+  maxModelLen?: number;
 }
 
 export interface InferenceModel {

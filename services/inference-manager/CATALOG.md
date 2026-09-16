@@ -78,9 +78,11 @@ failure retains the previous catalog and never removes installed models.
 engine for OpenAI-compatible clients. For `POST /v1/responses`, the manager
 first rewrites OpenAI `text.format.type=json_schema` so streaming clients do
 not hit the known `response.created` schema alias crash on older CPU runtime
-images: schema-only requests use constrained generation / JSON mode; requests
-that also carry tools keep tool calling and move schema guidance into
-instructions. Control-plane admin APIs use the `/internal/v1/...` surface only:
+images. CUDA may use constrained generation (`structured_outputs`); CPU never
+does — xgrammar's `pin_memory` path crashes EngineCore on CPU-only builds, so
+schema guidance stays in instructions only. Requests that also carry tools keep
+tool calling and move schema guidance into instructions. Control-plane admin
+APIs use the `/internal/v1/...` surface only:
 
 | Control plane | Inference manager |
 |---|---|

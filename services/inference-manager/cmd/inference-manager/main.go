@@ -192,12 +192,73 @@ func (m *manager) saveRegistry() error {
 
 func (m *manager) health(w http.ResponseWriter, _ *http.Request) {
 	servingState, loadedModelID := m.servingSnapshot()
-	writeJSON(w, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"status":        "ok",
 		"engine":        m.engine,
 		"loadedModelId": loadedModelID,
 		"servingState":  servingState,
-	})
+	}
+	if servingState == "ready" {
+		if maxLen := m.servedMaxModelLen(context.Background()); maxLen > 0 {
+			payload["maxModelLen"] = maxLen
+		}
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+// servedMaxModelLen returns the context window the live engine is actually
+// serving. Prefer the engine OpenAI /v1/models max_model_len; fall back to the
+// persisted launch args from the last successful Load.
+func (m *manager) servedMaxModelLen(ctx context.Context) uint64 {
+	if m.engine == "vllm" {
+		if maxLen := m.probeEngineMaxModelLen(ctx); maxLen > 0 {
+			return maxLen
+		}
+	}
+	m.processMu.Lock()
+	active := m.active
+	m.processMu.Unlock()
+	if active == "" {
+		return 0
+	}
+	m.mu.RLock()
+	item, ok := m.reg.Models[active]
+	m.mu.RUnlock()
+	if !ok {
+		return 0
+	}
+	return maxModelLenFromArgs(item.LaunchArguments)
+}
+
+func (m *manager) probeEngineMaxModelLen(ctx context.Context) uint64 {
+	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, m.backend.ResolveReference(&url.URL{Path: "/v1/models"}).String(), nil)
+	if err != nil {
+		return 0
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0
+	}
+	var body struct {
+		Data []struct {
+			MaxModelLen uint64 `json:"max_model_len"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
+		return 0
+	}
+	for _, item := range body.Data {
+		if item.MaxModelLen > 0 {
+			return item.MaxModelLen
+		}
+	}
+	return 0
 }
 
 func (m *manager) capabilities(w http.ResponseWriter, _ *http.Request) {
@@ -843,7 +904,8 @@ func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, message)
 		return
 	}
-	if err := prepareOpenAIProxyRequest(r); err != nil {
+	_, mode, _ := m.selectMode(r.Context())
+	if err := prepareOpenAIProxyRequest(r, openaiCompatOptionsForMode(mode)); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid OpenAI request body: "+err.Error())
 		return
 	}

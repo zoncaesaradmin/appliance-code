@@ -53,6 +53,65 @@ func TestCatalogForwardsSortQuery(t *testing.T) {
 	}
 }
 
+func TestListModelsPreservesLaunchArguments(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{{
+				"id":              "Qwen/Qwen2.5-3B-Instruct",
+				"launchArguments": []string{"--max-model-len", "8192"},
+			}},
+		})
+	}))
+	defer server.Close()
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "vllm", Architecture: "amd64", SupportedModes: []string{"cpu"}, RequestedMode: "cpu"}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := service.ListModels(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 || models[0].ID != "Qwen/Qwen2.5-3B-Instruct" {
+		t.Fatalf("models=%v", models)
+	}
+	if len(models[0].LaunchArguments) != 2 || models[0].LaunchArguments[1] != "8192" {
+		t.Fatalf("launchArguments=%v", models[0].LaunchArguments)
+	}
+}
+
+func TestStatusReportsServedMaxModelLen(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "ok", "servingState": "ready", "loadedModelId": "Qwen/Qwen2.5-3B-Instruct", "maxModelLen": 8192,
+			})
+		case "/internal/v1/models/load/progress":
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "ready", "modelId": "Qwen/Qwen2.5-3B-Instruct"})
+		case "/internal/v1/runtime/capabilities":
+			_ = json.NewEncoder(w).Encode(map[string]any{"availableModes": []string{"cpu"}, "activeMode": "cpu"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "vllm", Architecture: "amd64", SupportedModes: []string{"cpu"}, RequestedMode: "cpu"}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := service.Status(t.Context())
+	if status.ServingState != "ready" || status.LoadedModelID != "Qwen/Qwen2.5-3B-Instruct" {
+		t.Fatalf("status=%+v", status)
+	}
+	if status.MaxModelLen != 8192 {
+		t.Fatalf("MaxModelLen=%d want 8192", status.MaxModelLen)
+	}
+}
+
 func TestOllamaModelLifecycle(t *testing.T) {
 	var calls []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

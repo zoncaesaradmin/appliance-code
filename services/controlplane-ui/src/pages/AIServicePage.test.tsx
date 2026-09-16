@@ -262,10 +262,11 @@ it("shows serving ready-for-use and disables Load when the selected model is alr
     activeMode: "cuda",
     ready: true,
     servingState: "ready",
-    loadedModelId: "retired:1b"
+    loadedModelId: "retired:1b",
+    maxModelLen: 1024
   });
   api.listInferenceModels.mockResolvedValue([
-    { id: "retired:1b", launchArguments: ["--max-model-len", "1024"] }
+    { id: "retired:1b", launchArguments: ["--max-model-len", "32768"] }
   ]);
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Ready for use (retired:1b)");
@@ -285,6 +286,7 @@ it("shows serving ready-for-use and disables Load when the selected model is alr
   expect(element.textContent).toContain("https://zon-appliance.example/inference/v1");
   expect(element.textContent).toContain("retired:1b");
   expect(element.textContent).toContain("model_context_window = 1024");
+  expect(element.textContent).not.toContain("model_context_window = 32768");
   expect(element.textContent).toContain("zon_model_catalog.json");
 });
 

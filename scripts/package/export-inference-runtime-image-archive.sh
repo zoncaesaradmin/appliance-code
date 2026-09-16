@@ -120,11 +120,65 @@ fi
 mkdir -p "$(dirname "${OUT_FILE}")"
 OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}-${ENGINE}:${IMAGE_TAG}"
+SOURCE_ID_FILE="${OUT_FILE}.source-id"
+if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
+  mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"
+  REFERENCE_FILE="$(cd "$(dirname "${REFERENCE_OUT_FILE}")" && pwd)/$(basename "${REFERENCE_OUT_FILE}")"
+else
+  REFERENCE_FILE="${OUT_FILE}.reference"
+fi
+
+resolve_source_digest() {
+  local digest=""
+  digest="$(skopeo inspect --override-os linux --override-arch "${ARCHITECTURE}" \
+    --format '{{.Digest}}' "containers-storage:${LOCAL_REF}" 2>/dev/null || true)"
+  if [[ -n "${digest}" ]]; then
+    printf '%s\n' "${digest}"
+    return 0
+  fi
+  digest="$(skopeo inspect --override-os linux --override-arch "${ARCHITECTURE}" \
+    --format '{{.Digest}}' "docker://${SOURCE_IMAGE}" 2>/dev/null || true)"
+  if [[ -n "${digest}" ]]; then
+    printf '%s\n' "${digest}"
+    return 0
+  fi
+  return 1
+}
+
+# Reuse an existing archive when the upstream pin is unchanged. Prefer a cheap
+# digest probe (local storage, then registry inspect) so we can skip both the
+# prefetch and the multi-gigabyte re-tar on rebuilds.
+if [[ -f "${OUT_FILE}" && -f "${SOURCE_ID_FILE}" && -f "${REFERENCE_FILE}" ]]; then
+  previous_id="$(tr -d '\r\n' <"${SOURCE_ID_FILE}" 2>/dev/null || true)"
+  previous_ref="$(tr -d '\r\n' <"${REFERENCE_FILE}" 2>/dev/null || true)"
+  if [[ -n "${previous_id}" && -n "${previous_ref}" ]]; then
+    SOURCE_DIGEST="$(resolve_source_digest || true)"
+    SOURCE_ID="${SOURCE_IMAGE}"
+    if [[ -n "${SOURCE_DIGEST}" ]]; then
+      SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+    fi
+    if [[ "${previous_id}" == "${SOURCE_ID}" ]]; then
+      echo "reusing inference-runtime OCI archive: ${OUT_FILE}"
+      echo "source image: ${SOURCE_IMAGE}"
+      echo "runtime: ${ENGINE}/${ARCHITECTURE}"
+      echo "archive annotation: registry.local/inference-runtime:bundled"
+      echo "image reference: ${previous_ref}"
+      exit 0
+    fi
+  fi
+fi
 
 # Prefetch the selected Linux architecture into local storage, then re-label under the
 # canonical :bundled annotation. Do not layer the appliance manager into this image.
 retry "${PREFETCH_RETRIES}" \
   oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${LOCAL_REF}" "${ARCHITECTURE}"
+
+SOURCE_DIGEST="$(skopeo inspect --override-os linux --override-arch "${ARCHITECTURE}" \
+  --format '{{.Digest}}' "containers-storage:${LOCAL_REF}" 2>/dev/null || true)"
+SOURCE_ID="${SOURCE_IMAGE}"
+if [[ -n "${SOURCE_DIGEST}" ]]; then
+  SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
@@ -152,10 +206,8 @@ REFERENCE="registry.local/inference-runtime@${DIGEST}"
 
 rm -f "${OUT_FILE}"
 tar -C "${LAYOUT}" -cf "${OUT_FILE}" oci-layout index.json blobs
-if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
-  mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"
-  printf '%s\n' "${REFERENCE}" >"${REFERENCE_OUT_FILE}"
-fi
+printf '%s\n' "${SOURCE_ID}" >"${SOURCE_ID_FILE}"
+printf '%s\n' "${REFERENCE}" >"${REFERENCE_FILE}"
 
 echo "created inference-runtime OCI archive: ${OUT_FILE}"
 echo "source image: ${SOURCE_IMAGE}"

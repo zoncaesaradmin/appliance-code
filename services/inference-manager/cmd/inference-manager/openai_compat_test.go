@@ -30,7 +30,7 @@ func TestNormalizeResponsesJSONSchemaUsesStructuredOutputs(t *testing.T) {
 			}
 		}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -60,7 +60,7 @@ func TestNormalizeResponsesJSONSchemaUsesStructuredOutputs(t *testing.T) {
 
 func TestNormalizeResponsesJSONObjectPassthrough(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"json_object"}},"stream":true}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if changed {
 		t.Fatalf("json_object must pass through unchanged: %s", out)
 	}
@@ -68,7 +68,7 @@ func TestNormalizeResponsesJSONObjectPassthrough(t *testing.T) {
 
 func TestNormalizeResponsesTextPassthrough(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"text"}},"stream":true}`)
-	_, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	_, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if changed {
 		t.Fatal("text format must pass through")
 	}
@@ -76,7 +76,7 @@ func TestNormalizeResponsesTextPassthrough(t *testing.T) {
 
 func TestNormalizeResponsesJSONSchemaWithoutSchemaFallsBackToJSONObject(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"json_schema","name":"x"}},"stream":true}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -96,7 +96,7 @@ func TestNormalizeResponsesJSONSchemaWithoutSchemaFallsBackToJSONObject(t *testi
 
 func TestNormalizeIgnoresNonResponsesPaths(t *testing.T) {
 	in := []byte(`{"messages":[],"response_format":{"type":"json_schema","json_schema":{"name":"x","schema":{"type":"object"}}}}`)
-	_, changed := normalizeOpenAIUpstreamBody("/v1/chat/completions", in)
+	_, changed := normalizeOpenAIUpstreamBody("/v1/chat/completions", in, openaiCompatOptions{})
 	if changed {
 		t.Fatal("chat completions path is unchanged in this shim")
 	}
@@ -107,7 +107,7 @@ func TestNormalizeNestedChatStyleSchemaInsideFormat(t *testing.T) {
 		"input":"hi",
 		"text":{"format":{"type":"json_schema","json_schema":{"name":"n","schema":{"type":"object","properties":{"a":{"type":"string"}}}}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -127,7 +127,7 @@ func TestNormalizeKeepsExistingStructuredOutputs(t *testing.T) {
 		"structured_outputs":{"json":{"type":"object","properties":{"b":{"type":"number"}}}},
 		"text":{"format":{"type":"json_schema","name":"x","schema":{"type":"object","properties":{"a":{"type":"string"}}}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -154,7 +154,7 @@ func TestNormalizePreservesToolsAndStream(t *testing.T) {
 		"tools":[{"type":"function","name":"shell","parameters":{"type":"object","properties":{"command":{"type":"string"}}}}],
 		"text":{"format":{"type":"json_schema","name":"plan","schema":{"type":"object","properties":{"steps":{"type":"array"}},"required":["steps"]}}}
 	}`)
-	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{})
 	if !changed {
 		t.Fatal("expected normalization")
 	}
@@ -185,7 +185,7 @@ func TestPrepareOpenAIProxyRequestRewritesBody(t *testing.T) {
 	body := `{"input":"hi","stream":true,"text":{"format":{"type":"json_schema","name":"n","schema":{"type":"object"}}}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	if err := prepareOpenAIProxyRequest(req); err != nil {
+	if err := prepareOpenAIProxyRequest(req, openaiCompatOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := io.ReadAll(req.Body)
@@ -204,6 +204,44 @@ func TestPrepareOpenAIProxyRequestRewritesBody(t *testing.T) {
 	}
 }
 
+func TestNormalizeCPUDisablesStructuredOutputs(t *testing.T) {
+	in := []byte(`{
+		"input":"hi",
+		"structured_outputs":{"json":{"type":"object","properties":{"a":{"type":"string"}}}},
+		"text":{"format":{"type":"json_schema","name":"n","schema":{"type":"object","properties":{"a":{"type":"string"}}}}}
+	}`)
+	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatOptions{DisableStructuredOutputs: true})
+	if !changed {
+		t.Fatal("expected normalization")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := payload["structured_outputs"]; ok {
+		t.Fatalf("CPU must not forward structured_outputs: %#v", payload)
+	}
+	if _, ok := payload["text"]; ok {
+		t.Fatal("json_schema text.format must still be stripped")
+	}
+	instr, _ := payload["instructions"].(string)
+	if !strings.Contains(instr, `"a"`) {
+		t.Fatalf("schema guidance should remain in instructions: %q", instr)
+	}
+}
+
+func TestOpenaiCompatOptionsForMode(t *testing.T) {
+	if !openaiCompatOptionsForMode("cpu").DisableStructuredOutputs {
+		t.Fatal("cpu must disable structured outputs")
+	}
+	if !openaiCompatOptionsForMode("").DisableStructuredOutputs {
+		t.Fatal("unknown mode must disable structured outputs")
+	}
+	if openaiCompatOptionsForMode("cuda").DisableStructuredOutputs {
+		t.Fatal("cuda may use structured outputs")
+	}
+}
+
 func TestProxyOpenAINormalizesResponsesJSONSchema(t *testing.T) {
 	var sawBody []byte
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +251,8 @@ func TestProxyOpenAINormalizesResponsesJSONSchema(t *testing.T) {
 	}))
 	defer backend.Close()
 
+	t.Setenv("INFERENCE_SUPPORTED_MODES", "cpu")
+	t.Setenv("INFERENCE_MODE", "cpu")
 	m := testManager(t)
 	m.active = "ready-model"
 	m.backend, _ = url.Parse(backend.URL)
@@ -233,7 +273,12 @@ func TestProxyOpenAINormalizesResponsesJSONSchema(t *testing.T) {
 	if _, ok := payload["text"]; ok {
 		t.Fatalf("backend still received text.format: %s", sawBody)
 	}
-	if _, ok := payload["structured_outputs"]; !ok {
-		t.Fatalf("backend missing structured_outputs: %s", sawBody)
+	// CPU must not enable structured_outputs (xgrammar pin_memory crash).
+	if _, ok := payload["structured_outputs"]; ok {
+		t.Fatalf("CPU backend must not receive structured_outputs: %s", sawBody)
+	}
+	instr, _ := payload["instructions"].(string)
+	if !strings.Contains(instr, `"a"`) {
+		t.Fatalf("schema guidance missing: %s", sawBody)
 	}
 }

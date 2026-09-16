@@ -14,6 +14,14 @@ import (
 
 const maxOpenAIProxyBody = 32 << 20
 
+// openaiCompatOptions controls request rewrites for the active engine mode.
+type openaiCompatOptions struct {
+	// DisableStructuredOutputs avoids vLLM xgrammar / apply_grammar_bitmask on
+	// CPU builds. Those paths call pin_memory and fatally kill EngineCore:
+	// "pin_memory=True requires a CUDA or other accelerator backend".
+	DisableStructuredOutputs bool
+}
+
 // normalizeOpenAIUpstreamBody adapts OpenAI-compatible request bodies to the
 // subset the packaged inference runtime can serve without hanging or crashing.
 //
@@ -23,17 +31,18 @@ const maxOpenAIProxyBody = 32 << 20
 // accepts json_schema on the request but crashes while streaming
 // response.created (schema field alias dump bug). Remap that shape onto the
 // runtime-supported constrained-generation path and keep streaming healthy.
-func normalizeOpenAIUpstreamBody(path string, body []byte) ([]byte, bool) {
+// On CPU, never enable structured_outputs — use instruction guidance only.
+func normalizeOpenAIUpstreamBody(path string, body []byte, opts openaiCompatOptions) ([]byte, bool) {
 	path = strings.TrimSpace(path)
 	switch {
 	case path == "/v1/responses" || strings.HasPrefix(path, "/v1/responses?"):
-		return normalizeResponsesBody(body)
+		return normalizeResponsesBody(body, opts)
 	default:
 		return body, false
 	}
 }
 
-func normalizeResponsesBody(body []byte) ([]byte, bool) {
+func normalizeResponsesBody(body []byte, opts openaiCompatOptions) ([]byte, bool) {
 	if len(bytes.TrimSpace(body)) == 0 {
 		return body, false
 	}
@@ -41,7 +50,17 @@ func normalizeResponsesBody(body []byte) ([]byte, bool) {
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return body, false
 	}
-	if !normalizeResponsesTextFormat(payload) {
+	changed := false
+	if opts.DisableStructuredOutputs {
+		if _, ok := payload["structured_outputs"]; ok {
+			delete(payload, "structured_outputs")
+			changed = true
+		}
+	}
+	if normalizeResponsesTextFormat(payload, opts) {
+		changed = true
+	}
+	if !changed {
 		return body, false
 	}
 	out, err := json.Marshal(payload)
@@ -51,7 +70,7 @@ func normalizeResponsesBody(body []byte) ([]byte, bool) {
 	return out, true
 }
 
-func normalizeResponsesTextFormat(payload map[string]any) bool {
+func normalizeResponsesTextFormat(payload map[string]any, opts openaiCompatOptions) bool {
 	text, _ := payload["text"].(map[string]any)
 	if text == nil {
 		return false
@@ -90,6 +109,11 @@ func normalizeResponsesTextFormat(payload map[string]any) bool {
 	// request is not also doing tool calling. Coding agents on the Responses
 	// wire API commonly send tools + json_schema together; a grammar would
 	// block tool-call tokens, so keep schema guidance in instructions only.
+	// CPU engines must never take the grammar path (pin_memory crash).
+	if opts.DisableStructuredOutputs {
+		appendResponsesInstruction(payload, jsonSchemaInstruction(name, schema))
+		return true
+	}
 	if hasStructured {
 		appendResponsesInstruction(payload, jsonSchemaInstruction(name, schema))
 		return true
@@ -159,7 +183,7 @@ func jsonSchemaInstruction(name string, schema any) string {
 	return "Respond with a single JSON object that validates against this JSON Schema:\n" + string(encoded)
 }
 
-func prepareOpenAIProxyRequest(r *http.Request) error {
+func prepareOpenAIProxyRequest(r *http.Request, opts openaiCompatOptions) error {
 	if r == nil || r.Body == nil {
 		return nil
 	}
@@ -178,7 +202,7 @@ func prepareOpenAIProxyRequest(r *http.Request) error {
 	if len(raw) > maxOpenAIProxyBody {
 		return fmt.Errorf("request body exceeds %d bytes", maxOpenAIProxyBody)
 	}
-	rewritten, changed := normalizeOpenAIUpstreamBody(path, raw)
+	rewritten, changed := normalizeOpenAIUpstreamBody(path, raw, opts)
 	if !changed {
 		rewritten = raw
 	}
@@ -188,6 +212,14 @@ func prepareOpenAIProxyRequest(r *http.Request) error {
 	// Body was consumed; disable chunked leftovers.
 	r.Header.Del("Transfer-Encoding")
 	return nil
+}
+
+// openaiCompatOptionsForMode returns rewrite policy for the active runtime mode.
+// Non-CUDA (including unknown) stays fail-closed against structured_outputs.
+func openaiCompatOptionsForMode(mode string) openaiCompatOptions {
+	return openaiCompatOptions{
+		DisableStructuredOutputs: !strings.EqualFold(strings.TrimSpace(mode), "cuda"),
+	}
 }
 
 func newOpenAIReverseProxy(backend *url.URL) *httputil.ReverseProxy {

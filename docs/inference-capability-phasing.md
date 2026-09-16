@@ -42,16 +42,18 @@ The public OpenAI-compatible prefix is `/inference/{path...}`. The control plane
 authenticates and authorizes the request, strips `/inference`, and streams the
 remainder to the inference manager `/v1/*`, which proxies to the selected
 engine. Before proxying `POST /v1/responses`, the manager normalizes OpenAI
-`text.format.type=json_schema` so packaged runtimes can stream safely. When the
-request has no tools, the schema is remapped to constrained generation
-(`structured_outputs.json`) or OpenAI JSON mode (`text.format=json_object`).
-When tools are present (typical for coding agents on the Responses wire API),
-the broken `json_schema` format is stripped and the schema is preserved only as
-instruction guidance so tool-call tokens remain expressible. That keeps
-Responses streaming healthy for Codex (`wire_api = "responses"`), Continue,
-custom SDKs, and similar OpenAI-compatible clients. Engine-native management
-endpoints are never exposed under this prefix. (Legacy `/ai/v1/*` remains as an
-alias where still configured.)
+`text.format.type=json_schema` so packaged runtimes can stream safely. On CUDA,
+schema-only requests remap to constrained generation (`structured_outputs.json`)
+or OpenAI JSON mode. On CPU, structured_outputs is never forwarded: vLLM's
+xgrammar bitmask path calls `pin_memory` and fatally kills EngineCore
+("pin_memory=True requires a CUDA or other accelerator backend"). CPU requests
+keep schema guidance in instructions only. When tools are present (typical for
+coding agents on the Responses wire API), the broken `json_schema` format is
+stripped and the schema is preserved only as instruction guidance so tool-call
+tokens remain expressible. That keeps Responses streaming healthy for Codex
+(`wire_api = "responses"`), Continue, custom SDKs, and similar OpenAI-compatible
+clients. Engine-native management endpoints are never exposed under this prefix.
+(Legacy `/ai/v1/*` remains as an alias where still configured.)
 
 Administrators use a separate engine-neutral lifecycle API on the control plane,
 which calls manager-owned `/internal/v1/...` routes (not the OpenAI proxy):

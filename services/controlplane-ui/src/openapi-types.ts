@@ -1726,12 +1726,18 @@ export interface components {
              * @enum {string}
              */
             servingState?: "inactive" | "loading" | "ready" | "failed";
+            /** @description Served engine context window (max_model_len / --max-model-len), not the raw model-card limit. */
+            maxModelLen?: number;
             checks: components["schemas"]["InferenceCheck"][];
         };
         InferenceModel: {
             id: string;
             object?: string;
             ownedBy?: string;
+            source?: string;
+            digest?: string;
+            /** @description Effective vLLM argv persisted from the last successful Load (includes planned --max-model-len). */
+            launchArguments?: string[];
             details?: {
                 [key: string]: unknown;
             };
@@ -1745,6 +1751,7 @@ export interface components {
             lastError?: string;
             refreshing: boolean;
             stale: boolean;
+            /** @description Host/GPU-derived budget used for eligibility and Load limits. */
             availableMemoryBytes?: number;
             scope: string;
             /**
@@ -1762,6 +1769,7 @@ export interface components {
                 source: string;
                 downloadBytes: number;
                 memoryBytes: number;
+                /** @description Exact engine memory limit Load will request (estimate + shm + margin). */
                 requiredBytes?: number;
                 eligible: boolean;
                 reason?: string;
@@ -1796,7 +1804,9 @@ export interface components {
             state: "idle" | "loading" | "ready" | "failed";
             message?: string;
             error?: string;
+            /** @description Engine pod phase while loading */
             enginePhase?: string;
+            /** @description True when the engine container was OOMKilled */
             oomKilled?: boolean;
             /** Format: date-time */
             updatedAt?: string;

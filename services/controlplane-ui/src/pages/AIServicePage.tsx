@@ -266,7 +266,7 @@ wire_api = "responses"`;
     "   - Keep the slug equal to the served model id.",
     "",
     "3. After you Load a different model on the appliance, copy these settings again.",
-    "   Context window matches the loaded engine --max-model-len (from the model card).",
+    "   Context window matches the loaded engine --max-model-len (served window, not the raw model card).",
     "",
     `Base URL: ${baseURL}`,
     `Model: ${modelId}`,
@@ -598,6 +598,18 @@ export function AIServicePage(): React.JSX.Element {
     if (!readyModelId) {
       return undefined;
     }
+    // Prefer the live engine window from status. Catalog/inventory launch args
+    // can still carry the model-card limit (e.g. 32768) after Load planned 8192.
+    const fromStatus =
+      status?.servingState === "ready" &&
+      status.loadedModelId === readyModelId &&
+      typeof status.maxModelLen === "number" &&
+      status.maxModelLen > 0
+        ? Math.trunc(status.maxModelLen)
+        : undefined;
+    if (fromStatus) {
+      return fromStatus;
+    }
     const installed = models.find((model) => model.id === readyModelId);
     const fromInstalled = contextWindowFromLaunchArguments(installed?.launchArguments);
     if (fromInstalled) {
@@ -605,7 +617,7 @@ export function AIServicePage(): React.JSX.Element {
     }
     const fromCatalog = catalog?.items?.find((entry) => entry.id === readyModelId);
     return contextWindowFromLaunchArguments(fromCatalog?.launchArguments);
-  }, [catalog?.items, models, readyModelId]);
+  }, [catalog?.items, models, readyModelId, status?.loadedModelId, status?.maxModelLen, status?.servingState]);
   const clientSettings =
     readyModelId && clientOrigin
       ? buildOpenAIClientSettings({

@@ -64,13 +64,20 @@ type RuntimeStatus struct {
 	Ready         bool   `json:"ready"`
 	LoadedModelID string `json:"loadedModelId,omitempty"`
 	ServingState  string `json:"servingState,omitempty"` // inactive|loading|ready|failed
+	// MaxModelLen is the engine's served context window (--max-model-len /
+	// max_model_len), not the raw model-card limit. Client copy settings must
+	// use this when ready so Codex is not told 32768 while the engine is at 8192.
+	MaxModelLen uint64 `json:"maxModelLen,omitempty"`
 }
 
 type Model struct {
-	ID      string         `json:"id"`
-	Object  string         `json:"object,omitempty"`
-	OwnedBy string         `json:"ownedBy,omitempty"`
-	Details map[string]any `json:"details,omitempty"`
+	ID              string         `json:"id"`
+	Object          string         `json:"object,omitempty"`
+	OwnedBy         string         `json:"ownedBy,omitempty"`
+	Source          string         `json:"source,omitempty"`
+	Digest          string         `json:"digest,omitempty"`
+	LaunchArguments []string       `json:"launchArguments,omitempty"`
+	Details         map[string]any `json:"details,omitempty"`
 }
 
 type ImportRequest struct {
@@ -217,6 +224,7 @@ func (s *Service) getJSON(ctx context.Context, path string, target any) error {
 func (s *Service) Status(ctx context.Context) RuntimeStatus {
 	capabilities := s.Capabilities(ctx)
 	ready := false
+	var maxModelLen uint64
 	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	// Probe the manager admin health surface. OpenAI /v1/* is only up when a
@@ -224,6 +232,13 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 	resp, err := s.do(statusCtx, http.MethodGet, "/", nil)
 	if err == nil {
 		ready = resp.StatusCode >= 200 && resp.StatusCode < 300
+		if ready {
+			var health struct {
+				MaxModelLen uint64 `json:"maxModelLen"`
+			}
+			_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health)
+			maxModelLen = health.MaxModelLen
+		}
 		resp.Body.Close()
 	}
 	status := "pass"
@@ -253,6 +268,7 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 		Ready:               ready,
 		LoadedModelID:       loadedModelID,
 		ServingState:        servingState,
+		MaxModelLen:         maxModelLen,
 	}
 }
 

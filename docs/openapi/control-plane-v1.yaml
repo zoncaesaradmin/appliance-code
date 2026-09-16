@@ -2632,6 +2632,10 @@ components:
           type: string
           enum: [inactive, loading, ready, failed]
           description: Whether a model is inactive, currently loading, ready for use, or failed to load.
+        maxModelLen:
+          type: integer
+          minimum: 0
+          description: Served engine context window (max_model_len / --max-model-len), not the raw model-card limit.
         checks:
           type: array
           items: { $ref: "#/components/schemas/InferenceCheck" }
@@ -2642,6 +2646,12 @@ components:
         id: { type: string }
         object: { type: string }
         ownedBy: { type: string }
+        source: { type: string }
+        digest: { type: string }
+        launchArguments:
+          type: array
+          items: { type: string }
+          description: Effective vLLM argv persisted from the last successful Load (includes planned --max-model-len).
         details:
           type: object
           additionalProperties: true
