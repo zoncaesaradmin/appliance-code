@@ -185,7 +185,8 @@ func installedVLLMArchitectures(ctx context.Context) (map[string]bool, error) {
 	}
 	probeErr := err
 	// Dual-image layout: thin manager has no vLLM package. Wait for the engine
-	// sidecar to publish /control/vllm-architectures.json.
+	// Prefer architectures published by the install Job to
+	// /models/.zon/vllm-architectures.json.
 	if supported, waitErr := waitVLLMArchitecturesFile(ctx); waitErr == nil {
 		return supported, nil
 	}
@@ -196,7 +197,12 @@ func vllmArchitecturesFile() string {
 	if path := strings.TrimSpace(env("INFERENCE_VLLM_ARCHITECTURES_FILE", "")); path != "" {
 		return path
 	}
-	return filepath.Join(env("INFERENCE_CONTROL_DIR", "/control"), "vllm-architectures.json")
+	if path := strings.TrimSpace(env("INFERENCE_ARCH_FILE", "")); path != "" {
+		return path
+	}
+	// Prefer models PVC publish path from the arch-probe Job; fall back to legacy control dir.
+	modelsDir := env("INFERENCE_MODELS_DIR", "/models")
+	return filepath.Join(modelsDir, ".zon", "vllm-architectures.json")
 }
 
 func waitVLLMArchitecturesFile(ctx context.Context) (map[string]bool, error) {

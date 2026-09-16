@@ -159,12 +159,19 @@ export function buildOpenAIClientSettings(input: {
 }): OpenAIClientSettings {
   const baseURL = inferenceOpenAIBaseURL(input.origin);
   const modelId = input.modelId.trim();
-  const contextWindow =
-    input.contextWindow && input.contextWindow > 0 ? input.contextWindow : 8192;
-  const truncationLimit = Math.max(256, Math.min(10000, Math.floor(contextWindow / 2)));
+  const knownWindow = input.contextWindow && input.contextWindow > 0 ? input.contextWindow : undefined;
+  // Prefer the appliance-served window. When unknown, omit a fake default so
+  // clients are not told 8192 while vLLM is still running at something else.
+  const contextWindow = knownWindow ?? 0;
+  const truncationLimit =
+    contextWindow > 0 ? Math.max(256, Math.min(10000, Math.floor(contextWindow / 2))) : 4096;
+  const contextWindowLine =
+    contextWindow > 0
+      ? `model_context_window = ${contextWindow}`
+      : `# model_context_window = <reload the model, then copy again>`;
   const providerToml = `model = "${modelId}"
 model_provider = "appliance"
-model_context_window = ${contextWindow}
+${contextWindowLine}
 model_catalog_json = "/path/to/zon_model_catalog.json"
 
 [model_providers.appliance]
@@ -175,7 +182,7 @@ wire_api = "responses"`;
 
   // Codex 0.154+ requires a full catalog entry shape (not a minimal slug map).
   // Keep this aligned with a known-working local vLLM profile catalog.
-  const catalogModel = {
+  const catalogModel: Record<string, unknown> = {
     slug: modelId,
     display_name: modelId,
     description: `Model currently ready on the ZON appliance (${modelId}).`,
@@ -205,7 +212,6 @@ wire_api = "responses"`;
       limit: truncationLimit
     },
     supports_parallel_tool_calls: true,
-    context_window: contextWindow,
     auto_compact_token_limit: null,
     reasoning_summary_format: "none",
     default_reasoning_summary: "none",
@@ -214,6 +220,9 @@ wire_api = "responses"`;
     supports_search_tool: false,
     supports_reasoning_summaries: false
   };
+  if (contextWindow > 0) {
+    catalogModel.context_window = contextWindow;
+  }
   const catalogJson = JSON.stringify({ models: [catalogModel] }, null, 2);
 
   const instructions = [
@@ -230,11 +239,14 @@ wire_api = "responses"`;
     "   - Keep the slug equal to the served model id.",
     "",
     "3. After you Load a different model on the appliance, copy these settings again.",
+    "   Context window matches the loaded engine --max-model-len (from the model card).",
     "",
     `Base URL: ${baseURL}`,
     `Model: ${modelId}`,
-    `Context window: ${contextWindow}${
-      input.contextWindow && input.contextWindow > 0 ? "" : " (default; replace if the model card differs)"
+    `Context window: ${
+      contextWindow > 0
+        ? String(contextWindow)
+        : "unknown until Load refreshes launch settings — reload the model, then copy again"
     }`
   ].join("\n");
 
@@ -245,7 +257,7 @@ wire_api = "responses"`;
   return {
     baseURL,
     modelId,
-    contextWindow: input.contextWindow && input.contextWindow > 0 ? contextWindow : undefined,
+    contextWindow: contextWindow > 0 ? contextWindow : undefined,
     providerToml,
     catalogJson,
     instructions,
@@ -271,7 +283,10 @@ export function modelCapacitySummary(entry: InferenceCatalogEntry, limit = 120):
     parts.push(`download ${formatGiB(entry.downloadBytes)}`);
   }
   if (entry.memoryBytes > 0) {
-    parts.push(`est. RAM ${formatGiB(entry.memoryBytes)}`);
+    parts.push(`est. model ${formatGiB(entry.memoryBytes)}`);
+  }
+  if (entry.requiredBytes && entry.requiredBytes > 0) {
+    parts.push(`load needs ${formatGiB(entry.requiredBytes)}`);
   }
   if (parts.length === 0) {
     return "Capacity details unavailable for this model.";
@@ -671,7 +686,13 @@ export function AIServicePage(): React.JSX.Element {
                           {loadProgress?.message || "Loading model into the inference engine"}
                         </div>
                         <progress className="import-progress__bar" max={100} />
-                        <div className="import-progress__detail">Waiting for the engine to become ready…</div>
+                        <div className="import-progress__detail">
+                          {loadProgress?.oomKilled
+                            ? "Engine pod was OOMKilled"
+                            : loadProgress?.enginePhase
+                              ? `Engine pod phase: ${loadProgress.enginePhase}`
+                              : "Waiting for the engine Deployment to become ready…"}
+                        </div>
                       </div>
                     ) : null}
                     <div className="button-row">

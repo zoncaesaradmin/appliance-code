@@ -13,11 +13,13 @@ import (
 // loadProgress is the operator- and UI-visible model-load status.
 // Persisted under modelsDir/.zon/load-progress.json for host inspection.
 type loadProgress struct {
-	ModelID   string    `json:"modelId,omitempty"`
-	State     string    `json:"state"` // idle|loading|ready|failed
-	Message   string    `json:"message,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ModelID     string    `json:"modelId,omitempty"`
+	State       string    `json:"state"` // idle|loading|ready|failed
+	Message     string    `json:"message,omitempty"`
+	Error       string    `json:"error,omitempty"`
+	EnginePhase string    `json:"enginePhase,omitempty"`
+	OOMKilled   bool      `json:"oomKilled,omitempty"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 func (m *manager) loadProgressPath() string {
@@ -46,6 +48,32 @@ func (m *manager) beginLoadProgress(modelID, message string) {
 		Message:   message,
 		UpdatedAt: time.Now().UTC(),
 	}
+	_ = m.writeLoadProgressFileLocked()
+}
+
+func (m *manager) setLoadProgressMessage(message string) {
+	m.loadMu.Lock()
+	defer m.loadMu.Unlock()
+	if m.load.State != "loading" {
+		return
+	}
+	m.load.Message = message
+	m.load.UpdatedAt = time.Now().UTC()
+	_ = m.writeLoadProgressFileLocked()
+}
+
+func (m *manager) setLoadEngineStatus(status engineStatus) {
+	m.loadMu.Lock()
+	defer m.loadMu.Unlock()
+	if m.load.State != "loading" {
+		return
+	}
+	m.load.EnginePhase = status.Phase
+	m.load.OOMKilled = status.OOMKilled
+	if status.Message != "" {
+		m.load.Message = status.Message
+	}
+	m.load.UpdatedAt = time.Now().UTC()
 	_ = m.writeLoadProgressFileLocked()
 }
 
@@ -109,14 +137,14 @@ func (m *manager) reconcileInterruptedLoadProgress() {
 }
 
 // rehydrateActiveModel restores the in-memory active model after a manager
-// restart when the engine sidecar is still healthy. Without this, Serving
-// flips to Inactive and the Load button reappears even though vLLM is up.
+// restart when the on-demand engine Deployment is still healthy.
 func (m *manager) rehydrateActiveModel(ctx context.Context) {
 	load := m.currentLoadProgress()
 	if load.State != "ready" || load.ModelID == "" {
 		return
 	}
-	if !m.backendHealthy(ctx) {
+	status, err := m.engineOrch.EngineStatus(ctx)
+	if err != nil || !status.Ready || !m.backendHealthy(ctx) {
 		m.finishLoadProgress("failed", load.ModelID, "Runtime restarted and the previously loaded model is no longer serving; retry Load")
 		return
 	}
@@ -137,10 +165,21 @@ func (m *manager) servingSnapshot() (servingState, loadedModelID string) {
 	case "failed":
 		return "failed", load.ModelID
 	case "ready":
-		if active != "" {
-			return "ready", active
+		id := active
+		if id == "" {
+			id = load.ModelID
 		}
-		return "ready", load.ModelID
+		if id == "" {
+			return "inactive", ""
+		}
+		status, err := m.engineOrch.EngineStatus(context.Background())
+		if err != nil || !status.Ready || !m.backendHealthy(context.Background()) {
+			if status.OOMKilled {
+				return "failed", id
+			}
+			return "inactive", id
+		}
+		return "ready", id
 	default:
 		if active != "" {
 			return "ready", active

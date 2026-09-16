@@ -38,28 +38,34 @@ func TestInferenceGatewayRender(t *testing.T) {
 	out := render(t)
 	for _, want := range []string{
 		"kind: Service\nmetadata:\n  name: inference-gateway",
+		"kind: ServiceAccount\nmetadata:\n  name: inference-gateway-manager",
+		"kind: Role\nmetadata:\n  name: inference-gateway-manager",
+		"kind: RoleBinding\nmetadata:\n  name: inference-gateway-manager",
 		"runAsUser: 10006",
 		"name: inference-manager",
-		"name: inference-engine",
-		"command: [\"ollama\", \"serve\"]",
-		"name: CUDA_VISIBLE_DEVICES\n              value: \"-1\"",
-		"name: ROCR_VISIBLE_DEVICES\n              value: \"-1\"",
-		"name: HOME",
-		"value: \"/home/runtime\"",
-		"name: OLLAMA_MODELS",
-		"value: \"/models\"",
+		"name: INFERENCE_BACKEND_URL\n              value: \"http://inference-engine.inference.svc.cluster.local:8001\"",
 		"name: INFERENCE_ENGINE\n              value: \"ollama\"",
-		"name: INFERENCE_BACKEND_URL\n              value: \"http://127.0.0.1:8001\"",
+		"name: INFERENCE_RUNTIME_IMAGE",
 		"kind: PersistentVolume",
 		"name: inference-gateway-models",
 		"path: \"/data/zon/inference/models\"",
 		"kind: PersistentVolumeClaim",
 		"claimName: models",
 		"{protocol: TCP, port: 443}",
+		"app.kubernetes.io/name: inference-engine",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q", want)
 		}
+	}
+	if strings.Contains(out, "name: INFERENCE_ENGINE_MAX_MEMORY") {
+		t.Error("default chart must not set a hard-coded engine maxMemory ceiling")
+	}
+	if strings.Contains(out, "command: [\"ollama\", \"serve\"]") {
+		t.Error("ollama serve belongs on the on-demand engine Deployment, not the manager chart")
+	}
+	if strings.Contains(out, "mountPath: /control") || strings.Contains(out, "run.sh") {
+		t.Error("process-supervisor /control launcher must be removed")
 	}
 	if strings.Contains(out, "hostNetwork: true") {
 		t.Error("inference chart must not enable hostNetwork")
@@ -67,21 +73,31 @@ func TestInferenceGatewayRender(t *testing.T) {
 	if strings.Contains(out, "kind: Namespace") {
 		t.Error("default render must not own Namespace; zonctl EnsureNamespace creates it")
 	}
-	// Restricted PSA forbids pod-level hostPath; models must be PVC-backed.
 	if strings.Contains(out, "volumes:\n        - name: models\n          hostPath:") {
 		t.Error("models volume must not use pod-level hostPath under Restricted PSA")
 	}
 	if !strings.Contains(out, "volumes:\n        - name: models\n          persistentVolumeClaim:\n            claimName: models") {
 		t.Error("models volume must mount the models PVC")
 	}
+	// Manager-only Deployment: exactly one container in the gateway pod template.
+	if strings.Count(out, "name: inference-manager") < 1 {
+		t.Error("manager container missing")
+	}
 }
 
-func TestGPUContainerRuntimeMappingRenders(t *testing.T) {
+func TestGPUEnvPassedToManager(t *testing.T) {
 	out := render(t, "--set", "runtime.engine=vllm", "--set", "runtime.supportedModes={cpu,cuda}", "--set", "gpu.enabled=true")
-	for _, want := range []string{"runtimeClassName: \"nvidia\"", "name: NVIDIA_VISIBLE_DEVICES", "value: \"all\"", "name: NVIDIA_DRIVER_CAPABILITIES", "mountPath: /dev/shm"} {
+	for _, want := range []string{
+		"name: INFERENCE_GPU_ENABLED\n              value: \"true\"",
+		"name: INFERENCE_GPU_RUNTIME_CLASS\n              value: \"nvidia\"",
+		"name: INFERENCE_GPU_VISIBLE_DEVICES\n              value: \"all\"",
+	} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("GPU runtime mapping missing %q: %s", want, out)
+			t.Fatalf("GPU manager env missing %q: %s", want, out)
 		}
+	}
+	if strings.Contains(out, "runtimeClassName: \"nvidia\"") {
+		t.Fatal("steady-state manager Deployment must not set GPU runtimeClassName")
 	}
 }
 
@@ -126,8 +142,8 @@ func TestImageDigestWins(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("b", 64)
 	managerDigest := "sha256:" + strings.Repeat("d", 64)
 	out := render(t, "--set", "image.digest="+digest, "--set", "managerImage.digest="+managerDigest)
-	if !strings.Contains(out, "image: registry.local/inference-runtime@"+digest) {
-		t.Fatalf("digest-pinned runtime image not rendered")
+	if !strings.Contains(out, "INFERENCE_RUNTIME_IMAGE\n              value: \"registry.local/inference-runtime@"+digest+"\"") {
+		t.Fatalf("digest-pinned runtime image env not rendered")
 	}
 	if !strings.Contains(out, "image: registry.local/inference-manager@"+managerDigest) {
 		t.Fatalf("digest-pinned manager image not rendered")
@@ -142,12 +158,14 @@ func TestVLLMRuntimeContractRenders(t *testing.T) {
 	for _, want := range []string{
 		"name: INFERENCE_ENGINE", "value: \"vllm\"", "name: INFERENCE_MODE", "value: \"auto\"",
 		"name: INFERENCE_SUPPORTED_MODES", "value: \"cpu,cuda\"", "name: VLLM_CPU_KVCACHE_SPACE",
-		"mountPath: /dev/shm", "sizeLimit: 4Gi", "name: inference-gateway-engine-launcher",
-		"mountPath: /control", "command: [\"/bin/sh\", \"/launcher/run.sh\"]",
-		"list_vllm_archs.py", "vllm-architectures.json", "engine-exit.json",
+		"name: INFERENCE_ARCH_FILE", "value: \"/models/.zon/vllm-architectures.json\"",
+		"kind: Job", "list_vllm_archs.py", "vllm-architectures.json",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("vLLM runtime contract missing %q: %s", want, out)
 		}
+	}
+	if strings.Contains(out, "mountPath: /control") || strings.Contains(out, "engine-launcher") || strings.Contains(out, "run.sh") {
+		t.Fatal("vLLM chart must not render the old process supervisor")
 	}
 }

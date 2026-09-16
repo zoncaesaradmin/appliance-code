@@ -54,58 +54,136 @@ spec:
       storage: {{ .Values.persistence.size }}
 ---
 {{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "appliance-inference.serviceAccountName" . }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "appliance-inference.serviceAccountName" . }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ include "appliance-inference.engineName" . | quote }}]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["services"]
+    resourceNames: [{{ include "appliance-inference.engineName" . | quote }}]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "appliance-inference.serviceAccountName" . }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "appliance-inference.serviceAccountName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "appliance-inference.serviceAccountName" . }}
+    namespace: {{ include "appliance-inference.namespace" . }}
+---
 {{- if eq .Values.runtime.engine "vllm" }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "appliance-inference.fullname" . }}-engine-launcher
+  name: {{ include "appliance-inference.fullname" . }}-engine-probe
   namespace: {{ include "appliance-inference.namespace" . }}
   labels:
     {{- include "appliance-inference.labels" . | nindent 4 }}
 data:
   list_vllm_archs.py: |
 {{ .Files.Get "files/list_vllm_archs.py" | indent 4 }}
-  run.sh: |
+  publish.sh: |
     #!/bin/sh
     set -eu
-    CONTROL="${INFERENCE_CONTROL_DIR:-/control}"
-    CHILD=""
-    LAST=""
-    cleanup() {
-      if [ -n "${CHILD}" ]; then
-        kill "${CHILD}" 2>/dev/null || true
-        wait "${CHILD}" 2>/dev/null || true
-        CHILD=""
-      fi
-    }
-    trap cleanup EXIT INT TERM
-    # Publish supported architectures for the thin manager catalog probe.
-    # The manager image does not ship vLLM; the engine sidecar does.
-    python3 /launcher/list_vllm_archs.py > "${CONTROL}/vllm-architectures.json.tmp"
-    mv "${CONTROL}/vllm-architectures.json.tmp" "${CONTROL}/vllm-architectures.json"
-    while true; do
-      GEN="$(cat "${CONTROL}/generation" 2>/dev/null || true)"
-      if [ -n "${GEN}" ] && [ -f "${CONTROL}/argv.json" ] && [ "${GEN}" != "${LAST}" ]; then
-        cleanup
-        LAST="${GEN}"
-        rm -f "${CONTROL}/engine-exit.json"
-        python3 -c 'import json,os,sys; args=json.load(open(sys.argv[1],encoding="utf-8")); os.execvp(args[0], args)' "${CONTROL}/argv.json" &
-        CHILD="$!"
-      elif [ -z "${GEN}" ]; then
-        cleanup
-        LAST=""
-      fi
-      if [ -n "${CHILD}" ] && ! kill -0 "${CHILD}" 2>/dev/null; then
-        set +e
-        wait "${CHILD}"
-        EXIT=$?
-        set -e
-        printf '{"generation":"%s","exitCode":%s}\n' "${LAST}" "${EXIT}" > "${CONTROL}/engine-exit.json.tmp"
-        mv "${CONTROL}/engine-exit.json.tmp" "${CONTROL}/engine-exit.json"
-        CHILD=""
-      fi
-      sleep 1
-    done
+    OUT="/models/.zon/vllm-architectures.json"
+    mkdir -p /models/.zon
+    python3 /probe/list_vllm_archs.py > "${OUT}.tmp"
+    mv "${OUT}.tmp" "${OUT}"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}-arch-probe
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook-weight: "5"
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "appliance-inference.fullname" . }}-arch-probe
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: probe
+          image: {{ include "appliance-inference.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "/probe/publish.sh"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: probe
+              mountPath: /probe
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.claimName }}
+        - name: probe
+          configMap:
+            name: {{ include "appliance-inference.fullname" . }}-engine-probe
+            defaultMode: 0755
+        - name: tmp
+          emptyDir: {}
 ---
 {{- end }}
 apiVersion: v1
@@ -144,10 +222,8 @@ spec:
       labels:
         {{- include "appliance-inference.selectorLabels" . | nindent 8 }}
     spec:
-      automountServiceAccountToken: false
-      {{- if .Values.gpu.enabled }}
-      runtimeClassName: {{ .Values.gpu.runtimeClassName | quote }}
-      {{- end }}
+      serviceAccountName: {{ include "appliance-inference.serviceAccountName" . }}
+      automountServiceAccountToken: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -189,46 +265,6 @@ spec:
               mountPath: /tmp
             - name: runtime-home
               mountPath: /home/runtime
-            {{- if eq .Values.runtime.engine "vllm" }}
-            - name: control
-              mountPath: /control
-            {{- end }}
-        - name: inference-engine
-          image: {{ include "appliance-inference.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- if eq .Values.runtime.engine "ollama" }}
-          command: ["ollama", "serve"]
-          {{- else if eq .Values.runtime.engine "vllm" }}
-          command: ["/bin/sh", "/launcher/run.sh"]
-          {{- end }}
-          env:
-            {{- include "appliance-inference.engineEnv" . | nindent 12 }}
-            {{- if .Values.gpu.enabled }}
-            - name: NVIDIA_VISIBLE_DEVICES
-              value: {{ .Values.gpu.visibleDevices | quote }}
-            - name: NVIDIA_DRIVER_CAPABILITIES
-              value: {{ .Values.gpu.driverCapabilities | quote }}
-            {{- end }}
-          securityContext:
-            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
-          volumeMounts:
-            - name: models
-              mountPath: /models
-            - name: tmp
-              mountPath: /tmp
-            - name: runtime-home
-              mountPath: /home/runtime
-            {{- if eq .Values.runtime.engine "vllm" }}
-            - name: control
-              mountPath: /control
-            - name: launcher
-              mountPath: /launcher
-              readOnly: true
-            - name: shared-memory
-              mountPath: /dev/shm
-            {{- end }}
       volumes:
         - name: models
           persistentVolumeClaim:
@@ -237,18 +273,6 @@ spec:
           emptyDir: {}
         - name: runtime-home
           emptyDir: {}
-        {{- if eq .Values.runtime.engine "vllm" }}
-        - name: control
-          emptyDir: {}
-        - name: launcher
-          configMap:
-            name: {{ include "appliance-inference.fullname" . }}-engine-launcher
-            defaultMode: 0755
-        - name: shared-memory
-          emptyDir:
-            medium: Memory
-            sizeLimit: {{ .Values.runtime.sharedMemorySize }}
-        {{- end }}
 {{- if .Values.networkPolicy.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -263,7 +287,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "appliance-inference.fullname" . }}-allow
+  name: {{ include "appliance-inference.fullname" . }}-manager
   namespace: {{ include "appliance-inference.namespace" . }}
 spec:
   podSelector:
@@ -281,10 +305,18 @@ spec:
       ports:
         - {protocol: TCP, port: {{ .Values.service.targetPort }}}
         - {protocol: TCP, port: {{ .Values.service.port }}}
-  {{- if and (not .Values.networkPolicy.allowDNSToKubeSystem) (not .Values.networkPolicy.allowModelDownloadHTTPS) }}
-  egress: []
-  {{- else }}
   egress:
+    # Engine OpenAI backend inside this namespace.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "appliance-inference.engineName" . }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.engine.servicePort }}}
+    # Kubernetes API for on-demand engine Deployment apply/delete.
+    - ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
     {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
     - to:
         - namespaceSelector:
@@ -298,5 +330,23 @@ spec:
     - ports:
         - {protocol: TCP, port: 443}
     {{- end }}
-  {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}-engine
+  namespace: {{ include "appliance-inference.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "appliance-inference.engineName" . }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.engine.servicePort }}}
+  egress: []
 {{- end }}

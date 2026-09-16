@@ -94,11 +94,13 @@ type ImportProgress struct {
 }
 
 type LoadProgress struct {
-	ModelID   string `json:"modelId,omitempty"`
-	State     string `json:"state"` // idle|loading|ready|failed
-	Message   string `json:"message,omitempty"`
-	Error     string `json:"error,omitempty"`
-	UpdatedAt string `json:"updatedAt,omitempty"`
+	ModelID     string `json:"modelId,omitempty"`
+	State       string `json:"state"` // idle|loading|ready|failed
+	Message     string `json:"message,omitempty"`
+	Error       string `json:"error,omitempty"`
+	EnginePhase string `json:"enginePhase,omitempty"`
+	OOMKilled   bool   `json:"oomKilled,omitempty"`
+	UpdatedAt   string `json:"updatedAt,omitempty"`
 }
 
 // Catalog is runtime-owned and cached locally; reading it never refreshes upstream.
@@ -217,16 +219,17 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 	ready := false
 	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	// Probe the OpenAI surface (manager → engine), not the admin inventory.
-	resp, err := s.do(statusCtx, http.MethodGet, "/v1/models", nil)
+	// Probe the manager admin health surface. OpenAI /v1/* is only up when a
+	// model is loaded; idle appliances must still report the manager as ready.
+	resp, err := s.do(statusCtx, http.MethodGet, "/", nil)
 	if err == nil {
 		ready = resp.StatusCode >= 200 && resp.StatusCode < 300
 		resp.Body.Close()
 	}
 	status := "pass"
-	message := "OpenAI-compatible runtime API is reachable"
+	message := "Inference manager is reachable"
 	if !ready {
-		status, message = "fail", "OpenAI-compatible runtime API is unavailable"
+		status, message = "fail", "Inference manager is unavailable"
 	}
 	capabilities.Checks = append(capabilities.Checks, Check{Name: "runtime-api", Status: status, Message: message})
 

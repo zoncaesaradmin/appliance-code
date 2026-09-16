@@ -1,5 +1,5 @@
-# inference / cpu-llm: Ollama runs on CPU; GPU visibility is disabled
-# in the Deployment. The shared inference-gateway Service/API stays stable.
+# inference: manager stays up; engine Deployment is created on Load
+# (docker-run semantics via Kubernetes). Gateway Service stays stable.
 replicaCount: 1
 
 runtime:
@@ -11,6 +11,19 @@ runtime:
   # Conservative defaults for small CPU-only validation models. These are
   # runtime settings, not a hardware or model allow-list.
   cpuKVCacheSpaceGiB: 2
+  sharedMemorySize: 4Gi
+
+engine:
+  # In-cluster Service the manager proxies OpenAI traffic to after Load.
+  serviceName: inference-engine
+  servicePort: 8001
+  # Optional absolute ceiling. Empty = host-derived budget only (recommended).
+  # Set only for lab hosts that must refuse models above a fixed package cap.
+  maxMemory: ""
+  # Fixed CPU budget for the on-demand engine pod.
+  cpuLimit: "4"
+  cpuRequest: 100m
+  # emptyDir /dev/shm for vLLM (counts against the engine memory limit).
   sharedMemorySize: 4Gi
 
 gpu:
@@ -91,15 +104,6 @@ containerSecurityContext:
 # HOME is forced to /home/runtime (emptyDir) in the Deployment: the upstream
 # ollama image defaults HOME=/ for numeric UIDs, which fails under
 # readOnlyRootFilesystem (mkdir /.ollama).
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 4Gi
-  limits:
-    cpu: "4"
-    # CPU vLLM + ~3B bf16 weights needs well above 8Gi at load; leave headroom on 32Gi hosts.
-    memory: 24Gi
 
 managerResources:
   # HF snapshot downloads run in this container. 2Gi still OOM-kills mid-fetch

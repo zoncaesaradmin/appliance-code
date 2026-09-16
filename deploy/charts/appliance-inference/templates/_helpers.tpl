@@ -7,8 +7,16 @@
 {{- .Values.fullnameOverride | default "inference-gateway" | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "appliance-inference.engineName" -}}
+{{- .Values.engine.serviceName | default "inference-engine" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
 {{- define "appliance-inference.namespace" -}}
 {{- default .Release.Namespace .Values.namespace.name -}}
+{{- end -}}
+
+{{- define "appliance-inference.serviceAccountName" -}}
+{{- printf "%s-manager" (include "appliance-inference.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "appliance-inference.labels" -}}
@@ -19,6 +27,11 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 
 {{- define "appliance-inference.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-inference.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{- define "appliance-inference.engineSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-inference.engineName" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
@@ -54,71 +67,57 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 - name: INFERENCE_LISTEN_ADDRESS
   value: "0.0.0.0:11434"
 - name: INFERENCE_BACKEND_URL
-  value: "http://127.0.0.1:8001"
+  value: {{ printf "http://%s.%s.svc.cluster.local:%v" (include "appliance-inference.engineName" .) (include "appliance-inference.namespace" .) .Values.engine.servicePort | quote }}
 - name: INFERENCE_MODELS_DIR
   value: "/models"
-- name: INFERENCE_CONTROL_DIR
-  value: "/control"
+- name: INFERENCE_NAMESPACE
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.namespace
+- name: INFERENCE_ENGINE_DEPLOYMENT
+  value: {{ include "appliance-inference.engineName" . | quote }}
+- name: INFERENCE_ENGINE_SERVICE
+  value: {{ include "appliance-inference.engineName" . | quote }}
+- name: INFERENCE_ENGINE_PORT
+  value: {{ .Values.engine.servicePort | quote }}
+- name: INFERENCE_RUNTIME_IMAGE
+  value: {{ include "appliance-inference.image" . | quote }}
+{{- if .Values.engine.maxMemory }}
+- name: INFERENCE_ENGINE_MAX_MEMORY
+  value: {{ .Values.engine.maxMemory | quote }}
+{{- end }}
+- name: INFERENCE_ENGINE_CPU_LIMIT
+  value: {{ .Values.engine.cpuLimit | quote }}
+- name: INFERENCE_ENGINE_CPU_REQUEST
+  value: {{ .Values.engine.cpuRequest | quote }}
+- name: INFERENCE_ENGINE_SHARED_MEMORY
+  value: {{ .Values.engine.sharedMemorySize | default .Values.runtime.sharedMemorySize | quote }}
+- name: INFERENCE_RELEASE_INSTANCE
+  value: {{ .Release.Name | quote }}
+- name: INFERENCE_MODELS_CLAIM
+  value: {{ .Values.persistence.claimName | quote }}
 - name: HF_HOME
   value: "/models/.cache/huggingface"
 - name: HUGGINGFACE_HUB_CACHE
   value: "/models/.cache/huggingface/hub"
 - name: INFERENCE_GPU_ENABLED
   value: {{ .Values.gpu.enabled | quote }}
+{{- if .Values.gpu.enabled }}
+- name: INFERENCE_GPU_RUNTIME_CLASS
+  value: {{ .Values.gpu.runtimeClassName | quote }}
+- name: INFERENCE_GPU_VISIBLE_DEVICES
+  value: {{ .Values.gpu.visibleDevices | quote }}
+- name: INFERENCE_GPU_DRIVER_CAPABILITIES
+  value: {{ .Values.gpu.driverCapabilities | quote }}
+{{- end }}
+{{- with .Values.imagePullSecrets }}
+- name: INFERENCE_IMAGE_PULL_SECRETS
+  value: "{{ range $i, $s := . }}{{ if $i }},{{ end }}{{ $s.name }}{{ end }}"
+{{- end }}
 {{- if eq .Values.runtime.engine "vllm" }}
 - name: VLLM_CPU_KVCACHE_SPACE
   value: {{ .Values.runtime.cpuKVCacheSpaceGiB | quote }}
+- name: INFERENCE_ARCH_FILE
+  value: "/models/.zon/vllm-architectures.json"
 {{- end }}
-{{- end -}}
-
-{{- define "appliance-inference.engineEnv" -}}
-- name: HOME
-  value: "/home/runtime"
-- name: USER
-  value: "runtime"
-- name: LOGNAME
-  value: "runtime"
-{{- if not .Values.gpu.enabled }}
-- name: CUDA_VISIBLE_DEVICES
-  value: "-1"
-- name: ROCR_VISIBLE_DEVICES
-  value: "-1"
-{{- end }}
-{{- if eq .Values.runtime.engine "ollama" }}
-- name: OLLAMA_HOST
-  value: "127.0.0.1:8001"
-- name: OLLAMA_MODELS
-  value: "/models"
-{{- else if eq .Values.runtime.engine "vllm" }}
-- name: INFERENCE_CONTROL_DIR
-  value: "/control"
-- name: HF_HOME
-  value: "/models/.cache/huggingface"
-- name: VLLM_CACHE_ROOT
-  value: "/models/.cache/vllm"
-- name: HF_HUB_OFFLINE
-  value: "1"
-- name: TRANSFORMERS_OFFLINE
-  value: "1"
-- name: HF_HUB_DISABLE_TELEMETRY
-  value: "1"
-- name: VLLM_NO_USAGE_STATS
-  value: "1"
-- name: DO_NOT_TRACK
-  value: "1"
-- name: VLLM_CPU_KVCACHE_SPACE
-  value: {{ .Values.runtime.cpuKVCacheSpaceGiB | quote }}
-- name: VLLM_CPU_OMP_THREADS_BIND
-  value: "auto"
-- name: VLLM_CPU_NUM_OF_RESERVED_CPU
-  value: "1"
-- name: TORCHINDUCTOR_CACHE_DIR
-  value: "/home/runtime/.cache/torch/inductor"
-- name: TRITON_CACHE_DIR
-  value: "/home/runtime/.cache/triton"
-- name: XDG_CACHE_HOME
-  value: "/home/runtime/.cache"
-{{- else -}}
-{{- fail "unsupported inference runtime engine/modes; install a compatible signed runtime package" -}}
-{{- end -}}
 {{- end -}}

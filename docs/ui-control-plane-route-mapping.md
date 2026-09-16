@@ -33,7 +33,7 @@ shows a short capacity line (parameter hint, download size, estimated RAM).
 | `POST /api/v1/inference/models/imports` | `importInferenceModel` | Accept download job immediately (202); work continues on the inference manager |
 | `GET /api/v1/inference/models/imports/progress` | `getInferenceImportProgress` | Bytes/state for the active or most recent import; polled about every 2 seconds while downloading |
 | `POST /api/v1/inference/models/load` | `loadInferenceModel` | Accept load job immediately (202); engine warmup continues asynchronously |
-| `GET /api/v1/inference/models/load/progress` | `getInferenceLoadProgress` | Load state (`loading`/`ready`/`failed`); polled about every 2 seconds while loading |
+| `GET /api/v1/inference/models/load/progress` | `getInferenceLoadProgress` | Load state (`loading`/`ready`/`failed`) plus engine pod phase/OOM hints; polled about every 2 seconds while loading |
 | `POST /api/v1/inference/models/delete` | `deleteInferenceModel` | Remove local model, retaining catalog candidate |
 
 Catalog reads require `inference.models.read`; mutations require inference

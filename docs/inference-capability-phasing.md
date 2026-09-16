@@ -64,35 +64,43 @@ running. This is intentional: downloads can be large, and concurrent imports
 would make storage and memory admission unpredictable. A later job-backed
 implementation may queue multiple requests without changing these resources.
 
-Every inference image now uses the appliance manager as its entrypoint. The
-manager starts the packaged engine process, owns health plus `/internal/v1`
-admin lifecycle endpoints, and blind-proxies only `/v1/*` to the engine. The
-Ollama adapter maps to pull, tags, generate/keep-alive, and delete. The vLLM
+Every inference package deploys a steady-state **inference-manager** Deployment
+only. On Load, the manager applies an on-demand **inference-engine** Deployment
+(docker-run semantics via Kubernetes) with model-derived memory limits and the
+full serve argv, then blind-proxies `/v1/*` to the engine Service. When no model
+is loaded there is no engine pod; OpenAI routes return `503`. Admin
+`/internal/v1` stays on the manager. The Ollama adapter maps to pull, tags,
+generate/keep-alive, and delete against a transient engine Deployment. The vLLM
 adapter downloads and verifies a source, records installed models, and
-restarts/switches the single active vLLM server when `load` is requested.
-Multiple models may be stored, but one vLLM base model is active per runtime pod.
+creates/replaces the single active engine Deployment when `load` is requested.
+Multiple models may be stored, but one engine base model is active at a time.
 
 vLLM launch configuration is stored with the imported model as a validated
 argv array—never shell text. The current contract accepts quantization,
 maximum model length, GPU-memory utilization, CUDA graph capture size,
 FlashInfer autotune disablement, automatic tool choice, served model name, and
-tool-call parser. The manager owns the model path, bind address, and port so
+tool-call parser. `--max-model-len` comes from the model card
+(`max_position_embeddings` / `n_positions`); Load rewrites legacy fixed-2048
+caps to the installed model window and persists that value for client copy
+settings. The manager owns the model path, bind address, and port so
 callers cannot bypass the appliance boundary. Device selection is owned by the
 packaged runtime image and mode detection (CPU vs CUDA build / visible GPU),
 not by a `--device` CLI flag—current vLLM CPU images reject `--device`.
 
-The tested Docker invocation maps to the pod without rebuilding the vLLM
-environment:
+The tested Docker invocation maps to the on-demand engine pod without rebuilding
+the vLLM environment:
 
 | Docker setting | Appliance pod equivalent |
 | --- | --- |
-| official `vllm/vllm-openai` image | pinned base of the managed inference image |
-| `--gpus all` | detected K3s `nvidia` RuntimeClass plus `NVIDIA_VISIBLE_DEVICES=all` |
-| `--ipc=host` | isolated, memory-backed `/dev/shm` volume |
-| memlock/stack ulimits | manager raises inherited memlock to the container maximum and requests a 64 MiB stack |
-| port `8000` | manager-only loopback backend, exposed through the appliance Service on `/ai/v1` |
+| official `vllm/vllm-openai` image | pinned `registry.local/inference-runtime@sha256:…` |
+| `docker run … --model …` | engine Deployment `command`/`args` set on Load |
+| `--gpus all` | `runtimeClassName: nvidia` plus `NVIDIA_VISIBLE_DEVICES=all` when GPU package |
+| `--ipc=host` | isolated, memory-backed `/dev/shm` emptyDir (not host IPC) |
+| memlock/stack ulimits | inherited container defaults under Restricted PSA |
+| port `8000`/`8001` | in-namespace `inference-engine` Service; manager proxies `/v1/*` |
 | Hugging Face and vLLM caches | persistent model PVC cache directories |
 | vLLM server flags | validated `launchArguments` argv stored with the model |
+| cgroup memory | model `memoryBytes` + overhead, clamped by package `engine.maxMemory` |
 
 Host IPC is intentionally not enabled: the isolated `/dev/shm` mount supplies
 the shared memory vLLM needs without weakening Restricted pod isolation.

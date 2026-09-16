@@ -28,7 +28,10 @@ func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
 	c.discover = func(context.Context) ([]catalogEntry, error) { return nil, errors.New("offline") }
 	c.refresh(context.Background())
 	restarted := newModelCatalog(m)
-	restarted.budget = func(context.Context) (uint64, uint64) { return 10, 10 }
+	restarted.budget = func(context.Context) (uint64, uint64) {
+		plan, _ := planModelMemory(m.engine, 2, 1<<30)
+		return plan.RequiredBytes + 1, 10
+	}
 	snapshot := restarted.snapshot(context.Background())
 	if len(snapshot.Items) != 1 || !snapshot.Items[0].Eligible || snapshot.LastError == "" || !snapshot.Stale || !snapshot.LastSuccess.Equal(first) {
 		t.Fatalf("lost offline snapshot: %+v", snapshot)
@@ -99,11 +102,12 @@ func TestCatalogSelectionRechecksCapacityWithoutNetwork(t *testing.T) {
 	c := newModelCatalog(m)
 	c.state.Items = []catalogEntry{{ID: "org/model", Source: "org/model@revision", DownloadBytes: 10, MemoryBytes: 20}}
 	c.state.LastSuccess = time.Now()
-	c.budget = func(context.Context) (uint64, uint64) { return 30, 30 }
+	fit, _ := planModelMemory(m.engine, 20, 1<<30)
+	c.budget = func(context.Context) (uint64, uint64) { return fit.RequiredBytes, 30 }
 	if _, err := c.selection(context.Background(), "org/model"); err != nil {
 		t.Fatal(err)
 	}
-	c.budget = func(context.Context) (uint64, uint64) { return 19, 30 }
+	c.budget = func(context.Context) (uint64, uint64) { return fit.RequiredBytes - 1, 30 }
 	if _, err := c.selection(context.Background(), "org/model"); err == nil {
 		t.Fatal("low-memory model accepted")
 	}

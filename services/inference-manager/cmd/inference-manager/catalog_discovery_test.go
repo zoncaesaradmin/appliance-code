@@ -106,7 +106,7 @@ func TestDiscoverVLLMUsesInstalledArchitecturesAndUpstreamMetadata(t *testing.T)
 	if got.ID != keepID || got.Source != keepID+"@"+keepSHA || got.DownloadBytes != 1_002_000 || got.MemoryBytes != 1_000_000*2+(4<<30) {
 		t.Fatalf("unexpected entry: %+v", got)
 	}
-	if len(got.LaunchArguments) != 2 || got.LaunchArguments[0] != "--max-model-len" || got.LaunchArguments[1] != "2048" {
+	if len(got.LaunchArguments) != 2 || got.LaunchArguments[0] != "--max-model-len" || got.LaunchArguments[1] != "4096" {
 		t.Fatalf("launch args: %v", got.LaunchArguments)
 	}
 }

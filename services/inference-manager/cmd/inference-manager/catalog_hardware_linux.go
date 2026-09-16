@@ -39,7 +39,7 @@ func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 	}
 	// Catalog eligibility estimates whether a *model* can fit on this appliance.
 	// Do not clamp to the manager container's memory limit: the thin manager is
-	// intentionally small (API/proxy only); the engine sidecar / host holds the
+	// intentionally small (API/proxy only); the on-demand engine pod holds the
 	// model. Host MemAvailable is the conservative capacity signal for CPU mode.
 	memory := hostMemAvailable()
 	// Leave room for existing appliance workloads and transient allocations.
@@ -58,6 +58,9 @@ func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 		if memory == 0 || gpu < memory {
 			memory = gpu
 		}
+	}
+	if max := packageMaxMemoryBytes(); max > 0 && memory > max {
+		memory = max
 	}
 	return memory, freeDisk
 }

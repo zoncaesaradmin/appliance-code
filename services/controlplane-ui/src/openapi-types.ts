@@ -1745,6 +1745,7 @@ export interface components {
             lastError?: string;
             refreshing: boolean;
             stale: boolean;
+            availableMemoryBytes?: number;
             scope: string;
             /**
              * @description Applied sort key (defaults to parameters).
@@ -1761,6 +1762,7 @@ export interface components {
                 source: string;
                 downloadBytes: number;
                 memoryBytes: number;
+                requiredBytes?: number;
                 eligible: boolean;
                 reason?: string;
                 launchArguments?: string[];
@@ -1794,6 +1796,8 @@ export interface components {
             state: "idle" | "loading" | "ready" | "failed";
             message?: string;
             error?: string;
+            enginePhase?: string;
+            oomKilled?: boolean;
             /** Format: date-time */
             updatedAt?: string;
         };

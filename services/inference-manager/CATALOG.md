@@ -22,14 +22,17 @@ the existing explicit import API.
 Eligibility is an estimate, not a guarantee of runtime compatibility, especially
 for new model families in older Ollama versions. The UI states that a load is
 required to verify execution. No hardware vendors or specific model names are
-hardcoded. Runtime mode, host available memory, container cgroup memory limits,
+hardcoded. Runtime mode, host available memory, optional package maxMemory,
 GPU free memory for CUDA, and PVC free space determine current eligibility.
 GPU memory is not summed across devices; automatic tensor parallelism is not
-configured. Conservatively reserve 25% of CPU memory (20% of GPU memory), require
-twice the weights plus 2 GiB (Ollama) or 4 GiB (vLLM), and twice download storage.
-vLLM catalog launches use a 2048-token context. Estimates are recomputed locally
-on every catalog read and selection. Cached Hugging Face revisions can become
-unavailable upstream; report a download error without changing installed models.
+configured. Conservatively reserve 25% of CPU memory (20% of GPU memory). Model
+`memoryBytes` uses twice the weights plus 2 GiB (Ollama) or 4 GiB (vLLM). Load
+and eligibility then add vLLM `/dev/shm` plus a 512 MiB pod margin so the
+catalog “load needs” figure matches the engine Deployment memory limit.
+vLLM catalog/load sets `--max-model-len` from the model card
+(`max_position_embeddings` / `n_positions`), not a fixed 2048 product default.
+Load rewrites legacy capped values and persists the effective launch arguments
+so client copy settings match the running engine.
 
 A successful catalog (or a retained non-empty one) refreshes at most once per day
 so restarts do not hammer upstream. If discovery has never succeeded and the
@@ -49,10 +52,10 @@ Runtime images continue through the existing seeded LAN/online build policy,
 signed bundle, digest verification, and K3s preload path. Catalog metadata and
 downloaded weights persist on the inference PVC, not the OCI registry.
 
-The vLLM serving child uses local model paths with `HF_HUB_OFFLINE=1` and
+The vLLM serving engine Deployment uses local model paths with `HF_HUB_OFFLINE=1` and
 `TRANSFORMERS_OFFLINE=1`; usage reporting is disabled with
 `HF_HUB_DISABLE_TELEMETRY=1`, `VLLM_NO_USAGE_STATS=1`, and `DO_NOT_TRACK=1`.
-These overrides apply only to serving, preserving upstream catalog refreshes
+These overrides apply only to the engine pod, preserving upstream catalog refreshes
 and administrator-triggered model downloads in the manager. An offline refresh
 failure retains the previous catalog and never removes installed models.
 
@@ -80,10 +83,24 @@ Explicit imports retain the existing administrator API for advanced uses.
 
 Unit tests exercise the real `discoverVLLM` / `discoverOllama` path against a
 local HTTPS fixture (no public network required) and prove architecture probing
-parses the installed registry without importing the vLLM runtime. In the dual-image
-layout the engine sidecar publishes `/control/vllm-architectures.json` for the
-thin manager; the manager falls back to a local registry probe only when that
-file is unavailable (tests and legacy images).
+parses the installed registry without importing the vLLM runtime. An install-time
+Job publishes `/models/.zon/vllm-architectures.json` for the thin manager; the
+manager falls back to a local registry probe only when that file is unavailable
+(tests and legacy images).
+
+Eligibility and Load share one memory plan:
+
+```
+requiredBytes = memoryBytes + shmBytes(vLLM only) + 512Mi margin
+availableBytes = host MemAvailable × 0.75 (or GPU free × 0.8 in CUDA mode)
+eligible <=> requiredBytes <= availableBytes
+engine pod limit = requiredBytes
+```
+
+`memoryBytes` is the catalog model estimate (weights×2 plus engine headroom
+from discovery). Catalog responses also include `requiredBytes` per item and
+`availableMemoryBytes` for the host. An optional `engine.maxMemory` chart value
+may set an absolute ceiling; the default is empty (host budget only).
 
 UI download state is derived from the runtime inventory, never inferred from
 catalog membership. Removing or losing a catalog entry does not remove its

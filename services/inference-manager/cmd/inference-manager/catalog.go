@@ -21,19 +21,21 @@ type catalogEntry struct {
 	Source          string   `json:"source"`
 	DownloadBytes   uint64   `json:"downloadBytes"`
 	MemoryBytes     uint64   `json:"memoryBytes"`
+	RequiredBytes   uint64   `json:"requiredBytes"`
 	LaunchArguments []string `json:"launchArguments,omitempty"`
 	Eligible        bool     `json:"eligible"`
 	Reason          string   `json:"reason,omitempty"`
 }
 
 type catalogState struct {
-	Engine      string         `json:"engine"`
-	LastAttempt time.Time      `json:"lastAttempt"`
-	LastSuccess time.Time      `json:"lastSuccess"`
-	LastError   string         `json:"lastError,omitempty"`
-	Refreshing  bool           `json:"refreshing"`
-	Stale       bool           `json:"stale"`
-	Items       []catalogEntry `json:"items"`
+	Engine               string         `json:"engine"`
+	LastAttempt          time.Time      `json:"lastAttempt"`
+	LastSuccess          time.Time      `json:"lastSuccess"`
+	LastError            string         `json:"lastError,omitempty"`
+	Refreshing           bool           `json:"refreshing"`
+	Stale                bool           `json:"stale"`
+	AvailableMemoryBytes uint64         `json:"availableMemoryBytes"`
+	Items                []catalogEntry `json:"items"`
 	// Discovery is deliberately bounded, not an exhaustive upstream mirror.
 	Scope string `json:"scope"`
 	Sort  string `json:"sort,omitempty"`
@@ -165,14 +167,25 @@ func (c *modelCatalog) snapshot(ctx context.Context) catalogState {
 	c.mu.Unlock()
 	state.Stale = state.LastSuccess.IsZero() || time.Since(state.LastSuccess) >= catalogInterval || state.LastError != ""
 	memory, disk := c.budget(ctx)
+	state.AvailableMemoryBytes = memory
+	engine := ""
+	if c.m != nil {
+		engine = c.m.engine
+	}
 	for i := range state.Items {
 		item := &state.Items[i]
 		item.Eligible = false
+		plan, planErr := planModelMemory(engine, item.MemoryBytes, memory)
+		item.RequiredBytes = plan.RequiredBytes
 		switch {
 		case memory == 0:
 			item.Reason = "Usable runtime memory could not be confirmed"
-		case item.MemoryBytes == 0 || item.MemoryBytes > memory:
-			item.Reason = "Insufficient available inference memory"
+		case item.MemoryBytes == 0 || planErr != nil:
+			if planErr != nil {
+				item.Reason = planErr.Error()
+			} else {
+				item.Reason = "Insufficient available inference memory"
+			}
 		case disk == 0 || item.DownloadBytes == 0 || item.DownloadBytes > disk/2:
 			item.Reason = "Insufficient model storage including download workspace"
 		default:

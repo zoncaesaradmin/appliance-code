@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["replicaCount", "image", "managerImage", "service", "persistence", "runtime", "gpu"],
+  "required": ["replicaCount", "image", "managerImage", "service", "persistence", "runtime", "engine", "gpu"],
   "properties": {
     "runtime": {
       "type": "object",
@@ -34,6 +34,23 @@
           "type": "string",
           "pattern": "^[1-9][0-9]*(Mi|Gi)$"
         }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceName", "servicePort", "cpuLimit", "cpuRequest", "sharedMemorySize"],
+      "properties": {
+        "serviceName": {"type": "string", "const": "inference-engine"},
+        "servicePort": {"type": "integer", "minimum": 1},
+        "maxMemory": {
+          "type": "string",
+          "description": "Optional absolute ceiling. Empty means host-derived budget only.",
+          "pattern": "^$|^[1-9][0-9]*(Mi|Gi)$"
+        },
+        "cpuLimit": {"type": "string", "minLength": 1},
+        "cpuRequest": {"type": "string", "minLength": 1},
+        "sharedMemorySize": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$"}
       }
     },
     "gpu": {

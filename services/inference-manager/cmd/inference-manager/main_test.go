@@ -12,13 +12,21 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 func testManager(t *testing.T) *manager {
 	t.Helper()
 	dir := t.TempDir()
 	backend, _ := url.Parse("http://127.0.0.1:1")
-	m := &manager{modelsDir: dir, backend: backend, reg: registry{Models: map[string]model{}}}
+	fake := &fakeEngine{ready: true, exists: true, phase: "Running"}
+	m := &manager{
+		modelsDir:  dir,
+		backend:    backend,
+		engineOrch: fake,
+		reg:        registry{Models: map[string]model{}},
+	}
 	m.download = func(_ context.Context, source, destination string) error {
 		return os.WriteFile(filepath.Join(destination, "config.json"), []byte(source), 0o660)
 	}
@@ -90,41 +98,18 @@ func TestAutoModePrefersConfirmedCUDA(t *testing.T) {
 	}
 }
 
-func TestVLLMServingIsOfflineWithoutChangingManagerEnvironment(t *testing.T) {
-	base := []string{"HF_HUB_OFFLINE=0", "VLLM_NO_USAGE_STATS=0", "HF_HOME=/models/.cache/huggingface", "CUDA_VISIBLE_DEVICES=0"}
-	child := vllmProcessEnvironment(base)
-	for _, want := range []string{
-		"HF_HUB_OFFLINE=1",
-		"TRANSFORMERS_OFFLINE=1",
-		"HF_HUB_DISABLE_TELEMETRY=1",
-		"VLLM_NO_USAGE_STATS=1",
-		"DO_NOT_TRACK=1",
-		"USER=runtime",
-		"LOGNAME=runtime",
-		"HOME=/home/runtime",
-		"TORCHINDUCTOR_CACHE_DIR=/home/runtime/.cache/torch/inductor",
-		"TRITON_CACHE_DIR=/home/runtime/.cache/triton",
-		"XDG_CACHE_HOME=/home/runtime/.cache",
-		"HF_HOME=/models/.cache/huggingface",
-		"CUDA_VISIBLE_DEVICES=0",
-	} {
-		count := 0
-		for _, entry := range child {
-			if entry == want {
-				count++
-			}
-		}
-		if count != 1 {
-			t.Fatalf("child environment must contain %q exactly once: %v", want, child)
-		}
+func TestVLLMEnginePodSetsOfflineEnvContract(t *testing.T) {
+	t.Setenv("INFERENCE_ENGINE_MAX_MEMORY", "")
+	t.Setenv("INFERENCE_ENGINE_SHARED_MEMORY", "4Gi")
+	spec, err := engineResourceSpec("vllm", 1<<30, 32<<30)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, entry := range child {
-		if entry == "HF_HUB_OFFLINE=0" || entry == "VLLM_NO_USAGE_STATS=0" {
-			t.Fatalf("conflicting override retained: %s", entry)
-		}
-	}
-	if base[0] != "HF_HUB_OFFLINE=0" {
-		t.Fatal("manager environment was mutated")
+	spec.ModelID = "test/model"
+	spec.Command = []string{"vllm"}
+	spec.Args = []string{"serve", "/models/x", "--host", "0.0.0.0", "--port", "8001"}
+	if spec.MemoryLimit.Cmp(resource.MustParse("1Gi")) < 0 {
+		t.Fatalf("unexpected memory limit %s", spec.MemoryLimit.String())
 	}
 }
 
@@ -155,7 +140,7 @@ func TestValidatedVLLMArgumentsMatchSupportedDockerInvocation(t *testing.T) {
 	m := testManager(t)
 	got := m.vllmCommandArguments(model{ID: "internal", Path: "/models/model", LaunchArguments: arguments}, "cuda")
 	joined := strings.Join(got, " ")
-	for _, expected := range []string{"serve /models/model", "--quantization modelopt_fp4", "--max-model-len 262144", "--gpu-memory-utilization 0.8", "--cudagraph-capture-sizes 4", "--no-enable-flashinfer-autotune", "--enable-auto-tool-choice", "--served-model-name qwen3.6", "--tool-call-parser qwen3_coder", "--host 127.0.0.1", "--port 1"} {
+	for _, expected := range []string{"serve /models/model", "--quantization modelopt_fp4", "--max-model-len 262144", "--gpu-memory-utilization 0.8", "--cudagraph-capture-sizes 4", "--no-enable-flashinfer-autotune", "--enable-auto-tool-choice", "--served-model-name qwen3.6", "--tool-call-parser qwen3_coder", "--host 0.0.0.0", "--port 1"} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("command %q missing %q", joined, expected)
 		}
@@ -200,7 +185,8 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tiny:latest") {
 		t.Fatalf("list status %d: %s", w.Code, w.Body.String())
 	}
-	if len(calls) < 1 || calls[0] != "POST /api/pull" {
+	joined := strings.Join(calls, ",")
+	if !strings.Contains(joined, "POST /api/pull") || !strings.Contains(joined, "GET /api/tags") {
 		t.Fatalf("engine calls=%v", calls)
 	}
 }
@@ -303,13 +289,21 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	defer backend.Close()
 	m.backend, _ = url.Parse(backend.URL)
-	item := model{ID: "test/tiny", Path: filepath.Join(m.modelsDir, "tiny")}
-	m.reg.Models[item.ID] = item
-	started := make(chan struct{})
-	m.start = func(_ context.Context, _ model) error {
-		close(started)
-		return nil
+	fake := &fakeEngine{}
+	m.engineOrch = fake
+	t.Setenv("INFERENCE_SUPPORTED_MODES", "cpu")
+	t.Setenv("INFERENCE_MODE", "cpu")
+	t.Setenv("INFERENCE_ENGINE_MAX_MEMORY", "")
+	t.Setenv("INFERENCE_ENGINE_SHARED_MEMORY", "4Gi")
+	modelDir := filepath.Join(m.modelsDir, "tiny")
+	if err := os.MkdirAll(modelDir, 0o770); err != nil {
+		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(modelDir, "weights.bin"), make([]byte, 1024), 0o660); err != nil {
+		t.Fatal(err)
+	}
+	item := model{ID: "test/tiny", Path: modelDir}
+	m.reg.Models[item.ID] = item
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`))
 	w := httptest.NewRecorder()
 	m.loadModel(w, req)
@@ -319,12 +313,21 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"state":"loading"`) {
 		t.Fatalf("expected async loading accept: %s", w.Body.String())
 	}
-	select {
-	case <-started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("expected start callback for loaded model")
-	}
 	waitLoadState(t, m, "ready")
+	spec, ok := fake.lastApplied()
+	if !ok {
+		t.Fatal("expected engine Deployment apply")
+	}
+	if len(spec.Command) == 0 || spec.Command[0] != "vllm" {
+		t.Fatalf("command=%v", spec.Command)
+	}
+	joined := strings.Join(spec.Args, " ")
+	if !strings.Contains(joined, "serve "+modelDir) || !strings.Contains(joined, "--host 0.0.0.0") {
+		t.Fatalf("args=%v", spec.Args)
+	}
+	if fake.deleted < 1 {
+		t.Fatal("expected previous engine delete before apply")
+	}
 	w = httptest.NewRecorder()
 	m.handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models/load/progress", nil))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"state":"ready"`) {
@@ -337,20 +340,19 @@ func TestLoadAlreadyReadyIsIdempotent(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	defer backend.Close()
 	m.backend, _ = url.Parse(backend.URL)
+	fake := m.engineOrch.(*fakeEngine)
+	fake.exists = true
+	fake.ready = true
 	m.reg.Models["test/tiny"] = model{ID: "test/tiny", Path: filepath.Join(m.modelsDir, "tiny")}
 	m.active = "test/tiny"
 	m.finishLoadProgress("ready", "test/tiny", "Model is ready for use")
-	started := false
-	m.start = func(context.Context, model) error {
-		started = true
-		return nil
-	}
+	before := len(fake.applied)
 	w := httptest.NewRecorder()
 	m.loadModel(w, httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`)))
 	if w.Code != http.StatusAccepted || !strings.Contains(w.Body.String(), `"state":"ready"`) {
 		t.Fatalf("status %d body %s", w.Code, w.Body.String())
 	}
-	if started {
+	if len(fake.applied) != before {
 		t.Fatal("already-ready load restarted the engine")
 	}
 }

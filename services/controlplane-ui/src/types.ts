@@ -569,6 +569,8 @@ export interface InferenceLoadProgress {
   state: "idle" | "loading" | "ready" | "failed";
   message?: string;
   error?: string;
+  enginePhase?: string;
+  oomKilled?: boolean;
   updatedAt?: string;
 }
 
@@ -577,6 +579,7 @@ export interface InferenceCatalogEntry {
   source: string;
   downloadBytes: number;
   memoryBytes: number;
+  requiredBytes?: number;
   eligible: boolean;
   reason?: string;
   launchArguments?: string[];
@@ -589,6 +592,7 @@ export interface InferenceCatalog {
   lastError?: string;
   refreshing: boolean;
   stale: boolean;
+  availableMemoryBytes?: number;
   scope: string;
   sort?: "parameters" | "memory" | "name";
   order?: "asc" | "desc";

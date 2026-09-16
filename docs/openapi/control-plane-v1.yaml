@@ -2655,6 +2655,10 @@ components:
         lastError: { type: string }
         refreshing: { type: boolean }
         stale: { type: boolean }
+        availableMemoryBytes:
+          type: integer
+          minimum: 0
+          description: Host/GPU-derived budget used for eligibility and Load limits.
         scope: { type: string }
         sort:
           type: string
@@ -2674,6 +2678,10 @@ components:
               source: { type: string }
               downloadBytes: { type: integer, minimum: 0 }
               memoryBytes: { type: integer, minimum: 0 }
+              requiredBytes:
+                type: integer
+                minimum: 0
+                description: Exact engine memory limit Load will request (estimate + shm + margin).
               eligible: { type: boolean }
               reason: { type: string }
               launchArguments:
@@ -2721,6 +2729,8 @@ components:
           enum: [idle, loading, ready, failed]
         message: { type: string }
         error: { type: string }
+        enginePhase: { type: string, description: Engine pod phase while loading }
+        oomKilled: { type: boolean, description: True when the engine container was OOMKilled }
         updatedAt: { type: string, format: date-time }
     Problem:
       type: object

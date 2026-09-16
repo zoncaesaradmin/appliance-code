@@ -315,14 +315,15 @@ it("builds OpenAI client settings from the ready model", () => {
   expect(parsed.models[0].supports_search_tool).toBe(false);
 });
 
-it("defaults context window in catalog when the model does not report one", () => {
+it("omits a fake context window when the loaded model does not report one", () => {
   const settings = buildOpenAIClientSettings({
     origin: "https://appliance.example",
     modelId: "org/chat-model"
   });
-  expect(settings.providerToml).toContain("model_context_window = 8192");
-  expect(settings.catalogJson).toContain('"context_window": 8192');
+  expect(settings.providerToml).toContain("# model_context_window = <reload the model, then copy again>");
+  expect(settings.catalogJson).not.toContain('"context_window"');
   expect(settings.catalogJson).toContain('"supported_reasoning_levels"');
+  expect(settings.contextWindow).toBeUndefined();
 });
 
 it("polls load progress while an async load runs", async () => {
