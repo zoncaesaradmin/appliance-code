@@ -144,7 +144,7 @@ func TestVLLMRuntimeContractRenders(t *testing.T) {
 		"name: INFERENCE_SUPPORTED_MODES", "value: \"cpu,cuda\"", "name: VLLM_CPU_KVCACHE_SPACE",
 		"mountPath: /dev/shm", "sizeLimit: 4Gi", "name: inference-gateway-engine-launcher",
 		"mountPath: /control", "command: [\"/bin/sh\", \"/launcher/run.sh\"]",
-		"list_vllm_archs.py", "vllm-architectures.json",
+		"list_vllm_archs.py", "vllm-architectures.json", "engine-exit.json",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("vLLM runtime contract missing %q: %s", want, out)

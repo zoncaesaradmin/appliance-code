@@ -524,7 +524,7 @@ func (m *manager) runLoad(ctx context.Context, id string) {
 	m.processMu.Lock()
 	m.active = id
 	m.processMu.Unlock()
-	if err := m.waitBackend(ctx, nil); err != nil {
+	if err := m.waitVLLMReady(ctx); err != nil {
 		m.stopProcess()
 		m.finishLoadProgress("failed", id, "vLLM did not become ready: "+err.Error())
 		return
@@ -565,6 +565,39 @@ func (m *manager) waitBackend(ctx context.Context, done <-chan struct{}) error {
 	return m.waitBackendPath(ctx, done, "/health")
 }
 
+func (m *manager) waitVLLMReady(ctx context.Context) error {
+	done := make(chan struct{})
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			if _, exited := m.engineExitedForCurrentGeneration(); exited {
+				close(done)
+				return
+			}
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	if err := m.waitBackendPath(ctx, done, "/health"); err != nil {
+		if status, exited := m.engineExitedForCurrentGeneration(); exited {
+			return fmt.Errorf("runtime process exited (code %d)", status.ExitCode)
+		}
+		if errors.Is(err, errRuntimeExited) {
+			return err
+		}
+		return err
+	}
+	return nil
+}
+
+var errRuntimeExited = errors.New("runtime process exited")
+
 func (m *manager) waitBackendPath(ctx context.Context, done <-chan struct{}, healthPath string) error {
 	deadline := time.NewTimer(10 * time.Minute)
 	defer deadline.Stop()
@@ -585,7 +618,7 @@ func (m *manager) waitBackendPath(ctx context.Context, done <-chan struct{}, hea
 			return ctx.Err()
 		case <-done:
 			if done != nil {
-				return errors.New("runtime process exited")
+				return errRuntimeExited
 			}
 		case <-deadline.C:
 			return errors.New("startup timed out")
@@ -793,6 +826,7 @@ func (m *manager) startVLLM(_ context.Context, item model) error {
 	}
 	argvPath := filepath.Join(m.controlDir, "argv.json")
 	generation := fmt.Sprintf("%d", time.Now().UnixNano())
+	m.clearEngineExitStatus()
 	if err := os.WriteFile(argvPath, payload, 0o640); err != nil {
 		return err
 	}
@@ -809,8 +843,8 @@ func (m *manager) startVLLM(_ context.Context, item model) error {
 
 func (m *manager) vllmCommandArguments(item model, mode string) []string {
 	args := []string{"serve", item.Path}
-	args = append(args, item.LaunchArguments...)
-	if !argumentPresent(item.LaunchArguments, "--served-model-name") {
+	args = append(args, clampLaunchMaxModelLen(item.LaunchArguments, item.Path)...)
+	if !argumentPresent(item.LaunchArguments, "--served-model-name") && !argumentPresent(args, "--served-model-name") {
 		args = append(args, "--served-model-name", item.ID)
 	}
 	// Device is fixed by the packaged vLLM image (cpu vs CUDA build). Current

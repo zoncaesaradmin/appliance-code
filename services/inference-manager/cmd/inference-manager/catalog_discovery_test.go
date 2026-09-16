@@ -69,7 +69,10 @@ func TestDiscoverVLLMUsesInstalledArchitecturesAndUpstreamMetadata(t *testing.T)
 		case r.URL.Path == "/"+keepID+"/resolve/"+keepSHA+"/config.json":
 			http.Redirect(w, r, "/cdn/"+keepID+"/config.json", http.StatusFound)
 		case r.URL.Path == "/cdn/"+keepID+"/config.json":
-			_ = json.NewEncoder(w).Encode(map[string]any{"architectures": []string{"Qwen2ForCausalLM"}})
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"architectures":           []string{"Qwen2ForCausalLM"},
+				"max_position_embeddings": 4096,
+			})
 		case r.URL.Path == "/"+skipID+"/resolve/"+skipSHA+"/config.json":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"architectures":       []string{"Qwen2ForCausalLM"},
@@ -105,6 +108,52 @@ func TestDiscoverVLLMUsesInstalledArchitecturesAndUpstreamMetadata(t *testing.T)
 	}
 	if len(got.LaunchArguments) != 2 || got.LaunchArguments[0] != "--max-model-len" || got.LaunchArguments[1] != "2048" {
 		t.Fatalf("launch args: %v", got.LaunchArguments)
+	}
+}
+
+func TestDiscoverVLLMClampsMaxModelLenToModelWindow(t *testing.T) {
+	writeFakeVLLMRegistry(t)
+	const (
+		id  = "openai-community/gpt2"
+		sha = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	)
+	server := useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/models") && !strings.Contains(r.URL.Path, "/revision/"):
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": id, "sha": sha, "gated": false, "private": false}})
+		case strings.Contains(r.URL.Path, "/resolve/") && strings.HasSuffix(r.URL.Path, "/config.json"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"architectures":           []string{"GPT2LMHeadModel"},
+				"max_position_embeddings": 1024,
+			})
+		case strings.Contains(r.URL.Path, "/revision/"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"siblings": []map[string]any{{"rfilename": "model.safetensors", "size": 5000}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Setenv("INFERENCE_CATALOG_HF_BASE", server.URL)
+	t.Setenv("INFERENCE_VLLM_ARCHITECTURES_FILE", filepath.Join(t.TempDir(), "missing.json"))
+	// Prefer installed probe via fake registry; also publish architectures file.
+	archFile := filepath.Join(t.TempDir(), "vllm-architectures.json")
+	if err := os.WriteFile(archFile, []byte(`["GPT2LMHeadModel","Qwen2ForCausalLM","LlamaForCausalLM"]`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("INFERENCE_VLLM_ARCHITECTURES_FILE", archFile)
+
+	m := testManager(t)
+	m.engine = "vllm"
+	entries, err := m.discoverVLLM(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries=%+v", entries)
+	}
+	if got := entries[0].LaunchArguments; len(got) != 2 || got[0] != "--max-model-len" || got[1] != "1024" {
+		t.Fatalf("launch args: %v", got)
 	}
 }
 

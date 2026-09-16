@@ -88,6 +88,7 @@ data:
       if [ -n "${GEN}" ] && [ -f "${CONTROL}/argv.json" ] && [ "${GEN}" != "${LAST}" ]; then
         cleanup
         LAST="${GEN}"
+        rm -f "${CONTROL}/engine-exit.json"
         python3 -c 'import json,os,sys; args=json.load(open(sys.argv[1],encoding="utf-8")); os.execvp(args[0], args)' "${CONTROL}/argv.json" &
         CHILD="$!"
       elif [ -z "${GEN}" ]; then
@@ -95,7 +96,12 @@ data:
         LAST=""
       fi
       if [ -n "${CHILD}" ] && ! kill -0 "${CHILD}" 2>/dev/null; then
-        wait "${CHILD}" 2>/dev/null || true
+        set +e
+        wait "${CHILD}"
+        EXIT=$?
+        set -e
+        printf '{"generation":"%s","exitCode":%s}\n' "${LAST}" "${EXIT}" > "${CONTROL}/engine-exit.json.tmp"
+        mv "${CONTROL}/engine-exit.json.tmp" "${CONTROL}/engine-exit.json"
         CHILD=""
       fi
       sleep 1

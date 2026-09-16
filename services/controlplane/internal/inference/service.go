@@ -433,8 +433,11 @@ func (s *Service) do(ctx context.Context, method, path string, body any) (*http.
 		}
 		reader = bytes.NewReader(data)
 	}
-	target := *s.base
-	target.Path = path
+	rel, err := url.Parse(path)
+	if err != nil {
+		return nil, fmt.Errorf("inference: invalid path %q: %w", path, err)
+	}
+	target := s.base.ResolveReference(rel)
 	req, err := http.NewRequestWithContext(ctx, method, target.String(), reader)
 	if err != nil {
 		return nil, err

@@ -27,6 +27,30 @@ func TestCatalogReadUsesRuntimeCache(t *testing.T) {
 	}
 }
 
+func TestCatalogForwardsSortQuery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/internal/v1/models/catalog" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.RequestURI())
+		}
+		if got := r.URL.Query().Get("sort"); got != "parameters" {
+			t.Fatalf("sort=%q", got)
+		}
+		if got := r.URL.Query().Get("order"); got != "desc" {
+			t.Fatalf("order=%q", got)
+		}
+		_, _ = w.Write([]byte(`{"engine":"vllm","items":[],"sort":"parameters","order":"desc"}`))
+	}))
+	defer server.Close()
+	s, err := New(Config{BaseURL: server.URL, Engine: "vllm"}, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Catalog(context.Background(), "parameters", "desc")
+	if err != nil || !json.Valid(result) {
+		t.Fatalf("catalog=%s error=%v", result, err)
+	}
+}
+
 func TestOllamaModelLifecycle(t *testing.T) {
 	var calls []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -266,9 +266,11 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 			continue
 		}
 		var config struct {
-			Architectures []string        `json:"architectures"`
-			Quantization  json.RawMessage `json:"quantization_config"`
-			AutoMap       json.RawMessage `json:"auto_map"`
+			Architectures         []string        `json:"architectures"`
+			Quantization          json.RawMessage `json:"quantization_config"`
+			AutoMap               json.RawMessage `json:"auto_map"`
+			MaxPositionEmbeddings json.Number     `json:"max_position_embeddings"`
+			NPositions            json.Number     `json:"n_positions"`
 		}
 		address := huggingfaceBase() + "/" + item.ID + "/resolve/" + item.SHA + "/config.json"
 		// Hugging Face resolve redirects to its same-host metadata cache.
@@ -284,6 +286,7 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 		if !compatible || len(config.Quantization) > 0 || len(config.AutoMap) > 0 {
 			continue
 		}
+		modelLimit := maxPositionFromNumbers(config.MaxPositionEmbeddings, config.NPositions)
 		var info struct {
 			Siblings []struct {
 				Name string `json:"rfilename"`
@@ -303,7 +306,7 @@ func (m *manager) discoverVLLM(ctx context.Context) ([]catalogEntry, error) {
 		if weights == 0 || total > 1<<40 || weights > 1<<40 {
 			continue
 		}
-		entries = append(entries, catalogEntry{ID: item.ID, Source: item.ID + "@" + item.SHA, DownloadBytes: total, MemoryBytes: weights*2 + (4 << 30), LaunchArguments: []string{"--max-model-len", "2048"}})
+		entries = append(entries, catalogEntry{ID: item.ID, Source: item.ID + "@" + item.SHA, DownloadBytes: total, MemoryBytes: weights*2 + (4 << 30), LaunchArguments: launchArgsForCatalog(modelLimit)})
 	}
 	return entries, nil
 }
