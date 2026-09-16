@@ -298,6 +298,7 @@ it("builds OpenAI client settings from the ready model", () => {
   expect(settings.modelId).toBe("openai-community/gpt2");
   expect(settings.providerToml).toContain('model = "openai-community/gpt2"');
   expect(settings.providerToml).toContain("model_context_window = 1024");
+  expect(settings.providerToml).toContain('env_key = "INFERENCE_API_KEY"');
   expect(settings.catalogJson).toContain('"slug": "openai-community/gpt2"');
   expect(settings.catalogJson).toContain('"supported_reasoning_levels"');
   expect(settings.catalogJson).toContain('"effort": "medium"');

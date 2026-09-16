@@ -95,10 +95,11 @@ containerSecurityContext:
 resources:
   requests:
     cpu: 100m
-    memory: 512Mi
+    memory: 4Gi
   limits:
     cpu: "4"
-    memory: 8Gi
+    # CPU vLLM + ~3B bf16 weights needs well above 8Gi at load; leave headroom on 32Gi hosts.
+    memory: 24Gi
 
 managerResources:
   # HF snapshot downloads run in this container. 2Gi still OOM-kills mid-fetch

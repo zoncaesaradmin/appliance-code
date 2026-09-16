@@ -170,7 +170,7 @@ model_catalog_json = "/path/to/zon_model_catalog.json"
 [model_providers.appliance]
 name = "ZON appliance"
 base_url = "${baseURL}"
-env_key = "APPLIANCE_API_TOKEN"
+env_key = "INFERENCE_API_KEY"
 wire_api = "responses"`;
 
   // Codex 0.154+ requires a full catalog entry shape (not a minimal slug map).
@@ -764,7 +764,7 @@ export function AIServicePage(): React.JSX.Element {
             <p>
               Use these values in your OpenAI-compatible client. Put the provider settings in one
               config file, and the model catalog JSON in a separate catalog file. Create an appliance
-              API token with inference permissions and export it as <code>APPLIANCE_API_TOKEN</code>.
+              API token with inference permissions and export it as <code>INFERENCE_API_KEY</code>.
             </p>
             <div className="stack">
               <div>
