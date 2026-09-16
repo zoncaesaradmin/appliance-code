@@ -93,6 +93,8 @@ func main() {
 	if err := m.loadRegistry(); err != nil {
 		log.Fatalf("load model registry: %v", err)
 	}
+	m.reconcileInterruptedProgress()
+	m.rehydrateActiveModel(context.Background())
 	if engine == "ollama" {
 		if err := m.waitEngineReady(context.Background()); err != nil {
 			log.Fatalf("wait for Ollama engine sidecar: %v", err)

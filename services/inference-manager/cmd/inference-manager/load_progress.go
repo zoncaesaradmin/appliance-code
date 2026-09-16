@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -78,6 +80,50 @@ func (m *manager) writeLoadProgressFileLocked() error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func (m *manager) reconcileInterruptedLoadProgress() {
+	path := m.loadProgressPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var saved loadProgress
+	if err := json.Unmarshal(data, &saved); err != nil {
+		return
+	}
+	if saved.State != "loading" {
+		m.loadMu.Lock()
+		m.load = saved
+		m.loadMu.Unlock()
+		return
+	}
+	m.loadMu.Lock()
+	m.load = saved
+	m.load.State = "failed"
+	m.load.Error = "Load interrupted when the inference manager restarted; retry Load"
+	m.load.Message = "Load failed"
+	m.load.UpdatedAt = time.Now().UTC()
+	_ = m.writeLoadProgressFileLocked()
+	m.loadMu.Unlock()
+}
+
+// rehydrateActiveModel restores the in-memory active model after a manager
+// restart when the engine sidecar is still healthy. Without this, Serving
+// flips to Inactive and the Load button reappears even though vLLM is up.
+func (m *manager) rehydrateActiveModel(ctx context.Context) {
+	load := m.currentLoadProgress()
+	if load.State != "ready" || load.ModelID == "" {
+		return
+	}
+	if !m.backendHealthy(ctx) {
+		m.finishLoadProgress("failed", load.ModelID, "Runtime restarted and the previously loaded model is no longer serving; retry Load")
+		return
+	}
+	m.processMu.Lock()
+	m.active = load.ModelID
+	m.processMu.Unlock()
+	log.Printf("rehydrated active model after restart model=%s", load.ModelID)
 }
 
 func (m *manager) servingSnapshot() (servingState, loadedModelID string) {

@@ -101,13 +101,14 @@ resources:
     memory: 8Gi
 
 managerResources:
-  # HF snapshot downloads run in this container; 512Mi OOMs mid-fetch.
+  # HF snapshot downloads run in this container. 2Gi still OOM-kills mid-fetch
+  # on multi-GB models (huggingface_hub peak RSS).
   requests:
     cpu: 50m
     memory: 512Mi
   limits:
     cpu: "2"
-    memory: 2Gi
+    memory: 6Gi
 
 probes:
   # Manager exposes a lightweight health endpoint here.

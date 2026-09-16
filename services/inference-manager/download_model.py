@@ -14,10 +14,11 @@ repo_id, separator, revision = args.source.rpartition("@")
 if not separator:
     repo_id, revision = args.source, None
 
-# max_workers=2 keeps peak RSS lower in the thin manager container.
+# max_workers=1 keeps peak RSS lower in the thin manager container.
+# Concurrent HF workers previously OOM-killed the 2–6Gi manager mid-download.
 snapshot_download(
     repo_id=repo_id,
     revision=revision,
     local_dir=args.destination,
-    max_workers=2,
+    max_workers=1,
 )
