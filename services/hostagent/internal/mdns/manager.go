@@ -126,7 +126,9 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 	}
 	if !req.Desired {
 		if packagesPresent(m.runner()) {
-			if err := m.stopService(ctx); err != nil {
+			// Remove only appliance-owned alias publishers. Do not stop or mask
+			// avahi-daemon — host names such as gx10.local must keep working.
+			if err := m.stopApplianceAliasPublisher(ctx, st.ApplianceName); err != nil {
 				_ = m.saveState(st)
 				return Status{}, fmt.Errorf("mdns: disable: %w", err)
 			}
@@ -154,13 +156,27 @@ func (m *Manager) Apply(ctx context.Context, req ApplyRequest) (Status, error) {
 		status.Message = "mdns requires the appliance name configured during installation"
 		return status, nil
 	}
-	if err := m.configureAvahiServer(ctx, st.ApplianceName); err != nil {
+	// Bind Avahi to the LAN iface when needed, but never replace the host's
+	// Avahi host-name (gx10.local / vendor names). Appliance identity is an
+	// added <name>.local publisher alongside the existing host name.
+	if err := m.configureAvahiLANBinding(ctx); err != nil {
+		return Status{}, err
+	}
+	if err := m.clearStaleApplianceHostNameOverride(ctx, st.ApplianceName); err != nil {
 		return Status{}, err
 	}
 	if err := m.saveState(st); err != nil {
 		return Status{}, err
 	}
 	if err := m.startService(ctx); err != nil {
+		status, _ := m.Status(ctx)
+		status.Desired = true
+		status.Actual = ActualFailed
+		status.Reason = ReasonServiceStartFailed
+		status.Message = err.Error()
+		return status, nil
+	}
+	if err := m.ensureApplianceAliasPublisher(ctx, st.ApplianceName); err != nil {
 		status, _ := m.Status(ctx)
 		status.Desired = true
 		status.Actual = ActualFailed
@@ -294,14 +310,11 @@ func applicationAliasPublisherUnit(application, alias string) string {
 const applicationAliasBegin = "# BEGIN ZON APPLICATION ALIASES"
 const applicationAliasEnd = "# END ZON APPLICATION ALIASES"
 
-// configureAvahiServer gives the appliance its one mDNS name on the real LAN.
-// Avahi otherwise joins every K3s veth/CNI interface, creating isolated mDNS
-// domains that can collide with the appliance identity.
-//
-// Only host-name and allow-interfaces are patched in the active Avahi config
-// file (stock avahi-daemon.conf or a vendor -f override such as nvidia-spark).
-// Other keys, drop-ins, and /etc/avahi/services entries are left alone.
-func (m *Manager) configureAvahiServer(ctx context.Context, applianceName string) error {
+// configureAvahiLANBinding limits Avahi to the default-route LAN interface so
+// K3s veth/CNI interfaces do not create isolated mDNS domains. It never sets
+// host-name — the system / vendor Avahi host name (e.g. gx10.local) stays as
+// the primary advertisement; the appliance adds <name>.local separately.
+func (m *Manager) configureAvahiLANBinding(ctx context.Context) error {
 	iface, err := m.defaultRouteInterface(ctx)
 	if err != nil {
 		return err
@@ -315,10 +328,6 @@ func (m *Manager) configureAvahiServer(ctx context.Context, applianceName string
 	if err != nil {
 		return err
 	}
-	updated, err = setServerOption(updated, "host-name", applianceName)
-	if err != nil {
-		return err
-	}
 	if updated == string(data) {
 		return nil
 	}
@@ -328,10 +337,111 @@ func (m *Manager) configureAvahiServer(ctx context.Context, applianceName string
 	return nil
 }
 
+// clearStaleApplianceHostNameOverride removes a prior appliance install's
+// host-name=<appliance> overwrite so Avahi can fall back to the system
+// hostname again. Vendor host-name values (nvidia aibox, etc.) are left alone.
+func (m *Manager) clearStaleApplianceHostNameOverride(ctx context.Context, applianceName string) error {
+	applianceName = strings.ToLower(strings.TrimSpace(applianceName))
+	if applianceName == "" {
+		return nil
+	}
+	paths := map[string]struct{}{
+		m.avahiConfigPath(ctx): {},
+		filepath.Join(m.root(), "etc", "avahi", "avahi-daemon.conf"): {},
+	}
+	for path := range paths {
+		data, err := m.files().ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("mdns: read %s: %w", path, err)
+		}
+		updated, changed := removeServerOptionValue(string(data), "host-name", applianceName)
+		if !changed {
+			continue
+		}
+		if err := m.files().WriteFile(path, []byte(updated), 0o644); err != nil {
+			return fmt.Errorf("mdns: restore host-name in %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+func removeServerOptionValue(config, key, value string) (string, bool) {
+	want := key + "=" + value
+	lines := strings.Split(config, "\n")
+	changed := false
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) == want {
+			changed = true
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n"), changed
+}
+
+func (m *Manager) applianceAliasPublisherFile(applianceName string) string {
+	return filepath.Join(m.root(), "etc", "systemd", "system", applianceAliasPublisherUnit(applianceName))
+}
+
+func applianceAliasPublisherUnit(applianceName string) string {
+	return "zon-mdns-appliance-" + strings.ToLower(strings.TrimSpace(applianceName)) + ".service"
+}
+
+func (m *Manager) ensureApplianceAliasPublisher(ctx context.Context, applianceName string) error {
+	alias := applianceMDNSName(applianceName)
+	if alias == "" {
+		return fmt.Errorf("mdns: invalid appliance name %q", applianceName)
+	}
+	if _, err := m.runner().LookPath("avahi-publish-address"); err != nil {
+		return fmt.Errorf("mdns: publish appliance alias: avahi-publish-address is unavailable: %w", err)
+	}
+	address, err := m.primaryAddress(ctx)
+	if err != nil {
+		return err
+	}
+	unitPath := m.applianceAliasPublisherFile(applianceName)
+	unit := "[Unit]\nDescription=Zon appliance mDNS name " + alias + "\nRequires=avahi-daemon.service\nAfter=avahi-daemon.service\n\n[Service]\nType=simple\nExecStart=/usr/bin/avahi-publish-address -R " + alias + " " + address + "\nRestart=on-failure\nRestartSec=2\n\n[Install]\nWantedBy=multi-user.target\n"
+	if err := m.files().MkdirAll(filepath.Dir(unitPath), 0o755); err != nil {
+		return fmt.Errorf("mdns: create appliance alias publisher directory: %w", err)
+	}
+	if existing, err := m.files().ReadFile(unitPath); err == nil && string(existing) == unit {
+		// Unit unchanged; ensure it is running.
+	} else {
+		if err := m.files().WriteFile(unitPath, []byte(unit), 0o644); err != nil {
+			return fmt.Errorf("mdns: write appliance alias publisher: %w", err)
+		}
+		if _, err := m.runner().CombinedOutput(ctx, "systemctl", "daemon-reload"); err != nil {
+			return fmt.Errorf("mdns: reload appliance alias publisher: %w", err)
+		}
+	}
+	unitName := applianceAliasPublisherUnit(applianceName)
+	if _, err := m.runner().CombinedOutput(ctx, "systemctl", "enable", "--now", unitName); err != nil {
+		return fmt.Errorf("mdns: start appliance alias publisher %q: %w", alias, err)
+	}
+	return nil
+}
+
+func (m *Manager) stopApplianceAliasPublisher(ctx context.Context, applianceName string) error {
+	applianceName = strings.ToLower(strings.TrimSpace(applianceName))
+	if applianceName == "" {
+		return nil
+	}
+	unitName := applianceAliasPublisherUnit(applianceName)
+	_, _ = m.runner().CombinedOutput(ctx, "systemctl", "disable", "--now", unitName)
+	if err := m.files().Remove(m.applianceAliasPublisherFile(applianceName)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("mdns: remove appliance alias publisher: %w", err)
+	}
+	_, _ = m.runner().CombinedOutput(ctx, "systemctl", "daemon-reload")
+	return nil
+}
+
 // avahiConfigPath returns the config file the running unit actually loads.
 // Vendor packages may override ExecStart with -f /path; patch that file so we
-// do not silently edit an unused avahi-daemon.conf while leaving host mDNS
-// entries on the real config untouched aside from the two appliance keys.
+// do not silently edit an unused avahi-daemon.conf.
 func (m *Manager) avahiConfigPath(ctx context.Context) string {
 	defaultPath := filepath.Join(m.root(), "etc", "avahi", "avahi-daemon.conf")
 	out, err := m.runner().CombinedOutput(ctx, "systemctl", "show", "-p", "ExecStart", "--value", ServiceName)
@@ -350,7 +460,6 @@ func (m *Manager) avahiConfigPath(ctx context.Context) string {
 		if m.root() == "/" || m.root() == "" {
 			return cfg
 		}
-		// Test / chroot roots: map absolute host paths under the manager root.
 		return filepath.Join(m.root(), strings.TrimPrefix(cfg, "/"))
 	}
 	return defaultPath
@@ -432,7 +541,7 @@ func (m *Manager) writeApplicationAliases(ctx context.Context, st persistedState
 	if len(allAliases(st.ApplicationAliases)) == 0 {
 		return nil
 	}
-	if err := m.configureAvahiServer(ctx, st.ApplianceName); err != nil {
+	if err := m.configureAvahiLANBinding(ctx); err != nil {
 		return err
 	}
 	address, err := m.primaryAddress(ctx)
