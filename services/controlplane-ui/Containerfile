@@ -13,6 +13,8 @@ ARG UI_WEB_DEPS_IMAGE=docker.io/library/node:22-alpine
 # 0 = npm ci (online); 1 = copy node_modules from UI_WEB_DEPS_IMAGE (/deps)
 ARG USE_PREBAKED_NPM=0
 ARG RUNTIME_PREBAKED=0
+# buildah does not auto-inject BuildKit platform ARGs; packaging passes these.
+ARG BUILDPLATFORM
 
 # Fixed stage names (not deps-${USE_PREBAKED_NPM}): buildah does not treat
 # ARG-expanded FROM targets as prior stages and tries to pull "deps-0" as an

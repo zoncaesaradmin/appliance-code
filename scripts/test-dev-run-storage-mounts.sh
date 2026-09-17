@@ -66,6 +66,19 @@ assert_contains "${cross_out}" "--arch ${host_arch}"
 assert_contains "${cross_out}" "TARGET_ARCH=\"${foreign_arch}\""
 assert_contains "${cross_out}" "dev-build:latest-${host_arch}"
 
+# Platform build-args for native cross-compile (BUILDPLATFORM + TARGETARCH).
+platform_out="$(make -n -C services/controlplane \
+  SUDO= \
+  TARGET_ARCH="${foreign_arch}" \
+  HOST_ARCH="${host_arch}" \
+  SERVICE_IMAGE_NAME=localhost/appliance-control-plane \
+  SERVICE_IMAGE_TAG=test \
+  VERSION=test \
+  image-local 2>&1)"
+assert_contains "${platform_out}" "--build-arg BUILDPLATFORM=linux/${host_arch}"
+assert_contains "${platform_out}" "--build-arg TARGETARCH=${foreign_arch}"
+assert_contains "${platform_out}" "--build-arg TARGETPLATFORM=linux/${foreign_arch}"
+
 if make -n DEV_STORAGE_DRIVER=btrfs SCRIPT=scripts/package/oci-pull.sh dev-run >/dev/null 2>&1; then
   fail "expected DEV_STORAGE_DRIVER=btrfs to be rejected"
 fi

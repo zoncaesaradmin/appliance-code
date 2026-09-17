@@ -9,6 +9,8 @@
 ARG GO_IMAGE=docker.io/library/golang:1.26
 ARG RUNTIME_IMAGE=alpine:3.24.1
 ARG RUNTIME_PREBAKED=0
+# buildah does not auto-inject BuildKit platform ARGs; packaging passes these.
+ARG BUILDPLATFORM
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 WORKDIR /src

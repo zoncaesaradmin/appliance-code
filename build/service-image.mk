@@ -63,6 +63,25 @@ SERVICE_IMAGE_CONTAINERFILE ?= Containerfile
 SERVICE_IMAGE_BUILD_ARGS ?=
 SERVICE_IMAGE_EXTRA_BUILD_ARGS ?=
 
+# Cross-arch packaging: buildah does not auto-inject BuildKit platform ARGs the
+# way Docker does. Without explicit BUILDPLATFORM, `FROM --platform=$BUILDPLATFORM`
+# is empty and --arch <target> tries to pull an arm64 variant of the host golang
+# tag → manifest unknown. Always pass host compile platform + product TARGETARCH.
+# Prefer HOST_ARCH from the packaging environment (build-full-bundle); else detect.
+SERVICE_IMAGE_HOST_ARCH := $(if $(strip $(HOST_ARCH)),$(HOST_ARCH),$(shell go env GOARCH 2>/dev/null))
+ifeq ($(filter $(SERVICE_IMAGE_HOST_ARCH),amd64 arm64),)
+SERVICE_IMAGE_HOST_ARCH := $(shell uname -m 2>/dev/null | sed -e 's/x86_64/amd64/' -e 's/aarch64/arm64/')
+endif
+ifneq ($(strip $(TARGET_ARCH)),)
+SERVICE_IMAGE_PLATFORM_ARGS = \
+	--build-arg BUILDPLATFORM=linux/$(SERVICE_IMAGE_HOST_ARCH) \
+	--build-arg TARGETPLATFORM=linux/$(TARGET_ARCH) \
+	--build-arg TARGETARCH=$(TARGET_ARCH) \
+	--build-arg TARGETOS=linux
+else
+SERVICE_IMAGE_PLATFORM_ARGS =
+endif
+
 .PHONY: image-local image
 
 ## image-local: build this service image into local storage (no push)
@@ -82,6 +101,7 @@ image-local:
 	fi
 	$(BUILD_ENGINE) $(SERVICE_IMAGE_TLS_FLAG) $(BUILD_CACHE_FLAGS) \
 		$(SERVICE_IMAGE_BUILD_ARGS) \
+		$(SERVICE_IMAGE_PLATFORM_ARGS) \
 		$(SERVICE_IMAGE_EXTRA_BUILD_ARGS) \
 		-f $(SERVICE_IMAGE_CONTAINERFILE) \
 		-t $(SERVICE_IMAGE_REF) \
@@ -101,6 +121,7 @@ image:
 	fi
 	$(BUILD_ENGINE) $(SERVICE_IMAGE_TLS_FLAG) $(BUILD_CACHE_FLAGS) \
 		$(SERVICE_IMAGE_BUILD_ARGS) \
+		$(SERVICE_IMAGE_PLATFORM_ARGS) \
 		$(SERVICE_IMAGE_EXTRA_BUILD_ARGS) \
 		-f $(SERVICE_IMAGE_CONTAINERFILE) \
 		-t $(SERVICE_IMAGE_REF) \
