@@ -23,7 +23,10 @@ and optional `gpuAvailable`. There is no product-level `supportedModes`,
 - **Standard** (`std-llm`): Ollama. Install does not require a GPU. At runtime
   the manager may use a host GPU when one is present; otherwise it serves on CPU.
 - **Accelerated** (`acc-llm`): vLLM. Install fails closed without a usable
-  NVIDIA GPU on the host. `gpu.enabled` in Helm values follows that host check.
+  NVIDIA GPU on the host (`/dev/nvidiactl` plus `nvidia-container-runtime` or
+  `nvidia-ctk` on PATH). Install then configures that toolkit into K3s
+  containerd and applies RuntimeClass `nvidia`. `gpu.enabled` in Helm values
+  follows the host GPU check.
 
 The control-plane API exposes `RuntimeCapabilities` with `package`, `engine`,
 `architecture`, `hostArchitecture`, `acceleration`, optional `gpuAvailable`, and
