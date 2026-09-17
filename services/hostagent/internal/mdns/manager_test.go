@@ -104,6 +104,9 @@ func TestApplyEnableStartsService(t *testing.T) {
 		outputs: map[string]string{
 			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
 			"systemctl is-active avahi-daemon.service": "active",
+			"systemctl stop avahi-daemon.socket":       "",
+			"systemctl disable avahi-daemon.socket":    "",
+			"systemctl mask avahi-daemon.socket":       "",
 			"systemctl unmask avahi-daemon.service":    "",
 			"systemctl enable avahi-daemon.service":    "",
 			"systemctl restart avahi-daemon.service":   "",
@@ -128,6 +131,26 @@ func TestApplyEnableStartsService(t *testing.T) {
 	if config := string(m.Files.(*memFiles).data[filepath.Join(root, "etc", "avahi", "avahi-daemon.conf")]); !strings.Contains(config, "host-name=test-device-1\n") {
 		t.Fatalf("Avahi host name = %q", config)
 	}
+	wantSocketBeforeService := []string{
+		"systemctl stop avahi-daemon.socket",
+		"systemctl disable avahi-daemon.socket",
+		"systemctl mask avahi-daemon.socket",
+		"systemctl unmask avahi-daemon.service",
+		"systemctl enable avahi-daemon.service",
+		"systemctl restart avahi-daemon.service",
+	}
+	idx := 0
+	for _, call := range runner.calls {
+		if idx >= len(wantSocketBeforeService) {
+			break
+		}
+		if call == wantSocketBeforeService[idx] {
+			idx++
+		}
+	}
+	if idx != len(wantSocketBeforeService) {
+		t.Fatalf("missing socket quiesce before service start; calls=%v", runner.calls)
+	}
 }
 
 func TestApplyDisableStopsService(t *testing.T) {
@@ -136,8 +159,11 @@ func TestApplyDisableStopsService(t *testing.T) {
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
 			"systemctl is-active avahi-daemon.service": "inactive",
+			"systemctl stop avahi-daemon.socket":       "",
 			"systemctl stop avahi-daemon.service":      "",
+			"systemctl disable avahi-daemon.socket":    "",
 			"systemctl disable avahi-daemon.service":   "",
+			"systemctl mask avahi-daemon.socket":       "",
 		},
 	}
 	m := &Manager{
@@ -158,6 +184,16 @@ func TestApplyDisableStopsService(t *testing.T) {
 	}
 	if status.AdvertisedName != "test-device-1.local" {
 		t.Fatalf("advertisedName=%q", status.AdvertisedName)
+	}
+	foundSocketStop := false
+	for _, call := range runner.calls {
+		if call == "systemctl stop avahi-daemon.socket" {
+			foundSocketStop = true
+			break
+		}
+	}
+	if !foundSocketStop {
+		t.Fatalf("disable must stop avahi-daemon.socket; calls=%v", runner.calls)
 	}
 }
 

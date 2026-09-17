@@ -665,6 +665,11 @@ func (m *Manager) serviceActive(ctx context.Context) (bool, error) {
 
 func (m *Manager) startService(ctx context.Context) error {
 	r := m.runner()
+	// Quiesce socket activation before touching the service so a concurrent
+	// socket start cannot cancel restart ("Job … canceled").
+	_, _ = r.CombinedOutput(ctx, "systemctl", "stop", SocketName)
+	_, _ = r.CombinedOutput(ctx, "systemctl", "disable", SocketName)
+	_, _ = r.CombinedOutput(ctx, "systemctl", "mask", SocketName)
 	if _, err := r.CombinedOutput(ctx, "systemctl", "unmask", ServiceName); err != nil {
 		// unmask is best-effort if never masked.
 		_ = err
@@ -680,8 +685,11 @@ func (m *Manager) startService(ctx context.Context) error {
 
 func (m *Manager) stopService(ctx context.Context) error {
 	r := m.runner()
+	_, _ = r.CombinedOutput(ctx, "systemctl", "stop", SocketName)
 	_, _ = r.CombinedOutput(ctx, "systemctl", "stop", ServiceName)
+	_, _ = r.CombinedOutput(ctx, "systemctl", "disable", SocketName)
 	_, _ = r.CombinedOutput(ctx, "systemctl", "disable", ServiceName)
+	_, _ = r.CombinedOutput(ctx, "systemctl", "mask", SocketName)
 	return nil
 }
 
