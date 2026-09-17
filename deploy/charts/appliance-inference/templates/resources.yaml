@@ -348,5 +348,24 @@ spec:
               {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
       ports:
         - {protocol: TCP, port: {{ .Values.engine.servicePort }}}
+  # Ollama /api/pull runs in the engine pod (manager only proxies the request).
+  # Without DNS+HTTPS here, registry.ollama.ai lookups time out under default-deny.
+  {{- if or .Values.networkPolicy.allowDNSToKubeSystem .Values.networkPolicy.allowModelDownloadHTTPS }}
+  egress:
+    {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    {{- end }}
+    {{- if .Values.networkPolicy.allowModelDownloadHTTPS }}
+    - ports:
+        - {protocol: TCP, port: 443}
+    {{- end }}
+  {{- else }}
   egress: []
+  {{- end }}
 {{- end }}

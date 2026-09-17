@@ -3,15 +3,14 @@
 # Built only on the Linux build server/CI, inside the shared dev
 # container (see docs/dev-container.md) — never on a developer laptop.
 
-# Build stage: compiles a fully static binary (modernc.org/sqlite is pure
-# Go, so CGO_ENABLED=0 needs no libc at all) with the same version/commit/
-# build-time ldflags as `make build`. Builds from the vendored module
-# tree (-mod=vendor), so this step needs no network access at all.
+# Build stage: compile with the host (BUILDPLATFORM) Go toolchain, then
+# cross-compile via GOARCH=${TARGETARCH}. Never RUN the foreign-arch golang
+# image under qemu — that hangs/pathologically slows UI and CP packaging.
 ARG GO_IMAGE=docker.io/library/golang:1.26
 ARG RUNTIME_IMAGE=alpine:3.24.1
 ARG RUNTIME_PREBAKED=0
 
-FROM ${GO_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 WORKDIR /src
 COPY . .
 ARG VERSION=dev

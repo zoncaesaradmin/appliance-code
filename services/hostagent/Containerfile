@@ -4,7 +4,8 @@ ARG GO_IMAGE=docker.io/library/golang:1.26
 ARG RUNTIME_IMAGE=alpine:3.24.1
 ARG RUNTIME_PREBAKED=0
 
-FROM ${GO_IMAGE} AS build
+# Host-native Go toolchain; cross-compile with GOARCH=${TARGETARCH}.
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
 WORKDIR /src
 COPY . .
 ARG TARGETARCH

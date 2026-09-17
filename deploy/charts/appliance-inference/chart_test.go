@@ -141,6 +141,32 @@ func TestInferenceEgressCanBeClosedAfterConnectedWindow(t *testing.T) {
 	}
 }
 
+func TestEngineEgressAllowsOllamaPullDuringConnectedWindow(t *testing.T) {
+	out := render(t)
+	const marker = "name: inference-gateway-engine\n  namespace: inference\nspec:\n  podSelector:\n    matchLabels:\n      app.kubernetes.io/name: inference-engine"
+	start := strings.Index(out, marker)
+	if start < 0 {
+		t.Fatalf("engine NetworkPolicy not found: %s", out)
+	}
+	section := out[start:]
+	if end := strings.Index(section, "\n---\n"); end > 0 {
+		section = section[:end]
+	}
+	for _, want := range []string{
+		"protocol: UDP",
+		"port: 53",
+		"port: 443",
+		"kubernetes.io/metadata.name: kube-system",
+	} {
+		if !strings.Contains(section, want) {
+			t.Fatalf("engine NetworkPolicy missing %q during connected window:\n%s", want, section)
+		}
+	}
+	if strings.Contains(section, "egress: []") {
+		t.Fatalf("engine NetworkPolicy must not deny all egress during connected window:\n%s", section)
+	}
+}
+
 func TestImageDigestWins(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("b", 64)
 	managerDigest := "sha256:" + strings.Repeat("d", 64)

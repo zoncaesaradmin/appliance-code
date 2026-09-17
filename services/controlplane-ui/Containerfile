@@ -3,9 +3,9 @@
 # Built only on the Linux build server/CI, inside the shared dev
 # container (see docs/dev-container.md) — never on a developer laptop.
 
-# Base images are build arguments so the Linux release/build environment can
-# inject mirrored or digest-pinned references instead of relying on public
-# registries in the build definition.
+# Build/tooling stages use BUILDPLATFORM (host-native node/go). Final runtime
+# uses TARGETPLATFORM from buildah --arch. Cross-arch packaging must not RUN
+# foreign-arch node/go under qemu (hangs on go build).
 ARG UI_NODE_IMAGE=docker.io/library/node:22-alpine
 ARG UI_GO_IMAGE=docker.io/library/golang:1.26
 ARG UI_RUNTIME_IMAGE=alpine:3.24.1
@@ -17,17 +17,17 @@ ARG RUNTIME_PREBAKED=0
 # Fixed stage names (not deps-${USE_PREBAKED_NPM}): buildah does not treat
 # ARG-expanded FROM targets as prior stages and tries to pull "deps-0" as an
 # image short-name instead.
-FROM ${UI_NODE_IMAGE} AS deps-online
+FROM --platform=$BUILDPLATFORM ${UI_NODE_IMAGE} AS deps-online
 RUN mkdir -p /deps/node_modules
 
-FROM ${UI_WEB_DEPS_IMAGE} AS deps-offline
+FROM --platform=$BUILDPLATFORM ${UI_WEB_DEPS_IMAGE} AS deps-offline
 # Online builds still instantiate this stage with the stock node image; ensure
 # /deps exists so COPY --from=deps-offline always succeeds. Offline builds use
 # a prebaked image that already has /deps/node_modules.
 RUN mkdir -p /deps/node_modules
 
 # Frontend build stage: compiles the React/Vite SPA into dist/.
-FROM ${UI_NODE_IMAGE} AS web-build
+FROM --platform=$BUILDPLATFORM ${UI_NODE_IMAGE} AS web-build
 ARG USE_PREBAKED_NPM
 WORKDIR /src
 COPY package.json package-lock.json ./
@@ -48,7 +48,7 @@ RUN npm run build
 # version/commit/build-time ldflags as `make build`. Builds from the
 # vendored module tree (-mod=vendor), so this step needs no network
 # access at all.
-FROM ${UI_GO_IMAGE} AS build
+FROM --platform=$BUILDPLATFORM ${UI_GO_IMAGE} AS build
 WORKDIR /src
 COPY . .
 ARG VERSION=dev

@@ -79,9 +79,11 @@ networkPolicy:
     # app.kubernetes.io/name=controlplane.
     app.kubernetes.io/name: controlplane
   # DNS is required during the operator-controlled connected window.
+  # Applied to both manager (catalog/HF) and engine (Ollama /api/pull).
   allowDNSToKubeSystem: true
   # The operator controls the connected window at the appliance/network edge.
-  # HTTPS supports daily catalog metadata discovery and user-requested downloads.
+  # HTTPS supports catalog metadata discovery, HF downloads in the manager, and
+  # Ollama registry pulls from the engine pod.
   allowModelDownloadHTTPS: true
 
 podSecurityContext:

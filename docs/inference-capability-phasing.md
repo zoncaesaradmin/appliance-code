@@ -125,7 +125,9 @@ normal appliance operation remain offline. Model acquisition is the narrow
 exception: after installation an administrator may connect the appliance,
 explicitly request the desired models, wait for verification and installation,
 and disconnect it again. The inference NetworkPolicy permits DNS plus outbound
-HTTPS for that administrator-directed fetch. It does not download engines,
+HTTPS on both the manager and engine pods for that administrator-directed fetch
+(Ollama pulls run in the engine; Hugging Face snapshots download in the manager).
+It does not download engines,
 drivers, plugins, updates, or models in the background.
 
 The admin UI is available at **Admin → AI Services**. It shows runtime readiness,
