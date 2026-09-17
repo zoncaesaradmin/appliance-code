@@ -1,4 +1,7 @@
 ARG BASE_IMAGE=ghcr.io/project-zot/zot-linux-amd64:v2.1.8
+# Default ARGs are amd64; export-artifact-server-image-archive.sh overrides
+# BASE_IMAGE / ZOT_BINARY for TARGET_ARCH (zot-linux-amd64|zot-linux-arm64).
+ARG ZOT_BINARY=zot-linux-amd64
 # glibc runtime for the dynamically linked upstream binary (see FROM below).
 ARG RUNTIME_BASE_IMAGE=debian:bookworm-slim
 ARG RUNTIME_PACKAGES_INSTALLED=0
@@ -13,11 +16,10 @@ FROM ${BASE_IMAGE} AS upstream
 # Upstream implementation today is the pinned project-zot binary; the
 # appliance name is artifact-server so we can swap implementations later.
 #
-# Final base must provide glibc (/lib64/ld-linux-x86-64.so.2). The upstream
-# zot-linux-amd64 binary is dynamically linked; Alpine/musl cannot execute it
-# (execve fails with "cannot execute: required file not found" / exit 127).
-# CoreDNS and workflow-controller wrappers can stay on Alpine because those upstream binaries
-# are statically linked.
+# Final base must provide glibc. The upstream zot-linux-* binary is dynamically
+# linked; Alpine/musl cannot execute it (execve fails with "cannot execute:
+# required file not found" / exit 127). CoreDNS and workflow-controller wrappers
+# can stay on Alpine because those upstream binaries are statically linked.
 #
 # Bundle export prefetches RUNTIME_BASE_IMAGE into local storage and rebuilds
 # with --pull-never (same as the upstream BASE_IMAGE prefetch).
@@ -25,6 +27,7 @@ FROM ${BASE_IMAGE} AS upstream
 # (appliance-dependencies artifact-server-bases).
 FROM ${RUNTIME_BASE_IMAGE}
 ARG RUNTIME_PACKAGES_INSTALLED
+ARG ZOT_BINARY
 
 RUN set -eux; \
     if [ "${RUNTIME_PACKAGES_INSTALLED}" != "1" ]; then \
@@ -34,7 +37,7 @@ RUN set -eux; \
     fi
 
 # Published upstream image (stacker) places the binary here.
-COPY --from=upstream /usr/local/bin/zot-linux-amd64 /usr/local/bin/artifact-server
+COPY --from=upstream /usr/local/bin/${ZOT_BINARY} /usr/local/bin/artifact-server
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod 0755 /usr/local/bin/artifact-server /usr/local/bin/entrypoint.sh

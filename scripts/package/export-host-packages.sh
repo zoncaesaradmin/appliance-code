@@ -13,7 +13,8 @@ Options:
                                  written under ubuntu/<osVersion>/<arch>/.
   --os-version VERSION           Ubuntu version to package. Defaults to the
                                  current host/container VERSION_ID.
-  --arch ARCH                    Debian architecture. Default: amd64.
+  --arch ARCH                    Debian architecture. Default: TARGET_ARCH
+                                 or amd64. Supported: amd64, arm64.
   --capability NAME              Repeatable capability whose root packages
                                  should be included. Supported: mdns, wifi-client, wifi-ap.
                                  When omitted, defaults to mdns (legacy).
@@ -21,12 +22,15 @@ Options:
                                  Overrides --capability defaults when any
                                  --package is supplied.
   --help                         Show this help.
+
+Environment:
+  TARGET_ARCH                    Used as the default for --arch when unset.
 USAGE
 }
 
 OUT_DIR=""
 OS_VERSION=""
-ARCH="amd64"
+ARCH="${ARCH:-${TARGET_ARCH:-amd64}}"
 ROOT_PACKAGES=()
 CAPABILITIES=()
 
@@ -64,6 +68,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "${ARCH}" in
+  amd64|arm64) ;;
+  *)
+    echo "export-host-packages: unsupported arch ${ARCH} (want amd64|arm64)" >&2
+    exit 1
+    ;;
+esac
+
 if [[ -z "${OUT_DIR}" ]]; then
   echo "export-host-packages: --out-dir is required" >&2
   usage >&2
@@ -100,10 +112,6 @@ if [[ -z "${OS_VERSION}" ]]; then
 fi
 if [[ "${OS_VERSION}" != "${CURRENT_OS_VERSION}" ]]; then
   echo "export-host-packages: requested Ubuntu ${OS_VERSION}, but the current packaging environment is Ubuntu ${CURRENT_OS_VERSION}; use a matching Ubuntu build environment" >&2
-  exit 1
-fi
-if [[ "${ARCH}" != "amd64" ]]; then
-  echo "export-host-packages: only amd64 is supported, got ${ARCH}" >&2
   exit 1
 fi
 

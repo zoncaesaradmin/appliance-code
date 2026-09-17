@@ -325,13 +325,14 @@ package-dns-server-image-archive:
 package-inference-runtime-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/inference-runtime.tar}"; \
 	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	arch="$${INFERENCE_ARCHITECTURE:-$${TARGET_ARCH:-amd64}}"; \
 	bash ./scripts/package/export-inference-runtime-image-archive.sh \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
+		--architecture "$$arch" \
 		$${INFERENCE_SOURCE_IMAGE:+--source-image "$${INFERENCE_SOURCE_IMAGE}"} \
 		$${INFERENCE_VERSION:+--inference-version "$${INFERENCE_VERSION}"} \
-		$${INFERENCE_ENGINE:+--engine "$${INFERENCE_ENGINE}"} \
-		$${INFERENCE_ARCHITECTURE:+--architecture "$${INFERENCE_ARCHITECTURE}"}
+		$${INFERENCE_ENGINE:+--engine "$${INFERENCE_ENGINE}"}
 
 ## package-inference-manager-image-archive: build the thin inference-manager
 ## image with registry.local/inference-manager:bundled annotation.
@@ -364,17 +365,19 @@ package-message-broker-image-archive:
 ## for the complete product super-set (mDNS + wifi-client + wifi-ap).
 ## Install-time flags only enable services; all capability closures are packaged.
 ## HOST_CAPABILITIES overrides the default: "mdns wifi-client wifi-ap".
+## ARCH / TARGET_ARCH select amd64 (default) or arm64.
 package-host-packages:
 	@out_dir="$${OUT_DIR:-$(CURDIR)/.run/host-packages}"; \
 	mkdir -p "$$(dirname "$$out_dir")"; \
 	caps="$${HOST_CAPABILITIES:-mdns wifi-client wifi-ap}"; \
 	cap_args=(); \
 	for cap in $$caps; do cap_args+=(--capability "$$cap"); done; \
+	arch="$${ARCH:-$${TARGET_ARCH:-amd64}}"; \
 	bash ./scripts/package/export-host-packages.sh \
 		--out-dir "$$out_dir" \
 		"$${cap_args[@]}" \
-		$${OS_VERSION:+--os-version "$${OS_VERSION}"} \
-		$${ARCH:+--arch "$${ARCH}"}
+		--arch "$$arch" \
+		$${OS_VERSION:+--os-version "$${OS_VERSION}"}
 
 ## package-metadata-bundle: generate the base appliance metadata-bundle archive.
 package-metadata-bundle:

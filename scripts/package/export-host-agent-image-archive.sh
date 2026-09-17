@@ -19,12 +19,18 @@ Options:
                             Default: the appliance-code repo `git describe`
                             version for this checkout.
   --image-name NAME         Local image name. Default: appliance-host-agent.
-    --help                    Show this help.
+  --help                    Show this help.
+
+Environment:
+  TARGET_ARCH               amd64 (default) or arm64.
 EOF
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 SERVICE_DIR="${REPO_ROOT}/services/hostagent"
 
 OUT_FILE=""
@@ -99,6 +105,7 @@ make -C "${SERVICE_DIR}" build image-local \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BUILD_NO_CACHE=1 \
+  SERVICE_IMAGE_EXTRA_BUILD_ARGS="--arch ${TARGET_ARCH}" \
   GO_IMAGE="${GO_IMAGE:-}" \
   RUNTIME_IMAGE="${RUNTIME_IMAGE:-}" \
   RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
@@ -109,7 +116,7 @@ LAYOUT="${TMP_DIR}/oci"
 
 # Re-export under the canonical :bundled annotation so install
 # ValidateOCIArchiveReference / ctr import match the OCI contract.
-skopeo copy --override-os linux --override-arch amd64 \
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" \
   "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/appliance-host-agent:bundled"
 
 DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'

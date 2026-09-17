@@ -22,10 +22,10 @@ func TestCurrentDeliveryPackagesCoverEveryCapability(t *testing.T) {
 			t.Fatalf("%s has no delivery package", capability)
 		}
 	}
-	if len(owners["inference"]) != 3 {
-		t.Fatalf("inference owners = %q, want standard amd64 and accelerated amd64/arm64 packages", owners["inference"])
+	if len(owners["inference"]) != 2 {
+		t.Fatalf("inference owners = %q, want std-llm and acc-llm", owners["inference"])
 	}
-	for _, packageID := range []string{"inference", "legacy-inference", "legacy-gpu"} {
+	for _, packageID := range []string{"inference", "legacy-inference", "legacy-gpu", "std-llm-amd64", "acc-llm-amd64", "acc-llm-arm64"} {
 		if _, ok := b.Packages.Packages[packageID]; ok {
 			t.Fatalf("unexpected package %q", packageID)
 		}
@@ -40,9 +40,8 @@ func TestDeliveryPackageCatalogRejectsIncompleteMapping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	delete(b.Packages.Packages, "std-llm-amd64")
-	delete(b.Packages.Packages, "acc-llm-amd64")
-	delete(b.Packages.Packages, "acc-llm-arm64")
+	delete(b.Packages.Packages, "std-llm")
+	delete(b.Packages.Packages, "acc-llm")
 	if err := metadatabundle.ValidateBundle(b); err == nil {
 		t.Fatal("catalog without a standard inference package was accepted")
 	}
@@ -56,14 +55,11 @@ func TestInferencePackageDeclaresItsEngine(t *testing.T) {
 	if err := metadatabundle.ValidateBundle(b); err != nil {
 		t.Fatal(err)
 	}
-	if b.Packages.Packages["std-llm-amd64"].Runtime.InferenceEngine != "ollama" || b.Packages.Packages["std-llm-amd64"].Runtime.Architecture != "amd64" {
-		t.Fatalf("standard inference runtime = %+v", b.Packages.Packages["std-llm-amd64"].Runtime)
+	if b.Packages.Packages["std-llm"].Runtime.InferenceEngine != "ollama" {
+		t.Fatalf("standard inference runtime = %+v", b.Packages.Packages["std-llm"].Runtime)
 	}
-	if runtime := b.Packages.Packages["acc-llm-arm64"].Runtime; runtime.InferenceEngine != "vllm" || runtime.Architecture != "arm64" {
-		t.Fatalf("accelerated arm64 inference runtime = %+v", runtime)
-	}
-	if runtime := b.Packages.Packages["acc-llm-amd64"].Runtime; runtime.InferenceEngine != "vllm" || runtime.Architecture != "amd64" {
-		t.Fatalf("accelerated amd64 inference runtime = %+v", runtime)
+	if runtime := b.Packages.Packages["acc-llm"].Runtime; runtime.InferenceEngine != "vllm" {
+		t.Fatalf("accelerated inference runtime = %+v", runtime)
 	}
 }
 
@@ -76,9 +72,9 @@ func TestRuntimePackageCatalogRejectsAmbiguity(t *testing.T) {
 			}
 			switch invalid {
 			case "missing-engine":
-				pkg := b.Packages.Packages["std-llm-amd64"]
+				pkg := b.Packages.Packages["std-llm"]
 				pkg.Runtime.InferenceEngine = ""
-				b.Packages.Packages["std-llm-amd64"] = pkg
+				b.Packages.Packages["std-llm"] = pkg
 			}
 			if err := metadatabundle.ValidateBundle(b); err == nil {
 				t.Fatal("invalid runtime catalog accepted")

@@ -3,7 +3,11 @@ set -euo pipefail
 
 usage() { echo "usage: export-message-broker-image-archive.sh --out-file PATH [--reference-out-file PATH] [--source-image REF]"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/oci-pull.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
 SOURCE_IMAGE="${MESSAGE_BROKER_SOURCE_IMAGE:-docker.io/library/nats:2.10.26-alpine}"
@@ -21,7 +25,7 @@ for tool in skopeo python3 tar; do command -v "${tool}" >/dev/null || { echo "ex
 mkdir -p "$(dirname "${OUT_FILE}")"
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
-if ! oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "localhost/appliance-message-broker:2.10.26"; then
+if ! oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "localhost/appliance-message-broker:2.10.26" "${TARGET_ARCH}"; then
   if oci_ref_is_dev_registry "${SOURCE_IMAGE}"; then
     cat >&2 <<EOF
 export-message-broker-image-archive: seeded message broker image is missing or unavailable
@@ -35,12 +39,12 @@ EOF
   fi
   exit 1
 fi
-skopeo copy --override-os linux --override-arch amd64 containers-storage:localhost/appliance-message-broker:2.10.26 "oci:${tmp}/oci:registry.local/nats:bundled"
-digest="$(python3 - "${tmp}/oci/index.json" <<'PY'
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" containers-storage:localhost/appliance-message-broker:2.10.26 "oci:${tmp}/oci:registry.local/nats:bundled"
+digest="$(python3 - "${tmp}/oci/index.json" "${TARGET_ARCH}" <<'PY'
 import json, sys
 index=json.load(open(sys.argv[1], encoding="utf-8"))
 manifests=index.get("manifests", [])
-if len(manifests) != 1: raise SystemExit("message-broker image must contain one linux/amd64 manifest")
+if len(manifests) != 1: raise SystemExit(f"message-broker image must contain one linux/{sys.argv[2]} manifest")
 d=manifests[0]
 if (d.get("annotations") or {}).get("org.opencontainers.image.ref.name") != "registry.local/nats:bundled": raise SystemExit("message-broker archive annotation mismatch")
 digest=d.get("digest", "")

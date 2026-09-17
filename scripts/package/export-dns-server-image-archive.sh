@@ -19,6 +19,9 @@ Options:
   --source-image REF        Upstream CoreDNS image to wrap. Default:
                             registry.k8s.io/coredns/coredns:v<dns version>
   --dns-version VERSION     Compatibility version. Defaults to chart appVersion.
+
+Environment:
+  TARGET_ARCH               amd64 (default) or arm64.
 EOF
 }
 
@@ -26,6 +29,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/oci-pull.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 SERVICE_DIR="${REPO_ROOT}/services/dns-server"
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-dns/Chart.yaml"
 OUT_FILE=""
@@ -94,13 +100,13 @@ OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
 
-# Prefetch linux/amd64 upstream into local storage so the wrapper build can
+# Prefetch linux/${TARGET_ARCH} upstream into local storage so the wrapper build can
 # use --pull-never (same pattern as the workflow controller wrapper).
 retry "${PREFETCH_RETRIES}" \
-  oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${UPSTREAM_LOCAL_REF}"
+  oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${UPSTREAM_LOCAL_REF}" "${TARGET_ARCH}"
 
 make -C "${SERVICE_DIR}" image-local \
-  BUILD_ENGINE="buildah bud --pull-never" \
+  BUILD_ENGINE="buildah bud --pull-never --arch ${TARGET_ARCH}" \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BASE_IMAGE="${UPSTREAM_LOCAL_REF}" \
@@ -113,7 +119,7 @@ LAYOUT="${TMP_DIR}/oci"
 
 # Re-export the wrapper under the canonical :bundled annotation so install
 # ValidateOCIArchiveReference / ctr import match the OCI contract.
-skopeo copy --override-os linux --override-arch amd64 \
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" \
   "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/coredns:bundled"
 
 DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'

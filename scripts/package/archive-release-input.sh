@@ -32,12 +32,13 @@ Options:
                                    release-input as host-packages/ (required for
                                    the complete product super-set).
                                    Layout must be OS/version/arch, for example
-                                   ubuntu/24.04/amd64/*.deb.
+                                   ubuntu/24.04/<TARGET_ARCH>/*.deb.
   --host-packages-os-version VER   Ubuntu baseline expected under
-                                   host-packages/ubuntu/<VER>/amd64/.
+                                   host-packages/ubuntu/<VER>/<TARGET_ARCH>/.
                                    Defaults to the OS_VERSION environment
                                    variable. Required for the complete product.
-  --artifact-server-image PATH     Pinned artifact-server linux/amd64 OCI archive.
+  --artifact-server-image PATH     Pinned artifact-server OCI archive for
+                                   TARGET_ARCH.
   --artifact-server-image-reference REF
                                    Canonical
                                    registry.local/artifact-server@sha256:...
@@ -46,7 +47,7 @@ Options:
                                    artifact-server compatibility version.
                                    Defaults to the appliance-registry chart
                                    appVersion.
-  --dns-image PATH                 Pinned CoreDNS linux/amd64 OCI archive.
+  --dns-image PATH                 Pinned CoreDNS OCI archive for TARGET_ARCH.
   --dns-image-reference REF        Canonical registry.local/coredns@sha256:...
                                    platform-manifest reference.
   --dns-version VERSION            DNS compatibility version. Defaults to the
@@ -106,6 +107,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/fs-link.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
 MESSAGE_BROKER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-message-broker"
 WORKFLOWS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-workflows"
@@ -374,15 +378,15 @@ fi
 require_host_packages_baseline() {
   local root="$1"
   local os_version="$2"
-  local dir="${root}/ubuntu/${os_version}/amd64"
+  local dir="${root}/ubuntu/${os_version}/${TARGET_ARCH}"
   local deb_count=""
   if [[ ! -d "${dir}" ]]; then
-    echo "archive-release-input: host packages directory ${root} is missing ubuntu/${os_version}/amd64/*.deb" >&2
+    echo "archive-release-input: host packages directory ${root} is missing ubuntu/${os_version}/${TARGET_ARCH}/*.deb" >&2
     exit 1
   fi
   deb_count="$(find "${dir}" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d '[:space:]')"
   if [[ "${deb_count}" == "0" ]]; then
-    echo "archive-release-input: host packages directory ${root} is missing ubuntu/${os_version}/amd64/*.deb" >&2
+    echo "archive-release-input: host packages directory ${root} is missing ubuntu/${os_version}/${TARGET_ARCH}/*.deb" >&2
     exit 1
   fi
 }

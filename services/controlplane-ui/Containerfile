@@ -54,7 +54,8 @@ COPY . .
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
-RUN GOWORK=off CGO_ENABLED=0 go build -mod=vendor \
+ARG TARGETARCH=amd64
+RUN GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X appliance-code/services/controlplane-ui/internal/version.Version=${VERSION} \
               -X appliance-code/services/controlplane-ui/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/controlplane-ui/internal/version.BuildTime=${BUILD_TIME}" \

@@ -1359,7 +1359,7 @@ export class MockControlPlaneClient {
 
   async getInferenceStatus(): Promise<InferenceRuntimeStatus> {
     return {
-      package: "std-llm-amd64", engine: "ollama", architecture: "amd64",
+      package: "std-llm", engine: "ollama", architecture: "amd64",
       hostArchitecture: "amd64", acceleration: "standard", gpuAvailable: false,
       ready: true, servingState: "inactive", checks: [{ name: "runtime-api", status: "pass" }]
     };

@@ -8,34 +8,32 @@ stable API, persistent model storage, lifecycle checks, and upgrade contract.
 
 Package metadata carries only the minimum runtime contract:
 
-| Package | Engine | Architecture | Acceleration |
-| --- | --- | --- | --- |
-| `std-llm-amd64` | Ollama | `amd64` | standard |
-| `acc-llm-amd64` | vLLM | `amd64` | accelerated (GPU required) |
-| `acc-llm-arm64` | vLLM | `arm64` | accelerated (GPU required) |
+| Package | Engine | Acceleration |
+| --- | --- | --- |
+| `std-llm` | Ollama | standard |
+| `acc-llm` | vLLM | accelerated (GPU required) |
 
 These entries are not a supported-model or hardware-vendor catalog. The package
-declares `{inferenceEngine, architecture}` only. Runtime capability checks report
-the host architecture, acceleration class (`standard` or `accelerated`), and
-optional `gpuAvailable`. There is no product-level `supportedModes`,
+declares `{inferenceEngine}` only. Product architecture is a build/install
+dimension (`TARGET_ARCH` / bundle `hostBaseline.arch`). Runtime capability checks
+report the host architecture, acceleration class (`standard` or `accelerated`),
+and optional `gpuAvailable`. There is no product-level `supportedModes`,
 `inferenceMode`, or CPU/CUDA mode switch.
 
-- **Standard** (`std-llm-*`): Ollama. Install does not require a GPU. At runtime
+- **Standard** (`std-llm`): Ollama. Install does not require a GPU. At runtime
   the manager may use a host GPU when one is present; otherwise it serves on CPU.
-- **Accelerated** (`acc-llm-*`): vLLM. Install fails closed without a usable
+- **Accelerated** (`acc-llm`): vLLM. Install fails closed without a usable
   NVIDIA GPU on the host. `gpu.enabled` in Helm values follows that host check.
 
 The control-plane API exposes `RuntimeCapabilities` with `package`, `engine`,
 `architecture`, `hostArchitecture`, `acceleration`, optional `gpuAvailable`, and
 `checks`. It does not expose `supportedModes`, `requestedMode`, or `activeMode`.
 
-More architecture-specific packages can be added later without changing the
-profile or public API.
-
-The signed package still contains the pinned inference engine image and chart.
-It does not contain model weights. The `inference` capability is enabled by a
-profile, while the release index and host architecture select the one package
-that supplies it. Merely including a package never enables the capability.
+The signed package still contains the pinned inference engine image and chart
+for the product architecture being built. It does not contain model weights.
+The `inference` capability is enabled by a profile, while the release index
+selects the one package that supplies it. Merely including a package never
+enables the capability.
 
 ## Public and administrative APIs
 
@@ -137,13 +135,13 @@ actions.
 
 ## Accelerated package completion gate
 
-`acc-llm-amd64` and `acc-llm-arm64` package pinned vLLM images with the appliance
-runtime manager. They require a usable GPU at install time and again when the
-manager confirms `gpuAvailable`. They can start without a model, download an
-explicitly requested Hugging Face snapshot, verify its deterministic content
+`acc-llm` packages a pinned vLLM image with the appliance runtime manager for
+the product `TARGET_ARCH`. It requires a usable GPU at install time and again
+when the manager confirms `gpuAvailable`. It can start without a model, download
+an explicitly requested Hugging Face snapshot, verify its deterministic content
 digest, and start one selected model behind the stable OpenAI proxy.
 
-`acc-llm-arm64` is selected explicitly; it is not included by `all` while we
-maintain the standard AMD64 delivery baseline. Each release must validate OpenAI
-streaming, model switching, persistence, rollback, backup/restore, and
-interrupted-download cleanup for the exact image digest it publishes.
+`acc-llm` is selected explicitly; it is not included by `all` (which includes
+`std-llm`). Each release must validate OpenAI streaming, model switching,
+persistence, rollback, backup/restore, and interrupted-download cleanup for the
+exact image digest it publishes.

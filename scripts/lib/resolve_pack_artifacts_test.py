@@ -42,8 +42,8 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertNotIn("inference-runtime-image", arts)
         self.assertNotIn("workspace-provisioner-image", arts)
 
-    def test_foundation_plus_acc_llm_arm64(self):
-        arts = self._resolve("foundation", "acc-llm-arm64")
+    def test_foundation_plus_acc_llm(self):
+        arts = self._resolve("foundation", "acc-llm")
         self.assertIn("inference-runtime-image", arts)
         self.assertIn("inference-manager-image", arts)
         self.assertIn("appliance-inference-chart", arts)
@@ -73,7 +73,7 @@ class ResolvePackArtifactsTest(unittest.TestCase):
                 "--metadata-root",
                 str(METADATA),
                 "foundation",
-                "acc-llm-arm64",
+                "acc-llm",
             ],
             text=True,
         )

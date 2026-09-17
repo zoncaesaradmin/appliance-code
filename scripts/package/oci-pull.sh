@@ -28,7 +28,7 @@ oci_ref_is_dev_registry() {
 oci_skopeo_prefetch_docker() {
   local bare="$1"
   local dest_storage_ref="$2"
-  local architecture="${3:-amd64}"
+  local architecture="${3:-${TARGET_ARCH:-amd64}}"
   local -a args=(copy --override-os linux --override-arch "${architecture}")
 
   if oci_ref_is_dev_registry "${bare}"; then

@@ -1005,7 +1005,7 @@ config:
   applianceProfile: future-catalog-profile
   enabledCapabilities: [base, inference]
   inferenceGatewayBaseURL: http://inference-gateway.inference.svc.cluster.local:8080
-  inferenceRuntimePackage: std-llm-amd64
+  inferenceRuntimePackage: std-llm
   inferenceEngine: ollama
   inferenceArchitecture: amd64
 `)

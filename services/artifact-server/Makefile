@@ -12,11 +12,14 @@ SERVICE_IMAGE_NAME ?= appliance-artifact-server
 ARTIFACT_SERVER_VERSION ?= $(shell sed -n 's/^appVersion: *"\{0,1\}v\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$$/\1/p' $(CHART_YAML))
 SERVICE_IMAGE_TAG ?= v$(ARTIFACT_SERVER_VERSION)
 # Current upstream pull ref (implementation detail; not the appliance name).
+# Override with TARGET_ARCH=arm64 → zot-linux-arm64 (export script does this).
 BASE_IMAGE ?= ghcr.io/project-zot/zot-linux-amd64:v$(ARTIFACT_SERVER_VERSION)
+ZOT_BINARY ?= zot-linux-amd64
 # glibc base for the dynamically linked upstream binary (not Alpine/musl).
 RUNTIME_BASE_IMAGE ?= debian:bookworm-slim
 SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+	--build-arg ZOT_BINARY=$(ZOT_BINARY) \
 	--build-arg RUNTIME_BASE_IMAGE=$(RUNTIME_BASE_IMAGE)
 ifneq ($(strip $(RUNTIME_PACKAGES_INSTALLED)),)
 SERVICE_IMAGE_BUILD_ARGS += --build-arg RUNTIME_PACKAGES_INSTALLED=$(RUNTIME_PACKAGES_INSTALLED)

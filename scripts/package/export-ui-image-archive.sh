@@ -21,6 +21,9 @@ Options:
   --runtime-image REF    Runtime base image. Default: UI_RUNTIME_IMAGE env or
                          Containerfile default.
   --help                 Show this help.
+
+Environment:
+  TARGET_ARCH            amd64 (default) or arm64.
 EOF
 }
 
@@ -28,6 +31,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 UI_DIR="${REPO_ROOT}/services/controlplane-ui"
 VERIFY_SCRIPT="${SCRIPT_DIR}/verify-oci-archive-build-metadata.py"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 
 OUT_FILE=""
 IMAGE_TAG=""
@@ -118,6 +124,7 @@ make -C "${UI_DIR}" image-local \
   COMMIT="${COMMIT}" \
   BUILD_TIME="${BUILD_TIME}" \
   BUILD_NO_CACHE=1 \
+  SERVICE_IMAGE_EXTRA_BUILD_ARGS="--arch ${TARGET_ARCH}" \
   UI_NODE_IMAGE="${UI_NODE_IMAGE:-}" \
   UI_GO_IMAGE="${UI_GO_IMAGE:-}" \
   UI_RUNTIME_IMAGE="${UI_RUNTIME_IMAGE:-}" \
@@ -125,7 +132,8 @@ make -C "${UI_DIR}" image-local \
   USE_PREBAKED_NPM="${USE_PREBAKED_NPM:-0}" \
   RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
 rm -f "${OUT_FILE}"
-skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" \
+  "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 python3 "${VERIFY_SCRIPT}" \
   --archive "${OUT_FILE}" \
   --binary-path "appliance-ui" \

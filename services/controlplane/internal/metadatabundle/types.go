@@ -72,8 +72,10 @@ type PackageCatalog struct {
 }
 
 type PackageRuntime struct {
+	// InferenceEngine is the only package-owned runtime selector.
+	// Product architecture lives on the signed bundle hostBaseline and is
+	// injected into the control plane as InferenceArchitecture at install.
 	InferenceEngine string `yaml:"inferenceEngine" json:"inferenceEngine"`
-	Architecture    string `yaml:"architecture" json:"architecture"`
 }
 
 type PackageDef struct {

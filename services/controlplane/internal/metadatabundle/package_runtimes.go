@@ -38,17 +38,22 @@ func validatePackageCatalog(packages PackageCatalog, capabilities CapabilityCata
 		}
 		if seen["inference"] {
 			engine := strings.TrimSpace(pkg.Runtime.InferenceEngine)
-			arch := strings.TrimSpace(pkg.Runtime.Architecture)
-			if !packageIDPattern.MatchString(engine) || !packageIDPattern.MatchString(arch) {
-				return fmt.Errorf("metadatabundle: package %q must declare a valid inference engine and architecture", id)
+			if !packageIDPattern.MatchString(engine) {
+				return fmt.Errorf("metadatabundle: package %q must declare a valid inference engine", id)
 			}
-			// Product categories: standard packages use Ollama; accelerated
-			// packages use vLLM and require a GPU at install/runtime.
-			switch {
-			case strings.HasPrefix(id, "std-llm-") && engine != "ollama":
-				return fmt.Errorf("metadatabundle: standard inference package %q must use ollama", id)
-			case strings.HasPrefix(id, "acc-llm-") && engine != "vllm":
-				return fmt.Errorf("metadatabundle: accelerated inference package %q must use vllm", id)
+			// Product categories: standard = Ollama; accelerated = vLLM (GPU).
+			// Architecture is a product/build dimension, not a pack ID suffix.
+			switch id {
+			case "std-llm":
+				if engine != "ollama" {
+					return fmt.Errorf("metadatabundle: standard inference package %q must use ollama", id)
+				}
+			case "acc-llm":
+				if engine != "vllm" {
+					return fmt.Errorf("metadatabundle: accelerated inference package %q must use vllm", id)
+				}
+			default:
+				return fmt.Errorf("metadatabundle: unknown inference package %q (want std-llm or acc-llm)", id)
 			}
 		}
 	}

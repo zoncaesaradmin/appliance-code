@@ -17,6 +17,9 @@ Options:
                          operator-facing version.
   --image-name NAME      Local image name. Default: appliance-control-plane.
   --help                 Show this help.
+
+Environment:
+  TARGET_ARCH            amd64 (default) or arm64.
 EOF
 }
 
@@ -24,6 +27,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CONTROLPLANE_DIR="${REPO_ROOT}/services/controlplane"
 VERIFY_SCRIPT="${SCRIPT_DIR}/verify-oci-archive-build-metadata.py"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 
 OUT_FILE=""
 IMAGE_TAG=""
@@ -101,11 +107,13 @@ make -C "${CONTROLPLANE_DIR}" image-local \
   COMMIT="${COMMIT}" \
   BUILD_TIME="${BUILD_TIME}" \
   BUILD_NO_CACHE=1 \
+  SERVICE_IMAGE_EXTRA_BUILD_ARGS="--arch ${TARGET_ARCH}" \
   GO_IMAGE="${GO_IMAGE:-}" \
   RUNTIME_IMAGE="${RUNTIME_IMAGE:-}" \
   RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
 rm -f "${OUT_FILE}"
-skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" \
+  "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 python3 "${VERIFY_SCRIPT}" \
   --archive "${OUT_FILE}" \
   --binary-path "appliance-server" \

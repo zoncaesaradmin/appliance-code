@@ -486,11 +486,19 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(c.InferenceArchitecture) == "" {
 			errs = append(errs, "inferenceArchitecture must not be empty when the inference capability is enabled")
 		}
-		switch {
-		case strings.HasPrefix(c.InferenceRuntimePackage, "std-llm-") && engine != "ollama":
-			errs = append(errs, "standard inference packages must use ollama")
-		case strings.HasPrefix(c.InferenceRuntimePackage, "acc-llm-") && engine != "vllm":
-			errs = append(errs, "accelerated inference packages must use vllm")
+		switch strings.TrimSpace(c.InferenceRuntimePackage) {
+		case "std-llm":
+			if engine != "ollama" {
+				errs = append(errs, "standard inference package std-llm must use ollama")
+			}
+		case "acc-llm":
+			if engine != "vllm" {
+				errs = append(errs, "accelerated inference package acc-llm must use vllm")
+			}
+		default:
+			if strings.TrimSpace(c.InferenceRuntimePackage) != "" {
+				errs = append(errs, "inferenceRuntimePackage must be std-llm or acc-llm")
+			}
 		}
 	}
 	if profileErr == nil && videoEnabled {

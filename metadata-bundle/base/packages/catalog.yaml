@@ -11,18 +11,13 @@ packages:
     displayName: Device User Services
     description: Host-agent-backed host and application management.
     capabilities: [host, applications]
-  std-llm-amd64:
-    displayName: Standard LLM (amd64)
+  std-llm:
+    displayName: Standard LLM
     description: Standard inference using Ollama for simpler, lower-capacity deployments. The runtime uses CPU or a host GPU when one is available.
     capabilities: [inference]
-    runtime: {inferenceEngine: ollama, architecture: amd64}
-  acc-llm-amd64:
-    displayName: Accelerated LLM (amd64)
+    runtime: {inferenceEngine: ollama}
+  acc-llm:
+    displayName: Accelerated LLM
     description: Accelerated inference using vLLM. Requires a proper GPU on the install host.
     capabilities: [inference]
-    runtime: {inferenceEngine: vllm, architecture: amd64}
-  acc-llm-arm64:
-    displayName: Accelerated LLM (arm64)
-    description: Accelerated inference using vLLM. Requires a proper GPU on the install host.
-    capabilities: [inference]
-    runtime: {inferenceEngine: vllm, architecture: arm64}
+    runtime: {inferenceEngine: vllm}

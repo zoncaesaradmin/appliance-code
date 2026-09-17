@@ -17,6 +17,9 @@ Options:
                          Default: the chart appVersion.
   --image-name NAME      Local image name. Default: appliance-workflow-controller.
   --help                 Show this help.
+
+Environment:
+  TARGET_ARCH            amd64 (default) or arm64.
 EOF
 }
 
@@ -24,6 +27,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/oci-pull.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 SERVICE_DIR="${REPO_ROOT}/services/workflow-controller"
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-workflows/Chart.yaml"
 
@@ -120,21 +126,22 @@ OUT_FILE="$(cd "$(dirname "${OUT_FILE}")" && pwd)/$(basename "${OUT_FILE}")"
 IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
 
-# Prefetch the exact linux/amd64 upstream image into local containers-storage so
+# Prefetch the exact linux/${TARGET_ARCH} upstream image into local containers-storage so
 # the wrapper build can run with --pull-never instead of depending on a live
 # remote fetch during `buildah bud`.
 retry "${PREFETCH_RETRIES}" \
-  oci_skopeo_prefetch_docker "${BASE_IMAGE}" "${UPSTREAM_LOCAL_REF}"
+  oci_skopeo_prefetch_docker "${BASE_IMAGE}" "${UPSTREAM_LOCAL_REF}" "${TARGET_ARCH}"
 
 make -C "${SERVICE_DIR}" image-local \
-  BUILD_ENGINE="buildah bud --pull-never" \
+  BUILD_ENGINE="buildah bud --pull-never --arch ${TARGET_ARCH}" \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BASE_IMAGE="${UPSTREAM_LOCAL_REF}" \
   RUNTIME_IMAGE="${RUNTIME_IMAGE:-}" \
   RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
 rm -f "${OUT_FILE}"
-skopeo copy "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" \
+  "containers-storage:${IMAGE_REF}" "oci-archive:${OUT_FILE}:${IMAGE_REF}"
 
 echo "created workflow-controller image archive:"
 echo "  ${OUT_FILE}"

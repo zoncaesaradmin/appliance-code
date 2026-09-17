@@ -67,7 +67,7 @@ func TestListModelsPreservesLaunchArguments(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "vllm", Architecture: "amd64"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm", Engine: "vllm", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestStatusReportsServedMaxModelLen(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm", Engine: "ollama", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 	}))
 	defer server.Close()
 
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm", Engine: "ollama", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestAcceleratedCapabilitiesReportGPUAvailability(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm", Engine: "vllm", Architecture: "arm64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestAcceleratedCapabilitiesFailWithoutGPU(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"gpuAvailable": false, "checks": []map[string]string{}})
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm-arm64", Engine: "vllm", Architecture: "arm64"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "acc-llm", Engine: "vllm", Architecture: "arm64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestStandardCapabilitiesReportStandardAcceleration(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"gpuAvailable": false, "checks": []map[string]string{}})
 	}))
 	defer server.Close()
-	service, err := New(Config{BaseURL: server.URL, Package: "std-llm-amd64", Engine: "ollama", Architecture: "amd64"}, server.Client())
+	service, err := New(Config{BaseURL: server.URL, Package: "std-llm", Engine: "ollama", Architecture: "amd64"}, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}

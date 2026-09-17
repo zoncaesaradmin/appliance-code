@@ -17,13 +17,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/oci-pull.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
 IMAGE_TAG=""
 RUNTIME_IMAGE="${RUNTIME_IMAGE:-docker.io/library/alpine:3.24.1}"
 RUNTIME_PREBAKED="${RUNTIME_PREBAKED:-0}"
-GOARCH="${GOARCH:-amd64}"
+GOARCH="${GOARCH:-${TARGET_ARCH}}"
 LOCAL_IMAGE_PREFIX="localhost"
 IMAGE_NAME="inference-manager"
 PREFETCH_RETRIES=5
@@ -79,7 +82,7 @@ LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 case "${RUNTIME_PREBAKED}" in
   1|true|TRUE|yes|YES|on|ON) ;;
   *)
-    retry "${PREFETCH_RETRIES}" oci_skopeo_prefetch_docker "${RUNTIME_IMAGE}" "${LOCAL_BASE}" amd64
+    retry "${PREFETCH_RETRIES}" oci_skopeo_prefetch_docker "${RUNTIME_IMAGE}" "${LOCAL_BASE}" "${GOARCH}"
     RUNTIME_IMAGE="${LOCAL_BASE}"
     ;;
 esac

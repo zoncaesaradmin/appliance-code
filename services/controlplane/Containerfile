@@ -17,12 +17,14 @@ COPY . .
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
-RUN CGO_ENABLED=0 go build -mod=vendor \
+# TARGETARCH is set by buildah/docker when --arch is passed (product TARGET_ARCH).
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X appliance-code/services/controlplane/internal/version.Version=${VERSION} \
               -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \
     -o /out/appliance-server ./cmd/appliance-server
-RUN CGO_ENABLED=0 go build -mod=vendor \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X appliance-code/services/controlplane/internal/version.Version=${VERSION} \
               -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \

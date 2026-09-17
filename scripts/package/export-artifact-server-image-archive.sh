@@ -17,10 +17,11 @@ Options:
   --out-file PATH           Output OCI archive tar. Required.
   --reference-out-file PATH Write the canonical digest reference to PATH.
   --source-image REF        Upstream image to wrap. Default:
-                            ghcr.io/project-zot/zot-linux-amd64:v<version>
+                            ghcr.io/project-zot/zot-linux-\${TARGET_ARCH}:v<version>
   --version VERSION         Compatibility version. Defaults to chart appVersion.
 
 Environment:
+  TARGET_ARCH               amd64 (default) or arm64.
   RUNTIME_SOURCE_IMAGE      glibc runtime base pulled for --pull-never builds.
                             Default: debian:bookworm-slim
 EOF
@@ -30,6 +31,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/oci-pull.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 SERVICE_DIR="${REPO_ROOT}/services/artifact-server"
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-registry/Chart.yaml"
 OUT_FILE=""
@@ -94,7 +98,7 @@ if [[ -z "${ARTIFACT_SERVER_VERSION}" ]]; then
 fi
 IMAGE_TAG="v${ARTIFACT_SERVER_VERSION}"
 if [[ -z "${SOURCE_IMAGE}" ]]; then
-  SOURCE_IMAGE="ghcr.io/project-zot/zot-linux-amd64:v${ARTIFACT_SERVER_VERSION}"
+  SOURCE_IMAGE="ghcr.io/project-zot/zot-linux-${TARGET_ARCH}:v${ARTIFACT_SERVER_VERSION}"
 fi
 
 mkdir -p "$(dirname "${OUT_FILE}")"
@@ -103,18 +107,19 @@ IMAGE_REF="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}:${IMAGE_TAG}"
 UPSTREAM_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${UPSTREAM_LOCAL_NAME}:${IMAGE_TAG}"
 RUNTIME_LOCAL_REF="${LOCAL_IMAGE_PREFIX}/${RUNTIME_LOCAL_NAME}:${RUNTIME_LOCAL_TAG}"
 
-# Prefetch linux/amd64 upstream + glibc runtime into local storage so the
+# Prefetch linux/${TARGET_ARCH} upstream + glibc runtime into local storage so the
 # wrapper build can use --pull-never (same pattern as CoreDNS / the workflow controller).
 retry "${PREFETCH_RETRIES}" \
-  oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${UPSTREAM_LOCAL_REF}"
+  oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${UPSTREAM_LOCAL_REF}" "${TARGET_ARCH}"
 retry "${PREFETCH_RETRIES}" \
-  oci_skopeo_prefetch_docker "${RUNTIME_SOURCE_IMAGE}" "${RUNTIME_LOCAL_REF}"
+  oci_skopeo_prefetch_docker "${RUNTIME_SOURCE_IMAGE}" "${RUNTIME_LOCAL_REF}" "${TARGET_ARCH}"
 
 make -C "${SERVICE_DIR}" image-local \
-  BUILD_ENGINE="buildah bud --pull-never" \
+  BUILD_ENGINE="buildah bud --pull-never --arch ${TARGET_ARCH}" \
   SERVICE_IMAGE_NAME="${LOCAL_IMAGE_PREFIX}/${IMAGE_NAME}" \
   SERVICE_IMAGE_TAG="${IMAGE_TAG}" \
   BASE_IMAGE="${UPSTREAM_LOCAL_REF}" \
+  ZOT_BINARY="zot-linux-${TARGET_ARCH}" \
   RUNTIME_BASE_IMAGE="${RUNTIME_LOCAL_REF}" \
   RUNTIME_PACKAGES_INSTALLED="${RUNTIME_PACKAGES_INSTALLED:-0}"
 
@@ -137,7 +142,7 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 LAYOUT="${TMP_DIR}/oci"
 
 # Re-export under the existing install OCI contract annotation.
-skopeo copy --override-os linux --override-arch amd64 \
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" \
   "containers-storage:${IMAGE_REF}" "oci:${LAYOUT}:registry.local/artifact-server:bundled"
 
 DIGEST="$(python3 - "${LAYOUT}/index.json" <<'PY'

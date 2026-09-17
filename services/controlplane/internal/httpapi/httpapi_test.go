@@ -155,7 +155,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityInference) {
 		cfg.InferenceGatewayBaseURL = hostUpstream.URL
-		cfg.InferenceRuntimePackage = "std-llm-amd64"
+		cfg.InferenceRuntimePackage = "std-llm"
 		cfg.InferenceEngine = "ollama"
 		cfg.InferenceArchitecture = "amd64"
 	}
