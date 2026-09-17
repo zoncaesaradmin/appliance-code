@@ -71,6 +71,7 @@ func modelArchFromConfigJSON(data []byte) modelArch {
 		NHead                 json.Number `json:"n_head"`
 		HiddenSize            json.Number `json:"hidden_size"`
 		NEmbd                 json.Number `json:"n_embd"`
+		HeadDim               json.Number `json:"head_dim"`
 	}
 	if err := json.Unmarshal(data, &config); err != nil {
 		return modelArch{}
@@ -79,13 +80,16 @@ func modelArchFromConfigJSON(data []byte) modelArch {
 		MaxPosition: maxPositionFromNumbers(config.MaxPositionEmbeddings, config.NPositions),
 		Layers:      uintFromNumbers(config.NumHiddenLayers, config.NLayer),
 		KVHeads:     uintFromNumbers(config.NumKeyValueHeads),
+		HeadDim:     uintFromNumbers(config.HeadDim),
 	}
 	heads := uintFromNumbers(config.NumAttentionHeads, config.NHead)
 	hidden := uintFromNumbers(config.HiddenSize, config.NEmbd)
 	if arch.KVHeads == 0 {
 		arch.KVHeads = heads
 	}
-	if heads > 0 && hidden > 0 && hidden%heads == 0 {
+	// Prefer explicit head_dim (Qwen3 and others). Deriving hidden/heads is wrong
+	// when head_dim != hidden/num_attention_heads (Qwen3-0.6B: 128 vs 1024/16=64).
+	if arch.HeadDim == 0 && heads > 0 && hidden > 0 && hidden%heads == 0 {
 		arch.HeadDim = hidden / heads
 	}
 	return arch

@@ -1047,13 +1047,13 @@ func (m *manager) vllmCommandArguments(item model, mode string) []string {
 	// LaunchArguments are already planned by deployVLLMEngine / catalog snapshot
 	// (model card ∩ memory KV ∩ mode prefill). Do not re-expand to the raw card.
 	args = append(args, item.LaunchArguments...)
-	if !argumentPresent(item.LaunchArguments, "--served-model-name") && !argumentPresent(args, "--served-model-name") {
+	args = ensureVLLMLaunchDefaults(args, mode)
+	if !argumentPresent(args, "--served-model-name") {
 		args = append(args, "--served-model-name", item.ID)
 	}
 	// Device is fixed by the packaged vLLM image (cpu vs CUDA build). Current
 	// vLLM CPU images reject --device, and CUDA images select the platform at
-	// import time. Mode still gates whether load is allowed.
-	_ = mode
+	// import time. Mode still gates whether load is allowed via resolveDevice.
 	port := env("INFERENCE_ENGINE_PORT", "")
 	if port == "" {
 		port = m.backend.Port()
@@ -1062,6 +1062,24 @@ func (m *manager) vllmCommandArguments(item model, mode string) []string {
 		port = "8001"
 	}
 	return append(args, "--host", "0.0.0.0", "--port", port)
+}
+
+// ensureVLLMLaunchDefaults aligns launch argv with the known-good docker
+// contract used on appliance GPUs (gpu-memory-utilization 0.8). CPU mode
+// leaves utilization unset (vLLM CPU builds reject the flag).
+func ensureVLLMLaunchDefaults(arguments []string, mode string) []string {
+	out := append([]string(nil), arguments...)
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "gpu", "cuda":
+		if !argumentPresent(out, "--gpu-memory-utilization") {
+			util := strings.TrimSpace(env("INFERENCE_VLLM_GPU_MEMORY_UTILIZATION", "0.8"))
+			if util == "" {
+				util = "0.8"
+			}
+			out = append(out, "--gpu-memory-utilization", util)
+		}
+	}
+	return out
 }
 
 func argumentPresent(arguments []string, wanted string) bool {

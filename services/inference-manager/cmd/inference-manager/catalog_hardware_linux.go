@@ -27,6 +27,33 @@ func hostMemAvailable() uint64 {
 	return 0
 }
 
+// probeGPUFreeMemoryBytes reports free memory on GPU 0 for catalog eligibility.
+// The thin inference-manager pod is Restricted/CPU-only: torch/CUDA and often
+// nvidia-smi are unavailable there even when INFERENCE_GPU_ENABLED=true and the
+// on-demand engine pod will have the GPU. Callers must fall back to host
+// MemAvailable rather than treating a probe miss as zero capacity.
+func probeGPUFreeMemoryBytes(ctx context.Context) uint64 {
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	python := env("INFERENCE_PYTHON", "python3")
+	if b, err := exec.CommandContext(probeCtx, python, "-c", "import torch; print(torch.cuda.mem_get_info(0)[0])").Output(); err == nil {
+		n, _ := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 64)
+		if n > 0 {
+			return n
+		}
+	}
+	if b, err := exec.CommandContext(probeCtx, "nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits").Output(); err == nil {
+		line := strings.TrimSpace(strings.Split(string(b), "\n")[0])
+		if mib, err := strconv.ParseUint(line, 10, 64); err == nil && mib > 0 {
+			return mib * 1024 * 1024
+		}
+	}
+	return 0
+}
+
+// gpuFreeMemoryProbe is overridable in tests.
+var gpuFreeMemoryProbe = probeGPUFreeMemoryBytes
+
 func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 	var disk syscall.Statfs_t
 	if syscall.Statfs(m.modelsDir, &disk) != nil {
@@ -34,31 +61,11 @@ func (m *manager) catalogBudget(ctx context.Context) (uint64, uint64) {
 	}
 	freeDisk := disk.Bavail * uint64(disk.Bsize)
 	usingGPU, _ := m.resolveDevice(ctx)
-	if m.engine == "vllm" && !usingGPU {
-		return 0, freeDisk
-	}
-	// Catalog eligibility estimates whether a *model* can fit on this appliance.
-	// Do not clamp to the manager container's memory limit: the thin manager is
-	// intentionally small (API/proxy only); the on-demand engine pod holds the
-	// model. Host MemAvailable is the conservative capacity signal for CPU path.
-	memory := hostMemAvailable()
-	// Leave room for existing appliance workloads and transient allocations.
-	memory = memory / 4 * 3
+	gpuFree := uint64(0)
 	if usingGPU {
-		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		// Conservative single-device capacity: do not add GPU memories together
-		// unless a distributed/tensor-parallel launch has been configured.
-		b, err := exec.CommandContext(probeCtx, env("INFERENCE_PYTHON", "python3"), "-c", "import torch; print(torch.cuda.mem_get_info(0)[0])").Output()
-		if err != nil {
-			return 0, freeDisk
-		}
-		gpu, _ := strconv.ParseUint(strings.TrimSpace(string(b)), 10, 64)
-		gpu = gpu / 5 * 4
-		if memory == 0 || gpu < memory {
-			memory = gpu
-		}
+		gpuFree = gpuFreeMemoryProbe(ctx)
 	}
+	memory := combineCatalogMemory(hostMemAvailable(), gpuFree, usingGPU, m.engine)
 	if max := packageMaxMemoryBytes(); max > 0 && memory > max {
 		memory = max
 	}

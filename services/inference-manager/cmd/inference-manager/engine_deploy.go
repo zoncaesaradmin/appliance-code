@@ -270,7 +270,8 @@ func (e *k8sEngine) ApplyEngine(ctx context.Context, spec enginePodSpec) error {
 			corev1.EnvVar{Name: "OLLAMA_HOST", Value: fmt.Sprintf("0.0.0.0:%d", e.port)},
 			corev1.EnvVar{Name: "OLLAMA_MODELS", Value: "/models"},
 		)
-	} else {
+	} else if !e.gpuEnabled {
+		// CPU-only vLLM image knobs. Do not set these on CUDA engine pods.
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "VLLM_CPU_KVCACHE_SPACE", Value: env("VLLM_CPU_KVCACHE_SPACE", "2")},
 			corev1.EnvVar{Name: "VLLM_CPU_OMP_THREADS_BIND", Value: "auto"},
@@ -281,6 +282,10 @@ func (e *k8sEngine) ApplyEngine(ctx context.Context, spec enginePodSpec) error {
 				corev1.EnvVar{Name: "OMP_NUM_THREADS", Value: strconv.Itoa(spec.OMPThreads)},
 			)
 		}
+	} else if spec.OMPThreads > 0 {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "OMP_NUM_THREADS", Value: strconv.Itoa(spec.OMPThreads)},
+		)
 	}
 
 	mounts := []corev1.VolumeMount{
@@ -312,7 +317,10 @@ func (e *k8sEngine) ApplyEngine(ctx context.Context, spec enginePodSpec) error {
 		corev1.ResourceMemory: spec.MemoryReq,
 		corev1.ResourceCPU:    spec.CPURequest,
 	}
-	if spec.GPURequest {
+	// GPU access uses RuntimeClass + NVIDIA_VISIBLE_DEVICES (Toolkit/CDI path),
+	// matching docker --gpus all. Do not request nvidia.com/gpu unless a device
+	// plugin is installed — otherwise the engine pod stays Pending forever.
+	if spec.GPURequest && gpuExtendedResourceRequested() {
 		limits[corev1.ResourceName("nvidia.com/gpu")] = resource.MustParse("1")
 		requests[corev1.ResourceName("nvidia.com/gpu")] = resource.MustParse("1")
 	}
@@ -568,6 +576,19 @@ func packageMaxMemoryBytes() uint64 {
 		return 0
 	}
 	return uint64(maxMem.Value())
+}
+
+// gpuExtendedResourceRequested opts into nvidia.com/gpu Extended Resources.
+// Default is false: appliance installs use NVIDIA Container Toolkit + RuntimeClass
+// (docker --gpus all equivalent) and do not ship a device plugin. Requesting
+// nvidia.com/gpu without a plugin leaves engine pods Pending.
+func gpuExtendedResourceRequested() bool {
+	switch strings.ToLower(strings.TrimSpace(env("INFERENCE_GPU_RESOURCE_REQUEST", ""))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func persistEngineDesire(modelsDir, modelID string, spec enginePodSpec) error {

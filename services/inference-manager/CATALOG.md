@@ -113,11 +113,18 @@ Eligibility and Load share one vLLM serve plan (`planServe`):
 MaxModelLen = min(model card, KV memory cap, mode prefill cap)
 requiredBytes = memoryBytes + shmBytes + 512Mi margin + KVBytesPerToken×MaxModelLen
 cpuCores = ~75% host CPUs (CPU mode) or modest reservation (CUDA)
-availableBytes = host MemAvailable × 0.75 (or GPU free × 0.8 in CUDA mode)
+availableBytes = host MemAvailable × 0.75 (or GPU free × 0.8 in CUDA mode
+when the manager can probe GPU free memory via torch or nvidia-smi; the thin
+manager pod often cannot, so it keeps the host MemAvailable fallback instead of
+treating a probe miss as zero capacity)
 eligible <=> requiredBytes <= availableBytes
 engine pod memory limit = requiredBytes
 engine pod CPU limit/request = cpuCores (OMP_NUM_THREADS matched)
 --max-model-len = MaxModelLen (persisted on Load)
+CUDA launch defaults: --gpu-memory-utilization 0.8 unless already set
+(INFERENCE_VLLM_GPU_MEMORY_UTILIZATION / explicit launch arg). Engine GPU access
+uses RuntimeClass + NVIDIA_VISIBLE_DEVICES; nvidia.com/gpu is opt-in via
+INFERENCE_GPU_RESOURCE_REQUEST (device plugin required).
 ```
 
 `memoryBytes` is the catalog model estimate (weights×2 plus engine headroom
@@ -125,6 +132,9 @@ from discovery). Catalog responses also include `requiredBytes`,
 `modelContextLimit`, and `availableMemoryBytes`. Optional chart pins
 (`engine.maxMemory`, `engine.cpuLimit`) override planning only when set; the
 defaults are empty (host-derived).
+
+Model architecture parsing prefers an explicit `head_dim` from `config.json`
+(required for Qwen3 where `head_dim` ≠ `hidden_size / num_attention_heads`).
 
 UI download state is derived from the runtime inventory, never inferred from
 catalog membership. Removing or losing a catalog entry does not remove its

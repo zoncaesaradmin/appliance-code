@@ -101,6 +101,25 @@ func TestModelArchKVBytesPerToken(t *testing.T) {
 	}
 }
 
+func TestModelArchPrefersExplicitHeadDim(t *testing.T) {
+	// Qwen3-0.6B: head_dim=128 while hidden/heads = 1024/16 = 64.
+	cfg := []byte(`{
+		"max_position_embeddings":40960,
+		"num_hidden_layers":28,
+		"num_key_value_heads":8,
+		"num_attention_heads":16,
+		"hidden_size":1024,
+		"head_dim":128
+	}`)
+	arch := modelArchFromConfigJSON(cfg)
+	if arch.Layers != 28 || arch.KVHeads != 8 || arch.HeadDim != 128 {
+		t.Fatalf("arch=%+v", arch)
+	}
+	if got := arch.kvBytesPerToken(); got != 2*28*8*128*2 {
+		t.Fatalf("kv/token=%d want %d", got, 2*28*8*128*2)
+	}
+}
+
 func TestApplyServeWindowReplacesOversizedCardWindow(t *testing.T) {
 	got := applyServeWindowMaxModelLen([]string{"--max-model-len", "32768"}, 8192, 32768)
 	if len(got) != 2 || got[1] != "8192" {

@@ -163,6 +163,30 @@ func TestValidatedVLLMArgumentsMatchSupportedDockerInvocation(t *testing.T) {
 	}
 }
 
+func TestVLLMCommandArgumentsDefaultGPUMemoryUtilization(t *testing.T) {
+	m := testManager(t)
+	got := m.vllmCommandArguments(model{ID: "Qwen/Qwen3-0.6B", Path: "/models/qwen", LaunchArguments: []string{"--max-model-len", "8192"}}, "gpu")
+	joined := strings.Join(got, " ")
+	if !strings.Contains(joined, "--gpu-memory-utilization 0.8") {
+		t.Fatalf("GPU mode should default to 0.8 utilization, got %q", joined)
+	}
+	cpu := m.vllmCommandArguments(model{ID: "x", Path: "/models/x", LaunchArguments: nil}, "cpu")
+	if strings.Contains(strings.Join(cpu, " "), "--gpu-memory-utilization") {
+		t.Fatalf("CPU mode must not set gpu-memory-utilization: %v", cpu)
+	}
+}
+
+func TestGpuExtendedResourceRequestDefaultOff(t *testing.T) {
+	t.Setenv("INFERENCE_GPU_RESOURCE_REQUEST", "")
+	if gpuExtendedResourceRequested() {
+		t.Fatal("default must not request nvidia.com/gpu without a device plugin")
+	}
+	t.Setenv("INFERENCE_GPU_RESOURCE_REQUEST", "true")
+	if !gpuExtendedResourceRequested() {
+		t.Fatal("expected opt-in true")
+	}
+}
+
 func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 	var calls []string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
