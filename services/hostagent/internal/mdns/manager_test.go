@@ -104,9 +104,7 @@ func TestApplyEnableStartsService(t *testing.T) {
 		outputs: map[string]string{
 			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
 			"systemctl is-active avahi-daemon.service": "active",
-			"systemctl stop avahi-daemon.socket":       "",
-			"systemctl disable avahi-daemon.socket":    "",
-			"systemctl mask avahi-daemon.socket":       "",
+			"systemctl unmask avahi-daemon.socket":     "",
 			"systemctl unmask avahi-daemon.service":    "",
 			"systemctl enable avahi-daemon.service":    "",
 			"systemctl restart avahi-daemon.service":   "",
@@ -131,25 +129,23 @@ func TestApplyEnableStartsService(t *testing.T) {
 	if config := string(m.Files.(*memFiles).data[filepath.Join(root, "etc", "avahi", "avahi-daemon.conf")]); !strings.Contains(config, "host-name=test-device-1\n") {
 		t.Fatalf("Avahi host name = %q", config)
 	}
-	wantSocketBeforeService := []string{
-		"systemctl stop avahi-daemon.socket",
-		"systemctl disable avahi-daemon.socket",
-		"systemctl mask avahi-daemon.socket",
+	wantBeforeRestart := []string{
+		"systemctl unmask avahi-daemon.socket",
 		"systemctl unmask avahi-daemon.service",
 		"systemctl enable avahi-daemon.service",
 		"systemctl restart avahi-daemon.service",
 	}
 	idx := 0
 	for _, call := range runner.calls {
-		if idx >= len(wantSocketBeforeService) {
+		if idx >= len(wantBeforeRestart) {
 			break
 		}
-		if call == wantSocketBeforeService[idx] {
+		if call == wantBeforeRestart[idx] {
 			idx++
 		}
 	}
-	if idx != len(wantSocketBeforeService) {
-		t.Fatalf("missing socket quiesce before service start; calls=%v", runner.calls)
+	if idx != len(wantBeforeRestart) {
+		t.Fatalf("missing socket unmask before service restart; calls=%v", runner.calls)
 	}
 }
 
@@ -164,6 +160,7 @@ func TestApplyDisableStopsService(t *testing.T) {
 			"systemctl disable avahi-daemon.socket":    "",
 			"systemctl disable avahi-daemon.service":   "",
 			"systemctl mask avahi-daemon.socket":       "",
+			"systemctl mask avahi-daemon.service":      "",
 		},
 	}
 	m := &Manager{

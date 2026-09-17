@@ -6,9 +6,9 @@ import "context"
 
 const (
 	ServiceName = "avahi-daemon.service"
-	// SocketName activates ServiceName on Ubuntu. Leave it stopped/masked while
-	// the appliance owns mDNS so socket activation cannot cancel service stop
-	// or restart Avahi outside host-agentd Apply.
+	// SocketName is Required by ServiceName on Ubuntu. Quiesce/mask it when
+	// mDNS is off (stop socket first to avoid canceled stop jobs); unmask it
+	// again before enable/restart or systemd refuses to start the service.
 	SocketName = "avahi-daemon.socket"
 
 	ActualInactive = "inactive"
