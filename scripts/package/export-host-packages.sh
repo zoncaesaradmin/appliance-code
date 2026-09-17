@@ -25,11 +25,12 @@ Options:
 
 Environment:
   TARGET_ARCH                    Used when --arch is omitted (required if so).
-  HOST_PACKAGES_APT_MIRROR       Optional. Cross-arch only; default
-                                 http://archive.ubuntu.com/ubuntu
+  HOST_PACKAGES_APT_MIRROR       Optional. Cross-arch only; defaults:
+                                 amd64 → http://archive.ubuntu.com/ubuntu
+                                 arm64 → http://ports.ubuntu.com/ubuntu-ports
   HOST_PACKAGES_APT_SECURITY_MIRROR
-                                 Optional. Cross-arch only; default
-                                 http://security.ubuntu.com/ubuntu
+                                 Optional. Cross-arch only; defaults to the
+                                 primary mirror above (ports includes -security).
 USAGE
 }
 OUT_DIR=""
@@ -179,17 +180,30 @@ mkdir -p "${STATUS_DIR}/lists/partial" "${CACHE_DIR}/archives/partial"
 HOST_DPKG_ARCH="$(dpkg --print-architecture)"
 APT_SOURCE_LIST="/etc/apt/sources.list"
 APT_SOURCE_PARTS="/etc/apt/sources.list.d"
-# Host apt configs are often [arch=amd64]-only or regional mirrors without
-# foreign-arch indexes (404 on binary-arm64). For cross-arch export, use a
-# temporary sources.list pinned to archive.ubuntu.com for the target arch.
+# Host apt configs are often [arch=amd64]-only. For cross-arch export, use a
+# temporary sources.list for the target arch:
+#   amd64 → archive.ubuntu.com / security.ubuntu.com
+#   arm64 → ports.ubuntu.com/ubuntu-ports (arm64 is not on the primary archive)
 if [[ "${ARCH}" != "${HOST_DPKG_ARCH}" ]]; then
   CODENAME="${VERSION_CODENAME:-}"
   if [[ -z "${CODENAME}" ]]; then
     echo "export-host-packages: VERSION_CODENAME is required in /etc/os-release for cross-arch download" >&2
     exit 1
   fi
-  MIRROR="${HOST_PACKAGES_APT_MIRROR:-http://archive.ubuntu.com/ubuntu}"
-  SECURITY_MIRROR="${HOST_PACKAGES_APT_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}"
+  case "${ARCH}" in
+    arm64)
+      MIRROR="${HOST_PACKAGES_APT_MIRROR:-http://ports.ubuntu.com/ubuntu-ports}"
+      SECURITY_MIRROR="${HOST_PACKAGES_APT_SECURITY_MIRROR:-${MIRROR}}"
+      ;;
+    amd64)
+      MIRROR="${HOST_PACKAGES_APT_MIRROR:-http://archive.ubuntu.com/ubuntu}"
+      SECURITY_MIRROR="${HOST_PACKAGES_APT_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}"
+      ;;
+    *)
+      echo "export-host-packages: no cross-arch apt mirror mapping for ${ARCH}" >&2
+      exit 2
+      ;;
+  esac
   APT_SOURCE_LIST="${TMP_DIR}/sources.list"
   APT_SOURCE_PARTS="${TMP_DIR}/sources.list.d"
   mkdir -p "${APT_SOURCE_PARTS}"

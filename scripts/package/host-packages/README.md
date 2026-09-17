@@ -8,8 +8,8 @@ Expected layout after export (see `export-host-packages.sh`):
 where `<arch>` is `TARGET_ARCH` (`amd64` or `arm64`, required (no default)).
 
 Cross-arch export (e.g. arm64 packages on an amd64 build host) uses a temporary
-apt sources.list against `archive.ubuntu.com` / `security.ubuntu.com` for the
-target arch, because host mirrors are often amd64-only. Override with
+apt sources.list: arm64 from `ports.ubuntu.com/ubuntu-ports`, amd64 from
+`archive.ubuntu.com` / `security.ubuntu.com`. Override with
 `HOST_PACKAGES_APT_MIRROR` / `HOST_PACKAGES_APT_SECURITY_MIRROR` if needed.
 
 `build-full-bundle` always exports the complete capability set (`mdns` +
