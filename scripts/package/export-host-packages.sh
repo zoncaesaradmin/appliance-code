@@ -68,14 +68,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case "${ARCH}" in
-  amd64|arm64) ;;
-  *)
-    echo "export-host-packages: unsupported arch ${ARCH} (want amd64|arm64)" >&2
-    exit 1
-    ;;
-esac
-
 if [[ -z "${OUT_DIR}" ]]; then
   echo "export-host-packages: --out-dir is required" >&2
   usage >&2
