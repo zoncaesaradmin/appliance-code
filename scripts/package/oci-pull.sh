@@ -56,4 +56,14 @@ oci_skopeo_prefetch_docker() {
   fi
 
   skopeo "${args[@]}" "docker://${bare}" "containers-storage:${dest_storage_ref}"
+  # Fail closed if the stored image is the wrong arch (LAN tags that collided
+  # across amd64/arm64 used to make skopeo warn and still copy, then buildah
+  # --arch <want> --pull-never reported "image not known").
+  local got_arch
+  got_arch="$(skopeo inspect "containers-storage:${dest_storage_ref}" --format '{{.Architecture}}' 2>/dev/null || true)"
+  if [[ "${got_arch}" != "${architecture}" ]]; then
+    echo "oci-pull: prefetched ${bare} as containers-storage:${dest_storage_ref} has architecture ${got_arch:-<empty>}, want ${architecture}" >&2
+    echo "oci-pull: re-seed the LAN build-cache image for TARGET_ARCH=${architecture} (arch-suffixed tags required)" >&2
+    return 1
+  fi
 }
