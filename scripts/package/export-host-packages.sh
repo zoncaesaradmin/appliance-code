@@ -25,9 +25,13 @@ Options:
 
 Environment:
   TARGET_ARCH                    Used when --arch is omitted (required if so).
+  HOST_PACKAGES_APT_MIRROR       Optional. Cross-arch only; default
+                                 http://archive.ubuntu.com/ubuntu
+  HOST_PACKAGES_APT_SECURITY_MIRROR
+                                 Optional. Cross-arch only; default
+                                 http://security.ubuntu.com/ubuntu
 USAGE
 }
-
 OUT_DIR=""
 OS_VERSION=""
 ARCH=""
@@ -172,14 +176,41 @@ CACHE_DIR="${TMP_DIR}/cache"
 mkdir -p "${STATUS_DIR}/lists/partial" "${CACHE_DIR}/archives/partial"
 : > "${STATUS_DIR}/status"
 
+HOST_DPKG_ARCH="$(dpkg --print-architecture)"
+APT_SOURCE_LIST="/etc/apt/sources.list"
+APT_SOURCE_PARTS="/etc/apt/sources.list.d"
+# Host apt configs are often [arch=amd64]-only or regional mirrors without
+# foreign-arch indexes (404 on binary-arm64). For cross-arch export, use a
+# temporary sources.list pinned to archive.ubuntu.com for the target arch.
+if [[ "${ARCH}" != "${HOST_DPKG_ARCH}" ]]; then
+  CODENAME="${VERSION_CODENAME:-}"
+  if [[ -z "${CODENAME}" ]]; then
+    echo "export-host-packages: VERSION_CODENAME is required in /etc/os-release for cross-arch download" >&2
+    exit 1
+  fi
+  MIRROR="${HOST_PACKAGES_APT_MIRROR:-http://archive.ubuntu.com/ubuntu}"
+  SECURITY_MIRROR="${HOST_PACKAGES_APT_SECURITY_MIRROR:-http://security.ubuntu.com/ubuntu}"
+  APT_SOURCE_LIST="${TMP_DIR}/sources.list"
+  APT_SOURCE_PARTS="${TMP_DIR}/sources.list.d"
+  mkdir -p "${APT_SOURCE_PARTS}"
+  cat >"${APT_SOURCE_LIST}" <<EOF
+deb [arch=${ARCH}] ${MIRROR} ${CODENAME} main restricted universe multiverse
+deb [arch=${ARCH}] ${MIRROR} ${CODENAME}-updates main restricted universe multiverse
+deb [arch=${ARCH}] ${MIRROR} ${CODENAME}-backports main restricted universe multiverse
+deb [arch=${ARCH}] ${SECURITY_MIRROR} ${CODENAME}-security main restricted universe multiverse
+EOF
+  echo "export-host-packages: cross-arch download (${HOST_DPKG_ARCH} host → ${ARCH}); using ${MIRROR}"
+fi
+
 APT_ARGS=(
   -o "Dir::State=${STATUS_DIR}"
   -o "Dir::State::status=${STATUS_DIR}/status"
   -o "Dir::Cache=${CACHE_DIR}"
   -o "Dir::Cache::archives=${CACHE_DIR}/archives"
-  -o "Dir::Etc::sourcelist=/etc/apt/sources.list"
-  -o "Dir::Etc::sourceparts=/etc/apt/sources.list.d"
+  -o "Dir::Etc::sourcelist=${APT_SOURCE_LIST}"
+  -o "Dir::Etc::sourceparts=${APT_SOURCE_PARTS}"
   -o "APT::Architecture=${ARCH}"
+  -o "APT::Architectures::=${ARCH}"
   -o "Acquire::Languages=none"
   -o "Debug::NoLocking=1"
 )
