@@ -11,6 +11,10 @@ COVER_FILE  := coverage.out
 SERVICE_IMAGE_NAME ?= appliance-host-agent
 SERVICE_IMAGE_TAG ?= $(shell git -C $(CURDIR) describe --tags --dirty 2>/dev/null || echo 0.0.0-dev)
 RUNTIME_PROFILE ?= runtime
+# Packaging crosses arches from a host-native tooling container: pass
+# GOOS=linux GOARCH=<TARGET_ARCH> (same pattern as zonctl / Containerfile).
+GOOS ?=
+GOARCH ?=
 SERVICE_IMAGE_BUILD_ARGS = \
 	--build-arg RUNTIME_PROFILE=$(RUNTIME_PROFILE)
 ifneq ($(strip $(GO_IMAGE)),)
@@ -33,11 +37,11 @@ include $(CURDIR)/../../build/service-image.mk
 #   build        — both (local verify / day-to-day)
 build-agentd:
 	mkdir -p $(BIN_DIR)
-	go build -o $(AGENTD_BINARY) ./cmd/appliance-host-agentd
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(AGENTD_BINARY) ./cmd/appliance-host-agentd
 
 build-agent:
 	mkdir -p $(BIN_DIR)
-	go build -o $(AGENT_BINARY) ./cmd/appliance-host-agent
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o $(AGENT_BINARY) ./cmd/appliance-host-agent
 
 build: build-agentd build-agent
 
