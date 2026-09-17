@@ -6,7 +6,7 @@ usage() {
 usage: export-blob-storage-image-archive.sh --out-file PATH [options]
 
 Re-exports the pinned S3-compatible blob-storage image as a Linux OCI
-archive for TARGET_ARCH (amd64|arm64, default amd64), annotated for the
+archive for TARGET_ARCH (amd64|arm64, required), annotated for the
 appliance's offline registry.
 
 Options:
@@ -16,7 +16,7 @@ Options:
   --blob-storage-version V  Defaults to the control-plane chart image tag.
 
 Environment:
-  TARGET_ARCH               amd64 (default) or arm64.
+  TARGET_ARCH               amd64|arm64 (required; no default).
 EOF
 }
 

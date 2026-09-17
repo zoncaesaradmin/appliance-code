@@ -19,7 +19,7 @@ Options:
   --help                 Show this help.
 
 Environment:
-  TARGET_ARCH            amd64 (default) or arm64.
+  TARGET_ARCH            amd64|arm64 (required; no default).
 EOF
 }
 

@@ -21,7 +21,7 @@ Options:
   --dns-version VERSION     Compatibility version. Defaults to chart appVersion.
 
 Environment:
-  TARGET_ARCH               amd64 (default) or arm64.
+  TARGET_ARCH               amd64|arm64 (required; no default).
 EOF
 }
 

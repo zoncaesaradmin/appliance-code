@@ -24,11 +24,26 @@ oci_ref_is_dev_registry() {
 }
 
 # skopeo copy docker://BARE -> containers-storage:DEST for a target architecture.
+# Architecture is required (3rd arg or TARGET_ARCH) — no amd64 default.
 # LAN Artifact Server pulls get --src-tls-verify=false / --src-creds as needed.
 oci_skopeo_prefetch_docker() {
   local bare="$1"
   local dest_storage_ref="$2"
-  local architecture="${3:-${TARGET_ARCH:-amd64}}"
+  local architecture="${3-}"
+  if [[ -z "${architecture}" ]]; then
+    architecture="${TARGET_ARCH-}"
+  fi
+  if [[ -z "${architecture}" ]]; then
+    echo "oci-pull: architecture required (pass 3rd arg or set TARGET_ARCH)" >&2
+    return 2
+  fi
+  case "${architecture}" in
+    amd64|arm64) ;;
+    *)
+      echo "oci-pull: unsupported architecture ${architecture} (want amd64|arm64)" >&2
+      return 2
+      ;;
+  esac
   local -a args=(copy --override-os linux --override-arch "${architecture}")
 
   if oci_ref_is_dev_registry "${bare}"; then

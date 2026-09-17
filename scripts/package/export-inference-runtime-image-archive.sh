@@ -20,11 +20,10 @@ Options:
                             engine-specific pinned image
   --inference-version VER   Compatibility version. Defaults to chart appVersion.
   --engine ENGINE           ollama (default) or vllm.
-  --architecture ARCH       Defaults to TARGET_ARCH (amd64|arm64).
+  --architecture ARCH       amd64|arm64. Required unless TARGET_ARCH is set.
 
 Environment:
-  TARGET_ARCH               amd64 (default) or arm64; used when --architecture
-                            is omitted.
+  TARGET_ARCH               Required when --architecture is omitted.
 EOF
 }
 
@@ -34,7 +33,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${SCRIPT_DIR}/oci-pull.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/target-arch.sh"
-target_arch_resolve
 CHART_YAML="${REPO_ROOT}/deploy/charts/appliance-inference/Chart.yaml"
 VLLM_VERSION_FILE="${REPO_ROOT}/services/inference-manager/version.env"
 OUT_FILE=""
@@ -42,7 +40,7 @@ REFERENCE_OUT_FILE=""
 SOURCE_IMAGE=""
 INFERENCE_VERSION=""
 ENGINE="ollama"
-ARCHITECTURE="${TARGET_ARCH}"
+ARCHITECTURE=""
 LOCAL_IMAGE_PREFIX="localhost"
 IMAGE_NAME="inference-runtime"
 PREFETCH_RETRIES=5
@@ -75,6 +73,19 @@ while [[ $# -gt 0 ]]; do
     *) echo "export-inference-runtime-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+if [[ -z "${ARCHITECTURE}" ]]; then
+  if [[ -z "${TARGET_ARCH-}" ]]; then
+    echo "export-inference-runtime-image-archive: --architecture or TARGET_ARCH is required (amd64|arm64); no default" >&2
+    exit 2
+  fi
+  target_arch_resolve
+  ARCHITECTURE="${TARGET_ARCH}"
+else
+  TARGET_ARCH="${ARCHITECTURE}"
+  target_arch_resolve
+  ARCHITECTURE="${TARGET_ARCH}"
+fi
 
 case "${ENGINE}/${ARCHITECTURE}" in
   ollama/amd64|ollama/arm64|vllm/amd64|vllm/arm64) ;;

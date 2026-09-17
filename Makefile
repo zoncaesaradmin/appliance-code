@@ -19,6 +19,10 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
+# Inference-manager requires an explicit arch (no Makefile default). Local
+# verify/build pass TARGET_ARCH when set, otherwise the host go env arch.
+INFERENCE_GOARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(shell go env GOARCH))
+
 GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR)
 # Product/release version for packaged images and /version. Prefer an explicit
 # CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
@@ -109,7 +113,11 @@ build:
 	@set -e; \
 	for module in $(GO_MODULE_DIRS); do \
 		echo "build stage: $$module"; \
-		$(MAKE) -C "$$module" build; \
+		if [ "$$module" = "$(INFERENCE_MANAGER_DIR)" ]; then \
+			$(MAKE) -C "$$module" build GOARCH="$(INFERENCE_GOARCH)"; \
+		else \
+			$(MAKE) -C "$$module" build; \
+		fi; \
 	done
 
 ## test: run unit/integration tests across every module
@@ -117,7 +125,11 @@ test:
 	@set -e; \
 	for module in $(GO_MODULE_DIRS); do \
 		echo "test stage: $$module"; \
-		$(MAKE) -C "$$module" test; \
+		if [ "$$module" = "$(INFERENCE_MANAGER_DIR)" ]; then \
+			$(MAKE) -C "$$module" test GOARCH="$(INFERENCE_GOARCH)"; \
+		else \
+			$(MAKE) -C "$$module" test; \
+		fi; \
 	done
 
 ## test-curl: run the backend's curl-based live HTTP reference flow
@@ -325,7 +337,8 @@ package-dns-server-image-archive:
 package-inference-runtime-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/inference-runtime.tar}"; \
 	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
-	arch="$${INFERENCE_ARCHITECTURE:-$${TARGET_ARCH:-amd64}}"; \
+	arch="$${INFERENCE_ARCHITECTURE:-$${TARGET_ARCH:-}}"; \
+	if [ -z "$$arch" ]; then echo "package-inference-runtime-image-archive: INFERENCE_ARCHITECTURE or TARGET_ARCH is required" >&2; exit 2; fi; \
 	bash ./scripts/package/export-inference-runtime-image-archive.sh \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
@@ -365,14 +378,15 @@ package-message-broker-image-archive:
 ## for the complete product super-set (mDNS + wifi-client + wifi-ap).
 ## Install-time flags only enable services; all capability closures are packaged.
 ## HOST_CAPABILITIES overrides the default: "mdns wifi-client wifi-ap".
-## ARCH / TARGET_ARCH select amd64 (default) or arm64.
+## ARCH / TARGET_ARCH are required (amd64|arm64); no default.
 package-host-packages:
 	@out_dir="$${OUT_DIR:-$(CURDIR)/.run/host-packages}"; \
 	mkdir -p "$$(dirname "$$out_dir")"; \
 	caps="$${HOST_CAPABILITIES:-mdns wifi-client wifi-ap}"; \
 	cap_args=(); \
 	for cap in $$caps; do cap_args+=(--capability "$$cap"); done; \
-	arch="$${ARCH:-$${TARGET_ARCH:-amd64}}"; \
+	arch="$${ARCH:-$${TARGET_ARCH:-}}"; \
+	if [ -z "$$arch" ]; then echo "package-host-packages: ARCH or TARGET_ARCH is required (amd64|arm64)" >&2; exit 2; fi; \
 	bash ./scripts/package/export-host-packages.sh \
 		--out-dir "$$out_dir" \
 		"$${cap_args[@]}" \

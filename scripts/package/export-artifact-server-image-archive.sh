@@ -21,7 +21,7 @@ Options:
   --version VERSION         Compatibility version. Defaults to chart appVersion.
 
 Environment:
-  TARGET_ARCH               amd64 (default) or arm64.
+  TARGET_ARCH               amd64|arm64 (required; no default).
   RUNTIME_SOURCE_IMAGE      glibc runtime base pulled for --pull-never builds.
                             Default: debian:bookworm-slim
 EOF

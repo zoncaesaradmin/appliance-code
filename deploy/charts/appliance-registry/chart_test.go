@@ -159,6 +159,7 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 		"--blob-storage-image", blobStorageArchive,
 		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest,
 		"--artifact-server-version", "2.1.8", "--workflows-crds-dir", crds)
+	cmd.Env = append(os.Environ(), "TARGET_ARCH=amd64")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("archive release input: %v\n%s", err, output)
 	}
@@ -213,7 +214,7 @@ func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostPackagesDir, "avahi-daemon.deb"), []byte("deb"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
+	cmd := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "1.2.3",
 		"--k3s-version", "v1", "--control-plane-image", artifactServer, "--ui-image", artifactServer,
 		"--host-agent-image", hostAgentArchive,
@@ -223,7 +224,9 @@ func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 		"--host-packages-os-version", "24.04",
 		"--artifact-server-image", artifactServer,
 		"--blob-storage-image", blobStorageArchive,
-		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest).CombinedOutput()
+		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest)
+	cmd.Env = append(os.Environ(), "TARGET_ARCH=amd64")
+	out, err := cmd.CombinedOutput()
 	if err == nil || !bytes.Contains(out, []byte("must be provided together")) {
 		t.Fatalf("unpaired Artifact Server image was not rejected: err=%v output=%s", err, out)
 	}

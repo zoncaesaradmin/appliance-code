@@ -7,7 +7,8 @@ ARG RUNTIME_PREBAKED=0
 FROM ${GO_IMAGE} AS build
 WORKDIR /src
 COPY . .
-ARG TARGETARCH=amd64
+ARG TARGETARCH
+RUN test -n "${TARGETARCH}" || (echo "TARGETARCH is required (pass --arch from TARGET_ARCH); no default" >&2; exit 1)
 RUN GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /out/appliance-host-agent ./cmd/appliance-host-agent
 
 ARG RUNTIME_PROFILE=runtime

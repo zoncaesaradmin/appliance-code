@@ -5,9 +5,9 @@ SHELL := /bin/bash
 include version.env
 
 .DEFAULT_GOAL := build
-# Thin manager image is amd64 by default (matches appliance node). Engine images
-# remain architecture-specific and are packaged separately.
-GOARCH ?= amd64
+# GOARCH is required (amd64|arm64). Prefer explicit GOARCH; else TARGET_ARCH.
+# There is no amd64 default — empty fails closed so arch misses surface early.
+GOARCH ?= $(TARGET_ARCH)
 SERVICE_IMAGE_NAME ?= appliance-inference-manager
 VERSION ?= dev-$(shell git rev-parse --short HEAD)-$(shell date -u +%Y%m%d%H%M%S)
 VERSION := $(VERSION)
@@ -20,8 +20,14 @@ include ../../build/service-image.mk
 # same thin manager image (engine selection is pack metadata + runtime image).
 image-ollama-amd64 image-vllm-amd64 image-vllm-arm64: image
 
-.PHONY: check-image-base
-check-image-base:
+.PHONY: require-goarch check-image-base
+require-goarch:
+	@case "$(GOARCH)" in \
+	  amd64|arm64) ;; \
+	  *) echo 'inference-manager: GOARCH or TARGET_ARCH is required (amd64|arm64); no default' >&2; exit 2 ;; \
+	esac
+
+check-image-base: require-goarch
 	@test -n "$(BASE_IMAGE)" || { echo 'BASE_IMAGE is required' >&2; exit 1; }
 	@case "$(OFFLINE_BUILD)" in 1|true|TRUE|yes|YES|on|ON) \
 		case "$(BASE_IMAGE)" in docker.io/*|ghcr.io/*) \
@@ -35,7 +41,7 @@ export GOTOOLCHAIN := local
 endif
 export GOWORK := off
 
-build:
+build: require-goarch
 	mkdir -p bin
 	GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -trimpath -ldflags='-s -w' -o bin/inference-manager ./cmd/inference-manager
 

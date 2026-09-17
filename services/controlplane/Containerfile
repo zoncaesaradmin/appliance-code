@@ -18,7 +18,8 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_TIME=unknown
 # TARGETARCH is set by buildah/docker when --arch is passed (product TARGET_ARCH).
-ARG TARGETARCH=amd64
+ARG TARGETARCH
+RUN test -n "${TARGETARCH}" || (echo "TARGETARCH is required (pass --arch from TARGET_ARCH); no default" >&2; exit 1)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X appliance-code/services/controlplane/internal/version.Version=${VERSION} \
               -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \

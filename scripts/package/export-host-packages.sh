@@ -13,8 +13,8 @@ Options:
                                  written under ubuntu/<osVersion>/<arch>/.
   --os-version VERSION           Ubuntu version to package. Defaults to the
                                  current host/container VERSION_ID.
-  --arch ARCH                    Debian architecture. Default: TARGET_ARCH
-                                 or amd64. Supported: amd64, arm64.
+  --arch ARCH                    Debian architecture (amd64|arm64). Required
+                                 unless TARGET_ARCH is set.
   --capability NAME              Repeatable capability whose root packages
                                  should be included. Supported: mdns, wifi-client, wifi-ap.
                                  When omitted, defaults to mdns (legacy).
@@ -24,13 +24,13 @@ Options:
   --help                         Show this help.
 
 Environment:
-  TARGET_ARCH                    Used as the default for --arch when unset.
+  TARGET_ARCH                    Used when --arch is omitted (required if so).
 USAGE
 }
 
 OUT_DIR=""
 OS_VERSION=""
-ARCH="${ARCH:-${TARGET_ARCH:-amd64}}"
+ARCH=""
 ROOT_PACKAGES=()
 CAPABILITIES=()
 
@@ -88,6 +88,21 @@ for tool in apt-get dpkg; do
     exit 1
   fi
 done
+
+if [[ -z "${ARCH}" ]]; then
+  ARCH="${TARGET_ARCH-}"
+fi
+if [[ -z "${ARCH}" ]]; then
+  echo "export-host-packages: --arch or TARGET_ARCH is required (amd64|arm64); no default" >&2
+  exit 2
+fi
+case "${ARCH}" in
+  amd64|arm64) ;;
+  *)
+    echo "export-host-packages: unsupported arch ${ARCH} (want amd64|arm64)" >&2
+    exit 2
+    ;;
+esac
 
 if [[ ! -r /etc/os-release ]]; then
   echo "export-host-packages: /etc/os-release is required" >&2

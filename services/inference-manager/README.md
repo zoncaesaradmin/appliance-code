@@ -5,9 +5,12 @@ Thin lifecycle/API manager for appliance inference. Upstream engine images
 sidecar in the same pod; this image does not wrap those bases.
 
 ```sh
-make -C services/inference-manager build
-make -C services/inference-manager image-local
+make -C services/inference-manager build GOARCH=amd64
+make -C services/inference-manager image-local GOARCH=amd64
+# or: TARGET_ARCH=arm64 make -C services/inference-manager build
 ```
+
+`GOARCH` or `TARGET_ARCH` is required (`amd64|arm64`); there is no default.
 
 Packaging uses `make package-inference-manager-image-archive`, which annotates
 `registry.local/inference-manager:bundled` and emits a digest-pinned reference.
