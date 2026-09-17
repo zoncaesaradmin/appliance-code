@@ -1248,7 +1248,7 @@ else
   if command -v pigz >/dev/null 2>&1; then
     tar -C "${RELEASE_INPUT_DIR}" -I "pigz -${PACK_GZIP_LEVEL:-1}" -cf "${OUT_FILE}" .
   else
-    GZIP="-${PACK_GZIP_LEVEL:-1}" tar -C "${RELEASE_INPUT_DIR}" -czf "${OUT_FILE}" .
+    tar -C "${RELEASE_INPUT_DIR}" -czf "${OUT_FILE}" .
   fi
 
   if [[ -n "${LATEST_OUT_FILE}" ]]; then

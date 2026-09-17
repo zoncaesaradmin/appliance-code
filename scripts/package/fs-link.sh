@@ -72,5 +72,6 @@ create_gzip_tarball() {
     tar -C "${parent}" -I "pigz -${level}" -cf "${dest}" "${entry}"
     return 0
   fi
-  GZIP="-${level}" tar -C "${parent}" -czf "${dest}" "${entry}"
+  # Portable gzip fallback (GNU/BSD tar). Level control is pigz-only.
+  tar -C "${parent}" -czf "${dest}" "${entry}"
 }
