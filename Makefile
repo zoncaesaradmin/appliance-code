@@ -54,15 +54,36 @@ DEV_REGISTRY_TOKEN ?=
 DEV_REGISTRY_TLS_VERIFY ?= true
 DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
 
-# Tooling image arch: product TARGET_ARCH when set, else this host's go arch.
-TOOLING_ARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(shell go env GOARCH))
-ifeq ($(filter $(TOOLING_ARCH),amd64 arm64),)
-$(error TOOLING_ARCH/TARGET_ARCH must be amd64|arm64 (got "$(TOOLING_ARCH)"))
+# Host arch for the outer nested tooling container. Product TARGET_ARCH may
+# differ (cross-arch packaging): nested buildah/skopeo under qemu-foreign
+# tooling fails with unshare(CLONE_NEWUSER). Always run host-native tooling;
+# TARGET_ARCH still drives GOARCH / buildah --arch / skopeo --override-arch.
+HOST_ARCH := $(shell go env GOARCH)
+ifeq ($(filter $(HOST_ARCH),amd64 arm64),)
+$(error HOST_ARCH must be amd64|arm64 (got "$(HOST_ARCH)" from go env GOARCH))
 endif
-# Fail-closed: never pull bare :latest — always arch-suffixed.
-# (Avoid $(shell case …) — a closing ')' would terminate Make's $(shell …).)
+ifeq ($(strip $(TARGET_ARCH)),)
+TOOLING_ARCH := $(HOST_ARCH)
+else ifeq ($(filter $(TARGET_ARCH),amd64 arm64),)
+$(error TARGET_ARCH must be amd64|arm64 (got "$(TARGET_ARCH)"))
+else ifeq ($(TARGET_ARCH),$(HOST_ARCH))
+TOOLING_ARCH := $(TARGET_ARCH)
+else
+TOOLING_ARCH := $(HOST_ARCH)
+endif
+# Product arch forwarded into the container (may differ from TOOLING_ARCH).
+PRODUCT_ARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(TOOLING_ARCH))
+# Fail-closed: never pull bare :latest — always arch-suffixed for host tooling.
+# When TARGET_ARCH differs from the host, ignore a foreign-arch tag suffix so
+# nested Buildah still runs under host-native tooling.
 ifneq ($(filter %-amd64 %-arm64,$(DEV_IMAGE_TAG)),)
+ifeq ($(TARGET_ARCH),$(HOST_ARCH))
 DEV_IMAGE_REF_TAG := $(DEV_IMAGE_TAG)
+else ifeq ($(strip $(TARGET_ARCH)),)
+DEV_IMAGE_REF_TAG := $(DEV_IMAGE_TAG)
+else
+DEV_IMAGE_REF_TAG := $(patsubst %-arm64,%,$(patsubst %-amd64,%,$(DEV_IMAGE_TAG)))-$(TOOLING_ARCH)
+endif
 else
 DEV_IMAGE_REF_TAG := $(DEV_IMAGE_TAG)-$(TOOLING_ARCH)
 endif
@@ -599,7 +620,7 @@ DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
 	$(DEV_ENGINE_PULL_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
 	-e STORAGE_DRIVER="$(DEV_STORAGE_DRIVER)" \
-	-e TARGET_ARCH="$(TOOLING_ARCH)" \
+	-e TARGET_ARCH="$(PRODUCT_ARCH)" \
 	$(DEV_SSH_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:$(DEV_CONTAINER_HOME)/.cache/go-build$(DEV_VOLUME_OPTS)" \

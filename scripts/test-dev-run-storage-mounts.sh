@@ -44,6 +44,28 @@ assert_contains "${out}" 'STORAGE_DRIVER="vfs"'
 assert_contains "${out}" '/tmp/appliance-code-dev-cache-test/containers/vfs/user:/home/devcontainer/.local/share/containers'
 assert_contains "${out}" '/tmp/appliance-code-dev-cache-test/containers/vfs/system:/var/lib/containers'
 
+# Cross-arch packaging: outer tooling stays host-native; product TARGET_ARCH is
+# forwarded for GOARCH / buildah --arch (nested buildah under qemu fails).
+host_arch="$(go env GOARCH)"
+case "${host_arch}" in
+  amd64) foreign_arch=arm64 ;;
+  arm64) foreign_arch=amd64 ;;
+  *) fail "unsupported host Go arch ${host_arch}" ;;
+esac
+cross_out="$(make -n \
+  SUDO= \
+  CONTAINER_ENGINE=podman \
+  DEV_STORAGE_DRIVER=overlay \
+  DEV_CACHE_DIR=/tmp/appliance-code-dev-cache-test \
+  DEV_VOLUME_OPTS= \
+  TARGET_ARCH="${foreign_arch}" \
+  DEV_IMAGE_TAG="latest-${foreign_arch}" \
+  SCRIPT=scripts/package/oci-pull.sh \
+  dev-run 2>&1)"
+assert_contains "${cross_out}" "--arch ${host_arch}"
+assert_contains "${cross_out}" "TARGET_ARCH=\"${foreign_arch}\""
+assert_contains "${cross_out}" "dev-build:latest-${host_arch}"
+
 if make -n DEV_STORAGE_DRIVER=btrfs SCRIPT=scripts/package/oci-pull.sh dev-run >/dev/null 2>&1; then
   fail "expected DEV_STORAGE_DRIVER=btrfs to be rejected"
 fi

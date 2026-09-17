@@ -36,8 +36,10 @@ repo's sake; there is nothing here for it to build or run.
   (`latest-amd64` / `latest-arm64`), runs it, mounts this repo in. There is no
   Dockerfile for that image here, and there shouldn't be.
 - Tags are always arch-suffixed. Bare `:latest` is rejected by composition:
-  `DEV_IMAGE_TAG=latest` becomes `latest-<TOOLING_ARCH>`. Set `TARGET_ARCH` for
-  product packaging; interactive `make dev-shell` uses the host Go arch.
+  `DEV_IMAGE_TAG=latest` becomes `latest-<TOOLING_ARCH>`. `TOOLING_ARCH` is
+  always the **host** Go arch so nested Buildah works; set `TARGET_ARCH` for
+  product packaging (may differ — cross-arch uses host tooling +
+  `GOARCH`/`buildah --arch`). Interactive `make dev-shell` uses the host arch.
 
 ## Prerequisites
 
