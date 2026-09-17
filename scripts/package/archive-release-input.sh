@@ -5,12 +5,22 @@ usage() {
   cat <<'USAGE'
 usage: archive-release-input.sh --out-file PATH --code-version VERSION --control-plane-image PATH --ui-image PATH --k3s-version VERSION [options]
 
-Creates a versioned release-input tarball for appliance-release.
+Creates a durable release-input directory (and optionally a .tar.gz) for
+appliance-release assemble. Large OCI archives are hardlinked into the
+directory when the source and destination share a filesystem.
 
 Options:
-  --out-file PATH                  Output .tar.gz/.tgz file. Required.
+  --out-file PATH                  Output path used to derive the durable
+                                   release-input directory (strip .tar.gz) and,
+                                   unless --skip-tarball, the .tar.gz/.tgz file.
+                                   Required.
+  --skip-tarball                   Write only the durable release-input
+                                   directory (hardlinked tree). Skip the
+                                   multi-gigabyte .tar.gz. Local assemble via
+                                   build-full-bundle uses this by default.
   --latest-out-file PATH           Optional second path to copy the same tarball
                                    to, e.g. release-input-latest.tar.gz.
+                                   Ignored with --skip-tarball.
   --code-version VERSION           appliance-code version. Required.
   --release-id ID                  Release identifier. Defaults to
                                    local-<code-version>-<timestamp>.
@@ -120,6 +130,7 @@ VALUES_SCHEMA_PATH="${CHART_DIR}/values.schema.json"
 
 OUT_FILE=""
 LATEST_OUT_FILE=""
+SKIP_TARBALL=0
 CODE_VERSION=""
 RELEASE_ID=""
 CONTROL_PLANE_IMAGE=""
@@ -168,6 +179,10 @@ while [[ $# -gt 0 ]]; do
     --out-file)
       OUT_FILE="${2:-}"
       shift 2
+      ;;
+    --skip-tarball)
+      SKIP_TARBALL=1
+      shift
       ;;
     --latest-out-file)
       LATEST_OUT_FILE="${2:-}"
@@ -1209,28 +1224,43 @@ $(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": 
 JSON
 
 # Persist a durable release-input directory for same-host assemble (hardlink
-# tree). Keep producing the tarball for remote/fetch consumers.
+# tree). The optional .tar.gz is for remote/fetch consumers only; local
+# build-full-bundle assemble prefers the directory and passes --skip-tarball.
 DIR_OUT="${OUT_FILE%.tar.gz}"
+if [[ "${DIR_OUT}" == "${OUT_FILE}" ]]; then
+  DIR_OUT="${OUT_FILE%.tgz}"
+fi
 if [[ "${DIR_OUT}" == "${OUT_FILE}" ]]; then
   DIR_OUT="${OUT_FILE}.dir"
 fi
 link_or_copy_tree "${RELEASE_INPUT_DIR}" "${DIR_OUT}"
 
-if command -v pigz >/dev/null 2>&1; then
-  tar -C "${RELEASE_INPUT_DIR}" -I pigz -cf "${OUT_FILE}" .
+if bool_true "${SKIP_TARBALL}"; then
+  # Drop a stale fat tarball so operators do not confuse it with this run.
+  rm -f "${OUT_FILE}"
+  if [[ -n "${LATEST_OUT_FILE}" ]]; then
+    echo "archive-release-input: ignoring --latest-out-file with --skip-tarball" >&2
+  fi
+  echo "skipped release-input tarball (--skip-tarball)"
+  echo "release-input directory:"
+  echo "  ${DIR_OUT}"
 else
-  tar -C "${RELEASE_INPUT_DIR}" -czf "${OUT_FILE}" .
-fi
+  if command -v pigz >/dev/null 2>&1; then
+    tar -C "${RELEASE_INPUT_DIR}" -I "pigz -${PACK_GZIP_LEVEL:-1}" -cf "${OUT_FILE}" .
+  else
+    GZIP="-${PACK_GZIP_LEVEL:-1}" tar -C "${RELEASE_INPUT_DIR}" -czf "${OUT_FILE}" .
+  fi
 
-if [[ -n "${LATEST_OUT_FILE}" ]]; then
-  link_or_copy_file "${OUT_FILE}" "${LATEST_OUT_FILE}"
-fi
+  if [[ -n "${LATEST_OUT_FILE}" ]]; then
+    link_or_copy_file "${OUT_FILE}" "${LATEST_OUT_FILE}"
+  fi
 
-echo "created release-input tarball:"
-echo "  ${OUT_FILE}"
-echo "release-input directory:"
-echo "  ${DIR_OUT}"
-if [[ -n "${LATEST_OUT_FILE}" ]]; then
-  echo "updated latest alias:"
-  echo "  ${LATEST_OUT_FILE}"
+  echo "created release-input tarball:"
+  echo "  ${OUT_FILE}"
+  echo "release-input directory:"
+  echo "  ${DIR_OUT}"
+  if [[ -n "${LATEST_OUT_FILE}" ]]; then
+    echo "updated latest alias:"
+    echo "  ${LATEST_OUT_FILE}"
+  fi
 fi
