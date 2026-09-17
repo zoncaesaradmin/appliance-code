@@ -297,15 +297,19 @@ const applicationAliasEnd = "# END ZON APPLICATION ALIASES"
 // configureAvahiServer gives the appliance its one mDNS name on the real LAN.
 // Avahi otherwise joins every K3s veth/CNI interface, creating isolated mDNS
 // domains that can collide with the appliance identity.
+//
+// Only host-name and allow-interfaces are patched in the active Avahi config
+// file (stock avahi-daemon.conf or a vendor -f override such as nvidia-spark).
+// Other keys, drop-ins, and /etc/avahi/services entries are left alone.
 func (m *Manager) configureAvahiServer(ctx context.Context, applianceName string) error {
 	iface, err := m.defaultRouteInterface(ctx)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(m.root(), "etc", "avahi", "avahi-daemon.conf")
+	path := m.avahiConfigPath(ctx)
 	data, err := m.files().ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("mdns: read avahi configuration: %w", err)
+		return fmt.Errorf("mdns: read avahi configuration %s: %w", path, err)
 	}
 	updated, err := setServerOption(string(data), "allow-interfaces", iface)
 	if err != nil {
@@ -319,9 +323,37 @@ func (m *Manager) configureAvahiServer(ctx context.Context, applianceName string
 		return nil
 	}
 	if err := m.files().WriteFile(path, []byte(updated), 0o644); err != nil {
-		return fmt.Errorf("mdns: write avahi configuration: %w", err)
+		return fmt.Errorf("mdns: write avahi configuration %s: %w", path, err)
 	}
 	return nil
+}
+
+// avahiConfigPath returns the config file the running unit actually loads.
+// Vendor packages may override ExecStart with -f /path; patch that file so we
+// do not silently edit an unused avahi-daemon.conf while leaving host mDNS
+// entries on the real config untouched aside from the two appliance keys.
+func (m *Manager) avahiConfigPath(ctx context.Context) string {
+	defaultPath := filepath.Join(m.root(), "etc", "avahi", "avahi-daemon.conf")
+	out, err := m.runner().CombinedOutput(ctx, "systemctl", "show", "-p", "ExecStart", "--value", ServiceName)
+	if err != nil {
+		return defaultPath
+	}
+	fields := strings.Fields(out)
+	for index, field := range fields {
+		if field != "-f" || index+1 >= len(fields) {
+			continue
+		}
+		cfg := fields[index+1]
+		if !filepath.IsAbs(cfg) {
+			continue
+		}
+		if m.root() == "/" || m.root() == "" {
+			return cfg
+		}
+		// Test / chroot roots: map absolute host paths under the manager root.
+		return filepath.Join(m.root(), strings.TrimPrefix(cfg, "/"))
+	}
+	return defaultPath
 }
 
 func (m *Manager) defaultRouteInterface(ctx context.Context) (string, error) {
@@ -665,33 +697,47 @@ func (m *Manager) serviceActive(ctx context.Context) (bool, error) {
 
 func (m *Manager) startService(ctx context.Context) error {
 	r := m.runner()
-	// Ubuntu avahi-daemon.service Requires=avahi-daemon.socket. Quiesce/mask
-	// both when mDNS is off; unmask the socket before restart or systemd
-	// refuses with "Unit avahi-daemon.socket is masked".
-	if _, err := r.CombinedOutput(ctx, "systemctl", "unmask", SocketName); err != nil {
-		_ = err
+	// Avahi socket+service are interdependent (Requires=). Unmask both, then
+	// start only if inactive — never stop/mask mid-enable (cancels jobs and
+	// drops host vendor mDNS state). Existing /etc/avahi/services entries and
+	// vendor drop-ins stay in place; configureAvahiServer only patches options.
+	for _, unit := range []string{SocketName, ServiceName} {
+		if _, err := r.CombinedOutput(ctx, "systemctl", "unmask", unit); err != nil {
+			_ = err
+		}
 	}
-	if _, err := r.CombinedOutput(ctx, "systemctl", "unmask", ServiceName); err != nil {
-		_ = err
+	active, err := m.serviceActive(ctx)
+	if err != nil {
+		return err
 	}
 	if _, err := r.CombinedOutput(ctx, "systemctl", "enable", ServiceName); err != nil {
 		return fmt.Errorf("mdns: enable %s: %w", ServiceName, err)
 	}
-	if _, err := r.CombinedOutput(ctx, "systemctl", "restart", ServiceName); err != nil {
-		return fmt.Errorf("mdns: restart %s: %w", ServiceName, err)
+	if active {
+		// Config may have changed (host-name / allow-interfaces); reload in place.
+		if _, err := r.CombinedOutput(ctx, "systemctl", "reload-or-restart", ServiceName); err != nil {
+			return fmt.Errorf("mdns: reload-or-restart %s: %w", ServiceName, err)
+		}
+		return nil
+	}
+	if _, err := r.CombinedOutput(ctx, "systemctl", "start", ServiceName); err != nil {
+		// Canceled races: accept if the unit became active anyway.
+		if activeNow, activeErr := m.serviceActive(ctx); activeErr == nil && activeNow {
+			return nil
+		}
+		return fmt.Errorf("mdns: start %s: %w", ServiceName, err)
 	}
 	return nil
 }
 
 func (m *Manager) stopService(ctx context.Context) error {
 	r := m.runner()
-	// Stop socket before service so activation cannot cancel the stop job.
-	_, _ = r.CombinedOutput(ctx, "systemctl", "stop", SocketName)
-	_, _ = r.CombinedOutput(ctx, "systemctl", "stop", ServiceName)
-	_, _ = r.CombinedOutput(ctx, "systemctl", "disable", SocketName)
-	_, _ = r.CombinedOutput(ctx, "systemctl", "disable", ServiceName)
-	_, _ = r.CombinedOutput(ctx, "systemctl", "mask", SocketName)
-	_, _ = r.CombinedOutput(ctx, "systemctl", "mask", ServiceName)
+	// Stop socket+service in one replace job so activation cannot cancel a peer.
+	_, _ = r.CombinedOutput(ctx, "systemctl", "stop", "--job-mode=replace", SocketName, ServiceName)
+	for _, unit := range []string{SocketName, ServiceName} {
+		_, _ = r.CombinedOutput(ctx, "systemctl", "disable", unit)
+		_, _ = r.CombinedOutput(ctx, "systemctl", "mask", unit)
+	}
 	return nil
 }
 

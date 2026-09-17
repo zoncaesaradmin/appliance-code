@@ -6,9 +6,9 @@ import "context"
 
 const (
 	ServiceName = "avahi-daemon.service"
-	// SocketName is Required by ServiceName on Ubuntu. Quiesce/mask it when
-	// mDNS is off (stop socket first to avoid canceled stop jobs); unmask it
-	// again before enable/restart or systemd refuses to start the service.
+	// SocketName is Required by ServiceName on Ubuntu. Stop/start them as one
+	// group. When mDNS is desired on, unmask both and start/reload — do not
+	// stop/mask mid-enable. Vendor drop-ins and non-zon service files stay.
 	SocketName = "avahi-daemon.socket"
 
 	ActualInactive = "inactive"

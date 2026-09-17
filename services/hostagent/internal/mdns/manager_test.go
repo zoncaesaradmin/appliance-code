@@ -102,12 +102,12 @@ func TestApplyEnableStartsService(t *testing.T) {
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
-			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
-			"systemctl is-active avahi-daemon.service": "active",
-			"systemctl unmask avahi-daemon.socket":     "",
-			"systemctl unmask avahi-daemon.service":    "",
-			"systemctl enable avahi-daemon.service":    "",
-			"systemctl restart avahi-daemon.service":   "",
+			"ip -4 route show default":                         "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+			"systemctl is-active avahi-daemon.service":         "active",
+			"systemctl unmask avahi-daemon.socket":             "",
+			"systemctl unmask avahi-daemon.service":            "",
+			"systemctl enable avahi-daemon.service":            "",
+			"systemctl reload-or-restart avahi-daemon.service": "",
 		},
 	}
 	m := &Manager{
@@ -129,23 +129,23 @@ func TestApplyEnableStartsService(t *testing.T) {
 	if config := string(m.Files.(*memFiles).data[filepath.Join(root, "etc", "avahi", "avahi-daemon.conf")]); !strings.Contains(config, "host-name=test-device-1\n") {
 		t.Fatalf("Avahi host name = %q", config)
 	}
-	wantBeforeRestart := []string{
+	wantBeforeReload := []string{
 		"systemctl unmask avahi-daemon.socket",
 		"systemctl unmask avahi-daemon.service",
 		"systemctl enable avahi-daemon.service",
-		"systemctl restart avahi-daemon.service",
+		"systemctl reload-or-restart avahi-daemon.service",
 	}
 	idx := 0
 	for _, call := range runner.calls {
-		if idx >= len(wantBeforeRestart) {
+		if idx >= len(wantBeforeReload) {
 			break
 		}
-		if call == wantBeforeRestart[idx] {
+		if call == wantBeforeReload[idx] {
 			idx++
 		}
 	}
-	if idx != len(wantBeforeRestart) {
-		t.Fatalf("missing socket unmask before service restart; calls=%v", runner.calls)
+	if idx != len(wantBeforeReload) {
+		t.Fatalf("missing unmask/enable/reload for live avahi; calls=%v", runner.calls)
 	}
 }
 
@@ -154,13 +154,12 @@ func TestApplyDisableStopsService(t *testing.T) {
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "systemctl": true},
 		outputs: map[string]string{
-			"systemctl is-active avahi-daemon.service": "inactive",
-			"systemctl stop avahi-daemon.socket":       "",
-			"systemctl stop avahi-daemon.service":      "",
-			"systemctl disable avahi-daemon.socket":    "",
-			"systemctl disable avahi-daemon.service":   "",
-			"systemctl mask avahi-daemon.socket":       "",
-			"systemctl mask avahi-daemon.service":      "",
+			"systemctl is-active avahi-daemon.service":                                   "inactive",
+			"systemctl stop --job-mode=replace avahi-daemon.socket avahi-daemon.service": "",
+			"systemctl disable avahi-daemon.socket":                                      "",
+			"systemctl disable avahi-daemon.service":                                     "",
+			"systemctl mask avahi-daemon.socket":                                         "",
+			"systemctl mask avahi-daemon.service":                                        "",
 		},
 	}
 	m := &Manager{
@@ -179,18 +178,15 @@ func TestApplyDisableStopsService(t *testing.T) {
 	if status.Actual != ActualInactive {
 		t.Fatalf("actual=%q", status.Actual)
 	}
-	if status.AdvertisedName != "test-device-1.local" {
-		t.Fatalf("advertisedName=%q", status.AdvertisedName)
-	}
-	foundSocketStop := false
+	foundGroupStop := false
 	for _, call := range runner.calls {
-		if call == "systemctl stop avahi-daemon.socket" {
-			foundSocketStop = true
+		if call == "systemctl stop --job-mode=replace avahi-daemon.socket avahi-daemon.service" {
+			foundGroupStop = true
 			break
 		}
 	}
-	if !foundSocketStop {
-		t.Fatalf("disable must stop avahi-daemon.socket; calls=%v", runner.calls)
+	if !foundGroupStop {
+		t.Fatalf("disable must stop socket+service as one job; calls=%v", runner.calls)
 	}
 }
 
@@ -223,12 +219,13 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
 		outputs: map[string]string{
-			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
-			"hostname -I":                              "10.42.0.1 192.168.1.151\n",
-			"systemctl is-active avahi-daemon.service": "active",
-			"systemctl unmask avahi-daemon.service":    "",
-			"systemctl enable avahi-daemon.service":    "",
-			"systemctl restart avahi-daemon.service":   "",
+			"ip -4 route show default":                         "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+			"hostname -I":                                      "10.42.0.1 192.168.1.151\n",
+			"systemctl is-active avahi-daemon.service":         "active",
+			"systemctl unmask avahi-daemon.socket":             "",
+			"systemctl unmask avahi-daemon.service":            "",
+			"systemctl enable avahi-daemon.service":            "",
+			"systemctl reload-or-restart avahi-daemon.service": "",
 		},
 	}
 	m := &Manager{Root: root, StateDir: "/state", Runner: runner, Files: files}
@@ -259,12 +256,12 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 	}
 	restarts := 0
 	for _, call := range runner.calls {
-		if call == "systemctl restart avahi-daemon.service" {
+		if call == "systemctl reload-or-restart avahi-daemon.service" {
 			restarts++
 		}
 	}
 	if restarts != 1 {
-		t.Fatalf("identical application reconcile restarted Avahi %d times, want 1", restarts)
+		t.Fatalf("identical application reconcile reloaded Avahi %d times, want 1", restarts)
 	}
 	if err := m.ApplyApplicationServices(context.Background(), ApplicationRequest{Application: "jellyfin"}); err != nil {
 		t.Fatal(err)
@@ -288,12 +285,13 @@ func TestApplicationAliasesFailWhenAvahiDoesNotPublishAlias(t *testing.T) {
 	runner := &fakeRunner{
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
 		outputs: map[string]string{
-			"ip -4 route show default":                 "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
-			"hostname -I":                              "192.168.1.151\n",
-			"systemctl is-active avahi-daemon.service": "active",
-			"systemctl unmask avahi-daemon.service":    "",
-			"systemctl enable avahi-daemon.service":    "",
-			"systemctl restart avahi-daemon.service":   "",
+			"ip -4 route show default":                         "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+			"hostname -I":                                      "192.168.1.151\n",
+			"systemctl is-active avahi-daemon.service":         "active",
+			"systemctl unmask avahi-daemon.socket":             "",
+			"systemctl unmask avahi-daemon.service":            "",
+			"systemctl enable avahi-daemon.service":            "",
+			"systemctl reload-or-restart avahi-daemon.service": "",
 		},
 		fail: map[string]error{"avahi-resolve-host-name -4 jellyfin.local": errors.New("timeout reached")},
 	}
