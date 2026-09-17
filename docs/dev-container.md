@@ -30,10 +30,14 @@ repo's sake; there is nothing here for it to build or run.
 
 ## What This Repository Owns vs. What It Doesn't
 
-- **The dev-container image** (`development-container/dev-build`) is built and published
-  from a separate repository, not this one. This repository only
-  *consumes* it — pulls a tag, runs it, mounts this repo in. There is no
+- **The dev-container image** (`development-container/dev-build`) is built and
+  published from **`appliance-release/deps/development-container/`** (not this
+  repo). This repository only *consumes* it — pulls an arch-suffixed tag
+  (`latest-amd64` / `latest-arm64`), runs it, mounts this repo in. There is no
   Dockerfile for that image here, and there shouldn't be.
+- Tags are always arch-suffixed. Bare `:latest` is rejected by composition:
+  `DEV_IMAGE_TAG=latest` becomes `latest-<TOOLING_ARCH>`. Set `TARGET_ARCH` for
+  product packaging; interactive `make dev-shell` uses the host Go arch.
 
 ## Prerequisites
 
@@ -141,7 +145,8 @@ Every setting below is a Makefile variable — override per-invocation
 | `DEV_REGISTRY` | `ghcr.io/zoncaesaradmin/development-container` | Registry host, or legacy host/repo path. |
 | `DEV_IMAGE_REPO` | *(empty)* | Optional repo path between host and name (e.g. `development-container`). |
 | `DEV_IMAGE_NAME` | `dev-build` | Image name within the registry/repo. |
-| `DEV_IMAGE_TAG` | `latest` | Tag to pull. Pin to a specific version (e.g. `v0.1.0`) for reproducibility. |
+| `DEV_IMAGE_TAG` | `latest` | Base tag; composed to `latest-<arch>` (`amd64`/`arm64` from `TARGET_ARCH` or host). Pin e.g. `v0.1.0` → `v0.1.0-amd64`. |
+| `TARGET_ARCH` | *(host Go arch)* | Product/tooling arch for `dev-run` (`--arch`) and tag composition. |
 | `DEV_REGISTRY_TLS_VERIFY` | `true` | TLS verify for outer podman login/pull and for service-image push. Set `false` for LAN registries with host-mismatch certs. |
 | `SERVICE_IMAGE_REGISTRY` | host of `DEV_REGISTRY` (required) | Push registry host for `make -C services/<svc> image`. No hardcoded fallback — set `DEV_REGISTRY` or override with env / `make … SERVICE_IMAGE_REGISTRY=…`. |
 | `SERVICE_IMAGE_REPO` | `appliance-images` | Repo path for all service-image pushes. Override with env or make CLI. |
@@ -294,8 +299,9 @@ container; `dev-sudo-setup` keeps those names in sudo `env_keep`.
 
 If `make dev-shell` still lacks `go`/`buildah` after a pull, inspect the
 tag — `development-container/dev-build` may have been overwritten by a
-service push. Republish from the `development-container` repo, then pull
-again.
+service push. Republish from
+`appliance-release/deps/development-container` (`TARGET_ARCH=… make release`),
+then pull again.
 
 The outer `podman run` that pulls and starts the shared dev-container
 image no longer depends on a separate rootful login. Instead, it uses

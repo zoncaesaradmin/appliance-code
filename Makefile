@@ -47,17 +47,31 @@ OFFLINE_BUILD ?= 0
 DEV_REGISTRY     ?= ghcr.io
 DEV_IMAGE_REPO   ?= zoncaesaradmin/development-container
 DEV_IMAGE_NAME   ?= dev-build
+# Bare tag (default latest) is always composed with TOOLING_ARCH → latest-amd64|arm64.
 DEV_IMAGE_TAG    ?= latest
 DEV_REGISTRY_USER ?=
 DEV_REGISTRY_TOKEN ?=
 DEV_REGISTRY_TLS_VERIFY ?= true
 DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
 
+# Tooling image arch: product TARGET_ARCH when set, else this host's go arch.
+TOOLING_ARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(shell go env GOARCH))
+ifeq ($(filter $(TOOLING_ARCH),amd64 arm64),)
+$(error TOOLING_ARCH/TARGET_ARCH must be amd64|arm64 (got "$(TOOLING_ARCH)"))
+endif
+# Fail-closed: never pull bare :latest — always arch-suffixed.
+# (Avoid $(shell case …) — a closing ')' would terminate Make's $(shell …).)
+ifneq ($(filter %-amd64 %-arm64,$(DEV_IMAGE_TAG)),)
+DEV_IMAGE_REF_TAG := $(DEV_IMAGE_TAG)
+else
+DEV_IMAGE_REF_TAG := $(DEV_IMAGE_TAG)-$(TOOLING_ARCH)
+endif
+
 # Explicit DEV_IMAGE= override wins; otherwise build from DEV_* parts.
 ifeq ($(strip $(DEV_IMAGE_REPO)),)
-DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_REF_TAG)
 else
-DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_TAG)
+DEV_IMAGE        ?= $(DEV_REGISTRY)/$(DEV_IMAGE_REPO)/$(DEV_IMAGE_NAME):$(DEV_IMAGE_REF_TAG)
 endif
 
 DEV_REGISTRY_AUTH_FILE ?= $(HOME)/.config/containers/auth.json
@@ -102,7 +116,7 @@ DEV_ENGINE_TLS_FLAGS += --tls-verify=$(DEV_REGISTRY_TLS_VERIFY)
 # digest; without this, make dev-shell reuses a stale local image forever.
 DEV_ENGINE_PULL_FLAGS += --pull=newer
 endif
-DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG OFFLINE_BUILD
+DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_IMAGE_NAME DEV_REGISTRY DEV_IMAGE_REPO DEV_REGISTRY_TLS_VERIFY SERVICE_IMAGE_REGISTRY SERVICE_IMAGE_REPO SERVICE_IMAGE_NAME SERVICE_IMAGE_TAG OFFLINE_BUILD TARGET_ARCH
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
@@ -578,12 +592,14 @@ ifeq ($(shell test -d "$(HOME)/.ssh" && echo yes),yes)
 DEV_SSH_FLAGS += -v "$(HOME)/.ssh:$(DEV_CONTAINER_HOME)/.ssh:ro"
 endif
 DEV_RUN = $(SUDO) $(CONTAINER_ENGINE) run --rm --privileged --device /dev/fuse \
+	--arch $(TOOLING_ARCH) \
 	--entrypoint "" \
 	$(DEV_ENGINE_AUTH_FLAGS) \
 	$(DEV_ENGINE_TLS_FLAGS) \
 	$(DEV_ENGINE_PULL_FLAGS) \
 	$(DEV_FORWARD_ENV_FLAGS) \
 	-e STORAGE_DRIVER="$(DEV_STORAGE_DRIVER)" \
+	-e TARGET_ARCH="$(TOOLING_ARCH)" \
 	$(DEV_SSH_FLAGS) \
 	-v "$(CURDIR):/workspace$(DEV_VOLUME_OPTS)" \
 	-v "$(DEV_CACHE_DIR)/go-build:$(DEV_CONTAINER_HOME)/.cache/go-build$(DEV_VOLUME_OPTS)" \

@@ -99,6 +99,7 @@ cd /path/to/appliance-code
 export DEV_REGISTRY=artifact-dns-1.appliance.internal
 export DEV_IMAGE_REPO=development-container
 export DEV_IMAGE_NAME=dev-build
+# Composed to latest-<arch> (host Go arch, or TARGET_ARCH when set).
 export DEV_IMAGE_TAG=latest
 export DEV_REGISTRY_USER=<artifact-registry-username>
 export DEV_REGISTRY_TOKEN=<artifact-registry-token>
