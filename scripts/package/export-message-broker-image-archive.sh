@@ -31,7 +31,8 @@ if ! oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "localhost/appliance-message-b
 export-message-broker-image-archive: seeded message broker image is missing or unavailable
 export-message-broker-image-archive: expected LAN image: ${SOURCE_IMAGE}
 export-message-broker-image-archive: seed it before an offline build with:
-export-message-broker-image-archive:   make -C deps/message-broker release
+export-message-broker-image-archive:   TARGET_ARCH=amd64 make -C deps/message-broker release
+export-message-broker-image-archive:   # publishes build-cache/nats:2.10.26-alpine-${TARGET_ARCH}
 export-message-broker-image-archive: or: make seed-build-deps
 EOF
   else
@@ -42,13 +43,33 @@ fi
 skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" containers-storage:localhost/appliance-message-broker:2.10.26 "oci:${tmp}/oci:registry.local/nats:bundled"
 digest="$(python3 - "${tmp}/oci/index.json" "${TARGET_ARCH}" <<'PY'
 import json, sys
-index=json.load(open(sys.argv[1], encoding="utf-8"))
-manifests=index.get("manifests", [])
-if len(manifests) != 1: raise SystemExit(f"message-broker image must contain one linux/{sys.argv[2]} manifest")
-d=manifests[0]
-if (d.get("annotations") or {}).get("org.opencontainers.image.ref.name") != "registry.local/nats:bundled": raise SystemExit("message-broker archive annotation mismatch")
-digest=d.get("digest", "")
-if not digest.startswith("sha256:") or len(digest) != 71: raise SystemExit("invalid message-broker image digest")
+
+index_path = sys.argv[1]
+want_arch = sys.argv[2]
+oci_dir = index_path.rsplit("/", 1)[0]
+index = json.load(open(index_path, encoding="utf-8"))
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"message-broker image must contain one linux/{want_arch} manifest")
+d = manifests[0]
+if (d.get("annotations") or {}).get("org.opencontainers.image.ref.name") != "registry.local/nats:bundled":
+    raise SystemExit("message-broker archive annotation mismatch")
+digest = d.get("digest", "")
+if not digest.startswith("sha256:") or len(digest) != 71:
+    raise SystemExit("invalid message-broker image digest")
+manifest_digest = digest.split(":", 1)[1]
+manifest = json.load(open(f"{oci_dir}/blobs/sha256/{manifest_digest}", encoding="utf-8"))
+cfg_digest = (manifest.get("config") or {}).get("digest", "")
+if not cfg_digest.startswith("sha256:"):
+    raise SystemExit("message-broker manifest missing config digest")
+cfg = json.load(open(f"{oci_dir}/blobs/sha256/{cfg_digest.split(':', 1)[1]}", encoding="utf-8"))
+got_arch = cfg.get("architecture", "")
+if got_arch != want_arch:
+    raise SystemExit(
+        f"message-broker archive architecture is {got_arch!r}, want {want_arch!r} "
+        f"(LAN build-cache tag likely collided across arches; re-seed "
+        f"TARGET_ARCH={want_arch} make -C deps/message-broker release)"
+    )
 print(digest)
 PY
 )"
