@@ -4,6 +4,11 @@ Private AI is a first-class appliance capability. It is not implemented through
 the generic Applications catalog because the platform owns its authentication,
 stable API, persistent model storage, lifecycle checks, and upgrade contract.
 
+The forward-compatible serving topology and the migration away from the current
+single active engine are defined in
+[Inference serving instances](inference-serving-instances.md). This document
+describes the package/runtime capability contract that feeds that topology.
+
 ## Runtime packages
 
 Package metadata carries only the minimum runtime contract:

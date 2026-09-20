@@ -362,6 +362,9 @@ func TestLoadStartsInstalledModel(t *testing.T) {
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"state":"ready"`) {
 		t.Fatalf("progress status %d: %s", w.Code, w.Body.String())
 	}
+	if got := m.instanceSummaries(); len(got) != 1 || got[0].ID != defaultInstanceID || len(got[0].Models) != 1 || got[0].Models[0] != item.ID {
+		t.Fatalf("default instance after Load = %+v", got)
+	}
 }
 
 func TestLoadAlreadyReadyIsIdempotent(t *testing.T) {

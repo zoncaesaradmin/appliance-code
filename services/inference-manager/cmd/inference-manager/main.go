@@ -59,6 +59,8 @@ type manager struct {
 	processMu  sync.Mutex
 	active     string
 	reg        registry
+	instanceMu sync.RWMutex
+	instances  instanceRegistry
 	download   func(context.Context, string, string) error
 	gpuProbe   func(context.Context) bool
 	catalog    *modelCatalog
@@ -93,7 +95,13 @@ func main() {
 	if err := m.loadRegistry(); err != nil {
 		log.Fatalf("load model registry: %v", err)
 	}
+	if err := m.loadInstanceRegistry(); err != nil {
+		log.Fatalf("load instance registry: %v", err)
+	}
 	m.reconcileInterruptedProgress()
+	if err := m.migrateLegacyDefaultInstance(); err != nil {
+		log.Fatalf("migrate legacy default instance: %v", err)
+	}
 	if err := m.engineOrch.EnsureService(context.Background()); err != nil {
 		log.Printf("ensure engine service: %v", err)
 	}
@@ -197,6 +205,7 @@ func (m *manager) health(w http.ResponseWriter, _ *http.Request) {
 		"engine":        m.engine,
 		"loadedModelId": loadedModelID,
 		"servingState":  servingState,
+		"instances":     m.instanceSummaries(),
 	}
 	if servingState == "ready" {
 		if maxLen := m.servedMaxModelLen(context.Background()); maxLen > 0 {
@@ -543,6 +552,11 @@ func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := m.setDefaultInstance(id); err != nil {
+		m.opMu.Unlock()
+		writeError(w, http.StatusInternalServerError, "persist default model instance: "+err.Error())
+		return
+	}
 	m.beginLoadProgress(id, "Loading model into the inference engine")
 	go m.runLoad(context.Background(), id)
 	writeJSON(w, http.StatusAccepted, m.currentLoadProgress())
@@ -860,6 +874,10 @@ func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
 		m.active = ""
 		m.processMu.Unlock()
 		m.finishLoadProgress("idle", "", "No model is loaded")
+	}
+	if err := m.clearDefaultInstance(id); err != nil {
+		writeError(w, http.StatusInternalServerError, "clear default model instance: "+err.Error())
+		return
 	}
 	if err := os.RemoveAll(item.Path); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
