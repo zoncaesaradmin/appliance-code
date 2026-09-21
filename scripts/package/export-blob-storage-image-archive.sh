@@ -87,9 +87,32 @@ if [[ -f "${OUT_FILE}" && -f "${SOURCE_ID_FILE}" && -f "${REFERENCE_FILE}" ]]; t
       SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
     fi
     if [[ "${previous_id}" == "${SOURCE_ID}" ]]; then
-      echo "reusing blob-storage OCI archive: ${OUT_FILE}"
-      echo "image reference: ${previous_ref}"
-      exit 0
+      archive_digest="$(python3 - "${OUT_FILE}" <<'PY'
+import json, sys, tarfile
+archive = sys.argv[1]
+with tarfile.open(archive) as tar:
+    member = next(
+        (e for e in tar.getmembers() if e.isfile() and e.name.lstrip("./") == "index.json"),
+        None,
+    )
+    if member is None:
+        raise SystemExit(f"oci archive {archive} is missing index.json")
+    idx = json.load(tar.extractfile(member))
+manifests = idx.get("manifests") or []
+if not manifests:
+    raise SystemExit(f"oci archive {archive} has no manifests")
+digest = str(manifests[0].get("digest") or "").strip()
+print(digest)
+PY
+)"
+      expected_digest="${previous_ref##*@}"
+      if [[ "${archive_digest}" != "${expected_digest}" ]]; then
+        echo "blob-storage: stale reference sidecar ${previous_ref} (archive ${archive_digest}); rebuilding" >&2
+      else
+        echo "reusing blob-storage OCI archive: ${OUT_FILE}"
+        echo "image reference: ${previous_ref}"
+        exit 0
+      fi
     fi
   fi
 fi
