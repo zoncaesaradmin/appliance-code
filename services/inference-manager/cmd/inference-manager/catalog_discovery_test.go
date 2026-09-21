@@ -216,22 +216,28 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 		case "/library":
 			_, _ = w.Write([]byte(`<a href="/library/tiny">Tiny</a><a href="/library/skipme">Skip</a>`))
 		case "/library/tiny/tags":
-			_, _ = w.Write([]byte(`<a href="/library/tiny:1b">1b</a><a href="/library/tiny:latest">latest</a>`))
+			_, _ = w.Write([]byte(`<a href="/library/tiny:1b">1b</a><a href="/library/tiny:2b">2b</a><a href="/library/tiny:latest">latest</a>`))
 		case "/library/skipme/tags":
 			_, _ = w.Write([]byte(`<a href="/library/skipme:cloud">cloud</a>`))
 		case "/v2/library/tiny/manifests/1b":
+			if !strings.HasPrefix(r.UserAgent(), "ollama/0.9.0 ") {
+				t.Fatalf("manifest user agent=%q", r.UserAgent())
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"layers": []map[string]any{
 					{"size": 1000, "mediaType": "application/vnd.ollama.image.model"},
 					{"size": 50, "mediaType": "application/vnd.ollama.image.params"},
 				},
 			})
+		case "/v2/library/tiny/manifests/2b":
+			w.WriteHeader(http.StatusPreconditionFailed)
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	t.Setenv("INFERENCE_CATALOG_OLLAMA_BASE", server.URL)
 	t.Setenv("INFERENCE_CATALOG_OLLAMA_REGISTRY_BASE", server.URL)
+	t.Setenv("INFERENCE_RUNTIME_VERSION", "0.9.0")
 
 	entries, err := discoverOllama(context.Background())
 	if err != nil {
@@ -239,5 +245,12 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1050 || entries[0].MemoryBytes != 1000*2+(2<<30) {
 		t.Fatalf("entries=%+v", entries)
+	}
+}
+
+func TestDiscoverOllamaRequiresPackagedRuntimeVersion(t *testing.T) {
+	t.Setenv("INFERENCE_RUNTIME_VERSION", "")
+	if _, err := discoverOllama(context.Background()); err == nil || !strings.Contains(err.Error(), "packaged Ollama runtime version") {
+		t.Fatalf("discover error=%v", err)
 	}
 }

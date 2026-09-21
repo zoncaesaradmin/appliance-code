@@ -634,7 +634,7 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE
   if [[ -z "${INFERENCE_VERSION}" ]]; then
     INFERENCE_VERSION="$(sed -n 's/^appVersion: *"\{0,1\}\([^"[:space:]]*\)"\{0,1\}[[:space:]]*$/\1/p' "${INFERENCE_CHART_DIR}/Chart.yaml")"
   fi
-  # compatibility.inferenceVersion is unprefixed; Chart.yaml appVersion may be v0.6.5.
+  # compatibility.inferenceVersion is unprefixed; Chart.yaml appVersion may be v0.9.0.
   INFERENCE_VERSION="${INFERENCE_VERSION#v}"
   if [[ -z "${INFERENCE_VERSION}" ]]; then
     echo "archive-release-input: unable to derive inferenceVersion from ${INFERENCE_CHART_DIR}/Chart.yaml" >&2

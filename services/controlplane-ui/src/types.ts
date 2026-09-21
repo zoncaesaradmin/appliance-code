@@ -595,6 +595,7 @@ export interface InferenceCatalogEntry {
 
 export interface InferenceCatalog {
   engine: string;
+  runtimeVersion?: string;
   lastAttempt: string;
   lastSuccess: string;
   lastError?: string;

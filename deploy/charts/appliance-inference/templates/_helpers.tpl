@@ -78,6 +78,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.engine.servicePort | quote }}
 - name: INFERENCE_RUNTIME_IMAGE
   value: {{ include "appliance-inference.image" . | quote }}
+- name: INFERENCE_RUNTIME_VERSION
+  value: {{ .Chart.AppVersion | trimPrefix "v" | quote }}
 {{- if .Values.engine.maxMemory }}
 - name: INFERENCE_ENGINE_MAX_MEMORY
   value: {{ .Values.engine.maxMemory | quote }}

@@ -2677,6 +2677,9 @@ components:
       required: [engine, lastAttempt, lastSuccess, refreshing, stale, scope, items]
       properties:
         engine: { type: string }
+        runtimeVersion:
+          type: string
+          description: Signed runtime version used to determine catalog compatibility. Ollama candidates are listed only when the registry accepts this version.
         lastAttempt: { type: string, format: date-time }
         lastSuccess: { type: string, format: date-time }
         lastError: { type: string }

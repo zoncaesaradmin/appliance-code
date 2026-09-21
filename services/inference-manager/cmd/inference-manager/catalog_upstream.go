@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -22,6 +23,7 @@ var vllmArchitectureProbe string
 
 var libraryLink = regexp.MustCompile(`href="/library/([a-zA-Z0-9._:-]+)"`)
 var sha1RE = regexp.MustCompile(`^[0-9a-f]{40}$`)
+var ollamaVersionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
 
 // upstreamTransport is overridden in unit tests so discovery runs against a
 // local TLS fixture instead of the public internet.
@@ -80,6 +82,60 @@ func upstreamRead(ctx context.Context, address string, target any) error {
 	return json.Unmarshal(b, target)
 }
 
+// ollamaCatalogUserAgent identifies the exact signed runtime that will pull a
+// candidate. The Ollama registry uses this version to reject manifests that the
+// runtime cannot load; catalog discovery uses the same check so it never offers
+// a model that will fail with a manifest-version 412 during Import.
+func ollamaCatalogUserAgent() (string, error) {
+	version, err := ollamaRuntimeVersion()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("ollama/%s (%s %s) Go/%s", version, runtime.GOARCH, runtime.GOOS, runtime.Version()), nil
+}
+
+func ollamaRuntimeVersion() (string, error) {
+	version := strings.TrimPrefix(strings.TrimSpace(env("INFERENCE_RUNTIME_VERSION", "")), "v")
+	if !ollamaVersionRE.MatchString(version) {
+		return "", fmt.Errorf("cannot determine packaged Ollama runtime version")
+	}
+	return version, nil
+}
+
+// upstreamReadOllamaManifest returns compatible=false only for the registry's
+// explicit version gate. Other failures are discovery failures, not evidence
+// that a model is unsupported, and must retain the existing fail-closed catalog
+// behavior.
+func upstreamReadOllamaManifest(ctx context.Context, address, userAgent string, target any) (compatible bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := upstreamClient().Do(req)
+	if err != nil {
+		return false, fmt.Errorf("upstream metadata unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusPreconditionFailed {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("upstream metadata returned HTTP %d", resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, (8<<20)+1))
+	if err != nil {
+		return false, err
+	}
+	if len(b) > 8<<20 {
+		return false, fmt.Errorf("upstream metadata exceeds size limit")
+	}
+	if err := json.Unmarshal(b, target); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func libraryReferences(page string, tags bool, limit int) []string {
 	seen := map[string]bool{}
 	var result []string
@@ -105,6 +161,10 @@ func (m *manager) discoverModels(ctx context.Context) ([]catalogEntry, error) {
 }
 
 func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
+	userAgent, err := ollamaCatalogUserAgent()
+	if err != nil {
+		return nil, err
+	}
 	var page string
 	if err := upstreamRead(ctx, ollamaLibraryBase()+"/library?sort=popular", &page); err != nil {
 		return nil, err
@@ -127,8 +187,12 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 					MediaType string `json:"mediaType"`
 				} `json:"layers"`
 			}
-			if err := upstreamRead(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], &manifest); err != nil {
+			compatible, err := upstreamReadOllamaManifest(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], userAgent, &manifest)
+			if err != nil {
 				return nil, err
+			}
+			if !compatible {
+				continue
 			}
 			var weights, total uint64
 			for _, layer := range manifest.Layers {

@@ -31,6 +31,7 @@ type catalogEntry struct {
 
 type catalogState struct {
 	Engine               string         `json:"engine"`
+	RuntimeVersion       string         `json:"runtimeVersion,omitempty"`
 	LastAttempt          time.Time      `json:"lastAttempt"`
 	LastSuccess          time.Time      `json:"lastSuccess"`
 	LastError            string         `json:"lastError,omitempty"`
@@ -56,10 +57,11 @@ type modelCatalog struct {
 
 func newModelCatalog(m *manager) *modelCatalog {
 	c := &modelCatalog{m: m, path: filepath.Join(m.modelsDir, ".appliance-catalog", m.engine+".json")}
-	c.state = catalogState{Engine: m.engine, Items: []catalogEntry{}, Scope: "Popular upstream models; conservative estimates, load verification required"}
+	runtimeVersion := m.catalogRuntimeVersion()
+	c.state = catalogState{Engine: m.engine, RuntimeVersion: runtimeVersion, Items: []catalogEntry{}, Scope: "Popular upstream models; conservative estimates, load verification required"}
 	if b, err := os.ReadFile(c.path); err == nil {
 		var saved catalogState
-		if json.Unmarshal(b, &saved) == nil && saved.Engine == m.engine {
+		if json.Unmarshal(b, &saved) == nil && saved.Engine == m.engine && saved.RuntimeVersion == runtimeVersion {
 			c.state = saved
 			c.state.Refreshing = false
 			c.retryEmptyOnStart = (saved.LastSuccess.IsZero() || len(saved.Items) == 0) && saved.LastError != ""
@@ -68,6 +70,17 @@ func newModelCatalog(m *manager) *modelCatalog {
 	c.discover = m.discoverModels
 	c.budget = m.catalogBudget
 	return c
+}
+
+func (m *manager) catalogRuntimeVersion() string {
+	if m == nil || m.engine != "ollama" {
+		return ""
+	}
+	version, err := ollamaRuntimeVersion()
+	if err != nil {
+		return ""
+	}
+	return version
 }
 
 func (c *modelCatalog) nextRefreshDelay() time.Duration {
@@ -126,6 +139,7 @@ func (c *modelCatalog) refresh(ctx context.Context) {
 		log.Printf("model catalog refresh engine=%s failed: %v", c.m.engine, err)
 	} else {
 		sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+		c.state.RuntimeVersion = c.m.catalogRuntimeVersion()
 		c.state.Items, c.state.LastSuccess, c.state.LastError = items, time.Now().UTC(), ""
 		log.Printf("model catalog refreshed engine=%s candidates=%d", c.m.engine, len(items))
 	}

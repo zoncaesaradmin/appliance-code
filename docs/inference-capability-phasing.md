@@ -77,6 +77,13 @@ which calls manager-owned `/internal/v1/...` routes (not the OpenAI proxy):
 - `GET /api/v1/inference/models/load/progress`
 - `POST /api/v1/inference/models/delete`
 
+For Ollama, catalog discovery sends manifest requests using the version of the
+signed runtime shipped by the selected pack. Candidates whose registry manifest
+rejects that version are omitted; `runtimeVersion` on the catalog response makes
+the compatibility basis observable. A runtime upgrade invalidates the persisted
+catalog so discovery is repeated against the upgraded runtime. This is a model
+compatibility gate, separate from the existing capacity and hardware checks.
+
 Reads require `inference.models.read`, mutations require `inference.admin`, and
 OpenAI inference calls require `inference.use`. Mutations are audited. The first
 implementation serializes model mutations and returns `409` if another one is
