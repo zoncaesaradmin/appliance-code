@@ -2632,7 +2632,8 @@ components:
         loadedModelId: { type: string }
         instances:
           type: array
-          description: Desired model-serving instances. One default instance is supported initially; future runtime releases may expose more.
+          maxItems: 1
+          description: "Alpha desired serving state: zero or one default instance. The underlying instance contract is intentionally extensible for a later validated release."
           items: { $ref: "#/components/schemas/InferenceServingInstance" }
         servingState:
           type: string
@@ -2652,8 +2653,9 @@ components:
         id: { type: string }
         models:
           type: array
+          maxItems: 1
           items: { type: string }
-        replicas: { type: integer, minimum: 1 }
+        replicas: { type: integer, minimum: 1, maximum: 1 }
     InferenceModel:
       type: object
       required: [id]

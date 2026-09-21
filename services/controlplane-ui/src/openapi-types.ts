@@ -1723,7 +1723,7 @@ export interface components {
             gpuAvailable?: boolean;
             ready?: boolean;
             loadedModelId?: string;
-            /** @description Desired model-serving instances. One default instance is supported initially; future runtime releases may expose more. */
+            /** @description Alpha desired serving state: zero or one default instance. The underlying instance contract is intentionally extensible for a later validated release. */
             instances?: components["schemas"]["InferenceServingInstance"][];
             /**
              * @description Whether a model is inactive, currently loading, ready for use, or failed to load.

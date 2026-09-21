@@ -19,13 +19,14 @@ separate server-side call from the UI service to the control plane.
 ### AI Services model catalog
 
 The `/admin/ai-services` React page uses the existing authenticated API proxy.
-It separates the downloaded model library from enabled model-serving instances:
-the library lists locally stored models, while the right-hand card lists every
-model bound to an enabled instance. The selection dropdown joins eligible
-catalog candidates with downloaded models by ID and labels downloaded/enabled
-state. Downloaded entries remain visible when discovery fails or removes a
-candidate. Selecting a model shows a short capacity line (parameter hint,
-download size, estimated RAM).
+It separates the downloaded model library from the enabled model: the library
+lists locally stored models, while the right-hand card shows the one model bound
+to the Alpha default instance. The selection dropdown joins eligible catalog
+candidates with downloaded models by ID and labels downloaded/enabled state.
+Downloaded entries remain visible when discovery fails or removes a candidate.
+Selecting a model shows a short capacity line (parameter hint, download size,
+estimated RAM). Enabling a downloaded model replaces the currently enabled
+model.
 
 | Browser/API method and route | UI client method | Control-plane behavior |
 | --- | --- | --- |
@@ -48,11 +49,11 @@ continue through the existing authenticated and audited routes. On-disk staging
 lives under `/data/zon/inference/models/.downloads/` with
 `.progress.json` for operator inspection. Load progress is written under
 `/data/zon/inference/models/.zon/load-progress.json`. The AI Services page puts
-the **Model library** first (primary card) and **Enabled models** beside it on
+the **Model library** first (primary card) and **Enabled model** beside it on
 wide layouts (~75% / ~25%). On narrow viewports the enabled-model card stacks
-under the library. It renders each serving instance and all of its enabled
-models, even though the first runtime implementation currently has one default
-instance. When a model is Ready for use, **Copy OpenAI client settings** opens a dialog with the public
+under the library. Alpha permits one default serving instance with one enabled
+model; the UI labels the action **Enable and replace** when another model is
+already enabled. When a model is Ready for use, **Copy OpenAI client settings** opens a dialog with the public
 base URL (`https://<origin>/inference/v1`), served model id, a sample provider
 config (`wire_api = "responses"` for Codex), and a separate model-catalog JSON
 snippet for clients such as Codex. The catalog JSON is a complete Codex

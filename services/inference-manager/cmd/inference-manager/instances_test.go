@@ -32,6 +32,63 @@ func TestDefaultInstancePersistsAndBindsLoadedModel(t *testing.T) {
 	}
 }
 
+func TestDefaultInstanceReplacementRemovesStaleBinding(t *testing.T) {
+	m := testManager(t)
+	if err := m.setDefaultInstance("org/first-model"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.setDefaultInstance("org/second-model"); err != nil {
+		t.Fatal(err)
+	}
+	m.instanceMu.RLock()
+	defer m.instanceMu.RUnlock()
+	if len(m.instances.Bindings) != 1 {
+		t.Fatalf("bindings=%+v", m.instances.Bindings)
+	}
+	if _, stale := m.instances.Bindings["org/first-model"]; stale {
+		t.Fatalf("stale binding remains: %+v", m.instances.Bindings)
+	}
+	if binding := m.instances.Bindings["org/second-model"]; binding.InstanceID != defaultInstanceID {
+		t.Fatalf("replacement binding=%+v", binding)
+	}
+}
+
+func TestAlphaInstanceValidationRejectsUnsupportedLayouts(t *testing.T) {
+	tests := []struct {
+		name      string
+		instances map[string]modelInstance
+	}{
+		{
+			name: "multiple instances",
+			instances: map[string]modelInstance{
+				defaultInstanceID: {ID: defaultInstanceID, Models: []string{"org/one"}, Replicas: 1},
+				"second":          {ID: "second", Models: []string{"org/two"}, Replicas: 1},
+			},
+		},
+		{
+			name: "multiple models",
+			instances: map[string]modelInstance{
+				defaultInstanceID: {ID: defaultInstanceID, Models: []string{"org/one", "org/two"}, Replicas: 1},
+			},
+		},
+		{
+			name: "multiple replicas",
+			instances: map[string]modelInstance{
+				defaultInstanceID: {ID: defaultInstanceID, Models: []string{"org/one"}, Replicas: 2},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			m := testManager(t)
+			m.instances.Instances = test.instances
+			if err := m.validateAlphaInstancesLocked(); err == nil {
+				t.Fatal("unsupported layout was accepted")
+			}
+		})
+	}
+}
+
 func TestLegacyReadyLoadMigratesToDefaultInstance(t *testing.T) {
 	m := testManager(t)
 	m.engine = "ollama"

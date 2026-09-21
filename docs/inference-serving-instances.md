@@ -17,6 +17,20 @@ repository, or online runtime acquisition. All manager and runtime images stay
 signed, bundle-present, and digest-pinned under the existing air-gapped
 release contract.
 
+## Alpha serving policy
+
+Alpha intentionally permits multiple **downloaded** models but exactly one
+**enabled** model. The manager accepts only the `default` serving instance with
+one model and one replica; enabling another downloaded model atomically replaces
+the default desired binding. This is a product policy enforced by the manager,
+not an accidental property of the current engine Deployment.
+
+The durable model-instance and binding shapes remain plural so a later release
+can raise these limits after implementing admission control, per-instance
+reconciliation, routing, metrics, and failure isolation. Until then, no API or
+UI control may create a second instance, a second enabled model, or a replica
+set.
+
 ## Concepts
 
 The product uses these terms consistently:
@@ -124,9 +138,10 @@ GET               /api/v1/inference/status
 
 The existing model import, inventory, catalog, capability, and delete APIs
 remain model-oriented. The existing Load action is redefined as a convenient
-operation on `default`: set its one-model desired state, wait for readiness,
-and bind that public model name. UI copy may continue to say “Load” while the
-implementation uses instances.
+operation on `default`: replace its one-model desired state, wait for
+readiness, and bind that public model name. The Alpha UI calls this **Enable**
+so the replacement behavior is clear, while retaining the existing load
+endpoint and workflow.
 
 The initial status response retains the familiar default-model summary and
 adds an instances list. A future API version may retire singleton fields only

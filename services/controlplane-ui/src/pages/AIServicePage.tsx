@@ -265,7 +265,7 @@ wire_api = "responses"`;
     "   - Paste the JSON catalog below (complete Codex catalog entry).",
     "   - Keep the slug equal to the served model id.",
     "",
-    "3. After you Load a different model on the appliance, copy these settings again.",
+    "3. After you enable a different model on the appliance, copy these settings again.",
     "   Context window matches the loaded engine --max-model-len (served window, not the raw model card).",
     "",
     `Base URL: ${baseURL}`,
@@ -422,7 +422,7 @@ export function AIServicePage(): React.JSX.Element {
           setImportProgress(progress);
           if (progress.state === "complete") {
             setBusy("");
-            setMessage(`${progress.modelId || "Model"} downloaded. Load it to verify runtime compatibility.`);
+            setMessage(`${progress.modelId || "Model"} downloaded. Enable it to verify runtime compatibility.`);
             await refresh();
             return;
           }
@@ -506,7 +506,7 @@ export function AIServicePage(): React.JSX.Element {
       setImportProgress(accepted);
       if (accepted.state === "complete") {
         setBusy("");
-        setMessage(`${entry.id} downloaded. Load it to verify runtime compatibility.`);
+        setMessage(`${entry.id} downloaded. Enable it to verify runtime compatibility.`);
         await refresh();
       } else if (accepted.state === "failed") {
         setBusy("");
@@ -602,8 +602,10 @@ export function AIServicePage(): React.JSX.Element {
   const loadButtonLabel = selectedEnabled
     ? "Enabled"
     : loadBusy
-      ? "Loading…"
-      : "Load";
+      ? "Enabling…"
+      : enabledModelIDs.size > 0
+        ? "Enable and replace"
+        : "Enable";
   const readyContextWindow = useMemo(() => {
     if (!readyModelId) {
       return undefined;
@@ -651,7 +653,7 @@ export function AIServicePage(): React.JSX.Element {
     <PageFrame
       title="AI Services"
       eyebrow="Admin"
-      description="Download models to this appliance, then enable them for inference."
+      description="Download models to this appliance, then enable one model for inference."
       pathname="/admin/ai-services"
       onNavigate={navigate}
       tabs={[]}
@@ -671,7 +673,7 @@ export function AIServicePage(): React.JSX.Element {
           <Card
             className="ai-services-layout__models"
             title="Model library"
-            subtitle="Downloaded models are stored locally. Enable one to make it available to clients."
+            subtitle="Downloaded models are stored locally. Enabling a model replaces the current enabled model."
           >
             {catalogError || catalog?.lastError ? (
               <p className="message message--error">{catalogError || catalog?.lastError}</p>
@@ -692,7 +694,7 @@ export function AIServicePage(): React.JSX.Element {
                   <div className="model-inventory__heading">
                     <div>
                       <h3 id="downloaded-models-title">Downloaded models</h3>
-                      <p>Stored on this appliance and ready to enable.</p>
+                      <p>Stored locally. You can enable one model at a time.</p>
                     </div>
                     <span className="pill">{models.length}</span>
                   </div>
@@ -815,8 +817,8 @@ export function AIServicePage(): React.JSX.Element {
           </Card>
           <Card
             className="ai-services-layout__status"
-            title="Enabled models"
-            subtitle="Models exposed to clients through serving instances."
+            title="Enabled model"
+            subtitle="Alpha supports one enabled model at a time. Enabling another replaces it."
           >
             {status ? (
               <div className="stack">
@@ -844,7 +846,7 @@ export function AIServicePage(): React.JSX.Element {
                   </div>
                 </div>
                 {enabledInstances.length > 0 ? (
-                  <div className="enabled-model-list" aria-label="Enabled models">
+                  <div className="enabled-model-list" aria-label="Enabled model">
                     {enabledInstances.map((instance) => (
                       <section className="enabled-model-list__instance" key={instance.id}>
                         <div className="enabled-model-list__heading">
@@ -861,7 +863,7 @@ export function AIServicePage(): React.JSX.Element {
                     ))}
                   </div>
                 ) : (
-                  <EmptyState message="No enabled models. Load a downloaded model to enable it." />
+                  <EmptyState message="No enabled model. Enable a downloaded model to make it available to clients." />
                 )}
                 {clientSettings ? (
                   <div className="button-row">

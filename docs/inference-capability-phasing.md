@@ -141,11 +141,12 @@ It does not download engines,
 drivers, plugins, updates, or models in the background.
 
 The admin UI is available at **Admin → AI Services**. It separately shows the
-downloaded model library and the enabled models bound to serving instances,
-along with runtime readiness, acceleration class, optional GPU availability,
-and load/remove actions. The initial runtime still enables one default instance,
-but the UI contract renders multiple instances and multiple models per instance
-without presenting downloaded models as enabled.
+downloaded model library and the one enabled model bound to the Alpha default
+instance, along with runtime readiness, acceleration class, optional GPU
+availability, and enable/remove actions. Enabling another downloaded model
+replaces the current enabled model. The durable instance-shaped API remains
+extensible, but Alpha neither exposes nor accepts multiple instances, models
+per instance, or replicas.
 
 ## Accelerated package completion gate
 

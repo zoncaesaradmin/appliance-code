@@ -101,7 +101,7 @@ afterEach(async () => {
 it("puts the downloaded library beside the enabled-model view", async () => {
   await act(async () => root.render(<AIServicePage />));
   const headings = [...element.querySelectorAll("h2")].map((node) => node.textContent);
-  expect(headings.indexOf("Model library")).toBeLessThan(headings.indexOf("Enabled models"));
+  expect(headings.indexOf("Model library")).toBeLessThan(headings.indexOf("Enabled model"));
   expect(element.querySelector(".ai-services-layout__models")).not.toBeNull();
   expect(element.querySelector(".ai-services-layout__status")).not.toBeNull();
 });
@@ -121,7 +121,7 @@ it("separates downloaded inventory from enabled model instances", async () => {
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Downloaded models");
   expect(element.textContent).toContain("stored:2b");
-  expect(element.textContent).toContain("Enabled models");
+  expect(element.textContent).toContain("Enabled model");
   expect(element.textContent).toContain("Default instance");
   expect(element.textContent).toContain("Downloaded · enabled");
 
@@ -155,7 +155,7 @@ it("keeps downloaded models in the dropdown when catalog discovery fails", async
   expect(element.textContent).toContain("Model discovery is unavailable");
   const select = element.querySelector("select");
   expect([...select!.options].map((option) => option.textContent)).toContain("retired:1b (downloaded)");
-  expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Load")).toBe(true);
+  expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Enable")).toBe(true);
 });
 
 it("explains when catalog items exist but none are eligible", async () => {
@@ -274,7 +274,7 @@ it("sorts the model dropdown by estimated parameters descending", async () => {
   expect(api.getInferenceCatalog).toHaveBeenCalledWith({ sort: "parameters", order: "desc" });
 });
 
-it("shows serving ready-for-use and disables Load when the selected model is already loaded", async () => {
+it("shows serving ready-for-use and disables Enable when the selected model is already enabled", async () => {
   api.getInferenceStatus.mockResolvedValue({
     engine: "vllm",
     architecture: "amd64",
@@ -297,9 +297,9 @@ it("shows serving ready-for-use and disables Load when the selected model is alr
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
   expect(element.textContent).toContain("Default instance");
-  const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Enabled");
-  expect(load).toBeTruthy();
-  expect(load).toHaveProperty("disabled", true);
+  const enable = [...element.querySelectorAll("button")].find((button) => button.textContent === "Enabled");
+  expect(enable).toBeTruthy();
+  expect(enable).toHaveProperty("disabled", true);
   const copy = [...element.querySelectorAll("button")].find(
     (button) => button.textContent === "Copy OpenAI client settings"
   );
@@ -361,7 +361,7 @@ it("omits a fake context window when the loaded model does not report one", () =
   expect(settings.contextWindow).toBeUndefined();
 });
 
-it("polls load progress while an async load runs", async () => {
+it("polls enable progress while an async load runs", async () => {
   api.loadInferenceModel.mockResolvedValue({
     modelId: "retired:1b",
     state: "loading",
@@ -404,7 +404,7 @@ it("polls load progress while an async load runs", async () => {
     select.value = "retired:1b";
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Load");
+  const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Enable");
   expect(load).toBeTruthy();
 
   vi.useFakeTimers();
