@@ -3,7 +3,7 @@ name: appliance-inference
 description: Hardened local inference runtime (Ollama-compatible) for the Zon appliance.
 type: application
 version: 0.1.0
-appVersion: "0.9.0"
+appVersion: "0.17.1"
 keywords:
   - appliance
   - inference

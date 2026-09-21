@@ -1753,7 +1753,7 @@ export interface components {
         };
         InferenceCatalog: {
             engine: string;
-            /** @description Signed runtime version used to determine catalog compatibility. Ollama candidates are listed only when the registry accepts this version. */
+            /** @description Signed packaged runtime version associated with this cached catalog. A runtime upgrade invalidates the catalog and refreshes its upstream metadata. */
             runtimeVersion?: string;
             /** Format: date-time */
             lastAttempt: string;

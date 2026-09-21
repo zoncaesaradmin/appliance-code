@@ -32,13 +32,13 @@ gpu:
 image:
   repository: registry.local/inference-runtime
   # Prefer digest pins at install; tag is a schema fallback when digest is empty.
-  tag: "0.9.0"
+  tag: "0.17.1"
   digest: ""
   pullPolicy: IfNotPresent
 
 managerImage:
   repository: registry.local/inference-manager
-  tag: "0.9.0"
+  tag: "0.17.1"
   digest: ""
   pullPolicy: IfNotPresent
 
