@@ -520,6 +520,12 @@ export interface InferenceCheck {
   message?: string;
 }
 
+export interface InferenceServingInstance {
+  id: string;
+  models: string[];
+  replicas: number;
+}
+
 export interface InferenceRuntimeStatus {
   package: string;
   engine: "ollama" | "vllm" | string;
@@ -531,6 +537,7 @@ export interface InferenceRuntimeStatus {
   ready?: boolean;
   loadedModelId?: string;
   servingState?: "inactive" | "loading" | "ready" | "failed";
+  instances?: InferenceServingInstance[];
   /** Served engine context window (max_model_len), not the model-card limit. */
   maxModelLen?: number;
 }

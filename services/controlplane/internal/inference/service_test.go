@@ -89,6 +89,7 @@ func TestStatusReportsServedMaxModelLen(t *testing.T) {
 		case "/":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status": "ok", "servingState": "ready", "loadedModelId": "Qwen/Qwen2.5-3B-Instruct", "maxModelLen": 8192,
+				"instances": []map[string]any{{"id": "default", "models": []string{"Qwen/Qwen2.5-3B-Instruct"}, "replicas": 1}},
 			})
 		case "/internal/v1/models/load/progress":
 			_ = json.NewEncoder(w).Encode(map[string]any{"state": "ready", "modelId": "Qwen/Qwen2.5-3B-Instruct"})
@@ -109,6 +110,9 @@ func TestStatusReportsServedMaxModelLen(t *testing.T) {
 	}
 	if status.MaxModelLen != 8192 {
 		t.Fatalf("MaxModelLen=%d want 8192", status.MaxModelLen)
+	}
+	if len(status.Instances) != 1 || status.Instances[0].ID != "default" || len(status.Instances[0].Models) != 1 || status.Instances[0].Models[0] != "Qwen/Qwen2.5-3B-Instruct" {
+		t.Fatalf("instances=%+v", status.Instances)
 	}
 }
 

@@ -1361,7 +1361,7 @@ export class MockControlPlaneClient {
     return {
       package: "std-llm", engine: "ollama", architecture: "amd64",
       hostArchitecture: "amd64", acceleration: "standard", gpuAvailable: false,
-      ready: true, servingState: "inactive", checks: [{ name: "runtime-api", status: "pass" }]
+      ready: true, servingState: "inactive", instances: [], checks: [{ name: "runtime-api", status: "pass" }]
     };
   }
 

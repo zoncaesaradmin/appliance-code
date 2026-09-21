@@ -2630,6 +2630,10 @@ components:
           description: Whether the runtime currently sees a usable host GPU.
         ready: { type: boolean }
         loadedModelId: { type: string }
+        instances:
+          type: array
+          description: Desired model-serving instances. One default instance is supported initially; future runtime releases may expose more.
+          items: { $ref: "#/components/schemas/InferenceServingInstance" }
         servingState:
           type: string
           enum: [inactive, loading, ready, failed]
@@ -2641,6 +2645,15 @@ components:
         checks:
           type: array
           items: { $ref: "#/components/schemas/InferenceCheck" }
+    InferenceServingInstance:
+      type: object
+      required: [id, models, replicas]
+      properties:
+        id: { type: string }
+        models:
+          type: array
+          items: { type: string }
+        replicas: { type: integer, minimum: 1 }
     InferenceModel:
       type: object
       required: [id]

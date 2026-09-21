@@ -583,17 +583,27 @@ export function AIServicePage(): React.JSX.Element {
   const selectedDownloaded = selected ? downloaded.has(selected.id) : false;
   const selectedSummary = selected ? modelCapacitySummary(selected) : "";
   const showProgress = importInFlight(importProgress?.state);
-  const selectedAlreadyLoaded =
-    !!selected &&
-    status?.servingState === "ready" &&
-    status.loadedModelId === selected.id;
+  const readyModelId = status?.servingState === "ready" ? status.loadedModelId?.trim() || "" : "";
+  // Status instances are the source of truth. The fallback preserves a clear
+  // display while talking to an older manager that only reports loadedModelId.
+  const enabledInstances = useMemo(() => {
+    const instances = (status?.instances ?? []).filter((instance) => instance.models.length > 0);
+    if (instances.length > 0) {
+      return instances;
+    }
+    return readyModelId ? [{ id: "default", models: [readyModelId], replicas: 1 }] : [];
+  }, [readyModelId, status?.instances]);
+  const enabledModelIDs = useMemo(
+    () => new Set(enabledInstances.flatMap((instance) => instance.models)),
+    [enabledInstances]
+  );
+  const selectedEnabled = !!selected && enabledModelIDs.has(selected.id);
   const loadBusy = busy.startsWith("load:");
-  const loadButtonLabel = selectedAlreadyLoaded
-    ? "Ready"
+  const loadButtonLabel = selectedEnabled
+    ? "Enabled"
     : loadBusy
       ? "Loading…"
       : "Load";
-  const readyModelId = status?.servingState === "ready" ? status.loadedModelId?.trim() || "" : "";
   const readyContextWindow = useMemo(() => {
     if (!readyModelId) {
       return undefined;
@@ -641,7 +651,7 @@ export function AIServicePage(): React.JSX.Element {
     <PageFrame
       title="AI Services"
       eyebrow="Admin"
-      description="Select a model for this appliance, then download or load it."
+      description="Download models to this appliance, then enable them for inference."
       pathname="/admin/ai-services"
       onNavigate={navigate}
       tabs={[]}
@@ -660,8 +670,8 @@ export function AIServicePage(): React.JSX.Element {
         <div className="ai-services-layout">
           <Card
             className="ai-services-layout__models"
-            title="Models"
-            subtitle="Models are discovered for this runtime and current capacity. Load verifies actual compatibility."
+            title="Model library"
+            subtitle="Downloaded models are stored locally. Enable one to make it available to clients."
           >
             {catalogError || catalog?.lastError ? (
               <p className="message message--error">{catalogError || catalog?.lastError}</p>
@@ -678,8 +688,37 @@ export function AIServicePage(): React.JSX.Element {
               />
             ) : (
               <div className="stack">
+                <section className="model-inventory" aria-labelledby="downloaded-models-title">
+                  <div className="model-inventory__heading">
+                    <div>
+                      <h3 id="downloaded-models-title">Downloaded models</h3>
+                      <p>Stored on this appliance and ready to enable.</p>
+                    </div>
+                    <span className="pill">{models.length}</span>
+                  </div>
+                  {models.length > 0 ? (
+                    <div className="model-inventory__list">
+                      {models.map((model) => (
+                        <button
+                          className="model-inventory__item"
+                          type="button"
+                          key={model.id}
+                          onClick={() => setSelectedId(model.id)}
+                          disabled={busy !== ""}
+                        >
+                          <strong>{model.id}</strong>
+                          <span className={enabledModelIDs.has(model.id) ? "pill pill--navy" : "pill"}>
+                            {enabledModelIDs.has(model.id) ? "Downloaded · enabled" : "Downloaded"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="model-inventory__empty">No models have been downloaded yet.</p>
+                  )}
+                </section>
                 <label className="flex flex-col gap-1">
-                  Model
+                  Choose a model
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2"
                     value={selectedId}
@@ -689,7 +728,11 @@ export function AIServicePage(): React.JSX.Element {
                   >
                     {options.map((entry) => (
                       <option key={entry.id} value={entry.id}>
-                        {downloaded.has(entry.id) ? `${entry.id} (downloaded)` : entry.id}
+                        {enabledModelIDs.has(entry.id)
+                          ? `${entry.id} (downloaded · enabled)`
+                          : downloaded.has(entry.id)
+                            ? `${entry.id} (downloaded)`
+                            : entry.id}
                       </option>
                     ))}
                   </select>
@@ -739,7 +782,7 @@ export function AIServicePage(): React.JSX.Element {
                         <>
                           <Button
                             type="button"
-                            disabled={busy !== "" || selectedAlreadyLoaded}
+                            disabled={busy !== "" || selectedEnabled}
                             onClick={() => void startLoad(selected.id)}
                           >
                             {loadButtonLabel}
@@ -772,8 +815,8 @@ export function AIServicePage(): React.JSX.Element {
           </Card>
           <Card
             className="ai-services-layout__status"
-            title="Inference runtime"
-            subtitle="Engine, acceleration, and serving status."
+            title="Enabled models"
+            subtitle="Models exposed to clients through serving instances."
           >
             {status ? (
               <div className="stack">
@@ -796,10 +839,30 @@ export function AIServicePage(): React.JSX.Element {
                     </strong>
                   </div>
                   <div>
-                    <span>Serving</span>
+                    <span>Runtime status</span>
                     <strong>{servingStatusLabel(status)}</strong>
                   </div>
                 </div>
+                {enabledInstances.length > 0 ? (
+                  <div className="enabled-model-list" aria-label="Enabled models">
+                    {enabledInstances.map((instance) => (
+                      <section className="enabled-model-list__instance" key={instance.id}>
+                        <div className="enabled-model-list__heading">
+                          <strong>{instance.id === "default" ? "Default instance" : instance.id}</strong>
+                          <span>{instance.replicas} replica{instance.replicas === 1 ? "" : "s"}</span>
+                        </div>
+                        {instance.models.map((modelID) => (
+                          <div className="enabled-model-list__model" key={modelID}>
+                            <strong>{modelID}</strong>
+                            <span className="pill pill--navy">Enabled</span>
+                          </div>
+                        ))}
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState message="No enabled models. Load a downloaded model to enable it." />
+                )}
                 {clientSettings ? (
                   <div className="button-row">
                     <Button type="button" variant="ghost" onClick={() => setShowClientSettings(true)}>

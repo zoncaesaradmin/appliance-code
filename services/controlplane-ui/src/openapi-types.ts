@@ -1714,11 +1714,17 @@ export interface components {
             engine: "ollama" | "vllm";
             architecture: string;
             hostArchitecture: string;
-            /** @enum {string} */
+            /**
+             * @description Product category — standard uses Ollama; accelerated uses vLLM and requires a GPU.
+             * @enum {string}
+             */
             acceleration: "standard" | "accelerated";
+            /** @description Whether the runtime currently sees a usable host GPU. */
             gpuAvailable?: boolean;
             ready?: boolean;
             loadedModelId?: string;
+            /** @description Desired model-serving instances. One default instance is supported initially; future runtime releases may expose more. */
+            instances?: components["schemas"]["InferenceServingInstance"][];
             /**
              * @description Whether a model is inactive, currently loading, ready for use, or failed to load.
              * @enum {string}
@@ -1727,6 +1733,11 @@ export interface components {
             /** @description Served engine context window (max_model_len / --max-model-len), not the raw model-card limit. */
             maxModelLen?: number;
             checks: components["schemas"]["InferenceCheck"][];
+        };
+        InferenceServingInstance: {
+            id: string;
+            models: string[];
+            replicas: number;
         };
         InferenceModel: {
             id: string;

@@ -19,14 +19,17 @@ separate server-side call from the UI service to the control plane.
 ### AI Services model catalog
 
 The `/admin/ai-services` React page uses the existing authenticated API proxy.
-It presents one model dropdown that joins eligible catalog candidates with
-downloaded models by ID. Downloaded entries are labeled in the dropdown and
-remain visible when discovery fails or removes a candidate. Selecting a model
-shows a short capacity line (parameter hint, download size, estimated RAM).
+It separates the downloaded model library from enabled model-serving instances:
+the library lists locally stored models, while the right-hand card lists every
+model bound to an enabled instance. The selection dropdown joins eligible
+catalog candidates with downloaded models by ID and labels downloaded/enabled
+state. Downloaded entries remain visible when discovery fails or removes a
+candidate. Selecting a model shows a short capacity line (parameter hint,
+download size, estimated RAM).
 
 | Browser/API method and route | UI client method | Control-plane behavior |
 | --- | --- | --- |
-| `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability, `servingState`, and `loadedModelId` |
+| `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability, legacy `servingState`/`loadedModelId`, and desired serving `instances` |
 | `GET /api/v1/appliance/identity` | `getIdentity` | Canonical origin rewritten to `<appliance-name>.local` for the OpenAI base URL in Copy client settings |
 | `GET /api/v1/inference/models/catalog?sort=parameters&order=desc` | `getInferenceCatalog` | Cached candidates ordered by estimated parameter scale (default); also supports `sort=memory|name` and `order=asc|desc` |
 | `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
@@ -44,10 +47,12 @@ downloads do not block the downloaded-model list. Import, load, and delete
 continue through the existing authenticated and audited routes. On-disk staging
 lives under `/data/zon/inference/models/.downloads/` with
 `.progress.json` for operator inspection. Load progress is written under
-`/data/zon/inference/models/.zon/load-progress.json`. The AI Services page puts **Models** first (primary card) and
-**Inference runtime** beside it on wide layouts (~75% / ~25%). On narrow
-viewports the status card stacks under Models. When Serving is
-Ready for use, **Copy OpenAI client settings** opens a dialog with the public
+`/data/zon/inference/models/.zon/load-progress.json`. The AI Services page puts
+the **Model library** first (primary card) and **Enabled models** beside it on
+wide layouts (~75% / ~25%). On narrow viewports the enabled-model card stacks
+under the library. It renders each serving instance and all of its enabled
+models, even though the first runtime implementation currently has one default
+instance. When a model is Ready for use, **Copy OpenAI client settings** opens a dialog with the public
 base URL (`https://<origin>/inference/v1`), served model id, a sample provider
 config (`wire_api = "responses"` for Codex), and a separate model-catalog JSON
 snippet for clients such as Codex. The catalog JSON is a complete Codex
