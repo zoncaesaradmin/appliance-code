@@ -24,8 +24,9 @@ lists locally stored models, while the right-hand card shows the one model bound
 to the Alpha default instance. The selection dropdown joins eligible catalog
 candidates with downloaded models by ID and labels downloaded/enabled state.
 Downloaded entries remain visible when discovery fails or removes a candidate.
-For Ollama, catalog discovery excludes models whose manifest rejects the signed
-runtime version; the catalog response identifies that version as `runtimeVersion`.
+For Ollama, `runtimeVersion` identifies the packaged runtime associated with the
+cached catalog; a runtime upgrade refreshes its upstream metadata. Loading
+remains the final compatibility check.
 Selecting a model shows a short capacity line (parameter hint, download size,
 estimated RAM). Enabling a downloaded model replaces the currently enabled
 model.
@@ -34,7 +35,7 @@ model.
 | --- | --- | --- |
 | `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability, legacy `servingState`/`loadedModelId`, and desired serving `instances` |
 | `GET /api/v1/appliance/identity` | `getIdentity` | Canonical origin rewritten to `<appliance-name>.local` for the OpenAI base URL in Copy client settings |
-| `GET /api/v1/inference/models/catalog?sort=parameters&order=desc` | `getInferenceCatalog` | Cached candidates ordered by estimated parameter scale (default); also supports `sort=memory|name` and `order=asc|desc`. Ollama candidates are manifest-compatible with the returned signed `runtimeVersion`. |
+| `GET /api/v1/inference/models/catalog?sort=parameters&order=desc` | `getInferenceCatalog` | Cached candidates ordered by estimated parameter scale (default); also supports `sort=memory|name` and `order=asc|desc`. `runtimeVersion` identifies the packaged runtime associated with the cached catalog. |
 | `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
 | `POST /api/v1/inference/models/imports` | `importInferenceModel` | Accept download job immediately (202); work continues on the inference manager |
 | `GET /api/v1/inference/models/imports/progress` | `getInferenceImportProgress` | Bytes/state for the active or most recent import; polled about every 2 seconds while downloading |

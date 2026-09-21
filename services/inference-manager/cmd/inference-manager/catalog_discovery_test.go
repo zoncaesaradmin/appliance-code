@@ -211,36 +211,20 @@ func TestDiscoverModelsRoutesVLLMThroughCatalogRefresh(t *testing.T) {
 }
 
 func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
-	var server *httptest.Server
-	tokenCalls := 0
-	server = useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/library":
 			_, _ = w.Write([]byte(`<a href="/library/tiny">Tiny</a><a href="/library/skipme">Skip</a>`))
 		case "/library/tiny/tags":
-			_, _ = w.Write([]byte(`<a href="/library/tiny:1b">1b</a><a href="/library/tiny:2b">2b</a><a href="/library/tiny:latest">latest</a>`))
+			_, _ = w.Write([]byte(`<a href="/library/tiny:1b">1b</a><a href="/library/tiny:latest">latest</a>`))
 		case "/library/skipme/tags":
 			_, _ = w.Write([]byte(`<a href="/library/skipme:cloud">cloud</a>`))
-		case "/v2/token":
-			tokenCalls++
-			if r.URL.Query().Get("service") != "ollama" || r.URL.Query().Get("scope") != "repository:library/tiny:pull" || r.URL.Query().Get("ts") == "" || r.URL.Query().Get("nonce") == "" || r.Header.Get("Authorization") == "" {
-				t.Fatalf("unexpected registry token request: query=%q authorization=%q", r.URL.RawQuery, r.Header.Get("Authorization"))
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{"token": "catalog-token"})
 		case "/v2/library/tiny/manifests/1b":
-			if !strings.HasPrefix(r.UserAgent(), "ollama/0.9.0 ") {
-				t.Fatalf("manifest user agent=%q", r.UserAgent())
+			if got := r.UserAgent(); got != "appliance-model-catalog/1" {
+				t.Fatalf("catalog manifest user agent=%q", got)
 			}
-			if r.Header.Get("Accept") != "application/vnd.docker.distribution.manifest.v2+json" {
-				t.Fatalf("manifest accept=%q", r.Header.Get("Accept"))
-			}
-			if r.Header.Get("Authorization") == "" {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="`+server.URL+`/v2/token",service="ollama",scope="repository:library/tiny:pull"`)
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			if r.Header.Get("Authorization") != "Bearer catalog-token" {
-				t.Fatalf("manifest authorization=%q", r.Header.Get("Authorization"))
+			if got := r.Header.Get("Authorization"); got != "" {
+				t.Fatalf("catalog manifest authorization=%q", got)
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"layers": []map[string]any{
@@ -248,15 +232,12 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 					{"size": 50, "mediaType": "application/vnd.ollama.image.params"},
 				},
 			})
-		case "/v2/library/tiny/manifests/2b":
-			w.WriteHeader(http.StatusPreconditionFailed)
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	t.Setenv("INFERENCE_CATALOG_OLLAMA_BASE", server.URL)
 	t.Setenv("INFERENCE_CATALOG_OLLAMA_REGISTRY_BASE", server.URL)
-	t.Setenv("INFERENCE_RUNTIME_VERSION", "0.9.0")
 
 	entries, err := discoverOllama(context.Background())
 	if err != nil {
@@ -264,15 +245,5 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1050 || entries[0].MemoryBytes != 1000*2+(2<<30) {
 		t.Fatalf("entries=%+v", entries)
-	}
-	if tokenCalls != 1 {
-		t.Fatalf("registry token calls=%d, want 1", tokenCalls)
-	}
-}
-
-func TestDiscoverOllamaRequiresPackagedRuntimeVersion(t *testing.T) {
-	t.Setenv("INFERENCE_RUNTIME_VERSION", "")
-	if _, err := discoverOllama(context.Background()); err == nil || !strings.Contains(err.Error(), "packaged Ollama runtime version") {
-		t.Fatalf("discover error=%v", err)
 	}
 }

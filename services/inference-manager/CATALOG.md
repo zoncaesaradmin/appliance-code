@@ -19,14 +19,11 @@ non-quantized safetensors with no custom-code configuration; gated/private
 repositories are excluded. Advanced quantized models remain available through
 the existing explicit import API.
 
-For Ollama, discovery requests every upstream manifest with the exact version of
-the signed, packaged runtime (`INFERENCE_RUNTIME_VERSION`) in its Ollama user
-agent. A registry `412` manifest-version response excludes that candidate, so
-only candidates accepted by that runtime version enter the catalog. The persisted
-catalog records its runtime version and is invalidated after a runtime upgrade,
-which forces fresh compatibility discovery. Loading is still required to verify
-hardware and resource execution. No hardware vendors or specific model names are
-hardcoded. Runtime mode, host available memory, optional package maxMemory,
+For Ollama, discovery uses the same anonymous metadata requests as the existing
+working catalog flow. The persisted catalog records its runtime version and is
+invalidated after a runtime upgrade, which forces fresh metadata discovery.
+Loading is still required to verify hardware and resource execution. No hardware
+vendors or specific model names are hardcoded. Runtime mode, host available memory, optional package maxMemory,
 GPU free memory for CUDA, and PVC free space determine current eligibility.
 GPU memory is not summed across devices; automatic tensor parallelism is not
 configured. Conservatively reserve 25% of CPU memory (20% of GPU memory). Model
