@@ -211,7 +211,9 @@ func TestDiscoverModelsRoutesVLLMThroughCatalogRefresh(t *testing.T) {
 }
 
 func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
-	server := useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var server *httptest.Server
+	tokenCalls := 0
+	server = useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/library":
 			_, _ = w.Write([]byte(`<a href="/library/tiny">Tiny</a><a href="/library/skipme">Skip</a>`))
@@ -219,9 +221,23 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 			_, _ = w.Write([]byte(`<a href="/library/tiny:1b">1b</a><a href="/library/tiny:2b">2b</a><a href="/library/tiny:latest">latest</a>`))
 		case "/library/skipme/tags":
 			_, _ = w.Write([]byte(`<a href="/library/skipme:cloud">cloud</a>`))
+		case "/v2/token":
+			tokenCalls++
+			if r.URL.Query().Get("service") != "ollama" || r.URL.Query().Get("scope") != "repository:library/tiny:pull" || r.URL.Query().Get("ts") == "" || r.URL.Query().Get("nonce") == "" || r.Header.Get("Authorization") == "" {
+				t.Fatalf("unexpected registry token request: query=%q authorization=%q", r.URL.RawQuery, r.Header.Get("Authorization"))
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"token": "catalog-token"})
 		case "/v2/library/tiny/manifests/1b":
 			if !strings.HasPrefix(r.UserAgent(), "ollama/0.9.0 ") {
 				t.Fatalf("manifest user agent=%q", r.UserAgent())
+			}
+			if r.Header.Get("Authorization") == "" {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="`+server.URL+`/v2/token",service="ollama",scope="repository:library/tiny:pull"`)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if r.Header.Get("Authorization") != "Bearer catalog-token" {
+				t.Fatalf("manifest authorization=%q", r.Header.Get("Authorization"))
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"layers": []map[string]any{
@@ -245,6 +261,9 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1050 || entries[0].MemoryBytes != 1000*2+(2<<30) {
 		t.Fatalf("entries=%+v", entries)
+	}
+	if tokenCalls != 1 {
+		t.Fatalf("registry token calls=%d, want 1", tokenCalls)
 	}
 }
 

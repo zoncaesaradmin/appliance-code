@@ -3,7 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,6 +31,7 @@ var vllmArchitectureProbe string
 var libraryLink = regexp.MustCompile(`href="/library/([a-zA-Z0-9._:-]+)"`)
 var sha1RE = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var ollamaVersionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
+var ollamaRegistryChallengeRE = regexp.MustCompile(`^Bearer\s+realm="([^"]+)",service="([^"]*)",scope="([^"]*)"$`)
 
 // upstreamTransport is overridden in unit tests so discovery runs against a
 // local TLS fixture instead of the public internet.
@@ -106,15 +114,44 @@ func ollamaRuntimeVersion() (string, error) {
 // explicit version gate. Other failures are discovery failures, not evidence
 // that a model is unsupported, and must retain the existing fail-closed catalog
 // behavior.
-func upstreamReadOllamaManifest(ctx context.Context, address, userAgent string, target any) (compatible bool, err error) {
+type ollamaManifestReader struct {
+	token string
+}
+
+func (r *ollamaManifestReader) request(ctx context.Context, address, userAgent string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	resp, err := upstreamClient().Do(req)
+	if r.token != "" {
+		req.Header.Set("Authorization", "Bearer "+r.token)
+	}
+	return upstreamClient().Do(req)
+}
+
+// upstreamReadOllamaManifest returns compatible=false only for the registry's
+// explicit version gate. It follows Ollama's anonymous signed Bearer challenge
+// before reading a manifest: the public registry now requires that challenge
+// even for public model metadata. Other failures are discovery failures, not
+// evidence that a model is unsupported, and retain the fail-closed behavior.
+func (r *ollamaManifestReader) read(ctx context.Context, address, userAgent string, target any) (compatible bool, err error) {
+	resp, err := r.request(ctx, address, userAgent)
 	if err != nil {
 		return false, fmt.Errorf("upstream metadata unavailable: %w", err)
+	}
+	if resp.StatusCode == http.StatusUnauthorized && r.token == "" {
+		challenge := resp.Header.Get("WWW-Authenticate")
+		resp.Body.Close()
+		token, err := ollamaRegistryToken(ctx, address, challenge, userAgent)
+		if err != nil {
+			return false, err
+		}
+		r.token = token
+		resp, err = r.request(ctx, address, userAgent)
+		if err != nil {
+			return false, fmt.Errorf("upstream metadata unavailable: %w", err)
+		}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusPreconditionFailed {
@@ -134,6 +171,106 @@ func upstreamReadOllamaManifest(ctx context.Context, address, userAgent string, 
 		return false, err
 	}
 	return true, nil
+}
+
+func upstreamReadOllamaManifest(ctx context.Context, address, userAgent string, target any) (compatible bool, err error) {
+	return (&ollamaManifestReader{}).read(ctx, address, userAgent, target)
+}
+
+// ollamaRegistryToken mirrors the anonymous registry challenge used by the
+// packaged Ollama runtime. The short-lived key remains in memory only; neither
+// it nor the returned token is persisted or exposed through the API.
+func ollamaRegistryToken(ctx context.Context, manifestAddress, challengeHeader, userAgent string) (string, error) {
+	matches := ollamaRegistryChallengeRE.FindStringSubmatch(challengeHeader)
+	if len(matches) != 4 {
+		return "", fmt.Errorf("Ollama registry returned an invalid authentication challenge")
+	}
+	manifestURL, err := url.Parse(manifestAddress)
+	if err != nil {
+		return "", err
+	}
+	tokenURL, err := url.Parse(matches[1])
+	if err != nil {
+		return "", fmt.Errorf("invalid Ollama registry token realm: %w", err)
+	}
+	if tokenURL.Scheme != "https" || tokenURL.Host != manifestURL.Host {
+		return "", fmt.Errorf("Ollama registry token realm must be HTTPS on the manifest host")
+	}
+	query := tokenURL.Query()
+	query.Add("service", matches[2])
+	for _, scope := range strings.Fields(matches[3]) {
+		query.Add("scope", scope)
+	}
+	query.Set("ts", strconv.FormatInt(time.Now().Unix(), 10))
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", fmt.Errorf("generate Ollama registry nonce: %w", err)
+	}
+	query.Set("nonce", base64.RawURLEncoding.EncodeToString(nonce))
+	tokenURL.RawQuery = query.Encode()
+
+	emptySHA := sha256.Sum256(nil)
+	signedData := []byte(fmt.Sprintf("%s,%s,%s", http.MethodGet, tokenURL.String(), base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(emptySHA[:])))))
+	signature, err := ollamaRegistrySignature(signedData)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Authorization", signature)
+	resp, err := upstreamClient().Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Ollama registry token unavailable: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
+	if err != nil {
+		return "", err
+	}
+	if len(body) > 1<<20 {
+		return "", fmt.Errorf("Ollama registry token response exceeds size limit")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Ollama registry token returned HTTP %d", resp.StatusCode)
+	}
+	var response struct {
+		Token       string `json:"token"`
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", err
+	}
+	if response.Token != "" {
+		return response.Token, nil
+	}
+	if response.AccessToken != "" {
+		return response.AccessToken, nil
+	}
+	return "", fmt.Errorf("Ollama registry token response did not include a token")
+}
+
+func ollamaRegistrySignature(data []byte) (string, error) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", fmt.Errorf("generate Ollama registry signing key: %w", err)
+	}
+	publicWire := ollamaSSHWire([]byte("ssh-ed25519"), public)
+	signatureWire := ollamaSSHWire([]byte("ssh-ed25519"), ed25519.Sign(private, data))
+	return base64.StdEncoding.EncodeToString(publicWire) + ":" + base64.StdEncoding.EncodeToString(signatureWire), nil
+}
+
+func ollamaSSHWire(parts ...[]byte) []byte {
+	var out []byte
+	for _, part := range parts {
+		length := make([]byte, 4)
+		binary.BigEndian.PutUint32(length, uint32(len(part)))
+		out = append(out, length...)
+		out = append(out, part...)
+	}
+	return out
 }
 
 func libraryReferences(page string, tags bool, limit int) []string {
@@ -174,6 +311,7 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 		return nil, fmt.Errorf("Ollama library format was not recognized")
 	}
 	var entries []catalogEntry
+	reader := &ollamaManifestReader{}
 	for _, family := range families {
 		if err := upstreamRead(ctx, ollamaLibraryBase()+"/library/"+family+"/tags", &page); err != nil {
 			return nil, err
@@ -187,7 +325,7 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 					MediaType string `json:"mediaType"`
 				} `json:"layers"`
 			}
-			compatible, err := upstreamReadOllamaManifest(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], userAgent, &manifest)
+			compatible, err := reader.read(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], userAgent, &manifest)
 			if err != nil {
 				return nil, err
 			}
