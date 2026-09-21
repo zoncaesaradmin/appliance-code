@@ -124,6 +124,9 @@ func (r *ollamaManifestReader) request(ctx context.Context, address, userAgent s
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
+	// Match Ollama's manifest negotiation. The registry varies its response by
+	// Accept as well as User-Agent, including on its authentication path.
+	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 	if r.token != "" {
 		req.Header.Set("Authorization", "Bearer "+r.token)
 	}

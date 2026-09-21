@@ -231,6 +231,9 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 			if !strings.HasPrefix(r.UserAgent(), "ollama/0.9.0 ") {
 				t.Fatalf("manifest user agent=%q", r.UserAgent())
 			}
+			if r.Header.Get("Accept") != "application/vnd.docker.distribution.manifest.v2+json" {
+				t.Fatalf("manifest accept=%q", r.Header.Get("Accept"))
+			}
 			if r.Header.Get("Authorization") == "" {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="`+server.URL+`/v2/token",service="ollama",scope="repository:library/tiny:pull"`)
 				w.WriteHeader(http.StatusUnauthorized)
