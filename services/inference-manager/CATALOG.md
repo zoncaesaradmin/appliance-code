@@ -78,6 +78,9 @@ and administrator-triggered model downloads in the manager. An offline refresh
 failure retains the previous catalog and never removes installed models.
 
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
+For Ollama candidates, catalog discovery reads the published template layer and
+uses its explicit tool surface to classify a candidate as either chat-only or
+coding-agent before it is downloaded; it never infers the class from a name.
 `GET /internal/v1/models` returns the manager's downloaded inventory (admin).
 For Ollama, that endpoint is backed by `/models/.zon/ollama-inventory.json` on
 the model PVC: startup reads the previous snapshot synchronously, while a

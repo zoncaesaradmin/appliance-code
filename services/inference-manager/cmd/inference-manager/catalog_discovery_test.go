@@ -230,8 +230,11 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 				"layers": []map[string]any{
 					{"size": 1000, "mediaType": "application/vnd.ollama.image.model"},
 					{"size": 50, "mediaType": "application/vnd.ollama.image.params"},
+					{"size": 10, "mediaType": "application/vnd.ollama.image.template", "digest": "sha256:template"},
 				},
 			})
+		case "/v2/library/tiny/blobs/sha256:template":
+			_, _ = w.Write([]byte(`{{- if .Tools }}tools{{ end }}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -243,7 +246,7 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1050 || entries[0].MemoryBytes != 1000*2+(2<<30) {
+	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1060 || entries[0].MemoryBytes != 1000*2+(2<<30) || !entries[0].Capabilities.CodexCompatible || entries[0].Capabilities.Verification != "template-reported" {
 		t.Fatalf("entries=%+v", entries)
 	}
 }

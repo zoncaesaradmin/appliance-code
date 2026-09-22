@@ -24,6 +24,14 @@ var libraryLink = regexp.MustCompile(`href="/library/([a-zA-Z0-9._:-]+)"`)
 var sha1RE = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var ollamaVersionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
 
+// ollamaManifestLayer is deliberately limited to the public manifest fields
+// needed for catalog sizing and tool-capability discovery.
+type ollamaManifestLayer struct {
+	Size      uint64 `json:"size"`
+	MediaType string `json:"mediaType"`
+	Digest    string `json:"digest"`
+}
+
 // upstreamTransport is overridden in unit tests so discovery runs against a
 // local TLS fixture instead of the public internet.
 var upstreamTransport http.RoundTripper
@@ -131,10 +139,7 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 		for _, ref := range refs {
 			parts := strings.SplitN(ref, ":", 2)
 			var manifest struct {
-				Layers []struct {
-					Size      uint64 `json:"size"`
-					MediaType string `json:"mediaType"`
-				} `json:"layers"`
+				Layers []ollamaManifestLayer `json:"layers"`
 			}
 			if err := upstreamRead(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], &manifest); err != nil {
 				return nil, err
@@ -149,10 +154,38 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 			if weights == 0 || weights > 1<<40 || total > 1<<40 {
 				continue
 			}
-			entries = append(entries, catalogEntry{ID: ref, Source: ref, DownloadBytes: total, MemoryBytes: weights*2 + (2 << 30)})
+			entries = append(entries, catalogEntry{
+				ID:            ref,
+				Source:        ref,
+				DownloadBytes: total,
+				MemoryBytes:   weights*2 + (2 << 30),
+				Capabilities:  ollamaCatalogCapabilities(ctx, parts[0], manifest.Layers),
+			})
 		}
 	}
 	return entries, nil
+}
+
+// ollamaCatalogCapabilities reads the model's published template layer. The
+// library index alone does not state whether a candidate supports tools, and
+// treating an unknown candidate as a chat-only model made every catalog option
+// look like a Chat assistant. This uses the same template signal as the local
+// /api/show compatibility fallback, without guessing from the model name.
+func ollamaCatalogCapabilities(ctx context.Context, repository string, layers []ollamaManifestLayer) modelCapabilities {
+	for _, layer := range layers {
+		if layer.MediaType != "application/vnd.ollama.image.template" || layer.Digest == "" {
+			continue
+		}
+		var template string
+		address := ollamaRegistryBase() + "/v2/library/" + repository + "/blobs/" + layer.Digest
+		if err := upstreamRead(ctx, address, &template); err != nil {
+			// The candidate remains visible, but it must not be promoted to a
+			// coding agent without a runtime or template declaration.
+			return chatCapabilities()
+		}
+		return ollamaCapabilities(nil, template)
+	}
+	return chatCapabilities()
 }
 
 func pythonOutput(ctx context.Context, timeout time.Duration, stdin string, args ...string) ([]byte, error) {

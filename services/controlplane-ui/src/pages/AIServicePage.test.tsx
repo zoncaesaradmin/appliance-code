@@ -71,7 +71,20 @@ beforeEach(() => {
     refreshing: false,
     scope: "Popular models",
     items: [
-      { id: "available:1b", source: "available:1b", downloadBytes: 100, memoryBytes: 200, eligible: true },
+      {
+        id: "available:1b",
+        source: "available:1b",
+        downloadBytes: 100,
+        memoryBytes: 200,
+        eligible: true,
+        capabilities: {
+          experiences: ["chat", "coding-agent"],
+          toolCalling: true,
+          responsesCompatible: true,
+          codexCompatible: true,
+          verification: "template-reported"
+        }
+      },
       { id: "too-large:100b", source: "too-large:100b", downloadBytes: 1000, memoryBytes: 2000, eligible: false }
     ]
   });
@@ -132,7 +145,7 @@ it("separates downloaded inventory from enabled model instances", async () => {
   const labels = [...select!.options].map((option) => option.textContent);
   expect(labels).toContain("retired:1b (Chat assistant · downloaded · enabled)");
   expect(labels).toContain("stored:2b (Chat assistant · downloaded)");
-  expect(labels).toContain("available:1b (Chat assistant)");
+  expect(labels).toContain("available:1b (Coding agent)");
   expect(labels.some((label) => label?.includes("too-large:100b"))).toBe(false);
   await act(async () => {
     select!.value = "available:1b";
@@ -191,7 +204,7 @@ it("clears a stale downloaded-models refresh error after a successful post-downl
   expect(element.textContent).not.toContain("Could not refresh downloaded models");
   expect(element.textContent).toContain("available:1b downloaded");
   expect([...element.querySelectorAll("option")].map((option) => option.textContent)).toContain(
-    "available:1b (Chat assistant · downloaded)"
+    "available:1b (Coding agent · downloaded)"
   );
 });
 
