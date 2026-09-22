@@ -56,6 +56,25 @@ func chatCapabilities() modelCapabilities {
 	return modelCapabilities{Experiences: []string{"chat"}, Verification: "chat-only"}
 }
 
+// ollamaCapabilities reflects the runtime's per-model declaration from
+// /api/show. Ollama is not intrinsically chat-only: a model that advertises
+// tools can be used by an agent client through the appliance Responses proxy.
+// A failed discovery remains chat-only rather than guessing from a model name.
+func ollamaCapabilities(capabilities []string) modelCapabilities {
+	for _, capability := range capabilities {
+		if strings.EqualFold(strings.TrimSpace(capability), "tools") {
+			return modelCapabilities{
+				Experiences:         []string{"chat", "coding-agent"},
+				ToolCalling:         true,
+				ResponsesCompatible: true,
+				CodexCompatible:     true,
+				Verification:        "runtime-reported",
+			}
+		}
+	}
+	return chatCapabilities()
+}
+
 func configuredAgentCapabilities(engine string, arguments []string) modelCapabilities {
 	if engine != "vllm" || !hasVLLMToolCalling(arguments) {
 		return chatCapabilities()
@@ -1008,7 +1027,16 @@ func (m *manager) listOllamaModels(w http.ResponseWriter) {
 	}
 	items := make([]map[string]any, 0, len(response.Models))
 	for _, item := range response.Models {
-		items = append(items, map[string]any{"id": item.Name, "object": "model", "ownedBy": "ollama", "owned_by": "ollama", "capabilities": chatCapabilities()})
+		var details struct {
+			Capabilities []string `json:"capabilities"`
+		}
+		capabilities := chatCapabilities()
+		if err := m.callBackend(context.Background(), http.MethodPost, "/api/show", map[string]any{"name": item.Name}, &details); err != nil {
+			log.Printf("ollama model capability discovery model=%q failed: %v", item.Name, err)
+		} else {
+			capabilities = ollamaCapabilities(details.Capabilities)
+		}
+		items = append(items, map[string]any{"id": item.Name, "object": "model", "ownedBy": "ollama", "owned_by": "ollama", "capabilities": capabilities})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": items})
 }

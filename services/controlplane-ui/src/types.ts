@@ -558,7 +558,7 @@ export interface InferenceModelCapabilities {
   toolCalling: boolean;
   responsesCompatible: boolean;
   codexCompatible: boolean;
-  verification: "chat-only" | "configured" | "verified";
+  verification: "chat-only" | "configured" | "runtime-reported" | "verified";
 }
 
 export interface ImportInferenceModelRequest {

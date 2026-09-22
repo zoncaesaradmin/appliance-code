@@ -196,6 +196,10 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "tiny:latest"}}})
 			return
 		}
+		if r.URL.Path == "/api/show" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"completion", "tools"}})
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer backend.Close()
@@ -211,12 +215,18 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 	waitImportState(t, m, "complete")
 	w = httptest.NewRecorder()
 	m.listModels(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models", nil))
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tiny:latest") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tiny:latest") || !strings.Contains(w.Body.String(), `"codexCompatible":true`) {
 		t.Fatalf("list status %d: %s", w.Code, w.Body.String())
 	}
 	joined := strings.Join(calls, ",")
-	if !strings.Contains(joined, "POST /api/pull") || !strings.Contains(joined, "GET /api/tags") {
+	if !strings.Contains(joined, "POST /api/pull") || !strings.Contains(joined, "GET /api/tags") || !strings.Contains(joined, "POST /api/show") {
 		t.Fatalf("engine calls=%v", calls)
+	}
+}
+
+func TestOllamaModelWithoutToolsIsChatOnly(t *testing.T) {
+	if got := ollamaCapabilities([]string{"completion", "thinking"}); got.CodexCompatible || got.ToolCalling || !reflect.DeepEqual(got.Experiences, []string{"chat"}) {
+		t.Fatalf("unexpected Ollama chat capabilities: %#v", got)
 	}
 }
 

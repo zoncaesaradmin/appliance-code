@@ -2688,7 +2688,7 @@ components:
         codexCompatible: { type: boolean }
         verification:
           type: string
-          enum: [chat-only, configured, verified]
+          enum: [chat-only, configured, runtime-reported, verified]
     InferenceCatalog:
       type: object
       required: [engine, lastAttempt, lastSuccess, refreshing, stale, scope, items]
