@@ -550,6 +550,15 @@ export interface InferenceModel {
   digest?: string;
   launchArguments?: string[];
   details?: Record<string, unknown>;
+	capabilities?: InferenceModelCapabilities;
+}
+
+export interface InferenceModelCapabilities {
+  experiences: Array<"chat" | "coding-agent">;
+  toolCalling: boolean;
+  responsesCompatible: boolean;
+  codexCompatible: boolean;
+  verification: "chat-only" | "configured" | "verified";
 }
 
 export interface ImportInferenceModelRequest {
@@ -591,6 +600,7 @@ export interface InferenceCatalogEntry {
   eligible: boolean;
   reason?: string;
   launchArguments?: string[];
+	capabilities?: InferenceModelCapabilities;
 }
 
 export interface InferenceCatalog {

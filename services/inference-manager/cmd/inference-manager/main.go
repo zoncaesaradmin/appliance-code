@@ -29,15 +29,57 @@ import (
 var modelRefRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/@:-]{0,511}$`)
 
 type model struct {
-	ID              string    `json:"id"`
-	Object          string    `json:"object"`
-	OwnedBy         string    `json:"ownedBy"`
-	OpenAIOwnedBy   string    `json:"owned_by"`
-	Source          string    `json:"source"`
-	Digest          string    `json:"digest"`
-	Path            string    `json:"path"`
-	InstalledAt     time.Time `json:"installedAt"`
-	LaunchArguments []string  `json:"launchArguments,omitempty"`
+	ID              string            `json:"id"`
+	Object          string            `json:"object"`
+	OwnedBy         string            `json:"ownedBy"`
+	OpenAIOwnedBy   string            `json:"owned_by"`
+	Source          string            `json:"source"`
+	Digest          string            `json:"digest"`
+	Path            string            `json:"path"`
+	InstalledAt     time.Time         `json:"installedAt"`
+	LaunchArguments []string          `json:"launchArguments,omitempty"`
+	Capabilities    modelCapabilities `json:"capabilities"`
+}
+
+// modelCapabilities is an appliance assertion, not a claim inferred from a
+// model name. A model must be explicitly imported with a compatible runtime
+// profile before it is offered to agent clients.
+type modelCapabilities struct {
+	Experiences         []string `json:"experiences"`
+	ToolCalling         bool     `json:"toolCalling"`
+	ResponsesCompatible bool     `json:"responsesCompatible"`
+	CodexCompatible     bool     `json:"codexCompatible"`
+	Verification        string   `json:"verification"`
+}
+
+func chatCapabilities() modelCapabilities {
+	return modelCapabilities{Experiences: []string{"chat"}, Verification: "chat-only"}
+}
+
+func configuredAgentCapabilities(engine string, arguments []string) modelCapabilities {
+	if engine != "vllm" || !hasVLLMToolCalling(arguments) {
+		return chatCapabilities()
+	}
+	return modelCapabilities{
+		Experiences:         []string{"chat", "coding-agent"},
+		ToolCalling:         true,
+		ResponsesCompatible: true,
+		CodexCompatible:     true,
+		Verification:        "configured",
+	}
+}
+
+func hasVLLMToolCalling(arguments []string) bool {
+	hasAuto, hasParser := false, false
+	for i := 0; i < len(arguments); i++ {
+		switch strings.TrimSpace(arguments[i]) {
+		case "--enable-auto-tool-choice":
+			hasAuto = true
+		case "--tool-call-parser":
+			hasParser = i+1 < len(arguments) && strings.TrimSpace(arguments[i+1]) != ""
+		}
+	}
+	return hasAuto && hasParser
 }
 
 type registry struct {
@@ -73,6 +115,7 @@ type importRequest struct {
 	LaunchArguments []string
 	CatalogID       string
 	BytesTotal      uint64
+	Capabilities    modelCapabilities
 }
 
 func main() {
@@ -366,6 +409,9 @@ func (m *manager) listModels(w http.ResponseWriter, _ *http.Request) {
 	items := make([]model, 0, len(m.reg.Models))
 	for _, item := range m.reg.Models {
 		item.Path = ""
+		if len(item.Capabilities.Experiences) == 0 {
+			item.Capabilities = configuredAgentCapabilities(m.engine, item.LaunchArguments)
+		}
 		items = append(items, item)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
@@ -413,6 +459,7 @@ func (m *manager) importModel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		job.LaunchArguments = append([]string(nil), entry.LaunchArguments...)
+		job.Capabilities = entry.Capabilities
 		job.BytesTotal = entry.DownloadBytes
 	}
 	m.mu.RLock()
@@ -500,7 +547,11 @@ func (m *manager) runVLLMImport(ctx context.Context, req importRequest) {
 		m.finishImportProgress("failed", "install model: "+err.Error())
 		return
 	}
-	item := model{ID: req.ModelID, Object: "model", OwnedBy: "appliance", OpenAIOwnedBy: "appliance", Source: req.Source, Digest: digest, Path: destination, InstalledAt: time.Now().UTC(), LaunchArguments: append([]string(nil), req.LaunchArguments...)}
+	capabilities := req.Capabilities
+	if len(capabilities.Experiences) == 0 {
+		capabilities = configuredAgentCapabilities(m.engine, req.LaunchArguments)
+	}
+	item := model{ID: req.ModelID, Object: "model", OwnedBy: "appliance", OpenAIOwnedBy: "appliance", Source: req.Source, Digest: digest, Path: destination, InstalledAt: time.Now().UTC(), LaunchArguments: append([]string(nil), req.LaunchArguments...), Capabilities: capabilities}
 	m.reg.Models[item.ID] = item
 	if err := m.saveRegistry(); err != nil {
 		delete(m.reg.Models, item.ID)
@@ -957,7 +1008,7 @@ func (m *manager) listOllamaModels(w http.ResponseWriter) {
 	}
 	items := make([]map[string]any, 0, len(response.Models))
 	for _, item := range response.Models {
-		items = append(items, map[string]any{"id": item.Name, "object": "model", "ownedBy": "ollama", "owned_by": "ollama"})
+		items = append(items, map[string]any{"id": item.Name, "object": "model", "ownedBy": "ollama", "owned_by": "ollama", "capabilities": chatCapabilities()})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": items})
 }

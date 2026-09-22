@@ -2672,6 +2672,23 @@ components:
         details:
           type: object
           additionalProperties: true
+        capabilities:
+          $ref: "#/components/schemas/InferenceModelCapabilities"
+    InferenceModelCapabilities:
+      type: object
+      required: [experiences, toolCalling, responsesCompatible, codexCompatible, verification]
+      properties:
+        experiences:
+          type: array
+          items:
+            type: string
+            enum: [chat, coding-agent]
+        toolCalling: { type: boolean }
+        responsesCompatible: { type: boolean }
+        codexCompatible: { type: boolean }
+        verification:
+          type: string
+          enum: [chat-only, configured, verified]
     InferenceCatalog:
       type: object
       required: [engine, lastAttempt, lastSuccess, refreshing, stale, scope, items]

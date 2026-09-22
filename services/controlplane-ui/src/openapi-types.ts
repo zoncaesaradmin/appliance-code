@@ -1750,6 +1750,15 @@ export interface components {
             details?: {
                 [key: string]: unknown;
             };
+            capabilities?: components["schemas"]["InferenceModelCapabilities"];
+        };
+        InferenceModelCapabilities: {
+            experiences: ("chat" | "coding-agent")[];
+            toolCalling: boolean;
+            responsesCompatible: boolean;
+            codexCompatible: boolean;
+            /** @enum {string} */
+            verification: "chat-only" | "configured" | "verified";
         };
         InferenceCatalog: {
             engine: string;

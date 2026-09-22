@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -246,6 +247,35 @@ func TestImportListDelete(t *testing.T) {
 	m.deleteModel(w, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete status %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestConfiguredToolCallingModelIsAdvertisedAsCodingAgent(t *testing.T) {
+	m := testManager(t)
+	m.engine = "vllm"
+	m.reg.Models["qwen-coder"] = model{
+		ID: "qwen-coder",
+		LaunchArguments: []string{
+			"--enable-auto-tool-choice",
+			"--tool-call-parser", "qwen3_coder",
+		},
+	}
+	w := httptest.NewRecorder()
+	m.listModels(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status %d: %s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Data []model `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Data) != 1 || !response.Data[0].Capabilities.CodexCompatible {
+		t.Fatalf("expected Codex-compatible model, got %#v", response.Data)
+	}
+	if got := response.Data[0].Capabilities.Experiences; !reflect.DeepEqual(got, []string{"chat", "coding-agent"}) {
+		t.Fatalf("experiences = %#v", got)
 	}
 }
 

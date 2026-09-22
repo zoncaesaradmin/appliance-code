@@ -78,13 +78,22 @@ type ServingInstance struct {
 }
 
 type Model struct {
-	ID              string         `json:"id"`
-	Object          string         `json:"object,omitempty"`
-	OwnedBy         string         `json:"ownedBy,omitempty"`
-	Source          string         `json:"source,omitempty"`
-	Digest          string         `json:"digest,omitempty"`
-	LaunchArguments []string       `json:"launchArguments,omitempty"`
-	Details         map[string]any `json:"details,omitempty"`
+	ID              string            `json:"id"`
+	Object          string            `json:"object,omitempty"`
+	OwnedBy         string            `json:"ownedBy,omitempty"`
+	Source          string            `json:"source,omitempty"`
+	Digest          string            `json:"digest,omitempty"`
+	LaunchArguments []string          `json:"launchArguments,omitempty"`
+	Details         map[string]any    `json:"details,omitempty"`
+	Capabilities    ModelCapabilities `json:"capabilities"`
+}
+
+type ModelCapabilities struct {
+	Experiences         []string `json:"experiences"`
+	ToolCalling         bool     `json:"toolCalling"`
+	ResponsesCompatible bool     `json:"responsesCompatible"`
+	CodexCompatible     bool     `json:"codexCompatible"`
+	Verification        string   `json:"verification"`
 }
 
 type ImportRequest struct {

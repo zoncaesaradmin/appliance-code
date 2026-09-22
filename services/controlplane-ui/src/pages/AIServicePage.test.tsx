@@ -130,9 +130,9 @@ it("separates downloaded inventory from enabled model instances", async () => {
   expect(element.querySelector("input")).toBeNull();
   expect(element.querySelector("textarea")).toBeNull();
   const labels = [...select!.options].map((option) => option.textContent);
-  expect(labels).toContain("retired:1b (downloaded · enabled)");
-  expect(labels).toContain("stored:2b (downloaded)");
-  expect(labels).toContain("available:1b");
+  expect(labels).toContain("retired:1b (Chat assistant · downloaded · enabled)");
+  expect(labels).toContain("stored:2b (Chat assistant · downloaded)");
+  expect(labels).toContain("available:1b (Chat assistant)");
   expect(labels.some((label) => label?.includes("too-large:100b"))).toBe(false);
   await act(async () => {
     select!.value = "available:1b";
@@ -154,7 +154,7 @@ it("keeps downloaded models in the dropdown when catalog discovery fails", async
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Model discovery is unavailable");
   const select = element.querySelector("select");
-  expect([...select!.options].map((option) => option.textContent)).toContain("retired:1b (downloaded)");
+  expect([...select!.options].map((option) => option.textContent)).toContain("retired:1b (Chat assistant · downloaded)");
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Enable")).toBe(true);
 });
 
@@ -191,7 +191,7 @@ it("clears a stale downloaded-models refresh error after a successful post-downl
   expect(element.textContent).not.toContain("Could not refresh downloaded models");
   expect(element.textContent).toContain("available:1b downloaded");
   expect([...element.querySelectorAll("option")].map((option) => option.textContent)).toContain(
-    "available:1b (downloaded)"
+    "available:1b (Chat assistant · downloaded)"
   );
 });
 
@@ -270,7 +270,11 @@ it("sorts the model dropdown by estimated parameters descending", async () => {
   api.listInferenceModels.mockResolvedValue([]);
   await act(async () => root.render(<AIServicePage />));
   const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
-  expect(labels).toEqual(["org/large-7B", "org/mid-3B", "org/tiny-0.5B"]);
+  expect(labels).toEqual([
+    "org/large-7B (Chat assistant)",
+    "org/mid-3B (Chat assistant)",
+    "org/tiny-0.5B (Chat assistant)"
+  ]);
   expect(api.getInferenceCatalog).toHaveBeenCalledWith({ sort: "parameters", order: "desc" });
 });
 
@@ -287,7 +291,17 @@ it("shows serving ready-for-use and disables Enable when the selected model is a
     maxModelLen: 1024
   });
   api.listInferenceModels.mockResolvedValue([
-    { id: "retired:1b", launchArguments: ["--max-model-len", "32768"] }
+    {
+      id: "retired:1b",
+      launchArguments: ["--max-model-len", "32768"],
+      capabilities: {
+        experiences: ["chat", "coding-agent"],
+        toolCalling: true,
+        responsesCompatible: true,
+        codexCompatible: true,
+        verification: "verified"
+      }
+    }
   ]);
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Ready for use (retired:1b)");
@@ -310,6 +324,33 @@ it("shows serving ready-for-use and disables Enable when the selected model is a
   expect(element.textContent).toContain("model_context_window = 1024");
   expect(element.textContent).not.toContain("model_context_window = 32768");
   expect(element.textContent).toContain("zon_model_catalog.json");
+});
+
+it("keeps Codex settings unavailable for a chat-only enabled model", async () => {
+  api.getInferenceStatus.mockResolvedValue({
+    engine: "ollama",
+    architecture: "amd64",
+    acceleration: "standard",
+    ready: true,
+    servingState: "ready",
+    loadedModelId: "deepseek-r1:14b",
+    instances: [{ id: "default", models: ["deepseek-r1:14b"], replicas: 1 }]
+  });
+  api.listInferenceModels.mockResolvedValue([
+    {
+      id: "deepseek-r1:14b",
+      capabilities: {
+        experiences: ["chat"],
+        toolCalling: false,
+        responsesCompatible: false,
+        codexCompatible: false,
+        verification: "chat-only"
+      }
+    }
+  ]);
+  await act(async () => root.render(<AIServicePage />));
+  expect(element.textContent).toContain("available for chat only");
+  expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Copy OpenAI client settings")).toBe(false);
 });
 
 it("builds OpenAI client settings from the ready model", () => {

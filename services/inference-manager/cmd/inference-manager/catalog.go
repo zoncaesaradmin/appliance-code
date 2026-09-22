@@ -17,16 +17,17 @@ import (
 const catalogInterval = 24 * time.Hour
 
 type catalogEntry struct {
-	ID                string   `json:"id"`
-	Source            string   `json:"source"`
-	DownloadBytes     uint64   `json:"downloadBytes"`
-	MemoryBytes       uint64   `json:"memoryBytes"`
-	RequiredBytes     uint64   `json:"requiredBytes"`
-	ModelContextLimit uint64   `json:"modelContextLimit,omitempty"`
-	KVBytesPerToken   uint64   `json:"kvBytesPerToken,omitempty"`
-	LaunchArguments   []string `json:"launchArguments,omitempty"`
-	Eligible          bool     `json:"eligible"`
-	Reason            string   `json:"reason,omitempty"`
+	ID                string            `json:"id"`
+	Source            string            `json:"source"`
+	DownloadBytes     uint64            `json:"downloadBytes"`
+	MemoryBytes       uint64            `json:"memoryBytes"`
+	RequiredBytes     uint64            `json:"requiredBytes"`
+	ModelContextLimit uint64            `json:"modelContextLimit,omitempty"`
+	KVBytesPerToken   uint64            `json:"kvBytesPerToken,omitempty"`
+	LaunchArguments   []string          `json:"launchArguments,omitempty"`
+	Eligible          bool              `json:"eligible"`
+	Reason            string            `json:"reason,omitempty"`
+	Capabilities      modelCapabilities `json:"capabilities"`
 }
 
 type catalogState struct {

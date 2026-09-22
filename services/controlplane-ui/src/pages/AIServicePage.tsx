@@ -8,12 +8,29 @@ import type {
   InferenceImportProgress,
   InferenceLoadProgress,
   InferenceModel,
+  InferenceModelCapabilities,
   InferenceRuntimeStatus
 } from "../types";
 
 const PARAM_HINT = /(\d+(?:\.\d+)?)\s*([MmBb])(?:[-_]|\b)/;
 const MODELS_REFRESH_ERROR = "Could not refresh downloaded models. Displayed download status may be outdated.";
 const IMPORT_POLL_MS = 2000;
+
+const CHAT_ONLY_CAPABILITIES: InferenceModelCapabilities = {
+  experiences: ["chat"],
+  toolCalling: false,
+  responsesCompatible: false,
+  codexCompatible: false,
+  verification: "chat-only"
+};
+
+function capabilitiesFor(model?: InferenceModel, entry?: InferenceCatalogEntry): InferenceModelCapabilities {
+  return model?.capabilities ?? entry?.capabilities ?? CHAT_ONLY_CAPABILITIES;
+}
+
+function experienceLabel(capabilities: InferenceModelCapabilities): string {
+  return capabilities.codexCompatible ? "Coding agent" : "Chat assistant";
+}
 
 function formatGiB(bytes: number): string {
   if (bytes <= 0) {
@@ -580,6 +597,8 @@ export function AIServicePage(): React.JSX.Element {
   }, [options, selectedId]);
 
   const selected = options.find((entry) => entry.id === selectedId) ?? null;
+	const selectedModel = selected ? models.find((model) => model.id === selected.id) : undefined;
+	const selectedCapabilities = capabilitiesFor(selectedModel, selected ?? undefined);
   const selectedDownloaded = selected ? downloaded.has(selected.id) : false;
   const selectedSummary = selected ? modelCapacitySummary(selected) : "";
   const showProgress = importInFlight(importProgress?.state);
@@ -630,8 +649,10 @@ export function AIServicePage(): React.JSX.Element {
     const fromCatalog = catalog?.items?.find((entry) => entry.id === readyModelId);
     return contextWindowFromLaunchArguments(fromCatalog?.launchArguments);
   }, [catalog?.items, models, readyModelId, status?.loadedModelId, status?.maxModelLen, status?.servingState]);
+  const readyModel = models.find((model) => model.id === readyModelId);
+  const readyCapabilities = capabilitiesFor(readyModel);
   const clientSettings =
-    readyModelId && clientOrigin
+    readyModelId && clientOrigin && readyCapabilities.codexCompatible
       ? buildOpenAIClientSettings({
           origin: clientOrigin,
           modelId: readyModelId,
@@ -710,7 +731,9 @@ export function AIServicePage(): React.JSX.Element {
                         >
                           <strong>{model.id}</strong>
                           <span className={enabledModelIDs.has(model.id) ? "pill pill--navy" : "pill"}>
-                            {enabledModelIDs.has(model.id) ? "Downloaded · enabled" : "Downloaded"}
+                            {enabledModelIDs.has(model.id)
+                              ? `Downloaded · enabled · ${experienceLabel(capabilitiesFor(model))}`
+                              : `Downloaded · ${experienceLabel(capabilitiesFor(model))}`}
                           </span>
                         </button>
                       ))}
@@ -730,11 +753,9 @@ export function AIServicePage(): React.JSX.Element {
                   >
                     {options.map((entry) => (
                       <option key={entry.id} value={entry.id}>
-                        {enabledModelIDs.has(entry.id)
-                          ? `${entry.id} (downloaded · enabled)`
-                          : downloaded.has(entry.id)
-                            ? `${entry.id} (downloaded)`
-                            : entry.id}
+                        {`${entry.id} (${experienceLabel(capabilitiesFor(models.find((model) => model.id === entry.id), entry))}${
+                          enabledModelIDs.has(entry.id) ? " · downloaded · enabled" : downloaded.has(entry.id) ? " · downloaded" : ""
+                        })`}
                       </option>
                     ))}
                   </select>
@@ -744,6 +765,11 @@ export function AIServicePage(): React.JSX.Element {
                     <p className="text-sm text-slate-600" role="status" aria-live="polite">
                       {selectedSummary}
                     </p>
+							<p className="text-sm text-slate-600" role="status">
+								{selectedCapabilities.codexCompatible
+									? "Coding agent: workspace tools and Codex-compatible client settings are available after this model is enabled."
+									: "Chat assistant: this model can answer questions but is not configured for workspace tools or Codex."}
+							</p>
                     {showProgress && importProgress ? (
                       <div className="import-progress" role="status" aria-live="polite">
                         <div className="import-progress__label">{progressLabel(importProgress)}</div>
@@ -872,6 +898,11 @@ export function AIServicePage(): React.JSX.Element {
                     </Button>
                   </div>
                 ) : null}
+				{readyModelId && !readyCapabilities.codexCompatible ? (
+				  <p className="text-sm text-slate-600">
+					This enabled model is available for chat only. Codex settings are hidden because its runtime profile has not been configured for tool calling.
+				  </p>
+				) : null}
               </div>
             ) : (
               <EmptyState message="Inference runtime status is unavailable." />

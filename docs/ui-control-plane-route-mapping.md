@@ -36,7 +36,7 @@ model.
 | `GET /api/v1/inference/status` | `getInferenceStatus` | Runtime availability, legacy `servingState`/`loadedModelId`, and desired serving `instances` |
 | `GET /api/v1/appliance/identity` | `getIdentity` | Canonical origin rewritten to `<appliance-name>.local` for the OpenAI base URL in Copy client settings |
 | `GET /api/v1/inference/models/catalog?sort=parameters&order=desc` | `getInferenceCatalog` | Cached candidates ordered by estimated parameter scale (default); also supports `sort=memory|name` and `order=asc|desc`. `runtimeVersion` identifies the packaged runtime associated with the cached catalog. |
-| `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory |
+| `GET /api/v1/inference/models` | `listInferenceModels` | Actual downloaded inventory, including appliance-declared experiences and client compatibility; the UI uses these values to distinguish chat-only from coding-agent models and only offers Codex settings for compatible models. |
 | `POST /api/v1/inference/models/imports` | `importInferenceModel` | Accept download job immediately (202); work continues on the inference manager |
 | `GET /api/v1/inference/models/imports/progress` | `getInferenceImportProgress` | Bytes/state for the active or most recent import; polled about every 2 seconds while downloading |
 | `POST /api/v1/inference/models/load` | `loadInferenceModel` | Accept load job immediately (202); engine warmup continues asynchronously |
