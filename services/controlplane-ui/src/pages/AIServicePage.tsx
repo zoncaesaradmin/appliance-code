@@ -29,6 +29,7 @@ function capabilitiesFor(model?: InferenceModel, entry?: InferenceCatalogEntry):
 }
 
 function experienceLabel(capabilities: InferenceModelCapabilities): string {
+  if (capabilities.verification === "unverified") return "Capability unverified";
   return capabilities.codexCompatible ? "Coding agent" : "Chat assistant";
 }
 
@@ -784,9 +785,11 @@ export function AIServicePage(): React.JSX.Element {
                       {selectedSummary}
                     </p>
 							<p className="text-sm text-slate-600" role="status">
-								{selectedCapabilities.codexCompatible
-									? "Coding agent: workspace tools and Codex-compatible client settings are available after this model is enabled."
-									: "Chat assistant: this model can answer questions but is not configured for workspace tools or Codex."}
+								{selectedCapabilities.verification === "unverified"
+									? "Capability unverified: registry metadata was unavailable. Download the model to check its tool support with the local runtime."
+									: selectedCapabilities.codexCompatible
+										? "Coding agent: workspace tools and Codex-compatible client settings are available after this model is enabled."
+										: "Chat assistant: this model can answer questions but is not configured for workspace tools or Codex."}
 							</p>
                     {showProgress && importProgress ? (
                       <div className="import-progress" role="status" aria-live="polite">

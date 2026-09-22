@@ -171,6 +171,34 @@ it("keeps downloaded models in the dropdown when catalog discovery fails", async
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Enable")).toBe(true);
 });
 
+it("does not mislabel a candidate when registry capability metadata is unavailable", async () => {
+  api.listInferenceModels.mockResolvedValue([]);
+  api.getInferenceCatalog.mockResolvedValue({
+    lastSuccess: "2026-09-15T00:00:00Z",
+    stale: true,
+    refreshing: false,
+    scope: "Popular models",
+    items: [{
+      id: "qwen2.5-coder:1.5b",
+      source: "qwen2.5-coder:1.5b",
+      downloadBytes: 100,
+      memoryBytes: 200,
+      eligible: true,
+      capabilities: {
+        experiences: ["chat"],
+        toolCalling: false,
+        responsesCompatible: false,
+        codexCompatible: false,
+        verification: "unverified"
+      }
+    }]
+  });
+  await act(async () => root.render(<AIServicePage />));
+  const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
+  expect(labels).toContain("qwen2.5-coder:1.5b (Capability unverified)");
+  expect(element.textContent).toContain("Download the model to check its tool support");
+});
+
 it("explains when catalog items exist but none are eligible", async () => {
   api.listInferenceModels.mockResolvedValue([]);
   api.getInferenceCatalog.mockResolvedValue({

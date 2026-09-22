@@ -16,6 +16,7 @@ import (
 
 const (
 	catalogInterval      = 24 * time.Hour
+	catalogRetryInterval = 15 * time.Minute
 	catalogSchemaVersion = 3 // v3 requires template blobs to be followed through Ollama's signed R2 redirect.
 )
 
@@ -66,10 +67,20 @@ func newModelCatalog(m *manager) *modelCatalog {
 	c.state = catalogState{SchemaVersion: catalogSchemaVersion, Engine: m.engine, RuntimeVersion: runtimeVersion, Items: []catalogEntry{}, Scope: "Popular upstream models; conservative estimates, load verification required"}
 	if b, err := os.ReadFile(c.path); err == nil {
 		var saved catalogState
-		if json.Unmarshal(b, &saved) == nil && saved.SchemaVersion == catalogSchemaVersion && saved.Engine == m.engine && saved.RuntimeVersion == runtimeVersion {
+		if json.Unmarshal(b, &saved) == nil && (saved.SchemaVersion == catalogSchemaVersion || saved.SchemaVersion == 2) && saved.Engine == m.engine && saved.RuntimeVersion == runtimeVersion {
+			migrated := saved.SchemaVersion == 2
+			// The previous schema contains usable candidates and size estimates.
+			// Preserve them across an offline upgrade, but do not present its
+			// unverified Ollama capability labels as authoritative.
+			if saved.SchemaVersion == 2 && m.engine == "ollama" {
+				for i := range saved.Items {
+					saved.Items[i].Capabilities = unknownCapabilities()
+				}
+			}
+			saved.SchemaVersion = catalogSchemaVersion
 			c.state = saved
 			c.state.Refreshing = false
-			c.retryEmptyOnStart = (saved.LastSuccess.IsZero() || len(saved.Items) == 0) && saved.LastError != ""
+			c.retryEmptyOnStart = migrated || ((saved.LastSuccess.IsZero() || len(saved.Items) == 0) && saved.LastError != "")
 		}
 	}
 	c.discover = m.discoverModels
@@ -91,12 +102,14 @@ func (m *manager) catalogRuntimeVersion() string {
 func (c *modelCatalog) nextRefreshDelay() time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Successful catalogs (or retained good ones) keep the daily schedule so
-	// restarts do not hammer upstream. A never-successful / empty failed
-	// catalog must retry on the next start; otherwise a one-time probe bug
-	// hides behind a 24h lock after the fix is deployed.
+	// Successful catalogs keep the daily schedule. Partial or failed attempts
+	// retry after a bounded delay. A migrated or never-successful empty catalog
+	// gets one immediate retry on process start.
 	if c.retryEmptyOnStart {
 		return 0
+	}
+	if c.state.LastError != "" {
+		return time.Until(c.state.LastAttempt.Add(catalogRetryInterval))
 	}
 	return time.Until(c.state.LastAttempt.Add(catalogInterval))
 }
@@ -139,7 +152,29 @@ func (c *modelCatalog) refresh(ctx context.Context) {
 	if err == nil && len(items) == 0 {
 		err = errors.New("upstream discovery returned no compatible candidates")
 	}
-	if err != nil {
+	if err != nil && len(items) > 0 {
+		// A temporary failure for one Ollama family or manifest must not hide
+		// every candidate. Retain prior entries for missing ids, publish fresh
+		// results, and keep the catalog stale so it retries soon.
+		merged := make(map[string]catalogEntry, len(c.state.Items)+len(items))
+		for _, item := range c.state.Items {
+			merged[item.ID] = item
+		}
+		for _, item := range items {
+			if old, ok := merged[item.ID]; ok && item.Capabilities.Verification == "unverified" && old.Capabilities.Verification != "unverified" {
+				item.Capabilities = old.Capabilities
+			}
+			merged[item.ID] = item
+		}
+		c.state.Items = make([]catalogEntry, 0, len(merged))
+		for _, item := range merged {
+			c.state.Items = append(c.state.Items, item)
+		}
+		sort.Slice(c.state.Items, func(i, j int) bool { return c.state.Items[i].ID < c.state.Items[j].ID })
+		c.state.LastSuccess = time.Now().UTC()
+		c.state.LastError = "Catalog partially refreshed; retry scheduled. " + err.Error()
+		log.Printf("model catalog refresh engine=%s partially succeeded candidates=%d: %v", c.m.engine, len(c.state.Items), err)
+	} else if err != nil {
 		c.state.LastError = "Catalog refresh failed; retaining the previous catalog. " + err.Error()
 		log.Printf("model catalog refresh engine=%s failed: %v", c.m.engine, err)
 	} else {

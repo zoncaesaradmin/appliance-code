@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -145,40 +147,99 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 	if len(families) == 0 {
 		return nil, fmt.Errorf("Ollama library format was not recognized")
 	}
-	var entries []catalogEntry
+	var refs []string
+	var failed int
+	var lastErr error
 	for _, family := range families {
 		if err := upstreamRead(ctx, ollamaLibraryBase()+"/library/"+family+"/tags", &page); err != nil {
-			return nil, err
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			failed++
+			lastErr = err
+			continue
 		}
-		refs := libraryReferences(page, true, 8)
-		for _, ref := range refs {
-			parts := strings.SplitN(ref, ":", 2)
-			var manifest struct {
-				Layers []ollamaManifestLayer `json:"layers"`
+		refs = append(refs, libraryReferences(page, true, 8)...)
+	}
+	// Manifest and template reads are independent. Bound concurrency so one
+	// slow registry request does not hold up every later catalog candidate.
+	type result struct {
+		entry catalogEntry
+		err   error
+	}
+	jobs := make(chan string)
+	results := make(chan result, len(refs))
+	var workers sync.WaitGroup
+	for range 8 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for ref := range jobs {
+				entry, err := discoverOllamaReference(ctx, ref)
+				results <- result{entry: entry, err: err}
 			}
-			if err := upstreamRead(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], &manifest); err != nil {
-				return nil, err
-			}
-			var weights, total uint64
-			for _, layer := range manifest.Layers {
-				total += layer.Size
-				if layer.MediaType == "application/vnd.ollama.image.model" {
-					weights += layer.Size
-				}
-			}
-			if weights == 0 || weights > 1<<40 || total > 1<<40 {
-				continue
-			}
-			entries = append(entries, catalogEntry{
-				ID:            ref,
-				Source:        ref,
-				DownloadBytes: total,
-				MemoryBytes:   weights*2 + (2 << 30),
-				Capabilities:  ollamaCatalogCapabilities(ctx, parts[0], manifest.Layers),
-			})
+		}()
+	}
+	for _, ref := range refs {
+		jobs <- ref
+	}
+	close(jobs)
+	workers.Wait()
+	close(results)
+	var entries []catalogEntry
+	for item := range results {
+		if item.err != nil {
+			failed++
+			lastErr = item.err
+		}
+		if item.entry.ID != "" {
+			entries = append(entries, item.entry)
 		}
 	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if failed > 0 {
+		log.Printf("Ollama catalog discovery skipped %d unavailable metadata requests; retained %d candidates: %v", failed, len(entries), lastErr)
+		if len(entries) > 0 {
+			return entries, fmt.Errorf("Ollama catalog discovery skipped %d metadata requests: %w", failed, lastErr)
+		}
+	}
+	if len(entries) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("Ollama catalog discovery found no candidates: %w", lastErr)
+	}
 	return entries, nil
+}
+
+func discoverOllamaReference(ctx context.Context, ref string) (catalogEntry, error) {
+	parts := strings.SplitN(ref, ":", 2)
+	var manifest struct {
+		Layers []ollamaManifestLayer `json:"layers"`
+	}
+	if err := upstreamRead(ctx, ollamaRegistryBase()+"/v2/library/"+parts[0]+"/manifests/"+parts[1], &manifest); err != nil {
+		return catalogEntry{}, fmt.Errorf("%s manifest: %w", ref, err)
+	}
+	var weights, total uint64
+	for _, layer := range manifest.Layers {
+		total += layer.Size
+		if layer.MediaType == "application/vnd.ollama.image.model" {
+			weights += layer.Size
+		}
+	}
+	if weights == 0 || weights > 1<<40 || total > 1<<40 {
+		return catalogEntry{}, nil
+	}
+	capabilities, err := ollamaCatalogCapabilities(ctx, parts[0], manifest.Layers)
+	if err != nil {
+		// Manifest sizing remains useful even if the template blob CDN is
+		// unavailable. Never turn missing evidence into a chat-only assertion.
+		capabilities = unknownCapabilities()
+	}
+	entry := catalogEntry{ID: ref, Source: ref, DownloadBytes: total, MemoryBytes: weights*2 + (2 << 30), Capabilities: capabilities}
+	if err != nil {
+		return entry, fmt.Errorf("%s template: %w", ref, err)
+	}
+	return entry, nil
 }
 
 // ollamaCatalogCapabilities reads the model's published template layer. The
@@ -186,7 +247,7 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 // treating an unknown candidate as a chat-only model made every catalog option
 // look like a Chat assistant. This uses the same template signal as the local
 // /api/show compatibility fallback, without guessing from the model name.
-func ollamaCatalogCapabilities(ctx context.Context, repository string, layers []ollamaManifestLayer) modelCapabilities {
+func ollamaCatalogCapabilities(ctx context.Context, repository string, layers []ollamaManifestLayer) (modelCapabilities, error) {
 	for _, layer := range layers {
 		if layer.MediaType != "application/vnd.ollama.image.template" || layer.Digest == "" {
 			continue
@@ -194,13 +255,11 @@ func ollamaCatalogCapabilities(ctx context.Context, repository string, layers []
 		var template string
 		address := ollamaRegistryBase() + "/v2/library/" + repository + "/blobs/" + layer.Digest
 		if err := upstreamRead(ctx, address, &template); err != nil {
-			// The candidate remains visible, but it must not be promoted to a
-			// coding agent without a runtime or template declaration.
-			return chatCapabilities()
+			return modelCapabilities{}, err
 		}
-		return ollamaCapabilities(nil, template)
+		return ollamaCapabilities(nil, template), nil
 	}
-	return chatCapabilities()
+	return chatCapabilities(), nil
 }
 
 func pythonOutput(ctx context.Context, timeout time.Duration, stdin string, args ...string) ([]byte, error) {

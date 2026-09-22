@@ -1,11 +1,23 @@
 # Model discovery
 
-The manager refreshes metadata on first start and every 24 hours thereafter.
+The manager starts catalog discovery on first start and refreshes a successful
+catalog every 24 hours thereafter. Failed or partial refreshes retry after
+15 minutes (and an empty failed catalog retries once on the next start).
 It persists the last attempt, last successful catalog, and error under
 `/models/.appliance-catalog/<engine>.json` on the existing model PVC. A restart
 uses the saved schedule. Failed or empty refreshes retain the last good list;
 failure never prevents startup or use of downloaded models. No model weights
 are downloaded by this job. Operators control connectivity at the network edge.
+
+Regression contract: the saved catalog and installed inventory must remain
+available during startup and upstream outages; one failed family, manifest, or
+template request must not erase unrelated candidates. A manifest with an
+unavailable template remains selectable with `verification: unverified`, never
+an asserted Chat assistant label. Downloading it lets local `/api/show` provide
+the authoritative tool capability. The previous v2 cache is migrated rather
+than discarded during an offline upgrade, and its Ollama labels are marked
+unverified until fresh metadata arrives. A partial refresh publishes healthy
+new entries alongside retained old entries and retries after 15 minutes.
 
 Discovery is bounded to popular upstream candidates: up to 24 Ollama families
 and eight explicit tags each, or 40 Hugging Face text-generation repositories.
@@ -19,9 +31,13 @@ non-quantized safetensors with no custom-code configuration; gated/private
 repositories are excluded. Advanced quantized models remain available through
 the existing explicit import API.
 
-For Ollama, discovery uses the same anonymous metadata requests as the existing
-working catalog flow. The manager starts discovery before engine reconciliation
-and active-model rehydration, rather than waiting for a catalog API request.
+For Ollama, discovery uses anonymous metadata requests. The manager starts it
+at process startup, independently of the short local inventory bootstrap and
+before engine reconciliation, rather than waiting for a catalog API request.
+It fetches manifests and templates with bounded concurrency; an unavailable
+family or manifest leaves other candidates available, and prior candidates
+survive a partial refresh. A first-ever catalog still depends on successful
+upstream metadata access, but never blocks the manager API from starting.
 The catalog state is atomically persisted on the models PVC; a restart serves
 the prior snapshot immediately while a due refresh continues in the background.
 The persisted catalog records its runtime version and is invalidated after a
@@ -52,14 +68,9 @@ The packaged CPU image may log a benign `vllm._C_AVX2` import warning; upstream
 documents that the AVX2 library still loads. Hosts with AVX2 are expected to
 use those kernels.
 
-A successful catalog (or a retained non-empty one) refreshes at most once per day
-so restarts do not hammer upstream. If discovery has never succeeded and the
-cached list is empty, the next process start retries immediately once so a fixed
-runtime image is not blocked for 24 hours by a prior failed attempt. After that
-retry, failures return to the daily schedule.
-That immediate retry is allowed only once per process start. If it fails again,
-the process returns to the daily schedule; loss of connectivity cannot create
-a tight retry loop.
+A successful catalog refreshes once per day; failures and partial refreshes
+retry after 15 minutes without a tight loop. A migrated v2 catalog or a
+never-successful empty catalog retries immediately once on process startup.
 
 ## Registry and offline boundaries
 
@@ -119,6 +130,10 @@ persist the reported phase and bytes for the UI progress endpoint. A pull that
 stops making progress for two minutes fails visibly; completion requires
 Ollama's explicit `success` event. The manager then refreshes its installed
 inventory before marking the import complete.
+If an individual Ollama `/api/show` call fails during refresh, the manager
+retains that model's prior verified capability; a newly seen model is marked
+unverified. A transient runtime error must never rewrite a coding agent as a
+Chat assistant.
 
 Unit tests exercise the real `discoverVLLM` / `discoverOllama` path against a
 local HTTPS fixture (no public network required) and prove architecture probing

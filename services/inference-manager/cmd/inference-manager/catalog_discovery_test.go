@@ -251,6 +251,55 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 	}
 }
 
+func TestDiscoverOllamaKeepsHealthyCandidateWhenManifestTimesOut(t *testing.T) {
+	server := useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/library":
+			_, _ = w.Write([]byte(`<a href="/library/tiny">Tiny</a>`))
+		case "/library/tiny/tags":
+			_, _ = w.Write([]byte(`<a href="/library/tiny:good">Good</a><a href="/library/tiny:bad">Bad</a>`))
+		case "/v2/library/tiny/manifests/good":
+			_ = json.NewEncoder(w).Encode(map[string]any{"layers": []map[string]any{{"size": 1000, "mediaType": "application/vnd.ollama.image.model"}}})
+		case "/v2/library/tiny/manifests/bad":
+			w.WriteHeader(http.StatusGatewayTimeout)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Setenv("INFERENCE_CATALOG_OLLAMA_BASE", server.URL)
+	t.Setenv("INFERENCE_CATALOG_OLLAMA_REGISTRY_BASE", server.URL)
+	entries, err := discoverOllama(context.Background())
+	if err == nil || len(entries) != 1 || entries[0].ID != "tiny:good" {
+		t.Fatalf("partial discovery entries=%+v err=%v", entries, err)
+	}
+}
+
+func TestDiscoverOllamaRetainsModelWhenTemplateIsUnavailable(t *testing.T) {
+	server := useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/library":
+			_, _ = w.Write([]byte(`<a href="/library/tiny">Tiny</a>`))
+		case "/library/tiny/tags":
+			_, _ = w.Write([]byte(`<a href="/library/tiny:1b">1b</a>`))
+		case "/v2/library/tiny/manifests/1b":
+			_ = json.NewEncoder(w).Encode(map[string]any{"layers": []map[string]any{
+				{"size": 1000, "mediaType": "application/vnd.ollama.image.model"},
+				{"size": 10, "mediaType": "application/vnd.ollama.image.template", "digest": "sha256:template"},
+			}})
+		case "/v2/library/tiny/blobs/sha256:template":
+			w.WriteHeader(http.StatusGatewayTimeout)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Setenv("INFERENCE_CATALOG_OLLAMA_BASE", server.URL)
+	t.Setenv("INFERENCE_CATALOG_OLLAMA_REGISTRY_BASE", server.URL)
+	entries, err := discoverOllama(context.Background())
+	if err == nil || len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].Capabilities.Verification != "unverified" {
+		t.Fatalf("template outage lost catalog candidate or misclassified it: entries=%+v err=%v", entries, err)
+	}
+}
+
 func TestUpstreamRedirectAllowsOnlyOllamaSignedTemplateStorage(t *testing.T) {
 	origin, err := http.NewRequest(http.MethodGet, "https://registry.ollama.ai/v2/library/qwen2.5-coder/blobs/sha256:template", nil)
 	if err != nil {

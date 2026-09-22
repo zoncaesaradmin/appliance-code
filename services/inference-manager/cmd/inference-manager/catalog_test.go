@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,34 @@ import (
 	"testing"
 	"time"
 )
+
+func TestCatalogMigratesSavedV2WithoutLosingOfflineCandidates(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	c.state.SchemaVersion = 2
+	c.state.Items = []catalogEntry{{ID: "qwen2.5-coder:1.5b", Source: "qwen2.5-coder:1.5b", DownloadBytes: 100, MemoryBytes: 200, Capabilities: chatCapabilities()}}
+	c.state.LastSuccess = time.Now().UTC()
+	if err := c.save(); err != nil {
+		t.Fatal(err)
+	}
+	restarted := newModelCatalog(m)
+	if restarted.state.SchemaVersion != catalogSchemaVersion || len(restarted.state.Items) != 1 || restarted.state.Items[0].Capabilities.Verification != "unverified" {
+		t.Fatalf("v2 catalog lost or incorrectly labeled: %+v", restarted.state)
+	}
+	if delay := restarted.nextRefreshDelay(); delay > 0 {
+		t.Fatalf("migrated catalog should refresh in background: %s", delay)
+	}
+	restarted.discover = func(context.Context) ([]catalogEntry, error) { return nil, errors.New("offline") }
+	restarted.refresh(context.Background())
+	response := httptest.NewRecorder()
+	m.catalog = restarted
+	m.handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/internal/v1/models/catalog", nil))
+	var served catalogState
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &served) != nil || len(served.Items) != 1 || served.Items[0].Capabilities.Verification != "unverified" {
+		t.Fatalf("offline catalog API status=%d body=%s", response.Code, response.Body.String())
+	}
+}
 
 func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
 	m := testManager(t)
@@ -139,8 +168,8 @@ func TestFailedCatalogRetriesOnlyOncePerProcessStart(t *testing.T) {
 	fail := func(context.Context) ([]catalogEntry, error) { return nil, errors.New("network disconnected") }
 	c.discover = fail
 	c.refresh(context.Background())
-	if delay := c.nextRefreshDelay(); delay < 23*time.Hour {
-		t.Fatalf("first failure must wait until next daily refresh: %s", delay)
+	if delay := c.nextRefreshDelay(); delay < 14*time.Minute || delay > catalogRetryInterval {
+		t.Fatalf("first failure must retry after a bounded delay: %s", delay)
 	}
 	restarted := newModelCatalog(m)
 	if delay := restarted.nextRefreshDelay(); delay != 0 {
@@ -148,8 +177,31 @@ func TestFailedCatalogRetriesOnlyOncePerProcessStart(t *testing.T) {
 	}
 	restarted.discover = fail
 	restarted.refresh(context.Background())
-	if delay := restarted.nextRefreshDelay(); delay < 23*time.Hour {
+	if delay := restarted.nextRefreshDelay(); delay < 14*time.Minute || delay > catalogRetryInterval {
 		t.Fatalf("restart retry failure must not spin: %s", delay)
+	}
+}
+
+func TestCatalogPublishesPartialDiscoveryAndRetainsPriorCandidates(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	c.discover = func(context.Context) ([]catalogEntry, error) {
+		return []catalogEntry{{ID: "older:1b", Capabilities: toolCapableOllamaModel("template-reported")}}, nil
+	}
+	c.refresh(context.Background())
+	c.discover = func(context.Context) ([]catalogEntry, error) {
+		return []catalogEntry{{ID: "newer:1b"}, {ID: "older:1b", Capabilities: unknownCapabilities()}}, errors.New("one template timed out")
+	}
+	c.refresh(context.Background())
+	if len(c.state.Items) != 2 || c.state.Items[0].ID != "newer:1b" || c.state.Items[1].ID != "older:1b" {
+		t.Fatalf("partial catalog = %#v", c.state.Items)
+	}
+	if !c.state.Items[1].Capabilities.CodexCompatible {
+		t.Fatalf("partial metadata overwrote known tool support: %#v", c.state.Items[1])
+	}
+	if c.state.LastError == "" || c.nextRefreshDelay() > catalogRetryInterval {
+		t.Fatalf("partial catalog did not schedule retry: %+v", c.state)
 	}
 }
 

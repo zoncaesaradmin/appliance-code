@@ -56,6 +56,10 @@ func chatCapabilities() modelCapabilities {
 	return modelCapabilities{Experiences: []string{"chat"}, Verification: "chat-only"}
 }
 
+func unknownCapabilities() modelCapabilities {
+	return modelCapabilities{Experiences: []string{"chat"}, Verification: "unverified"}
+}
+
 // ollamaCapabilities reflects the runtime's per-model declaration from
 // /api/show. Ollama is not intrinsically chat-only: a model that advertises
 // tools can be used by an agent client through the appliance Responses proxy.
@@ -187,8 +191,8 @@ func main() {
 	// serves UI/API requests: AI Services consumes this saved state, rather than
 	// being the event that causes model discovery to start.
 	m.catalog = newModelCatalog(m)
-	m.bootstrapModelMetadata(ctx)
 	go m.catalog.run(ctx)
+	m.bootstrapModelMetadata(ctx)
 	if err := m.engineOrch.EnsureService(context.Background()); err != nil {
 		log.Printf("ensure engine service: %v", err)
 	}
@@ -209,29 +213,15 @@ func main() {
 
 const startupMetadataTimeout = 30 * time.Second
 
-// bootstrapModelMetadata gives a new manager process a bounded opportunity to
-// populate its persisted model metadata before its HTTP listener is available.
-// Both jobs have their own retained-cache failure behavior, so a temporarily
-// unavailable upstream or engine never prevents the appliance from starting.
+// bootstrapModelMetadata refreshes local installed-model inventory before the
+// API starts. Upstream catalog discovery starts independently at process start:
+// its many network requests must not inherit this short startup deadline.
 func (m *manager) bootstrapModelMetadata(ctx context.Context) {
 	bootstrapCtx, cancel := context.WithTimeout(ctx, startupMetadataTimeout)
 	defer cancel()
-	var group sync.WaitGroup
-	if m.catalog != nil {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			m.catalog.refresh(bootstrapCtx)
-		}()
-	}
 	if m.engine == "ollama" {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			m.refreshOllamaInventory(bootstrapCtx)
-		}()
+		m.refreshOllamaInventory(bootstrapCtx)
 	}
-	group.Wait()
 }
 
 func (m *manager) handler() http.Handler {

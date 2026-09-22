@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -108,17 +109,26 @@ func (m *manager) refreshOllamaInventory(ctx context.Context) {
 		log.Printf("Ollama inventory refresh: list tags: %v", err)
 		return
 	}
+	previous := make(map[string]modelCapabilities)
+	for _, item := range m.ollamaInventorySnapshot() {
+		previous[item.ID] = item.Capabilities
+	}
 	items := make([]model, 0, len(response.Models))
 	for _, tag := range response.Models {
 		var details struct {
 			Capabilities []string `json:"capabilities"`
 			Template     string   `json:"template"`
 		}
-		capabilities := chatCapabilities()
+		capabilities, known := previous[tag.Name]
+		if !known {
+			capabilities = unknownCapabilities()
+		}
 		if err := m.callBackend(ctx, http.MethodPost, "/api/show", map[string]any{"name": tag.Name}, &details); err != nil {
 			log.Printf("Ollama inventory refresh: model=%q capability discovery: %v", tag.Name, err)
-		} else {
+		} else if len(details.Capabilities) > 0 || strings.TrimSpace(details.Template) != "" {
 			capabilities = ollamaCapabilities(details.Capabilities, details.Template)
+		} else {
+			log.Printf("Ollama inventory refresh: model=%q returned no capability evidence", tag.Name)
 		}
 		items = append(items, model{ID: tag.Name, Object: "model", OwnedBy: "ollama", OpenAIOwnedBy: "ollama", Capabilities: capabilities})
 	}

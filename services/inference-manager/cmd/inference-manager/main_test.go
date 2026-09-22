@@ -280,7 +280,7 @@ func TestOllamaInventoryPersistsAcrossManagerRestart(t *testing.T) {
 	}
 }
 
-func TestBootstrapModelMetadataPopulatesOllamaBeforeServing(t *testing.T) {
+func TestBootstrapModelMetadataPopulatesLocalOllamaInventory(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/":
@@ -297,17 +297,46 @@ func TestBootstrapModelMetadataPopulatesOllamaBeforeServing(t *testing.T) {
 	m := testManager(t)
 	m.engine = "ollama"
 	m.backend, _ = url.Parse(backend.URL)
-	m.catalog = newModelCatalog(m)
-	m.catalog.discover = func(context.Context) ([]catalogEntry, error) {
-		return []catalogEntry{{ID: "qwen2.5-coder:7b", Capabilities: toolCapableOllamaModel("template-reported")}}, nil
-	}
 	m.bootstrapModelMetadata(context.Background())
 	inventory := m.ollamaInventorySnapshot()
 	if len(inventory) != 1 || !inventory[0].Capabilities.CodexCompatible {
 		t.Fatalf("startup Ollama inventory = %#v", inventory)
 	}
-	if got := m.catalog.snapshot(context.Background()).Items; len(got) != 1 || !got[0].Capabilities.CodexCompatible {
-		t.Fatalf("startup catalog = %#v", got)
+}
+
+func TestOllamaShowFailurePreservesKnownCapabilityWithoutGuessingNewModel(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+		case "/api/tags":
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "known:1b"}, {"name": "known-empty:1b"}, {"name": "new:1b"}}})
+		case "/api/show":
+			var request struct {
+				Name string `json:"name"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&request)
+			if request.Name == "known:1b" {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			} else {
+				_, _ = w.Write([]byte(`{}`))
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	m := testManager(t)
+	m.engine = "ollama"
+	m.backend, _ = url.Parse(backend.URL)
+	m.ollama.Models = []model{
+		{ID: "known:1b", Capabilities: toolCapableOllamaModel("runtime-reported")},
+		{ID: "known-empty:1b", Capabilities: toolCapableOllamaModel("template-reported")},
+	}
+	m.refreshOllamaInventory(context.Background())
+	got := m.ollamaInventorySnapshot()
+	if len(got) != 3 || got[0].ID != "known-empty:1b" || !got[0].Capabilities.CodexCompatible || got[1].ID != "known:1b" || !got[1].Capabilities.CodexCompatible || got[2].ID != "new:1b" || got[2].Capabilities.Verification != "unverified" {
+		t.Fatalf("failed /api/show changed known support or guessed new support: %+v", got)
 	}
 }
 

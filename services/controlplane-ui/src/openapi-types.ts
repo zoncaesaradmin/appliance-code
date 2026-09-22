@@ -1758,7 +1758,7 @@ export interface components {
             responsesCompatible: boolean;
             codexCompatible: boolean;
             /** @enum {string} */
-            verification: "chat-only" | "configured" | "runtime-reported" | "template-reported" | "verified";
+            verification: "chat-only" | "configured" | "runtime-reported" | "template-reported" | "verified" | "unverified";
         };
         InferenceCatalog: {
             engine: string;
