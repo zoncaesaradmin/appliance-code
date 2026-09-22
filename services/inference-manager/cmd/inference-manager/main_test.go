@@ -225,8 +225,15 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 }
 
 func TestOllamaModelWithoutToolsIsChatOnly(t *testing.T) {
-	if got := ollamaCapabilities([]string{"completion", "thinking"}); got.CodexCompatible || got.ToolCalling || !reflect.DeepEqual(got.Experiences, []string{"chat"}) {
+	if got := ollamaCapabilities([]string{"completion", "thinking"}, "{{ .Prompt }}"); got.CodexCompatible || got.ToolCalling || !reflect.DeepEqual(got.Experiences, []string{"chat"}) {
 		t.Fatalf("unexpected Ollama chat capabilities: %#v", got)
+	}
+}
+
+func TestOllamaToolTemplateIsCodingAgentWhenRuntimeOmitsCapabilities(t *testing.T) {
+	got := ollamaCapabilities(nil, "{{- if .Tools }}tools{{ end }}")
+	if !got.CodexCompatible || got.Verification != "template-reported" {
+		t.Fatalf("unexpected Ollama template capabilities: %#v", got)
 	}
 }
 

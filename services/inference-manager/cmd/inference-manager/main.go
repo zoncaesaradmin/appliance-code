@@ -60,19 +60,30 @@ func chatCapabilities() modelCapabilities {
 // /api/show. Ollama is not intrinsically chat-only: a model that advertises
 // tools can be used by an agent client through the appliance Responses proxy.
 // A failed discovery remains chat-only rather than guessing from a model name.
-func ollamaCapabilities(capabilities []string) modelCapabilities {
+func ollamaCapabilities(capabilities []string, template string) modelCapabilities {
 	for _, capability := range capabilities {
 		if strings.EqualFold(strings.TrimSpace(capability), "tools") {
-			return modelCapabilities{
-				Experiences:         []string{"chat", "coding-agent"},
-				ToolCalling:         true,
-				ResponsesCompatible: true,
-				CodexCompatible:     true,
-				Verification:        "runtime-reported",
-			}
+			return toolCapableOllamaModel("runtime-reported")
 		}
 	}
+	// Older packaged Ollama versions do not include capabilities in /api/show.
+	// Their model templates still expose the supported tool surface. This checks
+	// only template actions (not a model name), so an ordinary code-completion
+	// model is not accidentally promoted to an agent.
+	if strings.Contains(template, ".Tools") || strings.Contains(template, "$.Tools") {
+		return toolCapableOllamaModel("template-reported")
+	}
 	return chatCapabilities()
+}
+
+func toolCapableOllamaModel(verification string) modelCapabilities {
+	return modelCapabilities{
+		Experiences:         []string{"chat", "coding-agent"},
+		ToolCalling:         true,
+		ResponsesCompatible: true,
+		CodexCompatible:     true,
+		Verification:        verification,
+	}
 }
 
 func configuredAgentCapabilities(engine string, arguments []string) modelCapabilities {
@@ -1029,12 +1040,13 @@ func (m *manager) listOllamaModels(w http.ResponseWriter) {
 	for _, item := range response.Models {
 		var details struct {
 			Capabilities []string `json:"capabilities"`
+			Template     string   `json:"template"`
 		}
 		capabilities := chatCapabilities()
 		if err := m.callBackend(context.Background(), http.MethodPost, "/api/show", map[string]any{"name": item.Name}, &details); err != nil {
 			log.Printf("ollama model capability discovery model=%q failed: %v", item.Name, err)
 		} else {
-			capabilities = ollamaCapabilities(details.Capabilities)
+			capabilities = ollamaCapabilities(details.Capabilities, details.Template)
 		}
 		items = append(items, map[string]any{"id": item.Name, "object": "model", "ownedBy": "ollama", "owned_by": "ollama", "capabilities": capabilities})
 	}
