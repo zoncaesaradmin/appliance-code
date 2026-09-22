@@ -79,6 +79,13 @@ failure retains the previous catalog and never removes installed models.
 
 `GET /internal/v1/models/catalog` returns cached candidates and eligibility.
 `GET /internal/v1/models` returns the manager's downloaded inventory (admin).
+For Ollama, that endpoint is backed by `/models/.zon/ollama-inventory.json` on
+the model PVC: startup reads the previous snapshot synchronously, while a
+background refresh obtains `/api/tags` and per-model `/api/show` capability
+data and atomically replaces the snapshot. Import and delete operations also
+refresh it. Thus opening AI Services never waits for the Ollama daemon or
+per-model capability probes; on a brand-new empty PVC, the first background
+refresh populates the snapshot for subsequent reads and restarts.
 `GET /v1/models` (and the rest of `/v1/*`) is proxied to the inference
 engine for OpenAI-compatible clients. For `POST /v1/responses`, the manager
 first rewrites OpenAI `text.format.type=json_schema` so streaming clients do

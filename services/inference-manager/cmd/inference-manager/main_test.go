@@ -230,6 +230,52 @@ func TestOllamaModelWithoutToolsIsChatOnly(t *testing.T) {
 	}
 }
 
+func TestOllamaInventoryServesPersistedSnapshotWithoutRuntimeCall(t *testing.T) {
+	called := false
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer backend.Close()
+	m := testManager(t)
+	m.engine = "ollama"
+	m.backend, _ = url.Parse(backend.URL)
+	m.ollama = ollamaInventory{UpdatedAt: time.Now().UTC(), Models: []model{{
+		ID:           "qwen2.5-coder:1.5b",
+		Capabilities: modelCapabilities{Experiences: []string{"chat", "coding-agent"}, ToolCalling: true, ResponsesCompatible: true, CodexCompatible: true, Verification: "template-reported"},
+	}}}
+	w := httptest.NewRecorder()
+	m.listModels(w, httptest.NewRequest(http.MethodGet, "/internal/v1/models", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "qwen2.5-coder:1.5b") || !strings.Contains(w.Body.String(), `"codexCompatible":true`) {
+		t.Fatalf("list status %d: %s", w.Code, w.Body.String())
+	}
+	if called {
+		t.Fatal("cached inventory read called the Ollama runtime")
+	}
+}
+
+func TestOllamaInventoryPersistsAcrossManagerRestart(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	m.ollama = ollamaInventory{UpdatedAt: time.Now().UTC(), Models: []model{{ID: "qwen2.5-coder:1.5b", Capabilities: toolCapableOllamaModel("template-reported")}}}
+	m.mu.Lock()
+	err := m.saveOllamaInventoryLocked()
+	m.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted := testManager(t)
+	restarted.engine = "ollama"
+	restarted.modelsDir = m.modelsDir
+	if err := restarted.loadOllamaInventory(); err != nil {
+		t.Fatal(err)
+	}
+	got := restarted.ollamaInventorySnapshot()
+	if len(got) != 1 || got[0].ID != "qwen2.5-coder:1.5b" || !got[0].Capabilities.CodexCompatible {
+		t.Fatalf("restarted inventory = %#v", got)
+	}
+}
+
 func TestOllamaToolTemplateIsCodingAgentWhenRuntimeOmitsCapabilities(t *testing.T) {
 	got := ollamaCapabilities(nil, "{{- if .Tools }}tools{{ end }}")
 	if !got.CodexCompatible || got.Verification != "template-reported" {

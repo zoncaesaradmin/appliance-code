@@ -122,7 +122,7 @@ type manager struct {
 	backend    *url.URL
 	proxy      *httputil.ReverseProxy
 	engineOrch engineOrchestrator
-	mu         sync.RWMutex // protects reg only
+	mu         sync.RWMutex // protects persistent registry and Ollama inventory cache
 	opMu       sync.Mutex   // single-flight import/load/delete (held for async import/load lifetime)
 	progressMu sync.RWMutex
 	progress   importProgress
@@ -131,6 +131,7 @@ type manager struct {
 	processMu  sync.Mutex
 	active     string
 	reg        registry
+	ollama     ollamaInventory
 	instanceMu sync.RWMutex
 	instances  instanceRegistry
 	download   func(context.Context, string, string) error
@@ -171,6 +172,9 @@ func main() {
 	if err := m.loadRegistry(); err != nil {
 		log.Fatalf("load model registry: %v", err)
 	}
+	if err := m.loadOllamaInventory(); err != nil {
+		log.Fatalf("load Ollama model inventory: %v", err)
+	}
 	if err := m.loadInstanceRegistry(); err != nil {
 		log.Fatalf("load instance registry: %v", err)
 	}
@@ -183,6 +187,12 @@ func main() {
 	// snapshot immediately while a due refresh continues in the background.
 	m.catalog = newModelCatalog(m)
 	go m.catalog.run(ctx)
+	if m.engine == "ollama" {
+		// Never make the first UI inventory request wait for the Ollama daemon.
+		// A prior snapshot is already available from the models PVC; this refresh
+		// replaces it once the local runtime answers.
+		go m.refreshOllamaInventory(ctx)
+	}
 	if err := m.engineOrch.EnsureService(context.Background()); err != nil {
 		log.Printf("ensure engine service: %v", err)
 	}
@@ -939,6 +949,7 @@ func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
 			m.processMu.Unlock()
 			m.finishLoadProgress("idle", "", "No model is loaded")
 		}
+		m.refreshOllamaInventory(r.Context())
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -1014,43 +1025,14 @@ func (m *manager) runOllamaImport(ctx context.Context, req importRequest) {
 		m.finishImportProgress("failed", err.Error())
 		return
 	}
+	m.refreshOllamaInventory(ctx)
 	m.finishImportProgress("complete", "Model downloaded")
 }
 
 func (m *manager) listOllamaModels(w http.ResponseWriter) {
-	if !m.opMu.TryLock() {
-		writeError(w, http.StatusConflict, "another model operation is in progress")
-		return
-	}
-	defer m.opMu.Unlock()
-	if err := m.ensureOllamaDaemon(context.Background()); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	var response struct {
-		Models []struct {
-			Name string `json:"name"`
-		} `json:"models"`
-	}
-	if err := m.callBackend(context.Background(), http.MethodGet, "/api/tags", nil, &response); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	items := make([]map[string]any, 0, len(response.Models))
-	for _, item := range response.Models {
-		var details struct {
-			Capabilities []string `json:"capabilities"`
-			Template     string   `json:"template"`
-		}
-		capabilities := chatCapabilities()
-		if err := m.callBackend(context.Background(), http.MethodPost, "/api/show", map[string]any{"name": item.Name}, &details); err != nil {
-			log.Printf("ollama model capability discovery model=%q failed: %v", item.Name, err)
-		} else {
-			capabilities = ollamaCapabilities(details.Capabilities, details.Template)
-		}
-		items = append(items, map[string]any{"id": item.Name, "object": "model", "ownedBy": "ollama", "owned_by": "ollama", "capabilities": capabilities})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": items})
+	// Serve the persisted snapshot immediately. Live discovery happens at pod
+	// startup and after lifecycle changes, never on this UI/API read path.
+	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": m.ollamaInventorySnapshot()})
 }
 
 func (m *manager) callBackend(ctx context.Context, method, path string, body, target any) error {

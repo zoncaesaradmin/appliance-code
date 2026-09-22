@@ -356,7 +356,7 @@ export function AIServicePage(): React.JSX.Element {
   const busyRef = useRef("");
   busyRef.current = busy;
 
-  async function refresh() {
+  async function refresh(): Promise<boolean> {
     const [runtime, installed, available, identity] = await Promise.allSettled([
       client.getInferenceStatus(),
       client.listInferenceModels(),
@@ -384,17 +384,35 @@ export function AIServicePage(): React.JSX.Element {
     } else {
       setClientOrigin((current) => current || inferenceClientOrigin(undefined, window.location.origin));
     }
+    // A fresh appliance has no saved Ollama inventory until its initial
+    // background scan completes. Tell the caller to retry this short-lived
+    // empty state instead of leaving the page blank for the normal interval.
+    return installed.status === "fulfilled" && installed.value.length === 0;
   }
 
   useEffect(() => {
-    void refresh();
+    let bootstrapRetry: number | undefined;
+    let cancelled = false;
+    const refreshInitially = async (attempt = 0) => {
+      const emptyInventory = await refresh();
+      if (!cancelled && emptyInventory && attempt < 5) {
+        bootstrapRetry = window.setTimeout(() => void refreshInitially(attempt + 1), 2000);
+      }
+    };
+    void refreshInitially();
     const timer = window.setInterval(() => {
       if (busyRef.current) {
         return;
       }
       void refresh();
     }, 30000);
-    return () => window.clearInterval(timer);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      if (bootstrapRetry !== undefined) {
+        window.clearTimeout(bootstrapRetry);
+      }
+    };
   }, []);
 
   useEffect(() => {
