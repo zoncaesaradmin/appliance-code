@@ -114,6 +114,11 @@ APIs use the `/internal/v1/...` surface only:
 Catalog imports include `catalogId` alongside matching `modelId` and `source`;
 the manager revalidates capacity and takes launch arguments from the cache.
 Explicit imports retain the existing administrator API for advanced uses.
+Ollama imports consume the local engine's streaming `/api/pull` response and
+persist the reported phase and bytes for the UI progress endpoint. A pull that
+stops making progress for two minutes fails visibly; completion requires
+Ollama's explicit `success` event. The manager then refreshes its installed
+inventory before marking the import complete.
 
 Unit tests exercise the real `discoverVLLM` / `discoverOllama` path against a
 local HTTPS fixture (no public network required) and prove architecture probing

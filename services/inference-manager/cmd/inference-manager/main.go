@@ -1044,11 +1044,14 @@ func (m *manager) runOllamaImport(ctx context.Context, req importRequest) {
 		m.finishImportProgress("failed", err.Error())
 		return
 	}
-	if err := m.callBackend(ctx, http.MethodPost, "/api/pull", map[string]any{"model": req.Source, "stream": false}, nil); err != nil {
+	if err := m.pullOllamaModel(ctx, req.Source, 2*time.Minute); err != nil {
 		m.finishImportProgress("failed", err.Error())
 		return
 	}
-	m.refreshOllamaInventory(ctx)
+	m.setImportProgressState("installing", "Updating downloaded model list")
+	refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	m.refreshOllamaInventory(refreshCtx)
+	cancel()
 	m.finishImportProgress("complete", "Model downloaded")
 }
 

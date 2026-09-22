@@ -200,6 +200,10 @@ func TestOllamaUsesUnifiedManagerLifecycle(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"completion", "tools"}})
 			return
 		}
+		if r.URL.Path == "/api/pull" {
+			_, _ = w.Write([]byte("{\"status\":\"success\"}\n"))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer backend.Close()
