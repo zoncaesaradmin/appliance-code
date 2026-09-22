@@ -76,6 +76,9 @@ type importRequest struct {
 }
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	engine := strings.ToLower(env("INFERENCE_ENGINE", "vllm"))
 	modelsDir := env("INFERENCE_MODELS_DIR", "/models")
 	backend, _ := url.Parse(env("INFERENCE_BACKEND_URL", "http://inference-engine.inference.svc.cluster.local:8001"))
@@ -102,16 +105,17 @@ func main() {
 	if err := m.migrateLegacyDefaultInstance(); err != nil {
 		log.Fatalf("migrate legacy default instance: %v", err)
 	}
+	// Begin discovery before engine reconciliation and active-model rehydration.
+	// The catalog is persisted on the models PVC, so a restart serves its prior
+	// snapshot immediately while a due refresh continues in the background.
+	m.catalog = newModelCatalog(m)
+	go m.catalog.run(ctx)
 	if err := m.engineOrch.EnsureService(context.Background()); err != nil {
 		log.Printf("ensure engine service: %v", err)
 	}
 	m.rehydrateActiveModel(context.Background())
 
 	server := &http.Server{Addr: env("INFERENCE_LISTEN_ADDRESS", "0.0.0.0:11434"), Handler: m.handler(), ReadHeaderTimeout: 10 * time.Second}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	m.catalog = newModelCatalog(m)
-	go m.catalog.run(ctx)
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

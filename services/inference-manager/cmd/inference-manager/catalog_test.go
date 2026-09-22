@@ -49,6 +49,25 @@ func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestCatalogBeginsInitialRefreshWithoutAnAPIRead(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	started := make(chan struct{})
+	c.discover = func(context.Context) ([]catalogEntry, error) {
+		close(started)
+		return []catalogEntry{{ID: "test:small", Source: "test:small", DownloadBytes: 1, MemoryBytes: 2}}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.run(ctx)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("initial catalog refresh waited for an API read")
+	}
+}
+
 func TestOllamaCatalogIsInvalidatedWhenRuntimeVersionChanges(t *testing.T) {
 	t.Setenv("INFERENCE_RUNTIME_VERSION", "0.9.0")
 	m := testManager(t)

@@ -20,10 +20,14 @@ repositories are excluded. Advanced quantized models remain available through
 the existing explicit import API.
 
 For Ollama, discovery uses the same anonymous metadata requests as the existing
-working catalog flow. The persisted catalog records its runtime version and is
-invalidated after a runtime upgrade, which forces fresh metadata discovery.
-Loading is still required to verify hardware and resource execution. No hardware
-vendors or specific model names are hardcoded. Runtime mode, host available memory, optional package maxMemory,
+working catalog flow. The manager starts discovery before engine reconciliation
+and active-model rehydration, rather than waiting for a catalog API request.
+The catalog state is atomically persisted on the models PVC; a restart serves
+the prior snapshot immediately while a due refresh continues in the background.
+The persisted catalog records its runtime version and is invalidated after a
+runtime upgrade, which forces fresh metadata discovery. Loading is still
+required to verify hardware and resource execution. No hardware vendors or
+specific model names are hardcoded. Runtime mode, host available memory, optional package maxMemory,
 GPU free memory for CUDA, and PVC free space determine current eligibility.
 GPU memory is not summed across devices; automatic tensor parallelism is not
 configured. Conservatively reserve 25% of CPU memory (20% of GPU memory). Model
