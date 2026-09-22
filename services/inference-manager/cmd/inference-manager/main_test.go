@@ -276,6 +276,37 @@ func TestOllamaInventoryPersistsAcrossManagerRestart(t *testing.T) {
 	}
 }
 
+func TestBootstrapModelMetadataPopulatesOllamaBeforeServing(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.WriteHeader(http.StatusOK)
+		case "/api/tags":
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "qwen2.5-coder:7b"}}})
+		case "/api/show":
+			_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"completion", "tools"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer backend.Close()
+	m := testManager(t)
+	m.engine = "ollama"
+	m.backend, _ = url.Parse(backend.URL)
+	m.catalog = newModelCatalog(m)
+	m.catalog.discover = func(context.Context) ([]catalogEntry, error) {
+		return []catalogEntry{{ID: "qwen2.5-coder:7b", Capabilities: toolCapableOllamaModel("template-reported")}}, nil
+	}
+	m.bootstrapModelMetadata(context.Background())
+	inventory := m.ollamaInventorySnapshot()
+	if len(inventory) != 1 || !inventory[0].Capabilities.CodexCompatible {
+		t.Fatalf("startup Ollama inventory = %#v", inventory)
+	}
+	if got := m.catalog.snapshot(context.Background()).Items; len(got) != 1 || !got[0].Capabilities.CodexCompatible {
+		t.Fatalf("startup catalog = %#v", got)
+	}
+}
+
 func TestOllamaToolTemplateIsCodingAgentWhenRuntimeOmitsCapabilities(t *testing.T) {
 	got := ollamaCapabilities(nil, "{{- if .Tools }}tools{{ end }}")
 	if !got.CodexCompatible || got.Verification != "template-reported" {

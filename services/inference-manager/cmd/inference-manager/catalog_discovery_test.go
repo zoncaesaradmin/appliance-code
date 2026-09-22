@@ -250,3 +250,29 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 		t.Fatalf("entries=%+v", entries)
 	}
 }
+
+func TestUpstreamRedirectAllowsOnlyOllamaSignedTemplateStorage(t *testing.T) {
+	origin, err := http.NewRequest(http.MethodGet, "https://registry.ollama.ai/v2/library/qwen2.5-coder/blobs/sha256:template", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := http.NewRequest(http.MethodGet, "https://example.r2.cloudflarestorage.com/ollama/template", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := allowUpstreamRedirect(target, []*http.Request{origin}); err != nil {
+		t.Fatalf("signed Ollama template redirect rejected: %v", err)
+	}
+	for _, address := range []string{
+		"https://example.invalid/template",
+		"http://example.r2.cloudflarestorage.com/template",
+	} {
+		request, err := http.NewRequest(http.MethodGet, address, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := allowUpstreamRedirect(request, []*http.Request{origin}); err == nil {
+			t.Fatalf("unsafe redirect accepted: %s", address)
+		}
+	}
+}

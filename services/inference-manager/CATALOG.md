@@ -83,12 +83,12 @@ uses its explicit tool surface to classify a candidate as either chat-only or
 coding-agent before it is downloaded; it never infers the class from a name.
 `GET /internal/v1/models` returns the manager's downloaded inventory (admin).
 For Ollama, that endpoint is backed by `/models/.zon/ollama-inventory.json` on
-the model PVC: startup reads the previous snapshot synchronously, while a
-background refresh obtains `/api/tags` and per-model `/api/show` capability
-data and atomically replaces the snapshot. Import and delete operations also
-refresh it. Thus opening AI Services never waits for the Ollama daemon or
-per-model capability probes; on a brand-new empty PVC, the first background
-refresh populates the snapshot for subsequent reads and restarts.
+the model PVC: startup reads the previous snapshot, then completes a bounded
+`/api/tags` and per-model `/api/show` capability refresh before serving the
+manager API. Import and delete operations also refresh it. Thus opening AI
+Services consumes persisted, startup-populated state rather than triggering
+Ollama discovery; on a brand-new empty PVC, the first manager startup creates
+the snapshot before the API becomes available.
 `GET /v1/models` (and the rest of `/v1/*`) is proxied to the inference
 engine for OpenAI-compatible clients. For `POST /v1/responses`, the manager
 first rewrites OpenAI `text.format.type=json_schema` so streaming clients do

@@ -66,6 +66,21 @@ func TestCatalogBeginsInitialRefreshWithoutAnAPIRead(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("initial catalog refresh waited for an API read")
 	}
+	// The discovery signal is emitted before the refresh atomically writes the
+	// cache. Wait for that write before TempDir cleanup races the goroutine.
+	deadline := time.Now().Add(time.Second)
+	for {
+		c.mu.Lock()
+		refreshing := c.state.Refreshing
+		c.mu.Unlock()
+		if !refreshing {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("initial catalog refresh did not finish")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func TestOllamaCatalogIsInvalidatedWhenRuntimeVersionChanges(t *testing.T) {

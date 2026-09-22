@@ -53,12 +53,27 @@ func upstreamClient() *http.Client {
 	if transport == nil {
 		transport = http.DefaultTransport
 	}
-	return &http.Client{Timeout: 20 * time.Second, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) > 3 || req.URL.Scheme != "https" || req.URL.Host != via[0].URL.Host {
-			return fmt.Errorf("unexpected catalog redirect")
-		}
+	return &http.Client{Timeout: 20 * time.Second, Transport: transport, CheckRedirect: allowUpstreamRedirect}
+}
+
+// allowUpstreamRedirect keeps metadata discovery constrained to its origin,
+// except for an Ollama registry blob's signed R2 download location. The public
+// registry responds to template-blob requests with precisely that redirect;
+// rejecting it made every candidate lose its template-derived tool capability
+// and therefore appear as a Chat assistant.
+func allowUpstreamRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) > 3 || req.URL.Scheme != "https" {
+		return fmt.Errorf("unexpected catalog redirect")
+	}
+	origin := via[0].URL.Hostname()
+	target := req.URL.Hostname()
+	if target == origin {
 		return nil
-	}}
+	}
+	if origin == "registry.ollama.ai" && strings.HasSuffix(target, ".r2.cloudflarestorage.com") {
+		return nil
+	}
+	return fmt.Errorf("unexpected catalog redirect")
 }
 
 func upstreamRead(ctx context.Context, address string, target any) error {

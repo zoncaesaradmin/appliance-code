@@ -183,16 +183,12 @@ func main() {
 		log.Fatalf("migrate legacy default instance: %v", err)
 	}
 	// Begin discovery before engine reconciliation and active-model rehydration.
-	// The catalog is persisted on the models PVC, so a restart serves its prior
-	// snapshot immediately while a due refresh continues in the background.
+	// Metadata is persisted on the models PVC. Bootstrap it before this process
+	// serves UI/API requests: AI Services consumes this saved state, rather than
+	// being the event that causes model discovery to start.
 	m.catalog = newModelCatalog(m)
+	m.bootstrapModelMetadata(ctx)
 	go m.catalog.run(ctx)
-	if m.engine == "ollama" {
-		// Never make the first UI inventory request wait for the Ollama daemon.
-		// A prior snapshot is already available from the models PVC; this refresh
-		// replaces it once the local runtime answers.
-		go m.refreshOllamaInventory(ctx)
-	}
 	if err := m.engineOrch.EnsureService(context.Background()); err != nil {
 		log.Printf("ensure engine service: %v", err)
 	}
@@ -209,6 +205,33 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+}
+
+const startupMetadataTimeout = 30 * time.Second
+
+// bootstrapModelMetadata gives a new manager process a bounded opportunity to
+// populate its persisted model metadata before its HTTP listener is available.
+// Both jobs have their own retained-cache failure behavior, so a temporarily
+// unavailable upstream or engine never prevents the appliance from starting.
+func (m *manager) bootstrapModelMetadata(ctx context.Context) {
+	bootstrapCtx, cancel := context.WithTimeout(ctx, startupMetadataTimeout)
+	defer cancel()
+	var group sync.WaitGroup
+	if m.catalog != nil {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			m.catalog.refresh(bootstrapCtx)
+		}()
+	}
+	if m.engine == "ollama" {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			m.refreshOllamaInventory(bootstrapCtx)
+		}()
+	}
+	group.Wait()
 }
 
 func (m *manager) handler() http.Handler {

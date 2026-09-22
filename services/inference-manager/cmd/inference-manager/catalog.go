@@ -16,7 +16,7 @@ import (
 
 const (
 	catalogInterval      = 24 * time.Hour
-	catalogSchemaVersion = 2 // v2 persists Ollama template-derived capabilities.
+	catalogSchemaVersion = 3 // v3 requires template blobs to be followed through Ollama's signed R2 redirect.
 )
 
 type catalogEntry struct {
