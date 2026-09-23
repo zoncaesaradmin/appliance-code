@@ -46,8 +46,9 @@ survive a partial refresh. A first-ever catalog still depends on successful
 upstream metadata access, but never blocks the manager API from starting.
 The catalog state is atomically persisted on the models PVC; a restart serves
 the prior snapshot immediately while a due refresh continues in the background.
-The persisted catalog records its runtime version and is invalidated after a
-runtime upgrade, which forces fresh metadata discovery. Loading is still
+The persisted catalog records its runtime version. A runtime upgrade retains
+the prior snapshot for immediate use, marks it stale, and refreshes its metadata
+in the background. Loading is still
 required to verify hardware and resource execution. No hardware vendors or
 specific model names are hardcoded. Runtime mode, host available memory, optional package maxMemory,
 GPU free memory for CUDA, and PVC free space determine current eligibility.

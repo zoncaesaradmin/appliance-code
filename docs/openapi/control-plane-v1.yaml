@@ -2701,7 +2701,7 @@ components:
         engine: { type: string }
         runtimeVersion:
           type: string
-          description: Signed packaged runtime version associated with this cached catalog. A runtime upgrade invalidates the catalog and refreshes its upstream metadata.
+          description: Signed packaged runtime version associated with this cached catalog. A runtime upgrade retains the prior catalog as stale while refreshing its upstream metadata in the background.
         lastAttempt: { type: string, format: date-time }
         lastSuccess: { type: string, format: date-time }
         lastError: { type: string }

@@ -1767,7 +1767,7 @@ export interface components {
         };
         InferenceCatalog: {
             engine: string;
-            /** @description Signed packaged runtime version associated with this cached catalog. A runtime upgrade invalidates the catalog and refreshes its upstream metadata. */
+            /** @description Signed packaged runtime version associated with this cached catalog. A runtime upgrade retains the prior catalog as stale while refreshing its upstream metadata in the background. */
             runtimeVersion?: string;
             /** Format: date-time */
             lastAttempt: string;

@@ -79,8 +79,8 @@ which calls manager-owned `/internal/v1/...` routes (not the OpenAI proxy):
 
 For Ollama, catalog discovery uses the same anonymous metadata requests as the
 existing working catalog flow. `runtimeVersion` makes the packaged runtime
-observable and invalidates the persisted catalog after a runtime upgrade, so
-model metadata is refreshed. Loading remains the final compatibility check,
+observable. A runtime upgrade retains the prior catalog as stale while its
+model metadata is refreshed in the background. Loading remains the final compatibility check,
 separate from the existing capacity and hardware checks.
 
 Reads require `inference.models.read`, mutations require `inference.admin`, and

@@ -25,8 +25,8 @@ to the Alpha default instance. The selection dropdown joins eligible catalog
 candidates with downloaded models by ID and labels downloaded/enabled state.
 Downloaded entries remain visible when discovery fails or removes a candidate.
 For Ollama, `runtimeVersion` identifies the packaged runtime associated with the
-cached catalog; a runtime upgrade refreshes its upstream metadata. Loading
-remains the final compatibility check.
+cached catalog; a runtime upgrade retains the prior catalog as stale while
+refreshing its upstream metadata. Loading remains the final compatibility check.
 Selecting a model shows a short capacity line (parameter hint, download size,
 estimated RAM). The dropdown contains only candidates currently marked
 eligible by the manager; downloaded but ineligible models remain in the

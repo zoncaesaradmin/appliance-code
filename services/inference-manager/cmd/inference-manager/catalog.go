@@ -60,6 +60,7 @@ type modelCatalog struct {
 	budget                func(context.Context) (uint64, uint64)
 	path                  string
 	initialRefreshPending bool
+	runtimeChanged        bool
 }
 
 func newModelCatalog(m *manager) *modelCatalog {
@@ -68,7 +69,7 @@ func newModelCatalog(m *manager) *modelCatalog {
 	c.state = catalogState{SchemaVersion: catalogSchemaVersion, Engine: m.engine, RuntimeVersion: runtimeVersion, Items: []catalogEntry{}, Scope: "Popular upstream models; conservative estimates, load verification required"}
 	if b, err := os.ReadFile(c.path); err == nil {
 		var saved catalogState
-		if json.Unmarshal(b, &saved) == nil && (saved.SchemaVersion == catalogSchemaVersion || saved.SchemaVersion == 3 || saved.SchemaVersion == 2) && saved.Engine == m.engine && saved.RuntimeVersion == runtimeVersion {
+		if json.Unmarshal(b, &saved) == nil && (saved.SchemaVersion == catalogSchemaVersion || saved.SchemaVersion == 3 || saved.SchemaVersion == 2) && saved.Engine == m.engine {
 			// The previous schema contains usable candidates and size estimates.
 			// Preserve them across an offline upgrade, but do not present its
 			// unverified Ollama capability labels as authoritative.
@@ -90,6 +91,13 @@ func newModelCatalog(m *manager) *modelCatalog {
 			saved.SchemaVersion = catalogSchemaVersion
 			c.state = saved
 			c.state.Refreshing = false
+			if saved.RuntimeVersion != runtimeVersion {
+				// A newer runtime can still use the last catalog as an immediate,
+				// conservative selector. Keep it visible while this process-start
+				// refresh verifies upstream metadata for the new runtime.
+				c.state.RuntimeVersion = runtimeVersion
+				c.runtimeChanged = true
+			}
 		}
 	}
 	c.discover = m.discoverModels
@@ -191,6 +199,7 @@ func (c *modelCatalog) refresh(ctx context.Context) {
 		c.state.SchemaVersion = catalogSchemaVersion
 		c.state.RuntimeVersion = c.m.catalogRuntimeVersion()
 		c.state.Items, c.state.LastSuccess, c.state.LastError = items, time.Now().UTC(), ""
+		c.runtimeChanged = false
 		log.Printf("model catalog refreshed engine=%s candidates=%d", c.m.engine, len(items))
 	}
 	if err := c.save(); err != nil {
@@ -230,8 +239,9 @@ func (c *modelCatalog) snapshot(ctx context.Context) catalogState {
 	c.mu.Lock()
 	state := c.state
 	state.Items = append([]catalogEntry{}, c.state.Items...)
+	runtimeChanged := c.runtimeChanged
 	c.mu.Unlock()
-	state.Stale = state.LastSuccess.IsZero() || time.Since(state.LastSuccess) >= catalogInterval || state.LastError != ""
+	state.Stale = runtimeChanged || state.LastSuccess.IsZero() || time.Since(state.LastSuccess) >= catalogInterval || state.LastError != ""
 	memory, disk := c.budget(ctx)
 	state.AvailableMemoryBytes = memory
 	engine := ""

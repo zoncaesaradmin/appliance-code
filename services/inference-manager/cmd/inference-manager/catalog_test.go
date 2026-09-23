@@ -183,7 +183,7 @@ func TestCatalogBeginsInitialRefreshWithoutAnAPIRead(t *testing.T) {
 	}
 }
 
-func TestOllamaCatalogIsInvalidatedWhenRuntimeVersionChanges(t *testing.T) {
+func TestOllamaCatalogIsRetainedAndRefreshedWhenRuntimeVersionChanges(t *testing.T) {
 	t.Setenv("INFERENCE_RUNTIME_VERSION", "0.9.0")
 	m := testManager(t)
 	m.engine = "ollama"
@@ -198,11 +198,14 @@ func TestOllamaCatalogIsInvalidatedWhenRuntimeVersionChanges(t *testing.T) {
 
 	t.Setenv("INFERENCE_RUNTIME_VERSION", "0.9.1")
 	restarted := newModelCatalog(m)
-	if restarted.state.RuntimeVersion != "0.9.1" || len(restarted.state.Items) != 0 {
-		t.Fatalf("catalog from prior runtime was reused: %+v", restarted.state)
+	if restarted.state.RuntimeVersion != "0.9.1" || len(restarted.state.Items) != 1 {
+		t.Fatalf("catalog from prior runtime was not retained: %+v", restarted.state)
 	}
 	if delay := restarted.nextRefreshDelay(); delay > 0 {
-		t.Fatalf("changed runtime should refresh catalog immediately, delay=%s", delay)
+		t.Fatalf("changed runtime should refresh retained catalog immediately, delay=%s", delay)
+	}
+	if snapshot := restarted.snapshot(context.Background()); !snapshot.Stale {
+		t.Fatalf("retained catalog should be stale until the refresh completes: %+v", snapshot)
 	}
 }
 
