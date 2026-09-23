@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -408,9 +409,12 @@ func (m *Manager) ensureApplianceAliasPublisher(ctx context.Context, applianceNa
 	if err := m.files().MkdirAll(filepath.Dir(unitPath), 0o755); err != nil {
 		return fmt.Errorf("mdns: create appliance alias publisher directory: %w", err)
 	}
-	if existing, err := m.files().ReadFile(unitPath); err == nil && string(existing) == unit {
-		// Unit unchanged; ensure it is running.
-	} else {
+	existing, readErr := m.files().ReadFile(unitPath)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return fmt.Errorf("mdns: read appliance alias publisher: %w", readErr)
+	}
+	changed := readErr != nil || string(existing) != unit
+	if changed {
 		if err := m.files().WriteFile(unitPath, []byte(unit), 0o644); err != nil {
 			return fmt.Errorf("mdns: write appliance alias publisher: %w", err)
 		}
@@ -421,6 +425,13 @@ func (m *Manager) ensureApplianceAliasPublisher(ctx context.Context, applianceNa
 	unitName := applianceAliasPublisherUnit(applianceName)
 	if _, err := m.runner().CombinedOutput(ctx, "systemctl", "enable", "--now", unitName); err != nil {
 		return fmt.Errorf("mdns: start appliance alias publisher %q: %w", alias, err)
+	}
+	if changed && readErr == nil {
+		// enable --now leaves an already-running unit on its old ExecStart.
+		// Restart only when its published address actually changed.
+		if _, err := m.runner().CombinedOutput(ctx, "systemctl", "restart", unitName); err != nil {
+			return fmt.Errorf("mdns: restart appliance alias publisher %q: %w", alias, err)
+		}
 	}
 	return nil
 }
@@ -596,21 +607,31 @@ func (m *Manager) startApplicationAliasPublishers(ctx context.Context, applicati
 }
 
 func (m *Manager) primaryAddress(ctx context.Context) (string, error) {
-	out, err := m.runner().CombinedOutput(ctx, "hostname", "-I")
+	iface, err := m.defaultRouteInterface(ctx)
 	if err != nil {
-		return "", fmt.Errorf("mdns: find host address: %w", err)
+		return "", err
 	}
-	for _, value := range strings.Fields(out) {
-		// Avahi's static host file accepts IPv4/IPv6, but publish the ordinary
-		// LAN IPv4 address only. Loopback, link-local, and management AP space
-		// must not make an application reachable from the wrong network.
-		parts := strings.Split(value, ".")
-		if len(parts) != 4 || value == "127.0.0.1" || strings.HasPrefix(value, "169.254.") || strings.HasPrefix(value, "10.42.0.") {
-			continue
+	out, err := m.runner().CombinedOutput(ctx, "ip", "-4", "-o", "addr", "show", "dev", iface, "scope", "global")
+	if err != nil {
+		return "", fmt.Errorf("mdns: find LAN address on %s: %w", iface, err)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		for index, field := range fields {
+			if field != "inet" || index+1 >= len(fields) {
+				continue
+			}
+			prefix, err := netip.ParsePrefix(fields[index+1])
+			if err != nil {
+				continue
+			}
+			addr := prefix.Addr()
+			if addr.Is4() && !addr.IsUnspecified() && !addr.IsLoopback() && !addr.IsLinkLocalUnicast() && !addr.IsMulticast() {
+				return addr.String(), nil
+			}
 		}
-		return value, nil
 	}
-	return "", fmt.Errorf("mdns: no usable LAN IPv4 address is available")
+	return "", fmt.Errorf("mdns: no usable LAN IPv4 address on default-route interface %s", iface)
 }
 
 func removeAliasBlock(content string) string {
@@ -761,6 +782,11 @@ func (m *Manager) Reconcile(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	if status.Actual == ActualActive {
+		if st.ApplianceName != "" {
+			if err := m.ensureApplianceAliasPublisher(ctx, st.ApplianceName); err != nil {
+				return status, err
+			}
+		}
 		return status, nil
 	}
 	return m.Apply(ctx, ApplyRequest{Desired: true, ApplianceName: st.ApplianceName})

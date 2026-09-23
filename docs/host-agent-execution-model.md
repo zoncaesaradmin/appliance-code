@@ -71,6 +71,14 @@ The status payload includes the advertised appliance mDNS name in
 `<appliance-name>.local`. The installer configures that name through the
 root-owned host-agent socket; the host mDNS API can toggle it but cannot change
 the appliance identity.
+Host-agentd selects the IPv4 address assigned to the host's default-route LAN
+interface for the appliance and application `.local` publishers. It must not
+select the first `hostname -I` address: K3s/CNI addresses such as `10.44.0.0`
+can appear first and are not reachable from LAN clients. Startup and periodic
+mDNS reconciliation rewrite and restart the appliance publisher only when its
+address changes, so DHCP changes do not leave a stale A record. This runs on
+the host OS through the existing host-agentd boundary; the K3s pod does not
+inspect host interfaces or run Avahi.
 form so the Admin UI/API can show the exact browser/discovery name in use.
 Admin UI **Host Services** (`/admin/host-services`) is the day-2 configuration
 surface for all three host features. Management AP browser access is

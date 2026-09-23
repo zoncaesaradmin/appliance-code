@@ -59,8 +59,9 @@ twice the weights plus 4 GiB. Ollama remains an estimate, not a guarantee:
 large context windows, parallel requests, or runtime changes can exceed it.
 Older Ollama catalogs are migrated from their reversible `weights×2+2GiB`
 estimate at startup, preserving candidates during offline upgrades. The UI
-lists estimated non-fitting candidates with the reason and disables download,
-instead of silently removing them. For
+omits estimated non-fitting candidates from its model dropdown while the API
+retains eligibility reasons and downloaded models remain manageable in the
+separate inventory list. For
 vLLM, one planner (`planServe`) decides catalog eligibility, engine memory and
 CPU limits, and `--max-model-len` together:
 

@@ -175,10 +175,9 @@ it("separates downloaded inventory from enabled model instances", async () => {
   expect(element.querySelector("input")).toBeNull();
   expect(element.querySelector("textarea")).toBeNull();
   const labels = [...select!.options].map((option) => option.textContent);
-  expect(labels).toContain("retired:1b (Chat assistant · downloaded · enabled)");
-  expect(labels).toContain("stored:2b (Chat assistant · downloaded)");
   expect(labels).toContain("available:1b (Coding agent)");
-  expect(labels).toContain("too-large:100b (Chat assistant · does not fit estimated capacity)");
+  expect(labels.some((label) => label?.includes("retired:1b") || label?.includes("stored:2b"))).toBe(false);
+  expect(labels.some((label) => label?.includes("too-large:100b"))).toBe(false);
   await act(async () => {
     select!.value = "available:1b";
     select!.dispatchEvent(new Event("change", { bubbles: true }));
@@ -194,13 +193,29 @@ it("separates downloaded inventory from enabled model instances", async () => {
   });
 });
 
-it("keeps downloaded models in the dropdown when catalog discovery fails", async () => {
+it("keeps downloaded models manageable outside the dropdown when catalog discovery fails", async () => {
   api.getInferenceCatalog.mockRejectedValue(new Error("offline"));
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Model discovery is unavailable");
   const select = element.querySelector("select");
-  expect([...select!.options].map((option) => option.textContent)).toContain("retired:1b (Chat assistant · downloaded)");
+  expect([...select!.options].map((option) => option.textContent)).toEqual(["No models currently fit"]);
+  expect(element.textContent).toContain("retired:1b");
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Enable")).toBe(true);
+});
+
+it("keeps a downloaded non-fitting model in inventory but out of the dropdown", async () => {
+  api.listInferenceModels.mockResolvedValue([{ id: "too-large:32b" }]);
+  api.getInferenceCatalog.mockResolvedValue({
+    lastSuccess: "2026-09-15T00:00:00Z",
+    stale: false,
+    refreshing: false,
+    scope: "Popular models",
+    items: [{ id: "too-large:32b", source: "too-large:32b", downloadBytes: 1000, memoryBytes: 2000, eligible: false }]
+  });
+  await act(async () => root.render(<AIServicePage />));
+  expect([...element.querySelector("select")!.options].map((option) => option.textContent)).toEqual(["No models currently fit"]);
+  expect(element.querySelector(".model-inventory__list")?.textContent).toContain("too-large:32b");
+  expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Remove")).toBe(true);
 });
 
 it("does not mislabel a candidate when registry capability metadata is unavailable", async () => {
@@ -231,7 +246,7 @@ it("does not mislabel a candidate when registry capability metadata is unavailab
   expect(element.textContent).toContain("Download the model to check its tool support");
 });
 
-it("explains when catalog items exist but none are eligible", async () => {
+it("omits catalog items that do not fit estimated capacity", async () => {
   api.listInferenceModels.mockResolvedValue([]);
   api.getInferenceCatalog.mockResolvedValue({
     lastSuccess: "2026-09-15T00:00:00Z",
@@ -241,9 +256,9 @@ it("explains when catalog items exist but none are eligible", async () => {
     items: [{ id: "too-large:100b", source: "too-large:100b", downloadBytes: 1000, memoryBytes: 2000, eligible: false, reason: "model needs more memory" }]
   });
   await act(async () => root.render(<AIServicePage />));
-  expect([...element.querySelector("select")!.options].map((option) => option.textContent)).toContain("too-large:100b (Chat assistant · does not fit estimated capacity)");
-  expect(element.textContent).toContain("Not currently available for download: model needs more memory");
-  expect([...element.querySelectorAll("button")].find((button) => button.textContent === "Download")?.disabled).toBe(true);
+  expect(element.querySelector("select")).toBeNull();
+  expect(element.textContent).toContain("No catalog models currently fit this appliance");
+  expect(element.textContent).not.toContain("too-large:100b");
 });
 
 it("clears a stale downloaded-models refresh error after a successful post-download refresh", async () => {
@@ -345,6 +360,7 @@ it("sorts the model dropdown by estimated parameters descending", async () => {
   await act(async () => root.render(<AIServicePage />));
   const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
   expect(labels).toEqual([
+    "Choose a fitting model",
     "org/large-7B (Chat assistant)",
     "org/mid-3B (Chat assistant)",
     "org/tiny-0.5B (Chat assistant)"
@@ -379,10 +395,8 @@ it("shows serving ready-for-use and disables Enable when the selected model is a
   ]);
   await act(async () => root.render(<AIServicePage />));
   expect(element.textContent).toContain("Ready for use (retired:1b)");
-  const select = element.querySelector("select")!;
   await act(async () => {
-    select.value = "retired:1b";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    (element.querySelector(".model-inventory__item") as HTMLButtonElement).click();
   });
   expect(element.textContent).toContain("Default instance");
   const enable = [...element.querySelectorAll("button")].find((button) => button.textContent === "Enabled");
@@ -514,10 +528,8 @@ it("polls enable progress while an async load runs", async () => {
     });
 
   await act(async () => root.render(<AIServicePage />));
-  const select = element.querySelector("select")!;
   await act(async () => {
-    select.value = "retired:1b";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    (element.querySelector(".model-inventory__item") as HTMLButtonElement).click();
   });
   const load = [...element.querySelectorAll("button")].find((button) => button.textContent === "Enable");
   expect(load).toBeTruthy();

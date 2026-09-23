@@ -25,8 +25,9 @@ const (
 	sharedFSGID       = 20000
 
 	// Boot radios can take a few seconds to enumerate on mini PCs / USB NICs.
-	reconcileAttempts = 10
-	reconcileDelay    = 2 * time.Second
+	reconcileAttempts     = 10
+	reconcileDelay        = 2 * time.Second
+	mdnsReconcileInterval = time.Minute
 )
 
 func main() {
@@ -63,7 +64,12 @@ func main() {
 	wifiManager := wifiap.NewManager()
 	mdnsManager := mdns.NewManager()
 	firewallManager := firewall.NewManager()
-	go reconcileDay2Features(logger, wifiClientManager, wifiManager, mdnsManager)
+	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
+	defer cancelLifecycle()
+	go func() {
+		reconcileDay2Features(logger, wifiClientManager, wifiManager, mdnsManager)
+		reconcileMDNSPeriodically(lifecycleCtx, logger, mdnsManager)
+	}()
 	go reconcileApplicationFirewall(logger, firewallManager)
 
 	server := &http.Server{
@@ -77,6 +83,7 @@ func main() {
 	}
 	go func() {
 		<-process.ShutdownSignal()
+		cancelLifecycle()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = server.Shutdown(ctx)
@@ -86,6 +93,27 @@ func main() {
 	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		logger.Error("host agent daemon failed", "error", err)
 		os.Exit(1)
+	}
+}
+
+// DHCP and interface changes can invalidate a previously published A record
+// after boot. Reconcile the appliance alias without restarting an unchanged
+// publisher or Avahi itself.
+func reconcileMDNSPeriodically(ctx context.Context, logger *slog.Logger, manager *mdns.Manager) {
+	ticker := time.NewTicker(mdnsReconcileInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			reconcileCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			_, err := manager.Reconcile(reconcileCtx)
+			cancel()
+			if err != nil {
+				logger.Warn("mdns periodic reconcile failed", "error", err)
+			}
+		}
 	}
 }
 

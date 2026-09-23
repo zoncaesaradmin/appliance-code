@@ -103,7 +103,7 @@ func TestApplyEnableStartsService(t *testing.T) {
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "systemctl": true},
 		outputs: map[string]string{
 			"ip -4 route show default":                                        "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
-			"hostname -I":                                                     "10.42.0.1 192.168.1.151\n",
+			"ip -4 -o addr show dev enp1s0 scope global":                      "2: enp1s0 inet 192.168.1.151/24 brd 192.168.1.255 scope global dynamic enp1s0\n",
 			"systemctl is-active avahi-daemon.service":                        "active",
 			"systemctl unmask avahi-daemon.socket":                            "",
 			"systemctl unmask avahi-daemon.service":                           "",
@@ -154,6 +154,79 @@ func TestApplyEnableStartsService(t *testing.T) {
 	}
 	if idx != len(wantBeforeReload) {
 		t.Fatalf("missing unmask/enable/reload for live avahi; calls=%v", runner.calls)
+	}
+}
+
+func TestPrimaryAddressUsesDefaultRouteLANInsteadOfFirstHostAddress(t *testing.T) {
+	runner := &fakeRunner{outputs: map[string]string{
+		"hostname -I":                                "10.44.0.0 192.168.1.155\n",
+		"ip -4 route show default":                   "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+		"ip -4 -o addr show dev enp1s0 scope global": "2: enp1s0 inet 192.168.1.155/24 brd 192.168.1.255 scope global dynamic enp1s0\n",
+	}}
+	m := &Manager{Runner: runner}
+	address, err := m.primaryAddress(context.Background())
+	if err != nil || address != "192.168.1.155" {
+		t.Fatalf("LAN address = %q, err=%v", address, err)
+	}
+	for _, call := range runner.calls {
+		if call == "hostname -I" {
+			t.Fatal("unordered host addresses must not select the mDNS publisher IP")
+		}
+	}
+}
+
+func TestPrimaryAddressFailsClosedWhenLANHasNoUsableIPv4(t *testing.T) {
+	runner := &fakeRunner{outputs: map[string]string{
+		"ip -4 route show default":                   "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+		"ip -4 -o addr show dev enp1s0 scope global": "2: enp1s0 inet 169.254.2.3/16 scope global enp1s0\n",
+	}}
+	_, err := (&Manager{Runner: runner}).primaryAddress(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "no usable LAN IPv4") {
+		t.Fatalf("invalid LAN address should fail closed: %v", err)
+	}
+}
+
+func TestReconcileReplacesStaleApplianceAddressWithoutRestartingUnchangedUnit(t *testing.T) {
+	root := t.TempDir()
+	files := &memFiles{data: map[string][]byte{
+		"/state/state.json": []byte(`{"desired":true,"applianceName":"big-machine"}`),
+	}}
+	runner := &fakeRunner{
+		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "systemctl": true},
+		outputs: map[string]string{
+			"systemctl is-active avahi-daemon.service":   "active",
+			"ip -4 route show default":                   "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
+			"ip -4 -o addr show dev enp1s0 scope global": "2: enp1s0 inet 192.168.1.155/24 brd 192.168.1.255 scope global enp1s0\n",
+		},
+	}
+	m := &Manager{Root: root, StateDir: "/state", Runner: runner, Files: files}
+	files.data[m.applianceAliasPublisherFile("big-machine")] = []byte("[Service]\nExecStart=/usr/bin/avahi-publish-address -R big-machine.local 10.44.0.0\n")
+	status, err := m.Reconcile(context.Background())
+	if err != nil || status.Actual != ActualActive {
+		t.Fatalf("reconcile status=%+v err=%v", status, err)
+	}
+	if !strings.Contains(string(files.data[m.applianceAliasPublisherFile("big-machine")]), "big-machine.local 192.168.1.155") {
+		t.Fatal("stale publisher address was not replaced")
+	}
+	restarts := 0
+	for _, call := range runner.calls {
+		if call == "systemctl restart zon-mdns-appliance-big-machine.service" {
+			restarts++
+		}
+	}
+	if restarts != 1 {
+		t.Fatalf("changed active publisher restarts=%d, want 1; calls=%v", restarts, runner.calls)
+	}
+	if _, err := m.Reconcile(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range runner.calls {
+		if call == "systemctl restart zon-mdns-appliance-big-machine.service" {
+			restarts++
+		}
+	}
+	if restarts != 2 {
+		t.Fatalf("unchanged publisher was restarted; calls=%v", runner.calls)
 	}
 }
 
@@ -230,7 +303,7 @@ func TestApplicationAliasesPreserveOperatorMappingsAndUseLANInterface(t *testing
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
 		outputs: map[string]string{
 			"ip -4 route show default":                         "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
-			"hostname -I":                                      "10.42.0.1 192.168.1.151\n",
+			"ip -4 -o addr show dev enp1s0 scope global":       "2: enp1s0 inet 192.168.1.151/24 brd 192.168.1.255 scope global dynamic enp1s0\n",
 			"systemctl is-active avahi-daemon.service":         "active",
 			"systemctl unmask avahi-daemon.socket":             "",
 			"systemctl unmask avahi-daemon.service":            "",
@@ -296,7 +369,7 @@ func TestApplicationAliasesFailWhenAvahiDoesNotPublishAlias(t *testing.T) {
 		paths: map[string]bool{"avahi-daemon": true, "avahi-publish-address": true, "avahi-resolve-host-name": true, "systemctl": true},
 		outputs: map[string]string{
 			"ip -4 route show default":                         "default via 192.168.1.1 dev enp1s0 proto dhcp\n",
-			"hostname -I":                                      "192.168.1.151\n",
+			"ip -4 -o addr show dev enp1s0 scope global":       "2: enp1s0 inet 192.168.1.151/24 brd 192.168.1.255 scope global dynamic enp1s0\n",
 			"systemctl is-active avahi-daemon.service":         "active",
 			"systemctl unmask avahi-daemon.socket":             "",
 			"systemctl unmask avahi-daemon.service":            "",

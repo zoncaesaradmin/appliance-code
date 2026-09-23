@@ -614,7 +614,9 @@ export function AIServicePage(): React.JSX.Element {
   const options = useMemo(() => {
     const entries = new Map<string, InferenceCatalogEntry>();
     for (const entry of catalog?.items ?? []) {
-      entries.set(entry.id, entry);
+      if (entry.eligible || downloaded.has(entry.id)) {
+        entries.set(entry.id, entry);
+      }
     }
     for (const model of models) {
       if (!entries.has(model.id)) {
@@ -634,6 +636,7 @@ export function AIServicePage(): React.JSX.Element {
       catalog?.order ?? "desc"
     );
   }, [catalog?.items, catalog?.order, catalog?.sort, downloaded, models]);
+  const selectableOptions = useMemo(() => options.filter((entry) => entry.eligible), [options]);
 
   useEffect(() => {
     if (!selectedId && options.length > 0) {
@@ -753,7 +756,9 @@ export function AIServicePage(): React.JSX.Element {
                 message={
                   catalog?.refreshing
                     ? "Discovering models…"
-                    : "No models are available yet. Downloaded models still appear here."
+                    : (catalog?.items?.length ?? 0) > 0
+                      ? "No catalog models currently fit this appliance's estimated memory or storage. Downloaded models still appear here."
+                      : "No models are available yet. Downloaded models still appear here."
                 }
               />
             ) : (
@@ -793,15 +798,18 @@ export function AIServicePage(): React.JSX.Element {
                   Choose a model
                   <select
                     className="rounded-lg border border-slate-300 px-3 py-2"
-                    value={selectedId}
+                    value={selectableOptions.some((entry) => entry.id === selectedId) ? selectedId : ""}
                     onChange={(event) => setSelectedId(event.target.value)}
                     aria-label="Select model"
                     disabled={busy !== ""}
                   >
-                    {options.map((entry) => (
+                    <option value="" disabled>
+                      {selectableOptions.length > 0 ? "Choose a fitting model" : "No models currently fit"}
+                    </option>
+                    {selectableOptions.map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {`${entry.id} (${experienceLabel(capabilitiesFor(models.find((model) => model.id === entry.id), entry))}${
-                          enabledModelIDs.has(entry.id) ? " · downloaded · enabled" : downloaded.has(entry.id) ? " · downloaded" : !entry.eligible ? " · does not fit estimated capacity" : ""
+                          enabledModelIDs.has(entry.id) ? " · downloaded · enabled" : downloaded.has(entry.id) ? " · downloaded" : ""
                         })`}
                       </option>
                     ))}
@@ -812,9 +820,6 @@ export function AIServicePage(): React.JSX.Element {
                     <p className="text-sm text-slate-600" role="status" aria-live="polite">
                       {selectedSummary}
                     </p>
-					{!selected.eligible && !selectedDownloaded ? (
-					  <p className="message" role="status">Not currently available for download: {selected.reason || "Estimated memory or storage is insufficient."}</p>
-					) : null}
 							<p className="text-sm text-slate-600" role="status">
 								{selectedCapabilities.verification === "unverified"
 									? "Capability unverified: registry metadata was unavailable. Download the model to check its tool support with the local runtime."
