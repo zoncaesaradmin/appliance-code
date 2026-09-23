@@ -1,0 +1,52 @@
+diff --git a/backend/open_webui/routers/auths.py b/backend/open_webui/routers/auths.py
+index 5cbd415..ec21317 100644
+--- a/backend/open_webui/routers/auths.py
++++ b/backend/open_webui/routers/auths.py
+@@ -323,6 +323,11 @@ async def update_profile(
+     session_user=Depends(get_verified_user),
+     db: AsyncSession = Depends(get_async_session),
+ ):
++    # The appliance owns display identity for trusted-header users. WebUI may
++    # retain chat preferences, but must not maintain a second editable profile.
++    if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
++        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=ERROR_MESSAGES.ACTION_PROHIBITED)
++
+     if session_user:
+         user = await Users.update_user_by_id(
+             session_user.id,
+diff --git a/src/lib/components/chat/SettingsModal.svelte b/src/lib/components/chat/SettingsModal.svelte
+index 2557290..415b016 100644
+--- a/src/lib/components/chat/SettingsModal.svelte
++++ b/src/lib/components/chat/SettingsModal.svelte
+@@ -250,12 +250,16 @@
+ 			title: $i18n.t('settings.personal.archivedChats.title'),
+ 			searchPrefixes: ['settings.personal.archivedChats.']
+ 		},
+-		{
+-			id: 'account',
+-			titleKey: 'settings.personal.account.title',
+-			title: $i18n.t('settings.personal.account.title'),
+-			searchPrefixes: ['settings.personal.account.']
+-		},
++		...(!$config?.features?.auth_trusted_header
++			? [
++					{
++						id: 'account',
++						titleKey: 'settings.personal.account.title',
++						title: $i18n.t('settings.personal.account.title'),
++						searchPrefixes: ['settings.personal.account.']
++					}
++				]
++			: []),
+ 		{
+ 			id: 'about',
+ 			titleKey: 'settings.personal.about.title',
+@@ -842,7 +846,7 @@
+ 				<Usage />
+ 			{:else if selectedTab === 'archived_chats'}
+ 				<ArchivedChats />
+-			{:else if selectedTab === 'account'}
++			{:else if selectedTab === 'account' && !$config?.features?.auth_trusted_header}
+ 				<Account
+ 					saveHandler={() => {
+ 						toast.success($i18n.t('Settings saved successfully!'));

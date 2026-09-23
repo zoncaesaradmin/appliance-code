@@ -1,0 +1,14 @@
+diff --git a/vite.config.ts b/vite.config.ts
+index 631ce59..cdce4ff 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -26,7 +26,8 @@ export default defineConfig({
+ 		APP_BUILD_HASH: JSON.stringify(process.env.APP_BUILD_HASH || 'dev-build')
+ 	},
+ 	build: {
+-		sourcemap: true
++		// The appliance ships minified assets without public source maps.
++		sourcemap: false
+ 	},
+ 	server: {
+ 		proxy: {

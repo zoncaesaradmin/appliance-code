@@ -1,0 +1,59 @@
+diff --git a/src/lib/components/chat/Chat.svelte b/src/lib/components/chat/Chat.svelte
+index fd0e1bb..fd1e556 100644
+--- a/src/lib/components/chat/Chat.svelte
++++ b/src/lib/components/chat/Chat.svelte
+@@ -3602,8 +3602,7 @@
+ 				variables: {
+ 					...getPromptVariables(
+ 						$user?.name,
+-						$settings?.userLocation ? userLocation : undefined,
+-						$user?.email
++						$settings?.userLocation ? userLocation : undefined
+ 					)
+ 				},
+ 				...(useChatVariablesFallback ? { chat_variables: chatVariables } : {}),
+diff --git a/src/lib/components/chat/Settings/Account/UserProfileImage.svelte b/src/lib/components/chat/Settings/Account/UserProfileImage.svelte
+index 1aa54b4..60bfe86 100644
+--- a/src/lib/components/chat/Settings/Account/UserProfileImage.svelte
++++ b/src/lib/components/chat/Settings/Account/UserProfileImage.svelte
+@@ -4,7 +4,6 @@
+ 
+ 	const i18n = getContext('i18n');
+ 
+-	import { getGravatarUrl } from '$lib/apis/utils';
+ 	import { canvasPixelTest, generateInitialsImage } from '$lib/utils';
+ 
+ 	import { WEBUI_BASE_URL } from '$lib/constants';
+@@ -158,16 +157,6 @@
+ 						}
+ 					}}>{$i18n.t('Initials')}</button
+ 				>
+-				<span class="text-[0.6875rem] text-gray-300 dark:text-gray-700">·</span>
+-				<button
+-					class="text-[0.6875rem] text-gray-500 transition-colors duration-100 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
+-					type="button"
+-					on:click={async () => {
+-						const url = await getGravatarUrl(localStorage.token, user?.email);
+-
+-						profileImageUrl = url;
+-					}}>{$i18n.t('Gravatar')}</button
+-				>
+ 			</div>
+ 		</div>
+ 	</div>
+@@ -233,15 +222,6 @@
+ 				}}>{$i18n.t('Initials')}</button
+ 			>
+ 
+-			<button
+-				class="rounded-lg py-0.5 text-center text-xs text-gray-600 opacity-0 transition-all group-hover:opacity-100 group-focus-within:opacity-100 dark:text-gray-400"
+-				type="button"
+-				on:click={async () => {
+-					const url = await getGravatarUrl(localStorage.token, user?.email);
+-
+-					profileImageUrl = url;
+-				}}>{$i18n.t('Gravatar')}</button
+-			>
+ 		</div>
+ 	</div>
+ {/if}
