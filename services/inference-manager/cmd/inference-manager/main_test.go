@@ -286,7 +286,7 @@ func TestBootstrapModelMetadataPopulatesLocalOllamaInventory(t *testing.T) {
 		case "/":
 			w.WriteHeader(http.StatusOK)
 		case "/api/tags":
-			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "qwen2.5-coder:7b"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"name": "qwen2.5-coder:7b", "size": 4_000_000_000}}})
 		case "/api/show":
 			_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"completion", "tools"}})
 		default:
@@ -297,11 +297,66 @@ func TestBootstrapModelMetadataPopulatesLocalOllamaInventory(t *testing.T) {
 	m := testManager(t)
 	m.engine = "ollama"
 	m.backend, _ = url.Parse(backend.URL)
-	m.bootstrapModelMetadata(context.Background())
-	inventory := m.ollamaInventorySnapshot()
-	if len(inventory) != 1 || !inventory[0].Capabilities.CodexCompatible {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.startRuntimeInitialization(ctx)
+	var inventory []model
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		inventory = m.ollamaInventorySnapshot()
+		if len(inventory) == 1 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(inventory) != 1 || !inventory[0].Capabilities.CodexCompatible || inventory[0].SizeBytes != 4_000_000_000 {
 		t.Fatalf("startup Ollama inventory = %#v", inventory)
 	}
+	if got := m.memoryBytesForModel(context.Background(), "qwen2.5-coder:7b", ""); got != ollamaMemoryEstimate(4_000_000_000) {
+		t.Fatalf("downloaded model load estimate = %d", got)
+	}
+	m.opMu.Lock()
+	m.opMu.Unlock()
+}
+
+type blockingEnsureEngine struct {
+	*fakeEngine
+	started chan struct{}
+	release chan struct{}
+}
+
+func (f *blockingEnsureEngine) EnsureService(ctx context.Context) error {
+	select {
+	case f.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-f.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func TestStartupServesSavedInventoryWhileEngineInitializationIsBlocked(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	m.ollama.Models = []model{{ID: "saved:1b", Capabilities: toolCapableOllamaModel("runtime-reported")}}
+	engine := &blockingEnsureEngine{fakeEngine: &fakeEngine{}, started: make(chan struct{}, 1), release: make(chan struct{})}
+	m.engineOrch = engine
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m.startRuntimeInitialization(ctx)
+	<-engine.started
+	response := httptest.NewRecorder()
+	m.handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/internal/v1/models", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "saved:1b") {
+		t.Fatalf("saved inventory blocked by engine startup: status=%d body=%s", response.Code, response.Body.String())
+	}
+	cancel()
+	close(engine.release)
+	m.opMu.Lock()
+	m.opMu.Unlock()
 }
 
 func TestOllamaShowFailurePreservesKnownCapabilityWithoutGuessingNewModel(t *testing.T) {

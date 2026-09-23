@@ -79,6 +79,7 @@ type ServingInstance struct {
 
 type Model struct {
 	ID              string            `json:"id"`
+	SizeBytes       uint64            `json:"sizeBytes,omitempty"`
 	Object          string            `json:"object,omitempty"`
 	OwnedBy         string            `json:"ownedBy,omitempty"`
 	Source          string            `json:"source,omitempty"`

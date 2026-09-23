@@ -119,6 +119,38 @@ it("puts the downloaded library beside the enabled-model view", async () => {
   expect(element.querySelector(".ai-services-layout__status")).not.toBeNull();
 });
 
+it("shows cached models without waiting for a slow runtime status request", async () => {
+  let releaseStatus!: (value: unknown) => void;
+  api.getInferenceStatus.mockReturnValue(new Promise((resolve) => { releaseStatus = resolve; }));
+  await act(async () => root.render(<AIServicePage />));
+  const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
+  expect(labels).toContain("available:1b (Coding agent)");
+  releaseStatus({ engine: "ollama", ready: true, servingState: "inactive" });
+  await act(async () => {});
+});
+
+it("updates a first-run catalog when background discovery finishes", async () => {
+  vi.useFakeTimers();
+  api.listInferenceModels.mockResolvedValue([]);
+  api.getInferenceCatalog
+    .mockResolvedValueOnce({ lastSuccess: "", refreshing: true, stale: true, scope: "Popular models", items: [] })
+    .mockResolvedValue({
+      lastSuccess: "2026-09-23T00:00:00Z",
+      refreshing: false,
+      stale: false,
+      scope: "Popular models",
+      items: [{ id: "available:1b", source: "available:1b", downloadBytes: 100, memoryBytes: 200, eligible: true }]
+    });
+  try {
+    await act(async () => root.render(<AIServicePage />));
+    expect(element.textContent).toContain("Discovering models…");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect([...element.querySelector("select")!.options].map((option) => option.textContent)).toContain("available:1b (Chat assistant)");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("separates downloaded inventory from enabled model instances", async () => {
   api.getInferenceStatus.mockResolvedValue({
     engine: "ollama",
@@ -146,7 +178,7 @@ it("separates downloaded inventory from enabled model instances", async () => {
   expect(labels).toContain("retired:1b (Chat assistant · downloaded · enabled)");
   expect(labels).toContain("stored:2b (Chat assistant · downloaded)");
   expect(labels).toContain("available:1b (Coding agent)");
-  expect(labels.some((label) => label?.includes("too-large:100b"))).toBe(false);
+  expect(labels).toContain("too-large:100b (Chat assistant · does not fit estimated capacity)");
   await act(async () => {
     select!.value = "available:1b";
     select!.dispatchEvent(new Event("change", { bubbles: true }));
@@ -206,11 +238,12 @@ it("explains when catalog items exist but none are eligible", async () => {
     stale: false,
     refreshing: false,
     scope: "Popular models",
-    items: [{ id: "too-large:100b", source: "too-large:100b", downloadBytes: 1000, memoryBytes: 2000, eligible: false }]
+    items: [{ id: "too-large:100b", source: "too-large:100b", downloadBytes: 1000, memoryBytes: 2000, eligible: false, reason: "model needs more memory" }]
   });
   await act(async () => root.render(<AIServicePage />));
-  expect(element.querySelector("select")).toBeNull();
-  expect(element.textContent).toContain("No catalog models currently fit this appliance");
+  expect([...element.querySelector("select")!.options].map((option) => option.textContent)).toContain("too-large:100b (Chat assistant · does not fit estimated capacity)");
+  expect(element.textContent).toContain("Not currently available for download: model needs more memory");
+  expect([...element.querySelectorAll("button")].find((button) => button.textContent === "Download")?.disabled).toBe(true);
 });
 
 it("clears a stale downloaded-models refresh error after a successful post-download refresh", async () => {

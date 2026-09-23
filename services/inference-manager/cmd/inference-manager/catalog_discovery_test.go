@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func writeFakeVLLMRegistry(t *testing.T) string {
@@ -246,7 +248,7 @@ func TestDiscoverOllamaUsesLibraryAndRegistryMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1060 || entries[0].MemoryBytes != 1000*2+(2<<30) || !entries[0].Capabilities.CodexCompatible || entries[0].Capabilities.Verification != "template-reported" {
+	if len(entries) != 1 || entries[0].ID != "tiny:1b" || entries[0].DownloadBytes != 1060 || entries[0].MemoryBytes != ollamaMemoryEstimate(1000) || !entries[0].Capabilities.CodexCompatible || entries[0].Capabilities.Verification != "template-reported" {
 		t.Fatalf("entries=%+v", entries)
 	}
 }
@@ -271,6 +273,43 @@ func TestDiscoverOllamaKeepsHealthyCandidateWhenManifestTimesOut(t *testing.T) {
 	entries, err := discoverOllama(context.Background())
 	if err == nil || len(entries) != 1 || entries[0].ID != "tiny:good" {
 		t.Fatalf("partial discovery entries=%+v err=%v", entries, err)
+	}
+}
+
+func TestDiscoverOllamaDoesNotReadFamilyPagesSerially(t *testing.T) {
+	var active atomic.Int32
+	var maximum atomic.Int32
+	arrived := make(chan struct{})
+	server := useCatalogFixture(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/library":
+			_, _ = w.Write([]byte(`<a href="/library/first">First</a><a href="/library/second">Second</a>`))
+		case "/library/first/tags", "/library/second/tags":
+			current := active.Add(1)
+			for {
+				previous := maximum.Load()
+				if current <= previous || maximum.CompareAndSwap(previous, current) {
+					break
+				}
+			}
+			if current == 2 {
+				close(arrived)
+			}
+			select {
+			case <-arrived:
+			case <-time.After(time.Second):
+			}
+			active.Add(-1)
+			_, _ = w.Write([]byte("no explicit tags"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Setenv("INFERENCE_CATALOG_OLLAMA_BASE", server.URL)
+	t.Setenv("INFERENCE_CATALOG_OLLAMA_REGISTRY_BASE", server.URL)
+	_, _ = discoverOllama(context.Background())
+	if maximum.Load() < 2 {
+		t.Fatal("family metadata was fetched serially")
 	}
 }
 

@@ -122,7 +122,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
 		switch r.URL.Path {
 		case "/internal/v1/models":
-			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "tiny:latest", "object": "model"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "tiny:latest", "object": "model", "sizeBytes": 1_000_000_000}}})
 		case "/internal/v1/models/imports":
 			w.WriteHeader(http.StatusAccepted)
 			_ = json.NewEncoder(w).Encode(map[string]any{"state": "downloading", "modelId": "tiny:latest", "source": "tiny:latest"})
@@ -142,7 +142,7 @@ func TestOllamaModelLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	models, err := service.ListModels(t.Context())
-	if err != nil || len(models) != 1 || models[0].ID != "tiny:latest" {
+	if err != nil || len(models) != 1 || models[0].ID != "tiny:latest" || models[0].SizeBytes != 1_000_000_000 {
 		t.Fatalf("models=%v err=%v", models, err)
 	}
 	if _, err := service.Import(t.Context(), ImportRequest{ModelID: "tiny:latest", Source: "tiny:latest"}); err != nil {

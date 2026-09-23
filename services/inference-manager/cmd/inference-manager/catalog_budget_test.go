@@ -2,6 +2,20 @@ package main
 
 import "testing"
 
+func TestOllamaMemoryEstimateUsesQuantizedLayerNotDoubleWeights(t *testing.T) {
+	const weights = uint64(14_000_000_000)
+	got := ollamaMemoryEstimate(weights)
+	if got <= weights || got+(512<<20) >= 24<<30 {
+		t.Fatalf("gpt-oss:20b estimate %d should include headroom and fit 24 GiB budget", got)
+	}
+	if gpuBudget := combineCatalogMemory(32<<30, 24<<30, true, "ollama"); got+(512<<20) >= gpuBudget {
+		t.Fatalf("gpt-oss:20b estimate %d should fit a 24 GiB GPU budget of %d", got, gpuBudget)
+	}
+	if ollamaMemoryEstimate(0) != 0 {
+		t.Fatal("unknown model layer must remain unknown")
+	}
+}
+
 func TestCombineCatalogMemoryGPUProbeMissKeepsHost(t *testing.T) {
 	const host uint64 = 120 << 30 // 120 GiB MemAvailable
 	got := combineCatalogMemory(host, 0, true, "vllm")

@@ -2661,6 +2661,11 @@ components:
       required: [id]
       properties:
         id: { type: string }
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Installed Ollama model size reported by the local runtime when available.
         object: { type: string }
         ownedBy: { type: string }
         source: { type: string }

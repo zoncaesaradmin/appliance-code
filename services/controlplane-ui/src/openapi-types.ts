@@ -1741,6 +1741,11 @@ export interface components {
         };
         InferenceModel: {
             id: string;
+            /**
+             * Format: int64
+             * @description Installed Ollama model size reported by the local runtime when available.
+             */
+            sizeBytes?: number;
             object?: string;
             ownedBy?: string;
             source?: string;

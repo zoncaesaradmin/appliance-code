@@ -30,6 +30,7 @@ var modelRefRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/@:-]{0,511}$`)
 
 type model struct {
 	ID              string            `json:"id"`
+	SizeBytes       uint64            `json:"sizeBytes,omitempty"`
 	Object          string            `json:"object"`
 	OwnedBy         string            `json:"ownedBy"`
 	OpenAIOwnedBy   string            `json:"owned_by"`
@@ -186,17 +187,12 @@ func main() {
 	if err := m.migrateLegacyDefaultInstance(); err != nil {
 		log.Fatalf("migrate legacy default instance: %v", err)
 	}
-	// Begin discovery before engine reconciliation and active-model rehydration.
-	// Metadata is persisted on the models PVC. Bootstrap it before this process
-	// serves UI/API requests: AI Services consumes this saved state, rather than
-	// being the event that causes model discovery to start.
+	// Start discovery and runtime reconciliation at process start. Both run
+	// behind the API: cached catalog and inventory must be readable immediately,
+	// even while the engine or upstream registry is slow or unavailable.
 	m.catalog = newModelCatalog(m)
 	go m.catalog.run(ctx)
-	m.bootstrapModelMetadata(ctx)
-	if err := m.engineOrch.EnsureService(context.Background()); err != nil {
-		log.Printf("ensure engine service: %v", err)
-	}
-	m.rehydrateActiveModel(context.Background())
+	m.startRuntimeInitialization(ctx)
 
 	server := &http.Server{Addr: env("INFERENCE_LISTEN_ADDRESS", "0.0.0.0:11434"), Handler: m.handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -211,17 +207,23 @@ func main() {
 	}
 }
 
-const startupMetadataTimeout = 30 * time.Second
-
-// bootstrapModelMetadata refreshes local installed-model inventory before the
-// API starts. Upstream catalog discovery starts independently at process start:
-// its many network requests must not inherit this short startup deadline.
-func (m *manager) bootstrapModelMetadata(ctx context.Context) {
-	bootstrapCtx, cancel := context.WithTimeout(ctx, startupMetadataTimeout)
-	defer cancel()
-	if m.engine == "ollama" {
-		m.refreshOllamaInventory(bootstrapCtx)
-	}
+// startRuntimeInitialization serializes startup reconciliation with model
+// mutations but never delays read-only API requests. The local inventory cache
+// was already loaded from the PVC before this begins.
+func (m *manager) startRuntimeInitialization(ctx context.Context) {
+	m.opMu.Lock()
+	go func() {
+		defer m.opMu.Unlock()
+		if err := m.engineOrch.EnsureService(ctx); err != nil {
+			log.Printf("ensure engine service: %v", err)
+		}
+		m.rehydrateActiveModel(ctx)
+		if m.engine == "ollama" {
+			inventoryCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			m.refreshOllamaInventory(inventoryCtx)
+		}
+	}()
 }
 
 func (m *manager) handler() http.Handler {
@@ -845,6 +847,13 @@ func (m *manager) memoryBytesForModel(ctx context.Context, id, path string) uint
 		for _, item := range m.catalog.snapshot(ctx).Items {
 			if item.ID == id && item.MemoryBytes > 0 {
 				return item.MemoryBytes
+			}
+		}
+	}
+	if m.engine == "ollama" {
+		for _, item := range m.ollamaInventorySnapshot() {
+			if item.ID == id && item.SizeBytes > 0 {
+				return ollamaMemoryEstimate(item.SizeBytes)
 			}
 		}
 	}

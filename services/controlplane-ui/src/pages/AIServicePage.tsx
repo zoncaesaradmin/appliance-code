@@ -357,45 +357,46 @@ export function AIServicePage(): React.JSX.Element {
   const busyRef = useRef("");
   busyRef.current = busy;
 
-  async function refresh(): Promise<boolean> {
-    const [runtime, installed, available, identity] = await Promise.allSettled([
-      client.getInferenceStatus(),
-      client.listInferenceModels(),
-      client.getInferenceCatalog({ sort: "parameters", order: "desc" }),
-      client.getIdentity()
-    ]);
-    if (runtime.status === "fulfilled") {
-      setStatus(runtime.value);
-    }
-    if (installed.status === "fulfilled") {
-      setModels(installed.value);
+  async function refreshInstalled(): Promise<boolean> {
+    return client.listInferenceModels().then((installed) => {
+      setModels(installed);
       setError((current) => (current === MODELS_REFRESH_ERROR ? "" : current));
-    } else if (!busyRef.current) {
-      // Avoid noisy stale errors while download/load holds the runtime write lock.
-      setError(MODELS_REFRESH_ERROR);
-    }
-    if (available.status === "fulfilled") {
-      setCatalog(available.value);
+      return installed.length === 0;
+    }).catch(() => {
+      if (!busyRef.current) {
+        setError(MODELS_REFRESH_ERROR);
+      }
+      return false;
+    });
+  }
+
+  async function refresh(): Promise<boolean> {
+    // Publish each independent result as it arrives. Engine status or identity
+    // must not hold back an already cached model catalog or inventory.
+    void client.getInferenceStatus().then(setStatus).catch(() => {});
+    const inventory = refreshInstalled();
+    void client.getInferenceCatalog({ sort: "parameters", order: "desc" }).then((available) => {
+      setCatalog(available);
       setCatalogError("");
-    } else {
+    }).catch(() => {
       setCatalogError("Model discovery is unavailable. Downloaded models remain accessible.");
-    }
-    if (identity.status === "fulfilled") {
-      setClientOrigin(inferenceClientOrigin(identity.value.canonicalOrigin, window.location.origin));
-    } else {
+    });
+    void client.getIdentity().then((identity) => {
+      setClientOrigin(inferenceClientOrigin(identity.canonicalOrigin, window.location.origin));
+    }).catch(() => {
       setClientOrigin((current) => current || inferenceClientOrigin(undefined, window.location.origin));
-    }
+    });
     // A fresh appliance has no saved Ollama inventory until its initial
     // background scan completes. Tell the caller to retry this short-lived
     // empty state instead of leaving the page blank for the normal interval.
-    return installed.status === "fulfilled" && installed.value.length === 0;
+    return inventory;
   }
 
   useEffect(() => {
     let bootstrapRetry: number | undefined;
     let cancelled = false;
     const refreshInitially = async (attempt = 0) => {
-      const emptyInventory = await refresh();
+      const emptyInventory = await (attempt === 0 ? refresh() : refreshInstalled());
       if (!cancelled && emptyInventory && attempt < 5) {
         bootstrapRetry = window.setTimeout(() => void refreshInitially(attempt + 1), 2000);
       }
@@ -415,6 +416,37 @@ export function AIServicePage(): React.JSX.Element {
       }
     };
   }, []);
+
+  const catalogPending = !!catalog && (catalog.refreshing || (!catalog.lastSuccess && !catalog.lastError));
+  useEffect(() => {
+    if (!catalogPending) {
+      return;
+    }
+    let cancelled = false;
+    let inFlight = false;
+    const timer = window.setInterval(() => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      void client.getInferenceCatalog({ sort: "parameters", order: "desc" }).then((available) => {
+        if (!cancelled) {
+          setCatalog(available);
+          setCatalogError("");
+        }
+      }).catch(() => {
+        if (!cancelled) {
+          setCatalogError("Model discovery is unavailable. Downloaded models remain accessible.");
+        }
+      }).finally(() => {
+        inFlight = false;
+      });
+    }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [catalogPending]);
 
   useEffect(() => {
     let cancelled = false;
@@ -582,9 +614,7 @@ export function AIServicePage(): React.JSX.Element {
   const options = useMemo(() => {
     const entries = new Map<string, InferenceCatalogEntry>();
     for (const entry of catalog?.items ?? []) {
-      if (entry.eligible || downloaded.has(entry.id)) {
-        entries.set(entry.id, entry);
-      }
+      entries.set(entry.id, entry);
     }
     for (const model of models) {
       if (!entries.has(model.id)) {
@@ -607,7 +637,7 @@ export function AIServicePage(): React.JSX.Element {
 
   useEffect(() => {
     if (!selectedId && options.length > 0) {
-      setSelectedId(options[0].id);
+      setSelectedId((options.find((entry) => entry.eligible) ?? options[0]).id);
       return;
     }
     if (selectedId && !options.some((entry) => entry.id === selectedId)) {
@@ -723,9 +753,7 @@ export function AIServicePage(): React.JSX.Element {
                 message={
                   catalog?.refreshing
                     ? "Discovering models…"
-                    : (catalog?.items?.length ?? 0) > 0
-                      ? "No catalog models currently fit this appliance's estimated memory or storage. Downloaded models still appear here."
-                      : "No models are available yet. Discovery needs internet; downloaded models still appear here."
+                    : "No models are available yet. Downloaded models still appear here."
                 }
               />
             ) : (
@@ -773,7 +801,7 @@ export function AIServicePage(): React.JSX.Element {
                     {options.map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {`${entry.id} (${experienceLabel(capabilitiesFor(models.find((model) => model.id === entry.id), entry))}${
-                          enabledModelIDs.has(entry.id) ? " · downloaded · enabled" : downloaded.has(entry.id) ? " · downloaded" : ""
+                          enabledModelIDs.has(entry.id) ? " · downloaded · enabled" : downloaded.has(entry.id) ? " · downloaded" : !entry.eligible ? " · does not fit estimated capacity" : ""
                         })`}
                       </option>
                     ))}
@@ -784,6 +812,9 @@ export function AIServicePage(): React.JSX.Element {
                     <p className="text-sm text-slate-600" role="status" aria-live="polite">
                       {selectedSummary}
                     </p>
+					{!selected.eligible && !selectedDownloaded ? (
+					  <p className="message" role="status">Not currently available for download: {selected.reason || "Estimated memory or storage is insufficient."}</p>
+					) : null}
 							<p className="text-sm text-slate-600" role="status">
 								{selectedCapabilities.verification === "unverified"
 									? "Capability unverified: registry metadata was unavailable. Download the model to check its tool support with the local runtime."

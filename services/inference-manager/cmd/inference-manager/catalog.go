@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	catalogInterval      = 24 * time.Hour
-	catalogRetryInterval = 15 * time.Minute
-	catalogSchemaVersion = 3 // v3 requires template blobs to be followed through Ollama's signed R2 redirect.
+	catalogInterval       = 24 * time.Hour
+	catalogRetryInterval  = 15 * time.Minute
+	catalogRefreshTimeout = 2 * time.Minute
+	catalogSchemaVersion  = 4 // v4 recalculates Ollama memory from cached model-layer weights.
 )
 
 type catalogEntry struct {
@@ -52,23 +53,22 @@ type catalogState struct {
 }
 
 type modelCatalog struct {
-	mu                sync.Mutex
-	state             catalogState
-	m                 *manager
-	discover          func(context.Context) ([]catalogEntry, error)
-	budget            func(context.Context) (uint64, uint64)
-	path              string
-	retryEmptyOnStart bool
+	mu                    sync.Mutex
+	state                 catalogState
+	m                     *manager
+	discover              func(context.Context) ([]catalogEntry, error)
+	budget                func(context.Context) (uint64, uint64)
+	path                  string
+	initialRefreshPending bool
 }
 
 func newModelCatalog(m *manager) *modelCatalog {
-	c := &modelCatalog{m: m, path: filepath.Join(m.modelsDir, ".appliance-catalog", m.engine+".json")}
+	c := &modelCatalog{m: m, path: filepath.Join(m.modelsDir, ".appliance-catalog", m.engine+".json"), initialRefreshPending: true}
 	runtimeVersion := m.catalogRuntimeVersion()
 	c.state = catalogState{SchemaVersion: catalogSchemaVersion, Engine: m.engine, RuntimeVersion: runtimeVersion, Items: []catalogEntry{}, Scope: "Popular upstream models; conservative estimates, load verification required"}
 	if b, err := os.ReadFile(c.path); err == nil {
 		var saved catalogState
-		if json.Unmarshal(b, &saved) == nil && (saved.SchemaVersion == catalogSchemaVersion || saved.SchemaVersion == 2) && saved.Engine == m.engine && saved.RuntimeVersion == runtimeVersion {
-			migrated := saved.SchemaVersion == 2
+		if json.Unmarshal(b, &saved) == nil && (saved.SchemaVersion == catalogSchemaVersion || saved.SchemaVersion == 3 || saved.SchemaVersion == 2) && saved.Engine == m.engine && saved.RuntimeVersion == runtimeVersion {
 			// The previous schema contains usable candidates and size estimates.
 			// Preserve them across an offline upgrade, but do not present its
 			// unverified Ollama capability labels as authoritative.
@@ -77,10 +77,19 @@ func newModelCatalog(m *manager) *modelCatalog {
 					saved.Items[i].Capabilities = unknownCapabilities()
 				}
 			}
+			if saved.SchemaVersion < 4 && m.engine == "ollama" {
+				for i := range saved.Items {
+					// Older catalogs stored weights*2+2Gi. Preserve offline
+					// candidates while replacing that inflated estimate.
+					if saved.Items[i].MemoryBytes >= 2<<30 {
+						weights := (saved.Items[i].MemoryBytes - (2 << 30)) / 2
+						saved.Items[i].MemoryBytes = ollamaMemoryEstimate(weights)
+					}
+				}
+			}
 			saved.SchemaVersion = catalogSchemaVersion
 			c.state = saved
 			c.state.Refreshing = false
-			c.retryEmptyOnStart = migrated || ((saved.LastSuccess.IsZero() || len(saved.Items) == 0) && saved.LastError != "")
 		}
 	}
 	c.discover = m.discoverModels
@@ -102,10 +111,10 @@ func (m *manager) catalogRuntimeVersion() string {
 func (c *modelCatalog) nextRefreshDelay() time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Successful catalogs keep the daily schedule. Partial or failed attempts
-	// retry after a bounded delay. A migrated or never-successful empty catalog
-	// gets one immediate retry on process start.
-	if c.retryEmptyOnStart {
+	// Every process start attempts discovery in the background while the saved
+	// cache remains readable. Thereafter success is daily and failures retry
+	// after a bounded delay, never in a tight loop.
+	if c.initialRefreshPending {
 		return 0
 	}
 	if c.state.LastError != "" {
@@ -140,10 +149,10 @@ func (c *modelCatalog) refresh(ctx context.Context) {
 		return
 	}
 	c.state.Refreshing = true
-	c.retryEmptyOnStart = false
+	c.initialRefreshPending = false
 	c.state.LastAttempt = time.Now().UTC()
 	c.mu.Unlock()
-	refreshCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	refreshCtx, cancel := context.WithTimeout(ctx, catalogRefreshTimeout)
 	defer cancel()
 	items, err := c.discover(refreshCtx)
 	c.mu.Lock()

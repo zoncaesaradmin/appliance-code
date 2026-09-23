@@ -147,19 +147,42 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 	if len(families) == 0 {
 		return nil, fmt.Errorf("Ollama library format was not recognized")
 	}
+	// Family pages are independent. Fetching them serially could spend twenty
+	// seconds on each unavailable family before any model is considered.
+	type familyResult struct {
+		refs []string
+		err  error
+	}
+	familyJobs := make(chan string)
+	familyResults := make(chan familyResult, len(families))
+	var familyWorkers sync.WaitGroup
+	for range 8 {
+		familyWorkers.Add(1)
+		go func() {
+			defer familyWorkers.Done()
+			for family := range familyJobs {
+				var tagsPage string
+				err := upstreamRead(ctx, ollamaLibraryBase()+"/library/"+family+"/tags", &tagsPage)
+				familyResults <- familyResult{refs: libraryReferences(tagsPage, true, 8), err: err}
+			}
+		}()
+	}
+	for _, family := range families {
+		familyJobs <- family
+	}
+	close(familyJobs)
+	familyWorkers.Wait()
+	close(familyResults)
 	var refs []string
 	var failed int
 	var lastErr error
-	for _, family := range families {
-		if err := upstreamRead(ctx, ollamaLibraryBase()+"/library/"+family+"/tags", &page); err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
+	for result := range familyResults {
+		if result.err != nil {
 			failed++
-			lastErr = err
+			lastErr = result.err
 			continue
 		}
-		refs = append(refs, libraryReferences(page, true, 8)...)
+		refs = append(refs, result.refs...)
 	}
 	// Manifest and template reads are independent. Bound concurrency so one
 	// slow registry request does not hold up every later catalog candidate.
@@ -197,6 +220,9 @@ func discoverOllama(ctx context.Context) ([]catalogEntry, error) {
 		}
 	}
 	if ctx.Err() != nil {
+		if len(entries) > 0 {
+			return entries, ctx.Err()
+		}
 		return nil, ctx.Err()
 	}
 	if failed > 0 {
@@ -235,7 +261,7 @@ func discoverOllamaReference(ctx context.Context, ref string) (catalogEntry, err
 		// unavailable. Never turn missing evidence into a chat-only assertion.
 		capabilities = unknownCapabilities()
 	}
-	entry := catalogEntry{ID: ref, Source: ref, DownloadBytes: total, MemoryBytes: weights*2 + (2 << 30), Capabilities: capabilities}
+	entry := catalogEntry{ID: ref, Source: ref, DownloadBytes: total, MemoryBytes: ollamaMemoryEstimate(weights), Capabilities: capabilities}
 	if err != nil {
 		return entry, fmt.Errorf("%s template: %w", ref, err)
 	}

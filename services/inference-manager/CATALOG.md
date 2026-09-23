@@ -1,11 +1,11 @@
 # Model discovery
 
-The manager starts catalog discovery on first start and refreshes a successful
-catalog every 24 hours thereafter. Failed or partial refreshes retry after
-15 minutes (and an empty failed catalog retries once on the next start).
+The manager starts catalog discovery on every process start, serving a saved
+catalog immediately while that refresh runs. A successful catalog refreshes
+every 24 hours thereafter. Failed or partial refreshes retry after 15 minutes.
 It persists the last attempt, last successful catalog, and error under
 `/models/.appliance-catalog/<engine>.json` on the existing model PVC. A restart
-uses the saved schedule. Failed or empty refreshes retain the last good list;
+uses the saved catalog. Failed or empty refreshes retain the last good list;
 failure never prevents startup or use of downloaded models. No model weights
 are downloaded by this job. Operators control connectivity at the network edge.
 
@@ -14,7 +14,7 @@ available during startup and upstream outages; one failed family, manifest, or
 template request must not erase unrelated candidates. A manifest with an
 unavailable template remains selectable with `verification: unverified`, never
 an asserted Chat assistant label. Downloading it lets local `/api/show` provide
-the authoritative tool capability. The previous v2 cache is migrated rather
+the authoritative tool capability. Previous v2/v3 caches are migrated rather
 than discarded during an offline upgrade, and its Ollama labels are marked
 unverified until fresh metadata arrives. A partial refresh publishes healthy
 new entries alongside retained old entries and retries after 15 minutes.
@@ -32,9 +32,15 @@ repositories are excluded. Advanced quantized models remain available through
 the existing explicit import API.
 
 For Ollama, discovery uses anonymous metadata requests. The manager starts it
-at process startup, independently of the short local inventory bootstrap and
-before engine reconciliation, rather than waiting for a catalog API request.
-It fetches manifests and templates with bounded concurrency; an unavailable
+at process startup, independently of local inventory refresh and engine
+reconciliation, rather than waiting for a catalog API request.
+The manager API opens immediately after reading saved PVC snapshots; engine
+reconciliation and the local inventory refresh run in the background, so an
+unresponsive Ollama daemon cannot delay catalog or inventory reads. Model
+mutations remain serialized with this startup work. The old 30-second
+pre-listener wait was removed. Catalog discovery has a two-minute attempt
+deadline and retries partial failures after 15 minutes.
+It fetches family pages, manifests, and templates with bounded concurrency; an unavailable
 family or manifest leaves other candidates available, and prior candidates
 survive a partial refresh. A first-ever catalog still depends on successful
 upstream metadata access, but never blocks the manager API from starting.
@@ -47,7 +53,14 @@ specific model names are hardcoded. Runtime mode, host available memory, optiona
 GPU free memory for CUDA, and PVC free space determine current eligibility.
 GPU memory is not summed across devices; automatic tensor parallelism is not
 configured. Conservatively reserve 25% of CPU memory (20% of GPU memory). Model
-`memoryBytes` uses twice the weights plus 2 GiB (Ollama) or 4 GiB (vLLM). For
+`memoryBytes` uses the quantized model layer plus the greater of 20% or 2 GiB
+working headroom, then 1 GiB runtime/context headroom (Ollama); vLLM retains
+twice the weights plus 4 GiB. Ollama remains an estimate, not a guarantee:
+large context windows, parallel requests, or runtime changes can exceed it.
+Older Ollama catalogs are migrated from their reversible `weights×2+2GiB`
+estimate at startup, preserving candidates during offline upgrades. The UI
+lists estimated non-fitting candidates with the reason and disables download,
+instead of silently removing them. For
 vLLM, one planner (`planServe`) decides catalog eligibility, engine memory and
 CPU limits, and `--max-model-len` together:
 
@@ -68,9 +81,8 @@ The packaged CPU image may log a benign `vllm._C_AVX2` import warning; upstream
 documents that the AVX2 library still loads. Hosts with AVX2 are expected to
 use those kernels.
 
-A successful catalog refreshes once per day; failures and partial refreshes
-retry after 15 minutes without a tight loop. A migrated v2 catalog or a
-never-successful empty catalog retries immediately once on process startup.
+A successful catalog refreshes once per day after the initial startup attempt;
+failures and partial refreshes retry after 15 minutes without a tight loop.
 
 ## Registry and offline boundaries
 
@@ -94,12 +106,12 @@ uses its explicit tool surface to classify a candidate as either chat-only or
 coding-agent before it is downloaded; it never infers the class from a name.
 `GET /internal/v1/models` returns the manager's downloaded inventory (admin).
 For Ollama, that endpoint is backed by `/models/.zon/ollama-inventory.json` on
-the model PVC: startup reads the previous snapshot, then completes a bounded
-`/api/tags` and per-model `/api/show` capability refresh before serving the
-manager API. Import and delete operations also refresh it. Thus opening AI
-Services consumes persisted, startup-populated state rather than triggering
-Ollama discovery; on a brand-new empty PVC, the first manager startup creates
-the snapshot before the API becomes available.
+the model PVC: startup reads the previous snapshot before serving the API,
+then refreshes `/api/tags` and per-model `/api/show` in the background. Import
+and delete operations also refresh it. Thus opening AI Services consumes
+persisted state rather than triggering Ollama discovery; on a brand-new empty
+PVC, the API may initially return an empty inventory until that background
+refresh completes. The UI retries this initial empty state briefly.
 `GET /v1/models` (and the rest of `/v1/*`) is proxied to the inference
 engine for OpenAI-compatible clients. For `POST /v1/responses`, the manager
 first rewrites OpenAI `text.format.type=json_schema` so streaming clients do

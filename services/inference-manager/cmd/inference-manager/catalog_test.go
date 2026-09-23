@@ -42,6 +42,27 @@ func TestCatalogMigratesSavedV2WithoutLosingOfflineCandidates(t *testing.T) {
 	}
 }
 
+func TestCatalogMigratesSavedV3OllamaMemoryWithoutLosingOfflineCandidates(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	const weights = uint64(14_000_000_000)
+	c := newModelCatalog(m)
+	c.state.SchemaVersion = 3
+	c.state.Items = []catalogEntry{{ID: "gpt-oss:20b", Source: "gpt-oss:20b", DownloadBytes: weights, MemoryBytes: weights*2 + (2 << 30), Capabilities: toolCapableOllamaModel("template-reported")}}
+	c.state.LastSuccess = time.Now().UTC()
+	if err := c.save(); err != nil {
+		t.Fatal(err)
+	}
+	restarted := newModelCatalog(m)
+	if len(restarted.state.Items) != 1 || restarted.state.Items[0].MemoryBytes != ollamaMemoryEstimate(weights) || !restarted.state.Items[0].Capabilities.CodexCompatible {
+		t.Fatalf("v3 migration lost model or retained inflated estimate: %+v", restarted.state)
+	}
+	restarted.budget = func(context.Context) (uint64, uint64) { return 24 << 30, 100 << 30 }
+	if item := restarted.snapshot(context.Background()).Items[0]; !item.Eligible {
+		t.Fatalf("gpt-oss:20b should pass 32 GiB host's 24 GiB budget: %+v", item)
+	}
+}
+
 func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
 	m := testManager(t)
 	m.engine = "ollama"
@@ -76,6 +97,56 @@ func TestCatalogRetainsGoodSnapshotOfflineAndAcrossRestart(t *testing.T) {
 	if called {
 		t.Fatal("fresh persisted schedule triggered another discovery")
 	}
+}
+
+func TestFreshSavedCatalogIsVisibleWhileStartupRefreshBegins(t *testing.T) {
+	m := testManager(t)
+	m.engine = "ollama"
+	c := newModelCatalog(m)
+	c.state.Items = []catalogEntry{{ID: "cached:1b", Source: "cached:1b", DownloadBytes: 1, MemoryBytes: 2}}
+	c.state.LastSuccess = time.Now().UTC()
+	c.state.LastAttempt = c.state.LastSuccess
+	if err := c.save(); err != nil {
+		t.Fatal(err)
+	}
+	restarted := newModelCatalog(m)
+	if delay := restarted.nextRefreshDelay(); delay > 0 {
+		t.Fatalf("saved catalog postponed startup refresh for %s", delay)
+	}
+	started := make(chan struct{})
+	release := make(chan struct{})
+	restarted.discover = func(ctx context.Context) ([]catalogEntry, error) {
+		close(started)
+		select {
+		case <-release:
+			return []catalogEntry{{ID: "fresh:1b", Source: "fresh:1b", DownloadBytes: 1, MemoryBytes: 2}}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go restarted.run(ctx)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("startup catalog refresh did not begin")
+	}
+	if snapshot := restarted.snapshot(context.Background()); len(snapshot.Items) != 1 || snapshot.Items[0].ID != "cached:1b" || !snapshot.Refreshing {
+		t.Fatalf("cached catalog unavailable during refresh: %+v", snapshot)
+	}
+	close(release)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		restarted.mu.Lock()
+		refreshing := restarted.state.Refreshing
+		restarted.mu.Unlock()
+		if !refreshing {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("startup catalog refresh did not complete")
 }
 
 func TestCatalogBeginsInitialRefreshWithoutAnAPIRead(t *testing.T) {

@@ -103,6 +103,7 @@ func (m *manager) refreshOllamaInventory(ctx context.Context) {
 	var response struct {
 		Models []struct {
 			Name string `json:"name"`
+			Size uint64 `json:"size"`
 		} `json:"models"`
 	}
 	if err := m.callBackend(ctx, http.MethodGet, "/api/tags", nil, &response); err != nil {
@@ -130,7 +131,7 @@ func (m *manager) refreshOllamaInventory(ctx context.Context) {
 		} else {
 			log.Printf("Ollama inventory refresh: model=%q returned no capability evidence", tag.Name)
 		}
-		items = append(items, model{ID: tag.Name, Object: "model", OwnedBy: "ollama", OpenAIOwnedBy: "ollama", Capabilities: capabilities})
+		items = append(items, model{ID: tag.Name, SizeBytes: tag.Size, Object: "model", OwnedBy: "ollama", OpenAIOwnedBy: "ollama", Capabilities: capabilities})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	m.mu.Lock()
