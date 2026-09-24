@@ -25,8 +25,8 @@ func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadMigrations: %v", err)
 	}
-	if len(migrations) != 2 || migrations[0].Version != 1 || migrations[1].Version != 2 {
-		t.Fatalf("loadMigrations = %+v, want baseline plus native-chat migration", migrations)
+	if len(migrations) != 1 || migrations[0].Version != 1 {
+		t.Fatalf("loadMigrations = %+v, want one current baseline schema migration", migrations)
 	}
 
 	now := time.Now().UTC()

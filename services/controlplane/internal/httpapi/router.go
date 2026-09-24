@@ -45,7 +45,6 @@ type Deps struct {
 	MCPHandler       http.Handler
 	AIProxy          http.Handler
 	InferenceH       *InferenceHandlers
-	ChatH            *ChatHandlers
 	ProxiedServices  []ServiceProxyRegistration
 	Audit            *audit.Recorder
 }
@@ -102,27 +101,6 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 		}
 		if deps.InferenceH == nil || deps.InferenceH.Inference == nil {
 			return nil, fmt.Errorf("inference capability requires inference handlers")
-		}
-		// Native chat is intentionally interactive-session-only. API tokens
-		// retain the generic /ai/v1 interface but cannot read private browser
-		// transcripts.
-		chatProtect := func(h http.HandlerFunc) http.Handler {
-			return authRequired(RequirePermission(roles.PermInferenceUse)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				p, _ := PrincipalFromContext(r.Context())
-				if p.AuthMethod != "session" {
-					WriteProblem(w, r, http.StatusUnauthorized, "interactive_session_required", "An interactive session is required", "")
-					return
-				}
-				h(w, r)
-			})))
-		}
-		if deps.ChatH != nil && deps.ChatH.Chat != nil {
-			mux.Handle("GET /api/v1/inference/chat/availability", chatProtect(deps.ChatH.Availability))
-			mux.Handle("GET /api/v1/inference/chat/conversations", chatProtect(deps.ChatH.List))
-			mux.Handle("POST /api/v1/inference/chat/conversations", chatProtect(deps.ChatH.Create))
-			mux.Handle("GET /api/v1/inference/chat/conversations/{id}", chatProtect(deps.ChatH.Get))
-			mux.Handle("DELETE /api/v1/inference/chat/conversations/{id}", chatProtect(deps.ChatH.Delete))
-			mux.Handle("POST /api/v1/inference/chat/conversations/{id}/turns", chatProtect(deps.ChatH.Turn))
 		}
 		mux.Handle("GET /api/v1/inference/runtime-capabilities", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Capabilities))
 		mux.Handle("GET /api/v1/inference/status", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Status))

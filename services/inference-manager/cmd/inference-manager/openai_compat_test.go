@@ -75,31 +75,6 @@ func TestNormalizeResponsesTextPassthrough(t *testing.T) {
 	}
 }
 
-func TestRequireActiveChatModel(t *testing.T) {
-	for _, test := range []struct {
-		name, body string
-		wantErr    bool
-	}{
-		{"active model", `{"model":"qwen3:1.7b","messages":[]}`, false},
-		{"other model", `{"model":"other","messages":[]}`, true},
-		{"missing model", `{"messages":[]}`, true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(test.body))
-			err := requireActiveChatModel(req, "qwen3:1.7b")
-			if (err != nil) != test.wantErr {
-				t.Fatalf("err=%v, wantErr=%v", err, test.wantErr)
-			}
-			if !test.wantErr {
-				raw, _ := io.ReadAll(req.Body)
-				if string(raw) != test.body {
-					t.Fatalf("body = %q", raw)
-				}
-			}
-		})
-	}
-}
-
 func TestNormalizeResponsesJSONSchemaWithoutSchemaFallsBackToJSONObject(t *testing.T) {
 	in := []byte(`{"input":"hi","text":{"format":{"type":"json_schema","name":"x"}},"stream":true}`)
 	out, changed := normalizeOpenAIUpstreamBody("/v1/responses", in, openaiCompatConfig{})

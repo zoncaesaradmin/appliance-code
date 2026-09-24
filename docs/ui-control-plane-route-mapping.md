@@ -74,25 +74,6 @@ and only blind-proxies `/v1/*` to the engine. UI download status comes from
 `GET /api/v1/inference/models` → manager `GET /internal/v1/models`, not from the
 OpenAI `/v1/models` proxy.
 
-### Native Chat
-
-`/manage/chat` is an appliance UI page for interactive users with
-`inference.use`; it is separate from administrator-only model management.
-It makes a short cached-state availability request on entry and never triggers
-model catalog discovery. Conversations and text-only messages are persisted in
-the control-plane SQLite database on the existing control-plane PVC, so they
-follow the established control-plane backup and restore lifecycle. API tokens
-cannot access this browser-oriented surface. Prompt and response bodies are
-deliberately excluded from control-plane exchange logs; normal request logs
-still record path, status, duration, and request ID.
-
-| Browser/API method and route | UI handler | Control-plane behavior |
-| --- | --- | --- |
-| `GET /api/v1/inference/chat/availability` | `ChatPage` initial load and 15-second status refresh | Reads the current enabled-model state without requesting the model catalog |
-| `GET, POST /api/v1/inference/chat/conversations` | `ChatPage` list and New conversation | Lists or creates only the current user's conversations; creation binds the enabled model |
-| `GET, DELETE /api/v1/inference/chat/conversations/{id}` | `ChatPage` select/delete | Reads or deletes only the current user's persisted transcript |
-| `POST /api/v1/inference/chat/conversations/{id}/turns` | `ChatPage` direct `fetch`/SSE reader | Persists the user turn, streams the enabled model's response, and updates the assistant turn as it arrives; browser Stop aborts the request context |
-
 ### General tracing
 
 These UI-to-control-plane traces are enabled by default.

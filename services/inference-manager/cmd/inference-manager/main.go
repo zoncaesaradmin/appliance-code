@@ -1035,10 +1035,6 @@ func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid OpenAI request body: "+err.Error())
 		return
 	}
-	if err := requireActiveChatModel(r, active); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid OpenAI request body: "+err.Error())
-		return
-	}
 	m.proxy.ServeHTTP(w, r)
 }
 

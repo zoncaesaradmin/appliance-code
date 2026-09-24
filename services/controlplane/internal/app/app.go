@@ -113,7 +113,6 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			return nil, fmt.Errorf("building AI proxy: %w", err)
 		}
 		deps.InferenceH = &httpapi.InferenceHandlers{Inference: services.Inference, Audit: services.Audit}
-		deps.ChatH = &httpapi.ChatHandlers{Chat: services.Chat}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{

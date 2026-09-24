@@ -127,20 +127,6 @@ type LoadProgress struct {
 	UpdatedAt   string `json:"updatedAt,omitempty"`
 }
 
-// ChatMessage is the narrow OpenAI chat-completions shape used by the native
-// appliance chat surface. The model is selected by the control plane, never
-// by the browser.
-type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-type ChatRequest struct {
-	Model    string        `json:"model"`
-	Messages []ChatMessage `json:"messages"`
-	Stream   bool          `json:"stream"`
-}
-
 // Catalog is runtime-owned and cached locally; reading it never refreshes upstream.
 func (s *Service) Catalog(ctx context.Context, sortBy, order string) (json.RawMessage, error) {
 	sortBy = strings.TrimSpace(sortBy)
@@ -327,16 +313,6 @@ func (s *Service) ListModels(ctx context.Context) ([]Model, error) {
 		body.Data = []Model{}
 	}
 	return body.Data, nil
-}
-
-// StreamChat opens the selected runtime's OpenAI-compatible streaming
-// endpoint. Callers own the returned body and must close it.
-func (s *Service) StreamChat(ctx context.Context, request ChatRequest) (*http.Response, error) {
-	if strings.TrimSpace(request.Model) == "" || len(request.Messages) == 0 {
-		return nil, fmt.Errorf("%w: model and messages are required", ErrInvalidRequest)
-	}
-	request.Stream = true
-	return s.do(ctx, http.MethodPost, "/v1/chat/completions", request)
 }
 
 func (s *Service) Import(ctx context.Context, req ImportRequest) (ImportProgress, error) {

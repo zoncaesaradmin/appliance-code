@@ -8,8 +8,6 @@ export type ModeFeature = {
   icon: IconName;
   /** When set, the feature is shown only if this capability is enabled. */
   requiredCapability?: string;
-  /** When set, the feature is shown only to sessions with this permission. */
-  requiredPermission?: string;
 };
 
 export type Mode = {
@@ -69,14 +67,6 @@ export const MODES: Mode[] = [
     icon: "manage",
     defaultPath: "/manage/builder",
     features: [
-      {
-        label: "Chat",
-        path: "/manage/chat",
-        description: "Chat with the model currently enabled on this appliance",
-        icon: "analyze",
-        requiredCapability: "inference",
-        requiredPermission: "inference.use"
-      },
       {
         label: "Builder",
         path: "/manage/builder",
@@ -187,11 +177,10 @@ export function visibleModes(context: NavigationContext): Mode[] {
   return MODES.filter((mode) => mode.visibleWhen(context));
 }
 
-export function visibleFeatures(mode: Mode, capabilities: string[] = [], permissions: string[] = []): ModeFeature[] {
+export function visibleFeatures(mode: Mode, capabilities: string[] = []): ModeFeature[] {
   return mode.features.filter(
     (feature) =>
-      (!feature.requiredCapability || capabilities.includes(feature.requiredCapability)) &&
-      (!feature.requiredPermission || permissions.includes(feature.requiredPermission))
+      !feature.requiredCapability || capabilities.includes(feature.requiredCapability)
   );
 }
 

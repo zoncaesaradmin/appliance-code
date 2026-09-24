@@ -214,48 +214,6 @@ func prepareOpenAIProxyRequest(r *http.Request, opts openaiCompatConfig) error {
 	return nil
 }
 
-// requireActiveChatModel keeps the OpenAI-compatible gateway aligned with the
-// appliance serving contract. A loaded appliance has one selected model; a
-// caller must not use the proxy to ask an engine for an arbitrary downloaded
-// or engine-default model. Other OpenAI endpoints remain compatible with the
-// existing clients and are governed by their own request handling.
-func requireActiveChatModel(r *http.Request, active string) error {
-	if r == nil || r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" || r.Body == nil {
-		return nil
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, maxOpenAIProxyBody+1))
-	_ = r.Body.Close()
-	if err != nil {
-		return err
-	}
-	if len(raw) > maxOpenAIProxyBody {
-		return fmt.Errorf("request body exceeds %d bytes", maxOpenAIProxyBody)
-	}
-	// Preserve the gateway's historical routing behavior for an empty body:
-	// the engine remains responsible for reporting a malformed OpenAI request.
-	if len(bytes.TrimSpace(raw)) == 0 {
-		r.Body = io.NopCloser(bytes.NewReader(raw))
-		return nil
-	}
-	var payload struct {
-		Model string `json:"model"`
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return err
-	}
-	if strings.TrimSpace(payload.Model) == "" {
-		return fmt.Errorf("model is required")
-	}
-	if payload.Model != active {
-		return fmt.Errorf("requested model %q is not the enabled model", payload.Model)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-	r.ContentLength = int64(len(raw))
-	r.Header.Set("Content-Length", strconv.Itoa(len(raw)))
-	r.Header.Del("Transfer-Encoding")
-	return nil
-}
-
 // openaiCompatOptions returns rewrite policy for the active device.
 // CPU paths stay fail-closed against structured_outputs (grammar pin_memory).
 func openaiCompatOptions(usingGPU bool) openaiCompatConfig {

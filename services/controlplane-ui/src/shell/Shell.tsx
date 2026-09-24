@@ -363,7 +363,7 @@ export function Shell(props: {
                 <strong className="block text-sm text-slate-950">Select feature</strong>
               </div>
               <nav className="grid gap-1">
-                {visibleFeatures(featureMenuMode, props.capabilities, props.session.permissions).map((feature) => (
+                {visibleFeatures(featureMenuMode, props.capabilities).map((feature) => (
                   <button
                     key={feature.path}
                     className={cn(

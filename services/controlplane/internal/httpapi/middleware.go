@@ -214,8 +214,7 @@ func APIExchangeLog(logger logging.Logger) func(http.Handler) http.Handler {
 }
 
 func shouldTraceAPIExchange(path string) bool {
-	// Prompts and responses are private user content, not API diagnostics.
-	return strings.HasPrefix(path, "/api/v1/") && !strings.HasPrefix(path, "/api/v1/inference/chat/")
+	return strings.HasPrefix(path, "/api/v1/")
 }
 
 // peekRequestBodyForLog returns a redacted request summary for exchange logs
