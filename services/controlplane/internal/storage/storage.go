@@ -47,23 +47,23 @@ type DB interface {
 // history.  They intentionally store only text: attachments, tools, and
 // external retrieval are not part of the first native chat experience.
 type ChatConversation struct {
-	ID        string
-	OwnerID   string
-	ModelID   string
-	Title     string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        string    `json:"id"`
+	OwnerID   string    `json:"ownerId"`
+	ModelID   string    `json:"modelId"`
+	Title     string    `json:"title"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type ChatMessage struct {
-	ID             string
-	ConversationID string
-	Role           string // user | assistant
-	Content        string
-	Status         string // complete | streaming | stopped | failed
-	Sequence       int
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversationId"`
+	Role           string    `json:"role"` // user | assistant
+	Content        string    `json:"content"`
+	Status         string    `json:"status"` // complete | streaming | stopped | failed
+	Sequence       int       `json:"sequence"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
 // ChatStore persists private conversation history. Every lookup includes the
