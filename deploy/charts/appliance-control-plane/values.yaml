@@ -108,8 +108,6 @@ config:
   nodeIPv4: ""
   # Derived by zonctl as https://<applianceName>.<dnsZoneName>.
   canonicalOrigin: "https://appliance.example.internal"
-  # Dedicated host for browser chat. Cookies are host-scoped, not port-scoped.
-  chatOrigin: "https://chat.appliance.example.internal"
   logLevel: info
   trustedProxyCount: 1
   workflowInstanceID: appliance

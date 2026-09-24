@@ -31,7 +31,6 @@ type Config struct {
 	ApplianceName    string                 `json:"applianceName"`
 	NodeIPv4         string                 `json:"nodeIPv4"`
 	CanonicalOrigin  string                 `json:"canonicalOrigin"`
-	ChatOrigin       string                 `json:"chatOrigin"`
 	// TLSCACertPath is the mounted public appliance CA PEM (ca.crt only).
 	TLSCACertPath string `json:"tlsCACertPath"`
 	PublicAddr    string `json:"publicAddr"`
@@ -97,7 +96,6 @@ func Default() Config {
 	return Config{
 		ApplianceProfile:          string(appliance.ProfileCore),
 		CanonicalOrigin:           "http://localhost:8080",
-		ChatOrigin:                "https://chat.appliance.localhost",
 		TLSCACertPath:             "/var/run/appliance/tls/ca.crt",
 		PublicAddr:                "127.0.0.1:8080",
 		InternalAddr:              "127.0.0.1:8081",
@@ -218,7 +216,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("NAME", &cfg.ApplianceName)
 	str("NODE_IPV4", &cfg.NodeIPv4)
 	str("CANONICAL_ORIGIN", &cfg.CanonicalOrigin)
-	str("CHAT_ORIGIN", &cfg.ChatOrigin)
 	str("TLS_CA_CERT_PATH", &cfg.TLSCACertPath)
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
@@ -538,9 +535,6 @@ func (c Config) Validate() error {
 	}
 	if u, err := url.Parse(c.CanonicalOrigin); err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" {
 		errs = append(errs, "canonicalOrigin must be an absolute URL with no path, e.g. https://registry1.appliance.internal")
-	}
-	if u, err := url.Parse(c.ChatOrigin); err != nil || u.Scheme != "https" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
-		errs = append(errs, "chatOrigin must be an absolute HTTPS URL with no path")
 	}
 
 	if c.PublicAddr == "" {
