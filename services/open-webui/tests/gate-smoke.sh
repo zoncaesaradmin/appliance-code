@@ -17,6 +17,13 @@ trap cleanup EXIT
 
 podman volume create "${data_volume}" >/dev/null
 podman volume create "${cache_volume}" >/dev/null
+if podman image inspect "${image}" --format '{{range .Config.Env}}{{println .}}{{end}}' | \
+  grep -q '^USE_SLIM_DOCKER=true$'; then
+  :
+else
+  echo 'Open WebUI gate requires the appliance slim image' >&2
+  exit 1
+fi
 podman run --rm -d --name "${container}" --network=none --read-only \
   --user 10011:10011 --cap-drop=ALL --security-opt no-new-privileges \
   --tmpfs /tmp:rw,mode=1777 \
@@ -40,6 +47,10 @@ podman run --rm -d --name "${container}" --network=none --read-only \
   -e OPENAI_API_BASE_URL=http://127.0.0.1:9999/v1 \
   -e OPENAI_API_KEY=dummy \
   -e ENABLE_CODE_EXECUTION=false \
+  -e ENABLE_MEMORIES=false \
+  -e ENABLE_MEMORY_SYSTEM_CONTEXT=false \
+  -e ENABLE_RETRIEVAL_QUERY_GENERATION=false \
+  -e ENABLE_RAG_LOCAL_WEB_FETCH=false \
   -e ENABLE_DIRECT_CONNECTIONS=false \
   -e ENABLE_DIRECT_INTEGRATIONS=false \
   -e ENABLE_NOTES=false \

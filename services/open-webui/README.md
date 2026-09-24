@@ -19,16 +19,21 @@ file-descriptor limit while writing them. The compatibility build also raises
 its build-container `nofile` limit.
 The fifth patch removes the separate editable Profile page in trusted-header
 mode and rejects profile mutations in the API; the appliance owns display
-identity.
+identity. The sixth patch removes the upstream production build's unconditional
+Pyodide download. The appliance build must use `USE_SLIM=true`; that is the
+upstream mode which omits local embedding, speech, and document-processing
+model downloads. The gate rejects a non-slim image.
 
-The latest Linux compatibility build produced image ID
-`587f4acd321c1d190c6223f11b6813501ea519cf496ccb7d35d8ef54e2b85089`
-(not a release manifest digest). `tests/gate-smoke.sh` passed against it with
-no network, UID/GID 10011, read-only root, dropped capabilities, separate
-writable data/cache volumes, and `STATIC_DIR=/app/backend/data/static`. The
-test denies local signup, requires the trusted header for sign-in, verifies
-the first user remains ordinary, denies that user native admin access, and
-rejects edits to appliance-owned profile fields.
+The former upstream-default compatibility build is rejected: it downloaded
+Pyodide assets and Hugging Face models while constructing the image. The
+appliance compatibility image must be built with `USE_SLIM=true` and this
+patch set; no prior image ID is a release candidate. `tests/gate-smoke.sh`
+requires the slim image and checks egress-denied startup under UID/GID 10011,
+read-only root, dropped capabilities, separate writable data/cache volumes,
+and `STATIC_DIR=/app/backend/data/static`. The test denies local signup,
+requires the trusted header for sign-in, verifies the first user remains
+ordinary, denies that user native admin access, and rejects edits to
+appliance-owned profile fields.
 
 The patch **does not** make the release ready. Before building the image,
 finish the identity/UI review (including any synthetic address still shown to
