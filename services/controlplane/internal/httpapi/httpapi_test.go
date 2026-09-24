@@ -196,6 +196,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 			DNSZone:         cfg.DNSZoneName,
 			NodeIPv4:        cfg.NodeIPv4,
 			CanonicalOrigin: cfg.CanonicalOrigin,
+			ChatOrigin:      cfg.ChatOrigin,
 		},
 		ForwardAuthH: &httpapi.ForwardAuthHandlers{
 			Auth: authDeps, Audit: services.Audit, Capabilities: services.ApplianceProfile.Capabilities,

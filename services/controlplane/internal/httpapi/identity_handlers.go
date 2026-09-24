@@ -14,6 +14,7 @@ type IdentityHandlers struct {
 	DNSZone         string
 	NodeIPv4        string
 	CanonicalOrigin string
+	ChatOrigin      string
 	// CACertPath is the on-disk PEM path for the public appliance CA
 	// (installer Secret appliance-ca key ca.crt). Empty disables export.
 	CACertPath string
@@ -25,6 +26,7 @@ type identityResponse struct {
 	FQDN            string `json:"fqdn"`
 	NodeIPv4        string `json:"nodeIPv4,omitempty"`
 	CanonicalOrigin string `json:"canonicalOrigin,omitempty"`
+	ChatOrigin      string `json:"chatOrigin,omitempty"`
 }
 
 func (h *IdentityHandlers) Get(w http.ResponseWriter, r *http.Request) {
@@ -41,11 +43,16 @@ func (h *IdentityHandlers) Get(w http.ResponseWriter, r *http.Request) {
 	if u, err := url.Parse(origin); err == nil && u.Host != "" && fqdn == "" {
 		fqdn = u.Hostname()
 	}
+	chatOrigin := strings.TrimSpace(h.ChatOrigin)
+	if chatOrigin == "" && fqdn != "" {
+		chatOrigin = "https://chat." + fqdn
+	}
 	writeJSON(w, http.StatusOK, identityResponse{
 		ApplianceName:   name,
 		DNSZone:         zone,
 		FQDN:            fqdn,
 		NodeIPv4:        strings.TrimSpace(h.NodeIPv4),
 		CanonicalOrigin: origin,
+		ChatOrigin:      chatOrigin,
 	})
 }
