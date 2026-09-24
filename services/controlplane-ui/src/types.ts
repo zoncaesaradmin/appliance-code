@@ -542,6 +542,33 @@ export interface InferenceRuntimeStatus {
   maxModelLen?: number;
 }
 
+export interface ChatAvailability {
+  ready: boolean;
+  modelId?: string;
+  reason?: string;
+  maxModelLen?: number;
+}
+
+export interface ChatConversation {
+  id: string;
+  ownerId: string;
+  modelId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant";
+  content: string;
+  status: "complete" | "streaming" | "stopped" | "failed";
+  sequence: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface InferenceModel {
   id: string;
   object?: string;

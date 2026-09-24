@@ -9,6 +9,7 @@ import { FilesPage } from "../pages/FilesPage";
 import { VideosPage } from "../pages/VideosPage";
 import { ApplicationsPage } from "../pages/ApplicationsPage";
 import { AIServicePage } from "../pages/AIServicePage";
+import { ChatPage } from "../pages/ChatPage";
 import { HomePage } from "../pages/HomePage";
 import { navigate } from "../lib/navigate";
 import type { Session } from "../types";
@@ -37,6 +38,9 @@ export function RouteView(props: {
   }
   if (props.pathname.startsWith("/manage/builder")) {
     return <BuilderPage pathname={props.pathname} />;
+  }
+  if (props.pathname.startsWith("/manage/chat")) {
+    return <ChatPage session={props.session} />;
   }
   // Legacy Manage → DNS; now Admin → LAN Services.
   if (props.pathname === "/manage/dns" || props.pathname.startsWith("/manage/dns/")) {

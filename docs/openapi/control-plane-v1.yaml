@@ -1592,6 +1592,49 @@ paths:
                 $ref: "#/components/schemas/InferenceRuntimeStatus"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/inference/chat/availability:
+    get:
+      summary: Get native-chat availability
+      description: Interactive-session-only inference.use endpoint. Reads enabled-model state without refreshing the model catalog.
+      operationId: getChatAvailability
+      responses:
+        "200": { description: Native chat availability., content: { application/json: { schema: { $ref: "#/components/schemas/ChatAvailability" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/inference/chat/conversations:
+    get:
+      summary: List own native-chat conversations
+      operationId: listChatConversations
+      responses:
+        "200": { description: Conversations., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ChatConversation" } } } } } } }
+    post:
+      summary: Create a native-chat conversation bound to the enabled model
+      operationId: createChatConversation
+      responses:
+        "201": { description: Conversation., content: { application/json: { schema: { $ref: "#/components/schemas/ChatConversation" } } } }
+        "409": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/chat/conversations/{id}:
+    parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+    get:
+      summary: Get own native-chat conversation and messages
+      operationId: getChatConversation
+      responses:
+        "200": { description: Conversation., content: { application/json: { schema: { type: object, required: [conversation, messages], properties: { conversation: { $ref: "#/components/schemas/ChatConversation" }, messages: { type: array, items: { $ref: "#/components/schemas/ChatMessage" } } } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete own native-chat conversation
+      operationId: deleteChatConversation
+      responses: { "204": { description: Deleted. }, "404": { $ref: "#/components/responses/NotFound" } }
+  /api/v1/inference/chat/conversations/{id}/turns:
+    post:
+      summary: Stream an assistant turn for an own native-chat conversation
+      operationId: createChatTurn
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [content], properties: { content: { type: string, minLength: 1, maxLength: 16384 } } } } }
+      responses:
+        "200": { description: Server-sent events named started, delta, completed, or failed., content: { text/event-stream: { schema: { type: string } } } }
+        "409": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/inference/models:
     get:
       summary: List locally available inference models
@@ -2646,6 +2689,36 @@ components:
         checks:
           type: array
           items: { $ref: "#/components/schemas/InferenceCheck" }
+    ChatAvailability:
+      type: object
+      required: [ready]
+      properties:
+        ready: { type: boolean }
+        modelId: { type: string }
+        reason: { type: string }
+        maxModelLen: { type: integer, minimum: 0 }
+    ChatConversation:
+      type: object
+      required: [id, ownerId, modelId, title, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        ownerId: { type: string }
+        modelId: { type: string }
+        title: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ChatMessage:
+      type: object
+      required: [id, conversationId, role, content, status, sequence, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        conversationId: { type: string }
+        role: { type: string, enum: [user, assistant] }
+        content: { type: string }
+        status: { type: string, enum: [complete, streaming, stopped, failed] }
+        sequence: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     InferenceServingInstance:
       type: object
       required: [id, models, replicas]

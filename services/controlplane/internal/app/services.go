@@ -22,6 +22,7 @@ import (
 	"appliance-code/services/controlplane/internal/automationruntimeclient"
 	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
+	"appliance-code/services/controlplane/internal/chat"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/dnsrecords"
@@ -66,6 +67,7 @@ type Services struct {
 	JobStore           storage.JobStore
 	ApplicationStore   storage.ApplicationStore
 	FocusContentStore  storage.FocusContentStore
+	ChatStore          storage.ChatStore
 
 	Users              *users.Service
 	Roles              *roles.Service
@@ -86,6 +88,7 @@ type Services struct {
 	Applications       *applications.Service
 	ApplicationRuntime applications.ResourceManager
 	Inference          *inference.Service
+	Chat               *chat.Service
 
 	Keys     *keys.Material
 	Audit    *audit.Recorder
@@ -204,12 +207,14 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	jobStore := sqlite.NewJobStore(db)
 	applicationStore := sqlite.NewApplicationStore(db)
 	focusContentStore := sqlite.NewFocusContentStore(db)
+	chatStore := sqlite.NewChatStore(db)
 	applicationsSvc, err := applications.NewService(applicationStore, cfg.ApplicationCatalog)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application management: %w", err)
 	}
 	var inferenceSvc *inference.Service
+	var chatSvc *chat.Service
 	if inferenceEnabled {
 		inferenceSvc, err = inference.New(inference.Config{
 			BaseURL: cfg.InferenceGatewayBaseURL, Package: cfg.InferenceRuntimePackage,
@@ -218,6 +223,11 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring inference management: %w", err)
+		}
+		chatSvc, err = chat.New(chatStore, inferenceSvc)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: wiring native chat: %w", err)
 		}
 	}
 	applicationRuntime, err := applications.NewInClusterManager(applications.NewHostAgentProjector(
@@ -360,6 +370,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		JobStore:           jobStore,
 		ApplicationStore:   applicationStore,
 		FocusContentStore:  focusContentStore,
+		ChatStore:          chatStore,
 		Users:              usersSvc,
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokensSvc,
@@ -379,6 +390,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Applications:       applicationsSvc,
 		ApplicationRuntime: applicationRuntime,
 		Inference:          inferenceSvc,
+		Chat:               chatSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 		AuditOps:           auditOps,

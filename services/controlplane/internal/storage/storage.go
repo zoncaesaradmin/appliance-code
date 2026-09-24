@@ -43,6 +43,41 @@ type DB interface {
 	Close() error
 }
 
+// ChatConversation and ChatMessage are the appliance-owned, user-scoped chat
+// history.  They intentionally store only text: attachments, tools, and
+// external retrieval are not part of the first native chat experience.
+type ChatConversation struct {
+	ID        string
+	OwnerID   string
+	ModelID   string
+	Title     string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type ChatMessage struct {
+	ID             string
+	ConversationID string
+	Role           string // user | assistant
+	Content        string
+	Status         string // complete | streaming | stopped | failed
+	Sequence       int
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// ChatStore persists private conversation history. Every lookup includes the
+// owner, preventing handlers from ever loading another user's transcript.
+type ChatStore interface {
+	CreateConversation(ctx context.Context, conversation ChatConversation) error
+	ListConversations(ctx context.Context, ownerID string, limit int) ([]ChatConversation, error)
+	GetConversation(ctx context.Context, ownerID, id string) (ChatConversation, []ChatMessage, error)
+	DeleteConversation(ctx context.Context, ownerID, id string) error
+	UpdateConversationTitle(ctx context.Context, ownerID, id, title string) error
+	AppendMessage(ctx context.Context, message ChatMessage) error
+	UpdateMessage(ctx context.Context, ownerID, messageID, content, status string) error
+}
+
 // OperationKind identifies the kind of long-running async operation tracked
 // by OperationsStore, per the plan's durable asynchronous operation model.
 type OperationKind string
