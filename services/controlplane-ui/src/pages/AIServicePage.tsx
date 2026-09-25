@@ -33,6 +33,27 @@ function experienceLabel(capabilities: InferenceModelCapabilities): string {
   return capabilities.codexCompatible ? "Coding agent" : "Chat assistant";
 }
 
+/** Soften catalog LastError for expected partial/upstream refresh noise. */
+function catalogStatusPresentation(raw: string): { text: string; tone: "error" | "info" } {
+  const text = raw.trim();
+  if (!text) {
+    return { text: "", tone: "info" };
+  }
+  if (text.startsWith("Catalog partially refreshed")) {
+    return {
+      text: "Model catalog partially refreshed from upstream; retry scheduled. Downloaded models and prior candidates remain available.",
+      tone: "info"
+    };
+  }
+  if (text.startsWith("Catalog refresh failed; retaining the previous catalog")) {
+    return {
+      text: "Model catalog refresh failed; retaining the previous catalog. Downloaded models remain available.",
+      tone: "info"
+    };
+  }
+  return { text, tone: "error" };
+}
+
 function formatGiB(bytes: number): string {
   if (bytes <= 0) {
     return "unknown";
@@ -418,6 +439,7 @@ export function AIServicePage(): React.JSX.Element {
   }, []);
 
   const catalogPending = !!catalog && (catalog.refreshing || (!catalog.lastSuccess && !catalog.lastError));
+  const catalogStatus = catalogStatusPresentation(catalogError || catalog?.lastError || "");
   useEffect(() => {
     if (!catalogPending) {
       return;
@@ -748,8 +770,13 @@ export function AIServicePage(): React.JSX.Element {
             title="Model library"
             subtitle="Downloaded models are stored locally. Enabling a model replaces the current enabled model."
           >
-            {catalogError || catalog?.lastError ? (
-              <p className="message message--error">{catalogError || catalog?.lastError}</p>
+            {catalogStatus.text ? (
+              <p
+                className={catalogStatus.tone === "error" ? "message message--error" : "message"}
+                role={catalogStatus.tone === "error" ? "alert" : "status"}
+              >
+                {catalogStatus.text}
+              </p>
             ) : null}
             {options.length === 0 ? (
               <EmptyState

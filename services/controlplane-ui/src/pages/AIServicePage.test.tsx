@@ -203,6 +203,21 @@ it("keeps downloaded models manageable outside the dropdown when catalog discove
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Enable")).toBe(true);
 });
 
+it("shows partial catalog refresh as status, not a hard error", async () => {
+  api.getInferenceCatalog.mockResolvedValue({
+    lastSuccess: "2026-09-15T00:00:00Z",
+    lastError: "Catalog partially refreshed; retry scheduled. Ollama catalog discovery skipped 16 metadata requests: qwen2.5-coder:0.5b-base template: upstream metadata returned HTTP 503",
+    stale: true,
+    refreshing: false,
+    scope: "Popular models",
+    items: [{ id: "available:1b", source: "available:1b", downloadBytes: 100, memoryBytes: 200, eligible: true }]
+  });
+  await act(async () => root.render(<AIServicePage />));
+  expect(element.textContent).toContain("Model catalog partially refreshed from upstream");
+  expect(element.querySelector(".message--error")).toBeNull();
+  expect(element.querySelector(".message")?.getAttribute("role")).toBe("status");
+});
+
 it("keeps a downloaded non-fitting model in inventory but out of the dropdown", async () => {
   api.listInferenceModels.mockResolvedValue([{ id: "too-large:32b" }]);
   api.getInferenceCatalog.mockResolvedValue({

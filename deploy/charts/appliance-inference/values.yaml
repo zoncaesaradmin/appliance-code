@@ -47,6 +47,9 @@ managerImage:
 # bridge will own the public route once its launch-grant API is implemented.
 openWebUI:
   enabled: false
+  # Session-bridge consume/validate target. Basename is controlplane (see
+  # appliance-control-plane chart nameOverride default), not the chart name.
+  controlPlaneURL: "http://controlplane.ace-system.svc.cluster.local:8080"
   image:
     repository: registry.local/open-webui
     tag: ""

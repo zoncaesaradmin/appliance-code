@@ -208,6 +208,8 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 		"ENABLE_OLLAMA_API",
 		"OPENAI_API_BASE_URL",
 		"http://inference-gateway.inference.svc.cluster.local:8080/v1",
+		"CONTROL_PLANE_URL",
+		"http://controlplane.ace-system.svc.cluster.local:8080",
 		"USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS",
 		"WEBUI_SECRET_KEY",
 		"app.kubernetes.io/component: open-webui-gateway",
@@ -215,6 +217,9 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("Open WebUI render missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "appliance-control-plane.ace-system") {
+		t.Fatal("gateway must call controlplane Service DNS, not the chart/image name")
 	}
 	if strings.Contains(out, "kind: Ingress") {
 		t.Fatal("the session bridge must own the future public route; chart must not expose Open WebUI directly")

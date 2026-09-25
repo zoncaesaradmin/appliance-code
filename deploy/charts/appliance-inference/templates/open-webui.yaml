@@ -221,7 +221,9 @@ spec:
             - name: UPSTREAM_URL
               value: {{ printf "http://%s:%v" (include "appliance-inference.openWebUIName" .) .Values.openWebUI.service.port | quote }}
             - name: CONTROL_PLANE_URL
-              value: "http://appliance-control-plane.ace-system.svc.cluster.local:8080"
+              # Must match appliance-control-plane Service DNS (basename
+              # "controlplane", not the chart/image name).
+              value: {{ .Values.openWebUI.controlPlaneURL | quote }}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
           livenessProbe:
@@ -292,4 +294,13 @@ spec:
             matchLabels:
               {{- toYaml .Values.networkPolicy.controlPlanePodLabels | nindent 14 }}
       ports: [{protocol: TCP, port: 8080}]
+    {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    {{- end }}
 {{- end }}
