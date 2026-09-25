@@ -98,6 +98,7 @@ case "${node_arch}" in amd64|arm64) ;; *) node_arch="${TARGET_ARCH}" ;; esac
 node_local="localhost/open-webui-node:${node_arch}"
 python_local="localhost/open-webui-python:${TARGET_ARCH}"
 uv_local="localhost/open-webui-uv:${TARGET_ARCH}"
+frontend_local="localhost/open-webui-frontend:build"
 # Frontend base follows BUILDPLATFORM (host); python/uv follow TARGET_ARCH.
 # Cross-arch offline freezes therefore need both HOST_ARCH and TARGET_ARCH
 # seeds from deps/open-webui (node-${HOST_ARCH}, python/uv-${TARGET_ARCH}).
@@ -119,36 +120,76 @@ fi
 
 # Upstream Dockerfile hard-codes registry names. Rewrite to the prefetched
 # local refs so --pull-never works offline.
+#
+# Cross-arch note: `buildah bud --arch <target>` cannot see a differently
+# arch'd FROM image even with --platform=$BUILDPLATFORM ("image not known").
+# Build the node/frontend stage on the host arch first (frontend-only
+# Dockerfile so the foreign-arch python base is not resolved), then build the
+# final image with COPY --from=<frontend image> (file copy works across arches).
 dockerfile="${build_source}/Dockerfile"
+frontend_dockerfile="${build_source}/Dockerfile.frontend"
 [[ -f "${dockerfile}" ]] || { echo "export-open-webui-image-archive: missing Dockerfile in source" >&2; exit 1; }
-python3 - "${dockerfile}" "${node_local}" "${python_local}" "${uv_local}" <<'PY'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-node_ref = sys.argv[2]
-python_ref = sys.argv[3]
-uv_ref = sys.argv[4]
-text = path.read_text(encoding="utf-8")
+
+python3 - "${dockerfile}" "${frontend_dockerfile}" "${node_local}" "${python_local}" "${uv_local}" "${frontend_local}" <<'PY'
+import pathlib, re, sys
+
+dockerfile = pathlib.Path(sys.argv[1])
+frontend_df = pathlib.Path(sys.argv[2])
+node_ref = sys.argv[3]
+python_ref = sys.argv[4]
+uv_ref = sys.argv[5]
+frontend_ref = sys.argv[6]
+text = dockerfile.read_text(encoding="utf-8")
 old_node = "FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build"
 old_python = "FROM python:3.11-slim-bookworm AS base"
 old_uv = "RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv"
-new_node = f"FROM --platform=$BUILDPLATFORM {node_ref} AS build"
-new_python = f"FROM {python_ref} AS base"
-new_uv = f"RUN --mount=from={uv_ref},source=/uv,target=/bin/uv"
 if old_node not in text:
     raise SystemExit(f"open-webui Dockerfile missing expected node FROM line: {old_node!r}")
 if old_python not in text:
     raise SystemExit(f"open-webui Dockerfile missing expected python FROM line: {old_python!r}")
 if old_uv not in text:
     raise SystemExit(f"open-webui Dockerfile missing expected uv mount: {old_uv!r}")
-path.write_text(
-    text.replace(old_node, new_node, 1).replace(old_python, new_python, 1).replace(old_uv, new_uv, 1),
-    encoding="utf-8",
+
+# Frontend-only file for host-arch stage build (no foreign-arch FROM lines).
+frontend_text = text.replace(old_node, f"FROM {node_ref} AS build", 1)
+# Truncate at the backend stage so buildah --target build never resolves python/uv.
+parts = re.split(r"(?m)^(FROM python:3\.11-slim-bookworm AS base\s*)$", frontend_text, maxsplit=1)
+if len(parts) < 2:
+    raise SystemExit("open-webui Dockerfile: could not locate backend FROM for frontend-only split")
+frontend_df.write_text(parts[0], encoding="utf-8")
+
+# Final runtime Dockerfile: local python/uv + COPY --from=prebuilt frontend image.
+final = text.replace(old_node, f"FROM {node_ref} AS build", 1)
+final = final.replace(old_python, f"FROM {python_ref} AS base", 1)
+final = final.replace(old_uv, f"RUN --mount=from={uv_ref},source=/uv,target=/bin/uv", 1)
+final, n = re.subn(
+    r"(?ms)^FROM .+ AS build\n.*?^(?=FROM )",
+    "",
+    final,
+    count=1,
 )
+if n != 1:
+    raise SystemExit("open-webui Dockerfile: could not remove frontend build stage for final image")
+final = final.replace("COPY --chown=$UID:$GID --from=build ", f"COPY --chown=$UID:$GID --from={frontend_ref} ")
+final = final.replace("COPY --from=build ", f"COPY --from={frontend_ref} ")
+if " --from=build " in final:
+    raise SystemExit("open-webui Dockerfile: leftover COPY --from=build after rewrite")
+dockerfile.write_text(final, encoding="utf-8")
 PY
 
 IMAGE_TAG="${IMAGE_TAG:-${UPSTREAM_REF#v}-appliance}"
 IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed 's/[^A-Za-z0-9_.-]/-/g')"
 local_ref="localhost/open-webui:${IMAGE_TAG}"
+
+echo "export-open-webui-image-archive: building frontend stage on ${node_arch}" >&2
+buildah bud --arch "${node_arch}" --target build --pull-never --ulimit nofile=65535:65535 \
+  --build-arg USE_SLIM=true \
+  --build-arg UID=10011 \
+  --build-arg GID=10011 \
+  -f "${frontend_dockerfile}" \
+  --tag "${frontend_local}" "${build_source}"
+
+echo "export-open-webui-image-archive: building runtime image for ${TARGET_ARCH}" >&2
 buildah bud --arch "${TARGET_ARCH}" --pull-never --ulimit nofile=65535:65535 \
   --build-arg USE_SLIM=true \
   --build-arg UID=10011 \
