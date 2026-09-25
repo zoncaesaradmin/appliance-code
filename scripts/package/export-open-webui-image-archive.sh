@@ -20,6 +20,7 @@ Options:
   --image-tag TAG            Local temporary tag (default: pinned ref).
   --node-image REF           Frontend build base (default: docker.io/library/node:22-alpine3.20).
   --python-image REF         Backend base (default: docker.io/library/python:3.11-slim-bookworm).
+  --uv-image REF             astral uv mount image (default: ghcr.io/astral-sh/uv:0.12.10).
   --run-gate                 Run services/open-webui/tests/gate-smoke.sh after build.
 
 The source must be a clean Git checkout at the exact locked commit. The build
@@ -48,6 +49,7 @@ REFERENCE_OUT_FILE=""
 IMAGE_TAG=""
 NODE_IMAGE="${OPEN_WEBUI_NODE_IMAGE:-docker.io/library/node:22-alpine3.20}"
 PYTHON_IMAGE="${OPEN_WEBUI_PYTHON_IMAGE:-docker.io/library/python:3.11-slim-bookworm}"
+UV_IMAGE="${OPEN_WEBUI_UV_IMAGE:-ghcr.io/astral-sh/uv:0.12.10}"
 RUN_GATE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -57,6 +59,7 @@ while [[ $# -gt 0 ]]; do
     --image-tag) IMAGE_TAG="${2:-}"; shift 2 ;;
     --node-image) NODE_IMAGE="${2:-}"; shift 2 ;;
     --python-image) PYTHON_IMAGE="${2:-}"; shift 2 ;;
+    --uv-image) UV_IMAGE="${2:-}"; shift 2 ;;
     --run-gate) RUN_GATE=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "export-open-webui-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -65,7 +68,7 @@ done
 
 [[ -n "${SOURCE_DIR}" && -d "${SOURCE_DIR}/.git" ]] || { echo "export-open-webui-image-archive: --source-dir must be a Git checkout" >&2; exit 2; }
 [[ -n "${OUT_FILE}" ]] || { echo "export-open-webui-image-archive: --out-file is required" >&2; exit 2; }
-[[ -n "${NODE_IMAGE}" && -n "${PYTHON_IMAGE}" ]] || { echo "export-open-webui-image-archive: --node-image and --python-image are required" >&2; exit 2; }
+[[ -n "${NODE_IMAGE}" && -n "${PYTHON_IMAGE}" && -n "${UV_IMAGE}" ]] || { echo "export-open-webui-image-archive: --node-image, --python-image, and --uv-image are required" >&2; exit 2; }
 for tool in git buildah skopeo python3 tar; do
   command -v "${tool}" >/dev/null 2>&1 || { echo "export-open-webui-image-archive: ${tool} is required" >&2; exit 1; }
 done
@@ -94,28 +97,38 @@ node_arch="${HOST_ARCH:-${TARGET_ARCH}}"
 case "${node_arch}" in amd64|arm64) ;; *) node_arch="${TARGET_ARCH}" ;; esac
 node_local="localhost/open-webui-node:${node_arch}"
 python_local="localhost/open-webui-python:${TARGET_ARCH}"
+uv_local="localhost/open-webui-uv:${TARGET_ARCH}"
 oci_skopeo_prefetch_docker "${NODE_IMAGE}" "${node_local}" "${node_arch}"
 oci_skopeo_prefetch_docker "${PYTHON_IMAGE}" "${python_local}" "${TARGET_ARCH}"
+oci_skopeo_prefetch_docker "${UV_IMAGE}" "${uv_local}" "${TARGET_ARCH}"
 
-# Upstream Dockerfile hard-codes short registry names. Rewrite to the prefetched
+# Upstream Dockerfile hard-codes registry names. Rewrite to the prefetched
 # local refs so --pull-never works offline.
 dockerfile="${build_source}/Dockerfile"
 [[ -f "${dockerfile}" ]] || { echo "export-open-webui-image-archive: missing Dockerfile in source" >&2; exit 1; }
-python3 - "${dockerfile}" "${node_local}" "${python_local}" <<'PY'
+python3 - "${dockerfile}" "${node_local}" "${python_local}" "${uv_local}" <<'PY'
 import pathlib, sys
 path = pathlib.Path(sys.argv[1])
 node_ref = sys.argv[2]
 python_ref = sys.argv[3]
+uv_ref = sys.argv[4]
 text = path.read_text(encoding="utf-8")
 old_node = "FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build"
 old_python = "FROM python:3.11-slim-bookworm AS base"
+old_uv = "RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv"
 new_node = f"FROM --platform=$BUILDPLATFORM {node_ref} AS build"
 new_python = f"FROM {python_ref} AS base"
+new_uv = f"RUN --mount=from={uv_ref},source=/uv,target=/bin/uv"
 if old_node not in text:
     raise SystemExit(f"open-webui Dockerfile missing expected node FROM line: {old_node!r}")
 if old_python not in text:
     raise SystemExit(f"open-webui Dockerfile missing expected python FROM line: {old_python!r}")
-path.write_text(text.replace(old_node, new_node, 1).replace(old_python, new_python, 1), encoding="utf-8")
+if old_uv not in text:
+    raise SystemExit(f"open-webui Dockerfile missing expected uv mount: {old_uv!r}")
+path.write_text(
+    text.replace(old_node, new_node, 1).replace(old_python, new_python, 1).replace(old_uv, new_uv, 1),
+    encoding="utf-8",
+)
 PY
 
 IMAGE_TAG="${IMAGE_TAG:-${UPSTREAM_REF#v}-appliance}"

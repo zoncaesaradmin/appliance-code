@@ -403,6 +403,7 @@ package-open-webui-image-archive:
 		--reference-out-file "$$reference_file" \
 		$${OPEN_WEBUI_NODE_IMAGE:+--node-image "$${OPEN_WEBUI_NODE_IMAGE}"} \
 		$${OPEN_WEBUI_PYTHON_IMAGE:+--python-image "$${OPEN_WEBUI_PYTHON_IMAGE}"} \
+		$${OPEN_WEBUI_UV_IMAGE:+--uv-image "$${OPEN_WEBUI_UV_IMAGE}"} \
 		$${OPEN_WEBUI_RUN_GATE:+--run-gate}
 
 package-open-webui-gateway-image-archive:
