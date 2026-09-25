@@ -171,6 +171,27 @@ type SessionStore interface {
 	RotateRefresh(ctx context.Context, familyID string, newDigest []byte, expiresAt time.Time) error
 }
 
+// WebUILaunchGrant is a one-time, short-lived browser handoff. Raw grant
+// material is never persisted; LookupID selects the row and Digest verifies it.
+// The gateway binds the resulting bridge session to the interactive session
+// family, so API tokens can never create a browser workspace.
+type WebUILaunchGrant struct {
+	ID        string
+	LookupID  string
+	Digest    []byte
+	UserID    string
+	FamilyID  string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UsedAt    *time.Time
+}
+
+type WebUILaunchGrantStore interface {
+	CreateWebUILaunchGrant(ctx context.Context, grant WebUILaunchGrant) error
+	GetWebUILaunchGrantByLookupID(ctx context.Context, lookupID string) (WebUILaunchGrant, error)
+	ConsumeWebUILaunchGrant(ctx context.Context, id string, usedAt time.Time) error
+}
+
 // AuditActorType classifies who performed an audited action.
 type AuditActorType string
 
