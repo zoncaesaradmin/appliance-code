@@ -55,7 +55,14 @@ oci_skopeo_prefetch_docker() {
     fi
   fi
 
-  skopeo "${args[@]}" "docker://${bare}" "containers-storage:${dest_storage_ref}"
+  if ! skopeo "${args[@]}" "docker://${bare}" "containers-storage:${dest_storage_ref}"; then
+    echo "oci-pull: failed to prefetch docker://${bare} (arch=${architecture})" >&2
+    if oci_ref_is_dev_registry "${bare}"; then
+      echo "oci-pull: OFFLINE_BUILD expects this LAN build-cache tag to already exist" >&2
+      echo "oci-pull: seed the missing image (example: TARGET_ARCH=${architecture} make -C deps/<pkg> release), then retry" >&2
+    fi
+    return 1
+  fi
   # Fail closed if the stored image is the wrong arch (LAN tags that collided
   # across amd64/arm64 used to make skopeo warn and still copy, then buildah
   # --arch <want> --pull-never reported "image not known").

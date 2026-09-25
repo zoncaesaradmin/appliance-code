@@ -98,9 +98,24 @@ case "${node_arch}" in amd64|arm64) ;; *) node_arch="${TARGET_ARCH}" ;; esac
 node_local="localhost/open-webui-node:${node_arch}"
 python_local="localhost/open-webui-python:${TARGET_ARCH}"
 uv_local="localhost/open-webui-uv:${TARGET_ARCH}"
-oci_skopeo_prefetch_docker "${NODE_IMAGE}" "${node_local}" "${node_arch}"
-oci_skopeo_prefetch_docker "${PYTHON_IMAGE}" "${python_local}" "${TARGET_ARCH}"
-oci_skopeo_prefetch_docker "${UV_IMAGE}" "${uv_local}" "${TARGET_ARCH}"
+# Frontend base follows BUILDPLATFORM (host); python/uv follow TARGET_ARCH.
+# Cross-arch offline freezes therefore need both HOST_ARCH and TARGET_ARCH
+# seeds from deps/open-webui (node-${HOST_ARCH}, python/uv-${TARGET_ARCH}).
+if ! oci_skopeo_prefetch_docker "${NODE_IMAGE}" "${node_local}" "${node_arch}"; then
+  echo "export-open-webui-image-archive: missing node base ${NODE_IMAGE}" >&2
+  echo "export-open-webui-image-archive: seed with TARGET_ARCH=${node_arch} make -C deps/open-webui release" >&2
+  exit 1
+fi
+if ! oci_skopeo_prefetch_docker "${PYTHON_IMAGE}" "${python_local}" "${TARGET_ARCH}"; then
+  echo "export-open-webui-image-archive: missing python base ${PYTHON_IMAGE}" >&2
+  echo "export-open-webui-image-archive: seed with TARGET_ARCH=${TARGET_ARCH} make -C deps/open-webui release" >&2
+  exit 1
+fi
+if ! oci_skopeo_prefetch_docker "${UV_IMAGE}" "${uv_local}" "${TARGET_ARCH}"; then
+  echo "export-open-webui-image-archive: missing uv base ${UV_IMAGE}" >&2
+  echo "export-open-webui-image-archive: seed with TARGET_ARCH=${TARGET_ARCH} make -C deps/open-webui release" >&2
+  exit 1
+fi
 
 # Upstream Dockerfile hard-codes registry names. Rewrite to the prefetched
 # local refs so --pull-never works offline.
