@@ -1,0 +1,201 @@
+diff --git a/src/app.html b/src/app.html
+index 667808e..d413c25 100644
+--- a/src/app.html
++++ b/src/app.html
+@@ -6,28 +6,28 @@
+ 		visual, textual, symbolic identifiers, metadata, and surrounding UI.
+ 		Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 		https://docs.openwebui.com/license. -->
+-		<link rel="icon" type="image/png" href="/static/favicon.png" crossorigin="use-credentials" />
++		<link rel="icon" type="image/png" href="%sveltekit.paths.base%/static/favicon.png" crossorigin="use-credentials" />
+ 		<link
+ 			rel="icon"
+ 			type="image/png"
+-			href="/static/favicon-96x96.png"
++			href="%sveltekit.paths.base%/static/favicon-96x96.png"
+ 			sizes="96x96"
+ 			crossorigin="use-credentials"
+ 		/>
+ 		<link
+ 			rel="icon"
+ 			type="image/svg+xml"
+-			href="/static/favicon.svg"
++			href="%sveltekit.paths.base%/static/favicon.svg"
+ 			crossorigin="use-credentials"
+ 		/>
+-		<link rel="shortcut icon" href="/static/favicon.ico" crossorigin="use-credentials" />
++		<link rel="shortcut icon" href="%sveltekit.paths.base%/static/favicon.ico" crossorigin="use-credentials" />
+ 		<link
+ 			rel="apple-touch-icon"
+ 			sizes="180x180"
+-			href="/static/apple-touch-icon.png"
++			href="%sveltekit.paths.base%/static/apple-touch-icon.png"
+ 			crossorigin="use-credentials"
+ 		/>
+-		<link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
++		<link rel="manifest" href="%sveltekit.paths.base%/manifest.json" crossorigin="use-credentials" />
+ 		<meta
+ 			name="viewport"
+ 			content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+@@ -35,8 +35,8 @@
+ 		<meta name="theme-color" content="#171717" />
+ 		<meta name="robots" content="noindex,nofollow" />
+ 
+-		<script src="/static/loader.js" defer crossorigin="use-credentials"></script>
+-		<link rel="stylesheet" href="/static/custom.css" crossorigin="use-credentials" />
++		<script src="%sveltekit.paths.base%/static/loader.js" defer crossorigin="use-credentials"></script>
++		<link rel="stylesheet" href="%sveltekit.paths.base%/static/custom.css" crossorigin="use-credentials" />
+ 
+ 		<script>
+ 			function resizeIframe(obj) {
+@@ -79,8 +79,8 @@
+ 				// Do not alter, remove, obscure, or replace them except as LICENSE permits:
+ 				// https://docs.openwebui.com/license.
+ 				const preloadHref = document.documentElement.classList.contains('dark')
+-					? '/static/splash-dark.png'
+-					: '/static/splash.png';
++					? '%sveltekit.paths.base%/static/splash-dark.png'
++					: '%sveltekit.paths.base%/static/splash.png';
+ 				const preload = document.createElement('link');
+ 				preload.rel = 'preload';
+ 				preload.as = 'image';
+@@ -112,7 +112,7 @@
+ 				// LICENSE covers this Open WebUI splash logo.
+ 				// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 				// https://docs.openwebui.com/license.
+-				logo.src = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
++				logo.src = isDarkMode ? '%sveltekit.paths.base%/static/splash-dark.png' : '%sveltekit.paths.base%/static/splash.png';
+ 
+ 				document.addEventListener('DOMContentLoaded', function () {
+ 					const splash = document.getElementById('splash-screen');
+@@ -163,7 +163,7 @@
+ 				<img
+ 					id="logo-her"
+ 					style="width: auto; height: 13rem"
+-					src="/static/splash.png"
++					src="%sveltekit.paths.base%/static/splash.png"
+ 					loading="eager"
+ 					fetchpriority="high"
+ 					class="animate-pulse-fast"
+diff --git a/src/lib/constants.ts b/src/lib/constants.ts
+index e38dda5..842fde0 100644
+--- a/src/lib/constants.ts
++++ b/src/lib/constants.ts
+@@ -7,7 +7,8 @@
+ export const APP_NAME = 'Open WebUI';
+ 
+ export const WEBUI_HOSTNAME = '';
+-export const WEBUI_BASE_URL = '';
++// Appliance public path; must match Traefik PathPrefix(`/webui`) and gateway strip.
++export const WEBUI_BASE_URL = '/webui';
+ export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;
+ 
+ export const OLLAMA_API_BASE_URL = `${WEBUI_BASE_URL}/ollama`;
+diff --git a/src/routes/(app)/+layout.svelte b/src/routes/(app)/+layout.svelte
+index eaa9b60..550a9b8 100644
+--- a/src/routes/(app)/+layout.svelte
++++ b/src/routes/(app)/+layout.svelte
+@@ -3,6 +3,7 @@
+ 	import { onMount, tick, getContext } from 'svelte';
+ 
+ 	import { goto } from '$app/navigation';
++	import { base } from '$app/paths';
+ 	import { page } from '$app/stores';
+ 	import { fade } from 'svelte/transition';
+ 
+@@ -196,7 +197,7 @@
+ 
+ 	const gotoAuth = async () => {
+ 		const currentUrl = `${$page.url.pathname}${$page.url.search}`;
+-		await goto(`/auth?redirect=${encodeURIComponent(currentUrl)}`);
++		await goto(`${base}/auth?redirect=${encodeURIComponent(currentUrl)}`);
+ 	};
+ 
+ 	const navigateChat = async (direction: -1 | 1) => {
+diff --git a/src/routes/+layout.svelte b/src/routes/+layout.svelte
+index 69bc849..439d052 100644
+--- a/src/routes/+layout.svelte
++++ b/src/routes/+layout.svelte
+@@ -164,12 +164,15 @@
+ 	};
+ 
+ 	const setupSocket = async (enableWebsocket) => {
+-		const _socket = io(`${WEBUI_BASE_URL}` || undefined, {
++		// WEBUI_BASE_URL is a path prefix (/webui), not a socket.io namespace.
++		// Keep the Engine.IO endpoint under that public prefix so Traefik routes
++		// it through the session bridge.
++		const _socket = io(undefined, {
+ 			reconnection: true,
+ 			reconnectionDelay: 1000,
+ 			reconnectionDelayMax: 5000,
+ 			randomizationFactor: 0.5,
+-			path: '/ws/socket.io',
++			path: `${WEBUI_BASE_URL}/ws/socket.io`,
+ 			transports: enableWebsocket ? ['websocket'] : ['polling', 'websocket'],
+ 			auth: { token: localStorage.token }
+ 		});
+@@ -1243,7 +1246,7 @@
+ 			if (error?.authRedirect) {
+ 				// Forward-auth proxy is redirecting to an external login page.
+ 				// Full-page navigation lets the browser follow the redirect natively.
+-				window.location.href = '/';
++				window.location.href = `${WEBUI_BASE_URL}/`;
+ 				return;
+ 			}
+ 			console.error('Error loading backend config:', error);
+@@ -1335,7 +1338,7 @@
+ 
+ 			document.getElementById('splash-screen')?.remove();
+ 
+-			const audio = new Audio(`/audio/greeting.mp3`);
++			const audio = new Audio(`${WEBUI_BASE_URL}/audio/greeting.mp3`);
+ 			const playAudio = () => {
+ 				audio.play();
+ 				document.removeEventListener('click', playAudio);
+@@ -1396,7 +1399,7 @@
+ 		rel="search"
+ 		type="application/opensearchdescription+xml"
+ 		title={$WEBUI_NAME}
+-		href="/opensearch.xml"
++		href="{WEBUI_BASE_URL}/opensearch.xml"
+ 		crossorigin="use-credentials"
+ 	/>
+ </svelte:head>
+diff --git a/src/routes/auth/+page.svelte b/src/routes/auth/+page.svelte
+index f24800e..2559714 100644
+--- a/src/routes/auth/+page.svelte
++++ b/src/routes/auth/+page.svelte
+@@ -6,6 +6,7 @@
+ 
+ 	import { onMount, getContext } from 'svelte';
+ 	import { goto } from '$app/navigation';
++	import { base } from '$app/paths';
+ 	import { page } from '$app/stores';
+ 
+ 	import { getBackendConfig } from '$lib/apis';
+@@ -62,7 +63,7 @@
+ 			}
+ 
+ 			if (!redirectPath) {
+-				redirectPath = $page.url.searchParams.get('redirect') || '/';
++				redirectPath = $page.url.searchParams.get('redirect') || `${base}/`;
+ 			}
+ 
+ 			goto(redirectPath);
+diff --git a/svelte.config.js b/svelte.config.js
+index ffb774e..2d8af69 100644
+--- a/svelte.config.js
++++ b/svelte.config.js
+@@ -9,6 +9,12 @@ const config = {
+ 	// for more information about preprocessors
+ 	preprocess: vitePreprocess(),
+ 	kit: {
++		// Appliance Traefik serves the session bridge at PathPrefix(`/webui`).
++		// Open WebUI has no supported subpath mode; the appliance pins base at
++		// build time so static assets and API calls stay under that prefix.
++		paths: {
++			base: '/webui'
++		},
+ 		// adapter-auto only supports some environments, see https://kit.svelte.dev/docs/adapter-auto for a list.
+ 		// If your environment is not supported or you settled on a specific environment, switch out the adapter.
+ 		// See https://kit.svelte.dev/docs/adapters for more information about adapters.

@@ -52,8 +52,12 @@ be treated as optional when exposing the feature.
    identity/avatar calls. Use opaque appliance user IDs only.
 6. **Deployment/routing.** Extend the inference chart with gateway health
    checks, secrets, restricted NetworkPolicies, and an appliance-managed HTTPS
-   port route to the gateway. The core appliance readiness must not depend on
-   WebUI. The bridge cookie must be ignored/stripped by non-WebUI routes.
+   PathPrefix(`/webui`) route to the gateway. Open WebUI is built with
+   SvelteKit `paths.base=/webui` and `WEBUI_BASE_URL=/webui` so static assets,
+   API calls, and socket.io stay under that prefix (upstream still sees
+   root paths after the gateway strips `/webui`). The core appliance readiness
+   must not depend on WebUI. The bridge cookie must be ignored/stripped by
+   non-WebUI routes.
 7. **Installer/release wiring.** Make the image pair required together in new
    LLM packs, preload them, pass digest values to Helm, and keep old bundles
    inference-only. Update release contracts, offline docs, tests, and pack

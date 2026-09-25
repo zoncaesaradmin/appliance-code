@@ -25,9 +25,12 @@ its build-container `nofile` limit.
 The fifth patch removes the separate editable Profile page in trusted-header
 mode and rejects profile mutations in the API; the appliance owns display
 identity. The sixth patch removes the upstream production build's unconditional
-Pyodide download. The appliance build must use `USE_SLIM=true`; that is the
-upstream mode which omits local embedding, speech, and document-processing
-model downloads. The gate rejects a non-slim image.
+Pyodide download. The seventh patch pins SvelteKit `paths.base` and
+`WEBUI_BASE_URL` to `/webui` so Traefik PathPrefix routing can serve static
+assets, API calls, and socket.io under the session bridge (Open WebUI has no
+supported subpath mode upstream). The appliance build must use `USE_SLIM=true`;
+that is the upstream mode which omits local embedding, speech, and
+document-processing model downloads. The gate rejects a non-slim image.
 
 The former upstream-default compatibility build is rejected: it downloaded
 Pyodide assets and Hugging Face models while constructing the image. The
