@@ -9,6 +9,7 @@ import { FilesPage } from "../pages/FilesPage";
 import { VideosPage } from "../pages/VideosPage";
 import { ApplicationsPage } from "../pages/ApplicationsPage";
 import { AIServicePage } from "../pages/AIServicePage";
+import { CodingChatPage } from "../pages/CodingChatPage";
 import { HomePage } from "../pages/HomePage";
 import { navigate } from "../lib/navigate";
 import type { Session } from "../types";
@@ -50,6 +51,9 @@ export function RouteView(props: {
   }
   if (props.pathname.startsWith("/manage/artifacts")) {
     return <ArtifactsPage pathname={props.pathname} />;
+  }
+  if (props.pathname.startsWith("/manage/coding-chat")) {
+    return <CodingChatPage />;
   }
   if (props.pathname.startsWith("/analyze/workflows")) {
     return <AnalyzePage />;

@@ -91,6 +91,13 @@ export const MODES: Mode[] = [
         path: "/manage/artifacts",
         description: "Artifact catalog, registry grants, and API-token access",
         icon: "artifacts"
+      },
+      {
+        label: "Coding Chat",
+        path: "/manage/coding-chat",
+        description: "Open the appliance-hosted coding chat workspace",
+        icon: "analyze",
+        requiredCapability: "inference"
       }
     ],
     visibleWhen: alwaysVisible

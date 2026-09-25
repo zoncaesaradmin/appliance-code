@@ -51,6 +51,13 @@ describe("navigation model", () => {
     ).toBe(true);
   });
 
+  it("lists Coding Chat under Manage for every inference-capable appliance user", () => {
+    const manage = MODES.find((mode) => mode.id === "manage");
+    expect(manage?.features.some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
+    expect(visibleFeatures(manage!, []).some((feature) => feature.path === "/manage/coding-chat")).toBe(false);
+    expect(visibleFeatures(manage!, ["inference"]).some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
+  });
+
   it("lists LAN Services under Admin and not under Manage", () => {
     const manage = MODES.find((mode) => mode.id === "manage");
     const admin = MODES.find((mode) => mode.id === "admin");
