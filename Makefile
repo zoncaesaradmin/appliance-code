@@ -417,6 +417,8 @@ package-blob-storage-image-archive:
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
 		$${BLOB_STORAGE_SOURCE_IMAGE:+--source-image "$${BLOB_STORAGE_SOURCE_IMAGE}"} \
+		$${BLOB_STORAGE_BINARY_URL:+--binary-url "$${BLOB_STORAGE_BINARY_URL}"} \
+		$${BLOB_STORAGE_BINARY_SHA256:+--binary-sha256 "$${BLOB_STORAGE_BINARY_SHA256}"} \
 		$${BLOB_STORAGE_VERSION:+--blob-storage-version "$${BLOB_STORAGE_VERSION}"}
 
 package-message-broker-image-archive:

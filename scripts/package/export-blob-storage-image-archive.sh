@@ -12,8 +12,11 @@ appliance's offline registry.
 Options:
   --out-file PATH           Output OCI archive tar. Required.
   --reference-out-file PATH Write registry.local/blob-storage@sha256:... here.
-  --source-image REF        Upstream image. Defaults to minio/minio:<version>.
-  --blob-storage-version V  Defaults to the control-plane chart image tag.
+  --source-image REF        Already-built image to copy (offline LAN cache).
+  --binary-url URL          Official MinIO binary. Used when no registry image
+                            is available. Requires --binary-sha256.
+  --binary-sha256 HEX       sha256 of the binary at --binary-url.
+  --blob-storage-version V  Image tag for the local build. Required.
 
 Environment:
   TARGET_ARCH               amd64|arm64 (required; no default).
@@ -30,6 +33,8 @@ target_arch_resolve
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
 SOURCE_IMAGE=""
+BINARY_URL=""
+BINARY_SHA256=""
 BLOB_STORAGE_VERSION=""
 
 while [[ $# -gt 0 ]]; do
@@ -37,6 +42,8 @@ while [[ $# -gt 0 ]]; do
     --out-file) OUT_FILE="${2:-}"; shift 2 ;;
     --reference-out-file) REFERENCE_OUT_FILE="${2:-}"; shift 2 ;;
     --source-image) SOURCE_IMAGE="${2:-}"; shift 2 ;;
+    --binary-url) BINARY_URL="${2:-}"; shift 2 ;;
+    --binary-sha256) BINARY_SHA256="${2:-}"; shift 2 ;;
     --blob-storage-version) BLOB_STORAGE_VERSION="${2:-}"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "export-blob-storage-image-archive: unknown argument: $1" >&2; exit 2 ;;
@@ -45,8 +52,16 @@ done
 
 if [[ -z "${OUT_FILE}" ]]; then echo "--out-file is required" >&2; exit 2; fi
 for tool in skopeo python3 tar; do command -v "${tool}" >/dev/null || { echo "${tool} is required" >&2; exit 1; }; done
-if [[ -z "${SOURCE_IMAGE}" || -z "${BLOB_STORAGE_VERSION}" ]]; then
-  echo "--source-image and --blob-storage-version are required from signed release inputs" >&2
+if [[ -z "${BLOB_STORAGE_VERSION}" ]]; then
+  echo "--blob-storage-version is required from signed release inputs" >&2
+  exit 2
+fi
+if [[ -n "${BINARY_URL}" && -z "${BINARY_SHA256}" ]]; then
+  echo "--binary-sha256 is required with --binary-url" >&2
+  exit 2
+fi
+if [[ -z "${SOURCE_IMAGE}" && -z "${BINARY_URL}" ]]; then
+  echo "--source-image or --binary-url is required" >&2
   exit 2
 fi
 mkdir -p "$(dirname "${OUT_FILE}")"
@@ -68,6 +83,9 @@ resolve_source_digest() {
     printf '%s\n' "${digest}"
     return 0
   fi
+  if [[ -z "${SOURCE_IMAGE}" || -n "${BINARY_URL}" ]]; then
+    return 1
+  fi
   digest="$(skopeo inspect --override-os linux --override-arch "${TARGET_ARCH}" \
     --format '{{.Digest}}' "docker://${SOURCE_IMAGE}" 2>/dev/null || true)"
   if [[ -n "${digest}" ]]; then
@@ -81,10 +99,14 @@ if [[ -f "${OUT_FILE}" && -f "${SOURCE_ID_FILE}" && -f "${REFERENCE_FILE}" ]]; t
   previous_id="$(tr -d '\r\n' <"${SOURCE_ID_FILE}" 2>/dev/null || true)"
   previous_ref="$(tr -d '\r\n' <"${REFERENCE_FILE}" 2>/dev/null || true)"
   if [[ -n "${previous_id}" && -n "${previous_ref}" ]]; then
-    SOURCE_DIGEST="$(resolve_source_digest || true)"
-    SOURCE_ID="${SOURCE_IMAGE}"
-    if [[ -n "${SOURCE_DIGEST}" ]]; then
-      SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+    if [[ -n "${BINARY_URL}" ]]; then
+      SOURCE_ID="${BINARY_URL}@sha256:${BINARY_SHA256}"
+    else
+      SOURCE_DIGEST="$(resolve_source_digest || true)"
+      SOURCE_ID="${SOURCE_IMAGE}"
+      if [[ -n "${SOURCE_DIGEST}" ]]; then
+        SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+      fi
     fi
     if [[ "${previous_id}" == "${SOURCE_ID}" ]]; then
       archive_digest="$(python3 - "${OUT_FILE}" <<'PY'
@@ -117,12 +139,32 @@ PY
   fi
 fi
 
-oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${LOCAL_REF}" "${TARGET_ARCH}"
-SOURCE_DIGEST="$(skopeo inspect --override-os linux --override-arch "${TARGET_ARCH}" \
-  --format '{{.Digest}}' "containers-storage:${LOCAL_REF}" 2>/dev/null || true)"
-SOURCE_ID="${SOURCE_IMAGE}"
-if [[ -n "${SOURCE_DIGEST}" ]]; then
-  SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+if [[ -n "${BINARY_URL}" ]]; then
+  for tool in buildah curl sha256sum; do command -v "${tool}" >/dev/null || { echo "${tool} is required" >&2; exit 1; }; done
+  STAGE="$(mktemp -d)"
+  curl -fsSL -o "${STAGE}/minio" "${BINARY_URL}"
+  echo "${BINARY_SHA256}  ${STAGE}/minio" | sha256sum -c -
+  chmod 0755 "${STAGE}/minio"
+  cat >"${STAGE}/Containerfile" <<'EOF'
+FROM scratch
+COPY minio /usr/bin/minio
+USER 10009:10009
+EXPOSE 9000
+ENTRYPOINT ["/usr/bin/minio"]
+CMD ["server", "/data"]
+EOF
+  buildah bud --os linux --arch "${TARGET_ARCH}" --pull=never \
+    -f "${STAGE}/Containerfile" -t "${LOCAL_REF}" "${STAGE}"
+  rm -rf "${STAGE}"
+  SOURCE_ID="${BINARY_URL}@sha256:${BINARY_SHA256}"
+else
+  oci_skopeo_prefetch_docker "${SOURCE_IMAGE}" "${LOCAL_REF}" "${TARGET_ARCH}"
+  SOURCE_DIGEST="$(skopeo inspect --override-os linux --override-arch "${TARGET_ARCH}" \
+    --format '{{.Digest}}' "containers-storage:${LOCAL_REF}" 2>/dev/null || true)"
+  SOURCE_ID="${SOURCE_IMAGE}"
+  if [[ -n "${SOURCE_DIGEST}" ]]; then
+    SOURCE_ID="${SOURCE_IMAGE}@${SOURCE_DIGEST}"
+  fi
 fi
 
 TMP_DIR="$(mktemp -d)"
