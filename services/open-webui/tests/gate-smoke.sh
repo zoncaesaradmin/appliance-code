@@ -10,10 +10,23 @@ data_volume="zon-open-webui-gate-data-${suffix}"
 cache_volume="zon-open-webui-gate-cache-${suffix}"
 
 cleanup() {
-  podman stop "${container}" >/dev/null 2>&1 || true
+  podman rm -f "${container}" >/dev/null 2>&1 || true
   podman volume rm "${data_volume}" "${cache_volume}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+dump_gate_failure() {
+  local reason="$1"
+  echo "Open WebUI gate failure: ${reason}" >&2
+  if podman container exists "${container}" 2>/dev/null; then
+    echo "--- container inspect ---" >&2
+    podman inspect "${container}" --format 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} oom={{.State.OOMKilled}}' >&2 || true
+    echo "--- container logs (tail 120) ---" >&2
+    podman logs --tail 120 "${container}" >&2 || true
+  else
+    echo "container ${container} is gone (exited under --rm-equivalent cleanup or failed to start)" >&2
+  fi
+}
 
 podman volume create "${data_volume}" >/dev/null
 podman volume create "${cache_volume}" >/dev/null
@@ -24,7 +37,10 @@ else
   echo 'Open WebUI gate requires the appliance slim image' >&2
   exit 1
 fi
-podman run --rm -d --name "${container}" --network=none --read-only \
+
+# Do not use --rm: if the process exits we need logs. Trap removes the container.
+# Runtime identity must match the image build UID/GID (10011) and chart securityContext.
+if ! podman run -d --name "${container}" --network=none --read-only \
   --user 10011:10011 --cap-drop=ALL --security-opt no-new-privileges \
   --tmpfs /tmp:rw,mode=1777 \
   -v "${data_volume}:/app/backend/data:U" \
@@ -65,21 +81,28 @@ podman run --rm -d --name "${container}" --network=none --read-only \
   -e USER_PERMISSIONS_WORKSPACE_SKILLS_ACCESS=false \
   -e ENABLE_COMMUNITY_SHARING=false \
   -e ENABLE_API_KEYS=false \
-  "${image}" >/dev/null
+  "${image}" >/dev/null; then
+  dump_gate_failure "podman run failed"
+  exit 1
+fi
 
 ready=false
 for _ in $(seq 1 45); do
+  status="$(podman inspect "${container}" --format '{{.State.Status}}' 2>/dev/null || true)"
+  if [[ "${status}" != "running" ]]; then
+    dump_gate_failure "container status=${status:-missing} before health ready"
+    exit 1
+  fi
   if podman exec "${container}" curl -fsS \
       --stderr /dev/null \
-      http://127.0.0.1:8080/health | grep -q '"status":true'; then
+      http://127.0.0.1:8080/health 2>/dev/null | grep -q '"status":true'; then
     ready=true
     break
   fi
   sleep 2
 done
 if [[ "${ready}" != true ]]; then
-  podman logs --tail 80 "${container}" >&2
-  echo 'Open WebUI did not become healthy' >&2
+  dump_gate_failure "health endpoint never became ready"
   exit 1
 fi
 
@@ -122,8 +145,7 @@ profile_status="$(podman exec "${container}" curl -sS -o /dev/null -w '%{http_co
 [[ "${profile_status}" == 403 ]] || { echo "native profile mutation: ${profile_status}" >&2; exit 1; }
 
 if podman logs "${container}" 2>&1 | grep -E 'Read-only file system|Permission denied' >/dev/null; then
-  podman logs --tail 80 "${container}" >&2
-  echo 'Read-only or permission error during startup' >&2
+  dump_gate_failure "read-only or permission error during startup"
   exit 1
 fi
 

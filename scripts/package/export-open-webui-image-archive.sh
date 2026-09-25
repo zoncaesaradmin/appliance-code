@@ -136,13 +136,15 @@ IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed 's/[^A-Za-z0-9_.-]/-/g')"
 local_ref="localhost/open-webui:${IMAGE_TAG}"
 buildah bud --arch "${TARGET_ARCH}" --pull-never --ulimit nofile=65535:65535 \
   --build-arg USE_SLIM=true \
+  --build-arg UID=10011 \
+  --build-arg GID=10011 \
   --label "org.opencontainers.image.source=${UPSTREAM_URL}" \
   --label "org.opencontainers.image.revision=${UPSTREAM_COMMIT}" \
   --label "io.zon.appliance.open-webui.slim=true" \
   --tag "${local_ref}" "${build_source}"
 
-if ! buildah inspect "${local_ref}" | python3 -c 'import json,sys; image=json.load(sys.stdin); env=image.get("Docker",{}).get("config",{}).get("Env",[]) or image.get("OCIv1",{}).get("config",{}).get("Env",[]) or []; labels=image.get("Docker",{}).get("config",{}).get("Labels",{}) or image.get("OCIv1",{}).get("config",{}).get("Labels",{}) or {}; assert labels.get("io.zon.appliance.open-webui.slim") == "true"; assert "USE_SLIM_DOCKER=true" in env' ; then
-  echo "export-open-webui-image-archive: built image does not prove USE_SLIM=true" >&2
+if ! buildah inspect "${local_ref}" | python3 -c 'import json,sys; image=json.load(sys.stdin); env=image.get("Docker",{}).get("config",{}).get("Env",[]) or image.get("OCIv1",{}).get("config",{}).get("Env",[]) or []; labels=image.get("Docker",{}).get("config",{}).get("Labels",{}) or image.get("OCIv1",{}).get("config",{}).get("Labels",{}) or {}; cfg=image.get("Docker",{}).get("config",{}) or image.get("OCIv1",{}).get("config",{}) or {}; assert labels.get("io.zon.appliance.open-webui.slim") == "true"; assert "USE_SLIM_DOCKER=true" in env; user=(cfg.get("User") or "").strip(); assert user in ("10011:10011", "10011"), user' ; then
+  echo "export-open-webui-image-archive: built image does not prove USE_SLIM=true and UID/GID 10011" >&2
   exit 1
 fi
 
