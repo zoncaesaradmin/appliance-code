@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Build the reviewed Open WebUI source tree and export it under the appliance
+# OCI contract. The caller owns source acquisition: this script never fetches
+# from the network, so the release build can apply one online/offline source
+# policy outside this repository.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+usage: export-open-webui-image-archive.sh --source-dir DIR --out-file PATH [options]
+
+Builds the exact source revision in services/open-webui/source.lock, applies
+the numbered appliance patches, and exports an OCI archive annotated as:
+  registry.local/open-webui:bundled
+
+Options:
+  --source-dir DIR           Checked-out Open WebUI source (required).
+  --out-file PATH            Destination OCI tar (required).
+  --reference-out-file PATH  Write registry.local/open-webui@sha256:... here.
+  --image-tag TAG            Local temporary tag (default: pinned ref).
+  --run-gate                 Run services/open-webui/tests/gate-smoke.sh after build.
+
+The source must be a clean Git checkout at the exact locked commit. The build
+uses USE_SLIM=true and fails if the resulting image does not declare the slim
+mode. It does not publish, deploy, or expose the image.
+EOF
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+LOCK_FILE="${REPO_ROOT}/services/open-webui/source.lock"
+PATCH_DIR="${REPO_ROOT}/services/open-webui/patches"
+GATE_SCRIPT="${REPO_ROOT}/services/open-webui/tests/gate-smoke.sh"
+
+SOURCE_DIR=""
+OUT_FILE=""
+REFERENCE_OUT_FILE=""
+IMAGE_TAG=""
+RUN_GATE=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --source-dir) SOURCE_DIR="${2:-}"; shift 2 ;;
+    --out-file) OUT_FILE="${2:-}"; shift 2 ;;
+    --reference-out-file) REFERENCE_OUT_FILE="${2:-}"; shift 2 ;;
+    --image-tag) IMAGE_TAG="${2:-}"; shift 2 ;;
+    --run-gate) RUN_GATE=1; shift ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "export-open-webui-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+[[ -n "${SOURCE_DIR}" && -d "${SOURCE_DIR}/.git" ]] || { echo "export-open-webui-image-archive: --source-dir must be a Git checkout" >&2; exit 2; }
+[[ -n "${OUT_FILE}" ]] || { echo "export-open-webui-image-archive: --out-file is required" >&2; exit 2; }
+for tool in git buildah skopeo python3 tar; do
+  command -v "${tool}" >/dev/null 2>&1 || { echo "export-open-webui-image-archive: ${tool} is required" >&2; exit 1; }
+done
+
+# shellcheck disable=SC1090
+source "${LOCK_FILE}"
+[[ "${BUILD_MODE:-}" == "USE_SLIM=true" ]] || { echo "export-open-webui-image-archive: source lock must require USE_SLIM=true" >&2; exit 2; }
+actual_commit="$(git -C "${SOURCE_DIR}" rev-parse HEAD)"
+[[ "${actual_commit}" == "${UPSTREAM_COMMIT}" ]] || { echo "export-open-webui-image-archive: source commit ${actual_commit} does not match locked ${UPSTREAM_COMMIT}" >&2; exit 2; }
+git -C "${SOURCE_DIR}" diff --quiet || { echo "export-open-webui-image-archive: source checkout must be clean before appliance patches" >&2; exit 2; }
+
+workdir="$(mktemp -d)"
+trap 'rm -rf "${workdir}"' EXIT
+build_source="${workdir}/source"
+git clone --no-hardlinks --no-local "${SOURCE_DIR}" "${build_source}" >/dev/null
+git -C "${build_source}" checkout --detach "${UPSTREAM_COMMIT}" >/dev/null
+for patch in "${PATCH_DIR}"/*.patch; do
+  [[ -f "${patch}" ]] || { echo "export-open-webui-image-archive: missing patch ${patch}" >&2; exit 1; }
+  git -C "${build_source}" apply --check "${patch}"
+  git -C "${build_source}" apply "${patch}"
+done
+
+IMAGE_TAG="${IMAGE_TAG:-${UPSTREAM_REF#v}-appliance}"
+IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed 's/[^A-Za-z0-9_.-]/-/g')"
+local_ref="localhost/open-webui:${IMAGE_TAG}"
+buildah bud --pull-never --ulimit nofile=65535:65535 \
+  --build-arg USE_SLIM=true \
+  --label "org.opencontainers.image.source=${UPSTREAM_URL}" \
+  --label "org.opencontainers.image.revision=${UPSTREAM_COMMIT}" \
+  --label "io.zon.appliance.open-webui.slim=true" \
+  --tag "${local_ref}" "${build_source}"
+
+if ! buildah inspect "${local_ref}" | python3 -c 'import json,sys; image=json.load(sys.stdin); env=image.get("Docker",{}).get("config",{}).get("Env",[]) or image.get("OCIv1",{}).get("config",{}).get("Env",[]) or []; labels=image.get("Docker",{}).get("config",{}).get("Labels",{}) or image.get("OCIv1",{}).get("config",{}).get("Labels",{}) or {}; assert labels.get("io.zon.appliance.open-webui.slim") == "true"; assert "USE_SLIM_DOCKER=true" in env' ; then
+  echo "export-open-webui-image-archive: built image does not prove USE_SLIM=true" >&2
+  exit 1
+fi
+
+if [[ "${RUN_GATE}" == "1" ]]; then
+  bash "${GATE_SCRIPT}" "${local_ref}"
+fi
+
+layout="${workdir}/oci"
+skopeo copy "containers-storage:${local_ref}" "oci:${layout}:registry.local/open-webui:bundled"
+digest="$(python3 - "${layout}/index.json" <<'PY'
+import json, sys
+index = json.load(open(sys.argv[1], encoding="utf-8"))
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit("expected exactly one platform manifest")
+manifest = manifests[0]
+if manifest.get("annotations", {}).get("org.opencontainers.image.ref.name") != "registry.local/open-webui:bundled":
+    raise SystemExit("OCI archive missing registry.local/open-webui:bundled annotation")
+digest = manifest.get("digest", "")
+if not digest.startswith("sha256:") or len(digest) != 71:
+    raise SystemExit("invalid platform manifest digest")
+print(digest)
+PY
+)"
+mkdir -p "$(dirname "${OUT_FILE}")"
+tar -C "${layout}" -cf "${OUT_FILE}" oci-layout index.json blobs
+reference="registry.local/open-webui@${digest}"
+if [[ -n "${REFERENCE_OUT_FILE}" ]]; then
+  mkdir -p "$(dirname "${REFERENCE_OUT_FILE}")"
+  printf '%s\n' "${reference}" >"${REFERENCE_OUT_FILE}"
+fi
+printf 'created Open WebUI OCI archive: %s\nimage reference: %s\n' "${OUT_FILE}" "${reference}"

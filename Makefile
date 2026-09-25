@@ -141,7 +141,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -390,6 +390,18 @@ package-inference-manager-image-archive:
 	bash ./scripts/package/export-inference-manager-image-archive.sh \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file"
+
+## package-open-webui-image-archive: build the locked, patched Open WebUI
+## source and export the optional appliance OCI archive. SOURCE_DIR is required.
+package-open-webui-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/open-webui-image.tar}"; \
+	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	if [ -z "$${OPEN_WEBUI_SOURCE_DIR:-}" ]; then echo "package-open-webui-image-archive: OPEN_WEBUI_SOURCE_DIR is required" >&2; exit 2; fi; \
+	bash ./scripts/package/export-open-webui-image-archive.sh \
+		--source-dir "$${OPEN_WEBUI_SOURCE_DIR}" \
+		--out-file "$$out_file" \
+		--reference-out-file "$$reference_file" \
+		$${OPEN_WEBUI_RUN_GATE:+--run-gate}
 
 ## package-blob-storage-image-archive: re-export the pinned S3-compatible
 ## runtime with registry.local/blob-storage:bundled annotation.
