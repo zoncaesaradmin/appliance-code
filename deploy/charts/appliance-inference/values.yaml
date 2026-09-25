@@ -42,6 +42,31 @@ managerImage:
   digest: ""
   pullPolicy: IfNotPresent
 
+# Open WebUI is opt-in and is only enabled by a delivery pack that supplies
+# both digest-pinned images. It has no Ingress here: the appliance session
+# bridge will own the public route once its launch-grant API is implemented.
+openWebUI:
+  enabled: false
+  image:
+    repository: registry.local/open-webui
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  gatewayImage:
+    repository: registry.local/open-webui-gateway
+    tag: ""
+    digest: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 8080
+  gatewayService:
+    port: 8081
+  persistence:
+    claimName: open-webui-data
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+
 # Installer-injected LAN registry pull credentials (see zonctl image-pull).
 imagePullSecrets: []
 
@@ -100,6 +125,15 @@ containerSecurityContext:
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
+
+openWebUISecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10011
+  runAsGroup: 10011
+  fsGroup: 20000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
 # HOME is forced to /home/runtime (emptyDir) in the Deployment: the upstream
 # ollama image defaults HOME=/ for numeric UIDs, which fails under
 # readOnlyRootFilesystem (mkdir /.ollama).

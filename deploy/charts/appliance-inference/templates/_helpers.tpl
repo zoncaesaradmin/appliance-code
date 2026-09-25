@@ -55,6 +55,30 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-models" (include "appliance-inference.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "appliance-inference.openWebUIName" -}}
+{{- printf "%s-open-webui" (include "appliance-inference.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "appliance-inference.openWebUIGatewayName" -}}
+{{- printf "%s-open-webui-gateway" (include "appliance-inference.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "appliance-inference.openWebUIImage" -}}
+{{- if .Values.openWebUI.image.digest -}}
+{{ printf "%s@%s" .Values.openWebUI.image.repository .Values.openWebUI.image.digest }}
+{{- else -}}
+{{ printf "%s:%s" .Values.openWebUI.image.repository .Values.openWebUI.image.tag }}
+{{- end -}}
+{{- end -}}
+
+{{- define "appliance-inference.openWebUIGatewayImage" -}}
+{{- if .Values.openWebUI.gatewayImage.digest -}}
+{{ printf "%s@%s" .Values.openWebUI.gatewayImage.repository .Values.openWebUI.gatewayImage.digest }}
+{{- else -}}
+{{ printf "%s:%s" .Values.openWebUI.gatewayImage.repository .Values.openWebUI.gatewayImage.tag }}
+{{- end -}}
+{{- end -}}
+
 {{- define "appliance-inference.managerEnv" -}}
 - name: HOME
   value: "/home/runtime"

@@ -305,6 +305,16 @@ spec:
       ports:
         - {protocol: TCP, port: {{ .Values.service.targetPort }}}
         - {protocol: TCP, port: {{ .Values.service.port }}}
+    {{- if .Values.openWebUI.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: open-webui
+              {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
+      ports:
+        - {protocol: TCP, port: {{ .Values.service.targetPort }}}
+        - {protocol: TCP, port: {{ .Values.service.port }}}
+    {{- end }}
   egress:
     # Engine OpenAI backend inside this namespace.
     - to:

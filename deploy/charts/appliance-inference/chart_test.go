@@ -179,6 +179,39 @@ func TestImageDigestWins(t *testing.T) {
 	}
 }
 
+func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
+	base := render(t)
+	if strings.Contains(base, "name: inference-gateway-open-webui") {
+		t.Fatal("Open WebUI must not render unless explicitly enabled")
+	}
+	webUIDigest := "sha256:" + strings.Repeat("e", 64)
+	gatewayDigest := "sha256:" + strings.Repeat("f", 64)
+	out := render(t,
+		"--set", "openWebUI.enabled=true",
+		"--set", "openWebUI.image.digest="+webUIDigest,
+		"--set", "openWebUI.gatewayImage.digest="+gatewayDigest,
+	)
+	for _, want := range []string{
+		"name: inference-gateway-open-webui",
+		"name: inference-gateway-open-webui-gateway",
+		"image: registry.local/open-webui@" + webUIDigest,
+		"image: registry.local/open-webui-gateway@" + gatewayDigest,
+		"mountPath: /app/backend/data",
+		"WEBUI_AUTH_TRUSTED_EMAIL",
+		"value: \"true\"",
+		"ENABLE_SIGNUP",
+		"ENABLE_API_KEYS",
+		"app.kubernetes.io/component: open-webui-gateway",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("Open WebUI render missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "kind: Ingress") {
+		t.Fatal("the session bridge must own the future public route; chart must not expose Open WebUI directly")
+	}
+}
+
 func TestVLLMRuntimeContractRenders(t *testing.T) {
 	if _, err := exec.LookPath("helm"); err != nil {
 		t.Skip("helm not installed")
