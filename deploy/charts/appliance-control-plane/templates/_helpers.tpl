@@ -350,8 +350,17 @@ ForwardAuth middleware name.
   services:
     - name: {{ include "appliance-control-plane.fullname" . }}
       port: {{ .Values.service.publicPort }}
+{{- if .Values.ingress.webUIEnabled }}
+- match: {{ printf "%sPathPrefix(`/webui`)" $hostMatch }}
+  kind: Rule
+  priority: 110
+  services:
+    - name: inference-gateway-open-webui-gateway
+      namespace: inference
+      port: 8081
+{{- end }}
 {{- if .Values.ui.enabled }}
-- match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/ai`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" $hostMatch }}
+- match: {{ printf "%sPathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/ai`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/webui`) && !PathPrefix(`/v2`)" $hostMatch }}
   kind: Rule
   priority: 1
   services:

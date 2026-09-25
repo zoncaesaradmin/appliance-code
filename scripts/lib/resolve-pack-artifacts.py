@@ -39,6 +39,8 @@ KNOWN_ARTIFACTS = (
     "appliance-dns-chart",
     "inference-runtime-image",
     "inference-manager-image",
+    "open-webui-image",
+    "open-webui-gateway-image",
     "appliance-inference-chart",
     "workspace-provisioner-image",
     "workflows-chart",

@@ -37,6 +37,7 @@ data:
   APPLIANCE_INFERENCE_RUNTIME_PACKAGE: {{ .Values.config.inferenceRuntimePackage | quote }}
   APPLIANCE_INFERENCE_ENGINE: {{ .Values.config.inferenceEngine | quote }}
   APPLIANCE_INFERENCE_ARCHITECTURE: {{ .Values.config.inferenceArchitecture | quote }}
+  APPLIANCE_WEBUI_ENABLED: {{ .Values.config.webUIEnabled | default false | quote }}
   APPLIANCE_BLOB_STORAGE_ENDPOINT: {{ .Values.blobStorage.endpoint | quote }}
   APPLIANCE_BLOB_STORAGE_BUCKET: {{ .Values.blobStorage.bucket | quote }}
   APPLIANCE_BLOB_STORAGE_REGION: {{ .Values.blobStorage.region | quote }}

@@ -38,6 +38,20 @@ spec:
         - protocol: TCP
           port: {{ .Values.service.publicPort }}
     {{- end }}
+    {{- if .Values.ingress.webUIEnabled }}
+    # The WebUI bridge validates opaque cookies through the control plane; it
+    # is the only inference pod allowed to call this public listener.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: inference
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: open-webui-gateway
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.publicPort }}
+    {{- end }}
     # Same-namespace access to the internal listener, for future
     # in-namespace diagnostics/support-bundle jobs.
     - from:

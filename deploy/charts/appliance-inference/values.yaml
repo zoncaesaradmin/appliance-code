@@ -103,6 +103,8 @@ networkPolicy:
     # Matches appliance-control-plane chart selectorLabels:
     # app.kubernetes.io/name=controlplane.
     app.kubernetes.io/name: controlplane
+  traefikNamespaceLabel:
+    kubernetes.io/metadata.name: kube-system
   # DNS is required during the operator-controlled connected window.
   # Applied to both manager (catalog/HF) and engine (Ollama /api/pull).
   allowDNSToKubeSystem: true

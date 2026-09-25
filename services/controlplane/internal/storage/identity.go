@@ -192,6 +192,25 @@ type WebUILaunchGrantStore interface {
 	ConsumeWebUILaunchGrant(ctx context.Context, id string, usedAt time.Time) error
 }
 
+// WebUIBridgeSession is the opaque, durable browser session established after
+// a launch grant is consumed. Only its digest is stored; the raw value lives
+// solely in the HttpOnly gateway cookie.
+type WebUIBridgeSession struct {
+	ID, LookupID string
+	Digest       []byte
+	UserID       string
+	FamilyID     string
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	RevokedAt    *time.Time
+}
+
+type WebUIBridgeSessionStore interface {
+	CreateWebUIBridgeSession(context.Context, WebUIBridgeSession) error
+	GetWebUIBridgeSessionByLookupID(context.Context, string) (WebUIBridgeSession, error)
+	RevokeWebUIBridgeSession(context.Context, string, time.Time) error
+}
+
 // AuditActorType classifies who performed an audited action.
 type AuditActorType string
 

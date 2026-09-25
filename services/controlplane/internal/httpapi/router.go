@@ -45,6 +45,7 @@ type Deps struct {
 	MCPHandler       http.Handler
 	AIProxy          http.Handler
 	InferenceH       *InferenceHandlers
+	WebUIH           *WebUIHandlers
 	ProxiedServices  []ServiceProxyRegistration
 	Audit            *audit.Recorder
 }
@@ -111,6 +112,11 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 		mux.Handle("POST /api/v1/inference/models/load", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Load))
 		mux.Handle("GET /api/v1/inference/models/load/progress", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.LoadProgress))
 		mux.Handle("POST /api/v1/inference/models/delete", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Delete))
+		if deps.WebUIH != nil && deps.WebUIH.WebUI != nil {
+			mux.Handle("POST /api/v1/webui/launch", w.protect(roles.PermInferenceUse, deps.WebUIH.Launch))
+			mux.Handle("POST /api/v1/webui/bridge/consume", http.HandlerFunc(deps.WebUIH.Consume))
+			mux.Handle("POST /api/v1/webui/bridge/validate", http.HandlerFunc(deps.WebUIH.Validate))
+		}
 		mux.Handle("GET /ai/v1/models", w.protectAny(http.HandlerFunc(deps.AIProxy.ServeHTTP), roles.PermInferenceUse, roles.PermInferenceModelsRead))
 		mux.Handle("/ai/v1", w.protect(roles.PermInferenceUse, deps.AIProxy.ServeHTTP))
 		mux.Handle("/ai/v1/", w.protect(roles.PermInferenceUse, deps.AIProxy.ServeHTTP))

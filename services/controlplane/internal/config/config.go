@@ -61,6 +61,7 @@ type Config struct {
 	InferenceRuntimePackage   string                   `json:"inferenceRuntimePackage"`
 	InferenceEngine           string                   `json:"inferenceEngine"`
 	InferenceArchitecture     string                   `json:"inferenceArchitecture"`
+	WebUIEnabled              bool                     `json:"webUIEnabled"`
 	BlobStorageEndpoint       string                   `json:"blobStorageEndpoint"`
 	BlobStorageBucket         string                   `json:"blobStorageBucket"`
 	BlobStorageAccessKey      string                   `json:"blobStorageAccessKey"`
@@ -235,6 +236,13 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("INFERENCE_RUNTIME_PACKAGE", &cfg.InferenceRuntimePackage)
 	str("INFERENCE_ENGINE", &cfg.InferenceEngine)
 	str("INFERENCE_ARCHITECTURE", &cfg.InferenceArchitecture)
+	if v, ok := env[envPrefix+"WEBUI_ENABLED"]; ok {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("config: WEBUI_ENABLED: %w", err)
+		}
+		cfg.WebUIEnabled = b
+	}
 	str("BLOB_STORAGE_ENDPOINT", &cfg.BlobStorageEndpoint)
 	str("BLOB_STORAGE_BUCKET", &cfg.BlobStorageBucket)
 	str("BLOB_STORAGE_ACCESS_KEY", &cfg.BlobStorageAccessKey)
@@ -500,6 +508,9 @@ func (c Config) Validate() error {
 				errs = append(errs, "inferenceRuntimePackage must be std-llm or acc-llm")
 			}
 		}
+	}
+	if profileErr == nil && c.WebUIEnabled && !inferenceEnabled {
+		errs = append(errs, "webUIEnabled requires an inference-capable appliance profile")
 	}
 	if profileErr == nil && videoEnabled {
 		if u, err := url.Parse(c.BlobStorageEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {

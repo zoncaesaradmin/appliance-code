@@ -80,7 +80,10 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.inference
     artifacts:
-      required: [inference-runtime-image, inference-manager-image, appliance-inference-chart]
+      # The workspace is part of the inference delivery closure, never the
+      # foundation closure. Keep the runtime and bridge inseparable: the
+      # bridge is the only supported public route to Open WebUI.
+      required: [inference-runtime-image, inference-manager-image, open-webui-image, open-webui-gateway-image, appliance-inference-chart]
   video:
     displayName: Video
     requires: [base]

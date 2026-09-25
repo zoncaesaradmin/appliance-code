@@ -556,7 +556,7 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 				t.Errorf("API route priority = %v, want 100", route["priority"])
 			}
 			apiRouteOK = true
-		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/ai`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
+		case match == "PathPrefix(`/`) && !PathPrefix(`/api`) && !PathPrefix(`/mcp`) && !PathPrefix(`/ai`) && !PathPrefix(`/inference`) && !PathPrefix(`/video`) && !PathPrefix(`/webui`) && !PathPrefix(`/v2`)" && name == controlPlaneUIName:
 			if priority != 1 {
 				t.Errorf("UI route priority = %v, want 1", route["priority"])
 			}
@@ -568,6 +568,38 @@ func TestIngressRoutesAPIToControlPlaneAndRootToUI(t *testing.T) {
 	}
 	if !uiRouteOK {
 		t.Error("expected / route to target UI service with API/MCP/AI/inference/video/registry exclusions")
+	}
+}
+
+func TestIngressRouteExposesWebUIOnlyWhenInstallerEnablesPair(t *testing.T) {
+	base := renderChart(t, defaultRenderArgs()...)
+	routes := findByKind(base, "IngressRoute")
+	if len(routes) != 1 {
+		t.Fatalf("expected one IngressRoute, got %d", len(routes))
+	}
+	for _, raw := range at(routes[0], "spec", "routes").([]any) {
+		if raw.(map[string]any)["match"].(string) == "PathPrefix(`/webui`)" {
+			t.Fatal("WebUI route must be absent unless the paired delivery artifacts enable it")
+		}
+	}
+
+	docs := renderChart(t, append(defaultRenderArgs(), "--set", "ingress.webUIEnabled=true")...)
+	routes = findByKind(docs, "IngressRoute")
+	found := false
+	for _, raw := range at(routes[0], "spec", "routes").([]any) {
+		route := raw.(map[string]any)
+		if route["match"] != "PathPrefix(`/webui`)" {
+			continue
+		}
+		services := route["services"].([]any)
+		service := services[0].(map[string]any)
+		if service["name"] != "inference-gateway-open-webui-gateway" || service["namespace"] != "inference" || route["priority"] != 110 {
+			t.Fatalf("unexpected WebUI bridge route: %#v", route)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("expected HTTPS WebUI bridge route when installer enables the image pair")
 	}
 }
 

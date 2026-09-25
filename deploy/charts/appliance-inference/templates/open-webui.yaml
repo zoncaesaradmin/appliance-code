@@ -1,4 +1,19 @@
 {{- if .Values.openWebUI.enabled }}
+{{- $secretName := printf "%s-open-webui" (include "appliance-inference.fullname" .) }}
+{{- $existingSecret := lookup "v1" "Secret" (include "appliance-inference.namespace" .) $secretName }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ include "appliance-inference.namespace" . }}
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+    app.kubernetes.io/component: open-webui
+type: Opaque
+data:
+  # Keep the encryption key target-generated and stable across Helm upgrades.
+  WEBUI_SECRET_KEY: {{ if $existingSecret }}{{ index $existingSecret.data "WEBUI_SECRET_KEY" }}{{ else }}{{ randAlphaNum 64 | b64enc }}{{ end }}
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -76,19 +91,82 @@ spec:
           imagePullPolicy: {{ .Values.openWebUI.image.pullPolicy }}
           ports: [{name: http, containerPort: 8080, protocol: TCP}]
           env:
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: WEBUI_SECRET_KEY
             - name: WEBUI_AUTH_TRUSTED_EMAIL_HEADER
               value: X-Appliance-User
             - name: WEBUI_AUTH_TRUSTED_NAME_HEADER
               value: X-Appliance-Display-Name
+            - name: WEBUI_AUTH_TRUSTED_ROLE_HEADER
+              value: X-Appliance-Role
             - name: WEBUI_AUTH_TRUSTED_EMAIL
               value: "true"
+            - name: DEFAULT_USER_ROLE
+              value: user
+            - name: ENABLE_PASSWORD_AUTH
+              value: "false"
             - name: ENABLE_SIGNUP
               value: "false"
+            - name: ENABLE_LOGIN_FORM
+              value: "false"
+            - name: ENABLE_INITIAL_ADMIN_SIGNUP
+              value: "false"
+            - name: ENABLE_PERSISTENT_CONFIG
+              value: "false"
+            - name: OFFLINE_MODE
+              value: "true"
+            - name: HF_HUB_OFFLINE
+              value: "1"
             - name: ENABLE_API_KEYS
               value: "false"
             - name: ENABLE_OLLAMA_API
               value: "false"
+            - name: ENABLE_OPENAI_API
+              value: "true"
+            - name: OPENAI_API_BASE_URL
+              value: "http://inference-gateway.inference.svc.cluster.local:8080/v1"
+            - name: OPENAI_API_KEY
+              value: appliance-managed
+            - name: ENABLE_CODE_EXECUTION
+              value: "false"
+            - name: ENABLE_MEMORIES
+              value: "false"
+            - name: ENABLE_MEMORY_SYSTEM_CONTEXT
+              value: "false"
+            - name: ENABLE_RETRIEVAL_QUERY_GENERATION
+              value: "false"
+            - name: ENABLE_RAG_LOCAL_WEB_FETCH
+              value: "false"
+            - name: ENABLE_DIRECT_CONNECTIONS
+              value: "false"
+            - name: ENABLE_DIRECT_INTEGRATIONS
+              value: "false"
+            - name: ENABLE_NOTES
+              value: "false"
+            - name: ENABLE_CHANNELS
+              value: "false"
             - name: ENABLE_RAG_WEB_SEARCH
+              value: "false"
+            - name: ENABLE_WEB_SEARCH
+              value: "false"
+            - name: USER_PERMISSIONS_FEATURES_NOTES
+              value: "false"
+            - name: USER_PERMISSIONS_FEATURES_CHANNELS
+              value: "false"
+            - name: USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS
+              value: "false"
+            - name: USER_PERMISSIONS_WORKSPACE_KNOWLEDGE_ACCESS
+              value: "false"
+            - name: USER_PERMISSIONS_WORKSPACE_PROMPTS_ACCESS
+              value: "false"
+            - name: USER_PERMISSIONS_WORKSPACE_TOOLS_ACCESS
+              value: "false"
+            - name: USER_PERMISSIONS_WORKSPACE_SKILLS_ACCESS
+              value: "false"
+            - name: ENABLE_COMMUNITY_SHARING
               value: "false"
           securityContext:
             {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
@@ -142,6 +220,12 @@ spec:
               value: 0.0.0.0:8081
             - name: UPSTREAM_URL
               value: {{ printf "http://%s:%v" (include "appliance-inference.openWebUIName" .) .Values.openWebUI.service.port | quote }}
+            - name: CONTROL_PLANE_URL
+              value: "http://appliance-control-plane.ace-system.svc.cluster.local:8080"
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
           securityContext:
             {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
           volumeMounts:
@@ -175,4 +259,37 @@ spec:
             matchLabels:
               {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
       ports: [{protocol: TCP, port: {{ .Values.service.port }}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-inference.fullname" . }}-open-webui-gateway
+  namespace: {{ include "appliance-inference.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: open-webui-gateway
+      {{- include "appliance-inference.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.traefikNamespaceLabel | nindent 14 }}
+      ports: [{protocol: TCP, port: 8081}]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: open-webui
+              {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
+      ports: [{protocol: TCP, port: 8080}]
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.controlPlaneNamespaceLabel | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.controlPlanePodLabels | nindent 14 }}
+      ports: [{protocol: TCP, port: 8080}]
 {{- end }}

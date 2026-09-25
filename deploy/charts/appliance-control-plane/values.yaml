@@ -147,6 +147,7 @@ config:
   inferenceRuntimePackage: ""
   inferenceEngine: ""
   inferenceArchitecture: ""
+  webUIEnabled: false
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.
@@ -246,6 +247,11 @@ workspaceStorage:
 service:
   publicPort: 8080
   internalPort: 8081
+
+ingress:
+  # zonctl enables this only when the selected LLM pack contains both signed
+  # WebUI images. Foundation and legacy inference-only bundles leave it false.
+  webUIEnabled: false
 
 automationRuntime:
   enabled: true

@@ -610,6 +610,17 @@ export function AIServicePage(): React.JSX.Element {
     }
   }
 
+  async function launchWorkspace() {
+    setBusy("webui-launch");
+    setError("");
+    try {
+      await client.launchAIWorkspace();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Open AI Workspace is unavailable.");
+      setBusy("");
+    }
+  }
+
   const downloaded = useMemo(() => new Set(models.map((model) => model.id)), [models]);
   const options = useMemo(() => {
     const entries = new Map<string, InferenceCatalogEntry>();
@@ -955,6 +966,15 @@ export function AIServicePage(): React.JSX.Element {
                     </Button>
                   </div>
                 ) : null}
+				{readyModelId ? (
+				  <div className="button-row">
+					<Button type="button" onClick={() => void launchWorkspace()} disabled={busy === "webui-launch"}>
+					  {busy === "webui-launch" ? "Opening AI Workspace…" : "Open AI Workspace"}
+					</Button>
+				  </div>
+				) : (
+				  <p className="text-sm text-slate-600">Open AI Workspace becomes available after an LLM pack has a ready loaded model.</p>
+				)}
 				{readyModelId && !readyCapabilities.codexCompatible ? (
 				  <p className="text-sm text-slate-600">
 					This enabled model is available for chat only. Codex settings are hidden because its runtime profile has not been configured for tool calling.

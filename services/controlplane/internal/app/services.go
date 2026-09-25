@@ -38,6 +38,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage/sqlite"
 	"appliance-code/services/controlplane/internal/tokens"
 	"appliance-code/services/controlplane/internal/users"
+	"appliance-code/services/controlplane/internal/webui"
 	"appliance-code/services/controlplane/internal/workflows"
 	"appliance-code/services/controlplane/internal/workflows/engine"
 )
@@ -66,6 +67,8 @@ type Services struct {
 	JobStore           storage.JobStore
 	ApplicationStore   storage.ApplicationStore
 	FocusContentStore  storage.FocusContentStore
+	WebUIGrantStore    storage.WebUILaunchGrantStore
+	WebUIBridgeStore   storage.WebUIBridgeSessionStore
 
 	Users              *users.Service
 	Roles              *roles.Service
@@ -86,6 +89,7 @@ type Services struct {
 	Applications       *applications.Service
 	ApplicationRuntime applications.ResourceManager
 	Inference          *inference.Service
+	WebUI              *webui.Service
 
 	Keys     *keys.Material
 	Audit    *audit.Recorder
@@ -204,12 +208,15 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	jobStore := sqlite.NewJobStore(db)
 	applicationStore := sqlite.NewApplicationStore(db)
 	focusContentStore := sqlite.NewFocusContentStore(db)
+	webuiGrantStore := sqlite.NewWebUILaunchGrantStore(db)
+	webuiBridgeStore := sqlite.NewWebUIBridgeSessionStore(db)
 	applicationsSvc, err := applications.NewService(applicationStore, cfg.ApplicationCatalog)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application management: %w", err)
 	}
 	var inferenceSvc *inference.Service
+	var webuiSvc *webui.Service
 	if inferenceEnabled {
 		inferenceSvc, err = inference.New(inference.Config{
 			BaseURL: cfg.InferenceGatewayBaseURL, Package: cfg.InferenceRuntimePackage,
@@ -218,6 +225,11 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring inference management: %w", err)
+		}
+		webuiSvc, err = webui.New(webuiGrantStore, webuiBridgeStore, userStore, sessionStore, authz.NewService(roleStore), keyMaterial.RefreshPepper)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: wiring WebUI grants: %w", err)
 		}
 	}
 	applicationRuntime, err := applications.NewInClusterManager(applications.NewHostAgentProjector(
@@ -360,6 +372,8 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		JobStore:           jobStore,
 		ApplicationStore:   applicationStore,
 		FocusContentStore:  focusContentStore,
+		WebUIGrantStore:    webuiGrantStore,
+		WebUIBridgeStore:   webuiBridgeStore,
 		Users:              usersSvc,
 		Roles:              roles.NewService(db, roleStore, userStore, recorder),
 		Tokens:             tokensSvc,
@@ -379,6 +393,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		Applications:       applicationsSvc,
 		ApplicationRuntime: applicationRuntime,
 		Inference:          inferenceSvc,
+		WebUI:              webuiSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 		AuditOps:           auditOps,

@@ -124,19 +124,6 @@ CREATE TABLE session_families (
 
 CREATE INDEX idx_session_families_user ON session_families (user_id);
 
-CREATE TABLE webui_launch_grants (
-    id         TEXT PRIMARY KEY,
-    lookup_id  TEXT NOT NULL UNIQUE,
-    digest     BLOB NOT NULL,
-    user_id    TEXT NOT NULL REFERENCES users (id),
-    family_id  TEXT NOT NULL REFERENCES session_families (id),
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    used_at    TEXT
-);
-
-CREATE INDEX idx_webui_launch_grants_family ON webui_launch_grants (family_id);
-
 CREATE TABLE focus_content (
     id            INTEGER PRIMARY KEY CHECK (id = 1),
     resource_type TEXT NOT NULL,

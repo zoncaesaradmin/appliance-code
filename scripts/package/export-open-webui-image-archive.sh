@@ -31,6 +31,11 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 LOCK_FILE="${REPO_ROOT}/services/open-webui/source.lock"
 PATCH_DIR="${REPO_ROOT}/services/open-webui/patches"
 GATE_SCRIPT="${REPO_ROOT}/services/open-webui/tests/gate-smoke.sh"
+# Keep the optional image on the same explicit product architecture contract
+# as every other release archive; do not let Buildah silently use the build
+# host architecture during a cross-architecture bundle build.
+source "${SCRIPT_DIR}/target-arch.sh"
+target_arch_resolve
 
 SOURCE_DIR=""
 OUT_FILE=""
@@ -76,7 +81,7 @@ done
 IMAGE_TAG="${IMAGE_TAG:-${UPSTREAM_REF#v}-appliance}"
 IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed 's/[^A-Za-z0-9_.-]/-/g')"
 local_ref="localhost/open-webui:${IMAGE_TAG}"
-buildah bud --pull-never --ulimit nofile=65535:65535 \
+buildah bud --arch "${TARGET_ARCH}" --pull-never --ulimit nofile=65535:65535 \
   --build-arg USE_SLIM=true \
   --label "org.opencontainers.image.source=${UPSTREAM_URL}" \
   --label "org.opencontainers.image.revision=${UPSTREAM_COMMIT}" \
@@ -93,7 +98,7 @@ if [[ "${RUN_GATE}" == "1" ]]; then
 fi
 
 layout="${workdir}/oci"
-skopeo copy "containers-storage:${local_ref}" "oci:${layout}:registry.local/open-webui:bundled"
+skopeo copy --override-os linux --override-arch "${TARGET_ARCH}" "containers-storage:${local_ref}" "oci:${layout}:registry.local/open-webui:bundled"
 digest="$(python3 - "${layout}/index.json" <<'PY'
 import json, sys
 index = json.load(open(sys.argv[1], encoding="utf-8"))

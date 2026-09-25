@@ -1435,6 +1435,11 @@ export class MockControlPlaneClient {
     mockState.inferenceModels = mockState.inferenceModels.filter((model) => model.id !== modelId);
   }
 
+  async launchAIWorkspace(): Promise<void> {
+    // The mock has no browser gateway; preserving the method keeps the UI
+    // contract testable without ever fabricating a credential.
+  }
+
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
     const limit = params?.limit ?? 10;
     const all: AuditEvent[] = [

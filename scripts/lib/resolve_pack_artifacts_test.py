@@ -45,6 +45,8 @@ class ResolvePackArtifactsTest(unittest.TestCase):
     def test_foundation_plus_acc_llm(self):
         arts = self._resolve("foundation", "acc-llm")
         self.assertIn("inference-runtime-image", arts)
+        self.assertIn("open-webui-image", arts)
+        self.assertIn("open-webui-gateway-image", arts)
         self.assertIn("inference-manager-image", arts)
         self.assertIn("appliance-inference-chart", arts)
         self.assertNotIn("artifact-server-image", arts)

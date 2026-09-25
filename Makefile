@@ -23,7 +23,7 @@ VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 # verify/build pass TARGET_ARCH when set, otherwise the host go env arch.
 INFERENCE_GOARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(shell go env GOARCH))
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR)
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR) services/open-webui-gateway
 # Product/release version for packaged images and /version. Prefer an explicit
 # CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
 # reachable git tag, not a bare commit SHA from `git describe --always`.
@@ -141,7 +141,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-open-webui-gateway-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -402,6 +402,11 @@ package-open-webui-image-archive:
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
 		$${OPEN_WEBUI_RUN_GATE:+--run-gate}
+
+package-open-webui-gateway-image-archive:
+	@out_file="$${OUT_FILE:-$(CURDIR)/.run/open-webui-gateway-image.tar}"; \
+	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+	bash ./scripts/package/export-open-webui-gateway-image-archive.sh --out-file "$$out_file" --reference-out-file "$$reference_file"
 
 ## package-blob-storage-image-archive: re-export the pinned S3-compatible
 ## runtime with registry.local/blob-storage:bundled annotation.

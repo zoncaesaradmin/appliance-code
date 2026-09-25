@@ -213,6 +213,7 @@ export interface ControlPlaneClient {
   loadInferenceModel(modelId: string): Promise<InferenceLoadProgress>;
   getInferenceLoadProgress(): Promise<InferenceLoadProgress>;
   deleteInferenceModel(modelId: string): Promise<void>;
+  launchAIWorkspace(): Promise<void>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
 
@@ -800,6 +801,23 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async deleteInferenceModel(modelId: string): Promise<void> {
     await this.request(`/api/v1/inference/models/delete`, { method: "POST", body: { modelId } });
+  }
+
+  async launchAIWorkspace(): Promise<void> {
+    // The grant is intentionally kept in this stack frame only. It is posted
+    // as a form field to the gateway, never placed in a URL or browser storage.
+    const response = await this.request<{ grant: string }>("/api/v1/webui/launch", { method: "POST" });
+    if (!response.grant) throw new ApiError(500, "Workspace launch did not return a grant");
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/webui/launch";
+    const grant = document.createElement("input");
+    grant.type = "hidden";
+    grant.name = "grant";
+    grant.value = response.grant;
+    form.append(grant);
+    document.body.append(form);
+    form.submit();
   }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {

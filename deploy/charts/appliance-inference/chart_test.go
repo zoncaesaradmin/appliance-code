@@ -201,6 +201,15 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 		"value: \"true\"",
 		"ENABLE_SIGNUP",
 		"ENABLE_API_KEYS",
+		"ENABLE_PASSWORD_AUTH",
+		"ENABLE_LOGIN_FORM",
+		"ENABLE_INITIAL_ADMIN_SIGNUP",
+		"ENABLE_PERSISTENT_CONFIG",
+		"ENABLE_OLLAMA_API",
+		"OPENAI_API_BASE_URL",
+		"http://inference-gateway.inference.svc.cluster.local:8080/v1",
+		"USER_PERMISSIONS_WORKSPACE_MODELS_ACCESS",
+		"WEBUI_SECRET_KEY",
 		"app.kubernetes.io/component: open-webui-gateway",
 	} {
 		if !strings.Contains(out, want) {
@@ -209,6 +218,15 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 	}
 	if strings.Contains(out, "kind: Ingress") {
 		t.Fatal("the session bridge must own the future public route; chart must not expose Open WebUI directly")
+	}
+	for _, forbidden := range []string{
+		"ENABLE_PASSWORD_AUTH\n              value: \"true\"",
+		"ENABLE_OLLAMA_API\n              value: \"true\"",
+		"ENABLE_API_KEYS\n              value: \"true\"",
+	} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("Open WebUI lockdown regressed: %q", forbidden)
+		}
 	}
 }
 
