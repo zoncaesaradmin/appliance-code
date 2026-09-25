@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build the reviewed Open WebUI source tree and export it under the appliance
 # OCI contract. The caller owns source acquisition: this script never fetches
-# from the network, so the release build can apply one online/offline source
-# policy outside this repository.
+# source from the network. Dockerfile base images are prefetched (online from
+# Docker Hub, offline from the LAN build-cache refs passed by the caller).
 set -euo pipefail
 
 usage() {
@@ -18,6 +18,8 @@ Options:
   --out-file PATH            Destination OCI tar (required).
   --reference-out-file PATH  Write registry.local/open-webui@sha256:... here.
   --image-tag TAG            Local temporary tag (default: pinned ref).
+  --node-image REF           Frontend build base (default: docker.io/library/node:22-alpine3.20).
+  --python-image REF         Backend base (default: docker.io/library/python:3.11-slim-bookworm).
   --run-gate                 Run services/open-webui/tests/gate-smoke.sh after build.
 
 The source must be a clean Git checkout at the exact locked commit. The build
@@ -34,6 +36,9 @@ GATE_SCRIPT="${REPO_ROOT}/services/open-webui/tests/gate-smoke.sh"
 # Keep the optional image on the same explicit product architecture contract
 # as every other release archive; do not let Buildah silently use the build
 # host architecture during a cross-architecture bundle build.
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/oci-pull.sh"
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/target-arch.sh"
 target_arch_resolve
 
@@ -41,6 +46,8 @@ SOURCE_DIR=""
 OUT_FILE=""
 REFERENCE_OUT_FILE=""
 IMAGE_TAG=""
+NODE_IMAGE="${OPEN_WEBUI_NODE_IMAGE:-docker.io/library/node:22-alpine3.20}"
+PYTHON_IMAGE="${OPEN_WEBUI_PYTHON_IMAGE:-docker.io/library/python:3.11-slim-bookworm}"
 RUN_GATE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -48,6 +55,8 @@ while [[ $# -gt 0 ]]; do
     --out-file) OUT_FILE="${2:-}"; shift 2 ;;
     --reference-out-file) REFERENCE_OUT_FILE="${2:-}"; shift 2 ;;
     --image-tag) IMAGE_TAG="${2:-}"; shift 2 ;;
+    --node-image) NODE_IMAGE="${2:-}"; shift 2 ;;
+    --python-image) PYTHON_IMAGE="${2:-}"; shift 2 ;;
     --run-gate) RUN_GATE=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "export-open-webui-image-archive: unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -56,6 +65,7 @@ done
 
 [[ -n "${SOURCE_DIR}" && -d "${SOURCE_DIR}/.git" ]] || { echo "export-open-webui-image-archive: --source-dir must be a Git checkout" >&2; exit 2; }
 [[ -n "${OUT_FILE}" ]] || { echo "export-open-webui-image-archive: --out-file is required" >&2; exit 2; }
+[[ -n "${NODE_IMAGE}" && -n "${PYTHON_IMAGE}" ]] || { echo "export-open-webui-image-archive: --node-image and --python-image are required" >&2; exit 2; }
 for tool in git buildah skopeo python3 tar; do
   command -v "${tool}" >/dev/null 2>&1 || { echo "export-open-webui-image-archive: ${tool} is required" >&2; exit 1; }
 done
@@ -77,6 +87,36 @@ for patch in "${PATCH_DIR}"/*.patch; do
   git -C "${build_source}" apply --check "${patch}"
   git -C "${build_source}" apply "${patch}"
 done
+
+# Frontend build stage follows BUILDPLATFORM (host); final python stage follows
+# TARGET_ARCH. Prefer HOST_ARCH for the node prefetch when set by the caller.
+node_arch="${HOST_ARCH:-${TARGET_ARCH}}"
+case "${node_arch}" in amd64|arm64) ;; *) node_arch="${TARGET_ARCH}" ;; esac
+node_local="localhost/open-webui-node:${node_arch}"
+python_local="localhost/open-webui-python:${TARGET_ARCH}"
+oci_skopeo_prefetch_docker "${NODE_IMAGE}" "${node_local}" "${node_arch}"
+oci_skopeo_prefetch_docker "${PYTHON_IMAGE}" "${python_local}" "${TARGET_ARCH}"
+
+# Upstream Dockerfile hard-codes short registry names. Rewrite to the prefetched
+# local refs so --pull-never works offline.
+dockerfile="${build_source}/Dockerfile"
+[[ -f "${dockerfile}" ]] || { echo "export-open-webui-image-archive: missing Dockerfile in source" >&2; exit 1; }
+python3 - "${dockerfile}" "${node_local}" "${python_local}" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+node_ref = sys.argv[2]
+python_ref = sys.argv[3]
+text = path.read_text(encoding="utf-8")
+old_node = "FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build"
+old_python = "FROM python:3.11-slim-bookworm AS base"
+new_node = f"FROM --platform=$BUILDPLATFORM {node_ref} AS build"
+new_python = f"FROM {python_ref} AS base"
+if old_node not in text:
+    raise SystemExit(f"open-webui Dockerfile missing expected node FROM line: {old_node!r}")
+if old_python not in text:
+    raise SystemExit(f"open-webui Dockerfile missing expected python FROM line: {old_python!r}")
+path.write_text(text.replace(old_node, new_node, 1).replace(old_python, new_python, 1), encoding="utf-8")
+PY
 
 IMAGE_TAG="${IMAGE_TAG:-${UPSTREAM_REF#v}-appliance}"
 IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed 's/[^A-Za-z0-9_.-]/-/g')"

@@ -401,12 +401,17 @@ package-open-webui-image-archive:
 		--source-dir "$${OPEN_WEBUI_SOURCE_DIR}" \
 		--out-file "$$out_file" \
 		--reference-out-file "$$reference_file" \
+		$${OPEN_WEBUI_NODE_IMAGE:+--node-image "$${OPEN_WEBUI_NODE_IMAGE}"} \
+		$${OPEN_WEBUI_PYTHON_IMAGE:+--python-image "$${OPEN_WEBUI_PYTHON_IMAGE}"} \
 		$${OPEN_WEBUI_RUN_GATE:+--run-gate}
 
 package-open-webui-gateway-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/open-webui-gateway-image.tar}"; \
 	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
-	bash ./scripts/package/export-open-webui-gateway-image-archive.sh --out-file "$$out_file" --reference-out-file "$$reference_file"
+	bash ./scripts/package/export-open-webui-gateway-image-archive.sh \
+		--out-file "$$out_file" \
+		--reference-out-file "$$reference_file" \
+		$${RUNTIME_IMAGE:+--runtime-image "$${RUNTIME_IMAGE}"}
 
 ## package-blob-storage-image-archive: re-export the pinned S3-compatible
 ## runtime with registry.local/blob-storage:bundled annotation.
