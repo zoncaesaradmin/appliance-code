@@ -256,11 +256,21 @@ spec:
               {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
       ports: [{protocol: TCP, port: 8080}]
   egress:
+    # OpenAI provider calls go to inference-gateway Service DNS.
     - to:
         - podSelector:
             matchLabels:
               {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
       ports: [{protocol: TCP, port: {{ .Values.service.port }}}]
+    {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

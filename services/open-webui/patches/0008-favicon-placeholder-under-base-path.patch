@@ -1,0 +1,127 @@
+diff --git a/src/lib/components/admin/Settings/Evaluations/ArenaModelModal.svelte b/src/lib/components/admin/Settings/Evaluations/ArenaModelModal.svelte
+index f27a0c69d..403c878cd 100644
+--- a/src/lib/components/admin/Settings/Evaluations/ArenaModelModal.svelte
++++ b/src/lib/components/admin/Settings/Evaluations/ArenaModelModal.svelte
+@@ -46,7 +46,7 @@
+ 	// LICENSE covers this Open WebUI fallback logo.
+ 	// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 	// https://docs.openwebui.com/license.
+-	let profileImageUrl = `${WEBUI_BASE_URL}/favicon.png`;
++	let profileImageUrl = `${WEBUI_BASE_URL}/static/favicon.png`;
+ 	let description = '';
+ 
+ 	let selectedModelId = '';
+@@ -112,7 +112,7 @@
+ 		// LICENSE covers this Open WebUI fallback logo.
+ 		// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 		// https://docs.openwebui.com/license.
+-		profileImageUrl = `${WEBUI_BASE_URL}/favicon.png`;
++		profileImageUrl = `${WEBUI_BASE_URL}/static/favicon.png`;
+ 		description = '';
+ 		modelIds = [];
+ 		selectedModelId = '';
+diff --git a/src/lib/components/chat/ChatPlaceholder.svelte b/src/lib/components/chat/ChatPlaceholder.svelte
+index 469395e85..2c2494acc 100644
+--- a/src/lib/components/chat/ChatPlaceholder.svelte
++++ b/src/lib/components/chat/ChatPlaceholder.svelte
+@@ -84,7 +84,10 @@
+ 									// LICENSE covers this Open WebUI fallback logo.
+ 									// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 									// https://docs.openwebui.com/license.
+-									e.currentTarget.src = '/favicon.png';
++									const fallback = `${WEBUI_BASE_URL}/static/favicon.png`;
++									if (!e.currentTarget.src.endsWith('/static/favicon.png')) {
++										e.currentTarget.src = fallback;
++									}
+ 								}}
+ 							/>
+ 						</Tooltip>
+diff --git a/src/lib/components/chat/MessageInput/Commands/AtCommands.svelte b/src/lib/components/chat/MessageInput/Commands/AtCommands.svelte
+index 4b40400a8..fe05fe861 100644
+--- a/src/lib/components/chat/MessageInput/Commands/AtCommands.svelte
++++ b/src/lib/components/chat/MessageInput/Commands/AtCommands.svelte
+@@ -10,7 +10,7 @@
+ 		settings,
+ 		terminalServers
+ 	} from '$lib/stores';
+-	import { WEBUI_API_BASE_URL } from '$lib/constants';
++	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+ 	import { getFolders } from '$lib/apis/folders';
+ 	import { searchKnowledgeBases, searchKnowledgeFiles } from '$lib/apis/knowledge';
+ 	import { searchFiles } from '$lib/apis/terminal';
+@@ -351,7 +351,11 @@
+ 							// LICENSE covers this Open WebUI fallback logo.
+ 							// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 							// https://docs.openwebui.com/license.
+-							(e.currentTarget as HTMLImageElement).src = '/favicon.png';
++							const img = e.currentTarget as HTMLImageElement;
++							const fallback = `${WEBUI_BASE_URL}/static/favicon.png`;
++							if (!img.src.endsWith('/static/favicon.png')) {
++								img.src = fallback;
++							}
+ 						}}
+ 					/>
+ 					<div class="min-w-0 truncate">
+diff --git a/src/lib/components/chat/MessageInput/Commands/Models.svelte b/src/lib/components/chat/MessageInput/Commands/Models.svelte
+index c159a4f8f..d1820b6be 100644
+--- a/src/lib/components/chat/MessageInput/Commands/Models.svelte
++++ b/src/lib/components/chat/MessageInput/Commands/Models.svelte
+@@ -95,7 +95,10 @@
+ 							// LICENSE covers this Open WebUI fallback logo.
+ 							// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 							// https://docs.openwebui.com/license.
+-							e.currentTarget.src = '/favicon.png';
++							const fallback = `${WEBUI_BASE_URL}/static/favicon.png`;
++							if (!e.currentTarget.src.endsWith('/static/favicon.png')) {
++								e.currentTarget.src = fallback;
++							}
+ 						}}
+ 					/>
+ 					<div class="min-w-0 truncate">
+diff --git a/src/lib/components/chat/ModelSelector/ModelItem.svelte b/src/lib/components/chat/ModelSelector/ModelItem.svelte
+index b15041b08..6ba97e2e0 100644
+--- a/src/lib/components/chat/ModelSelector/ModelItem.svelte
++++ b/src/lib/components/chat/ModelSelector/ModelItem.svelte
+@@ -105,7 +105,10 @@
+ 							// LICENSE covers this Open WebUI fallback logo.
+ 							// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 							// https://docs.openwebui.com/license.
+-							e.currentTarget.src = '/favicon.png';
++							const fallback = `${WEBUI_BASE_URL}/static/favicon.png`;
++							if (!e.currentTarget.src.endsWith('/static/favicon.png')) {
++								e.currentTarget.src = fallback;
++							}
+ 						}}
+ 					/>
+ 				</Tooltip>
+diff --git a/src/lib/components/chat/Placeholder.svelte b/src/lib/components/chat/Placeholder.svelte
+index 603861eae..9ec481574 100644
+--- a/src/lib/components/chat/Placeholder.svelte
++++ b/src/lib/components/chat/Placeholder.svelte
+@@ -169,7 +169,10 @@
+ 												// LICENSE covers this Open WebUI fallback logo.
+ 												// Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ 												// https://docs.openwebui.com/license.
+-												e.currentTarget.src = '/favicon.png';
++												const fallback = `${WEBUI_BASE_URL}/static/favicon.png`;
++												if (!e.currentTarget.src.endsWith('/static/favicon.png')) {
++													e.currentTarget.src = fallback;
++												}
+ 											}}
+ 										/>
+ 									</button>
+diff --git a/src/lib/utils/safeImageUrl.ts b/src/lib/utils/safeImageUrl.ts
+index c81412294..f7bb58aef 100644
+--- a/src/lib/utils/safeImageUrl.ts
++++ b/src/lib/utils/safeImageUrl.ts
+@@ -3,7 +3,9 @@ import { WEBUI_BASE_URL } from '$lib/constants';
+ // LICENSE covers this Open WebUI fallback logo.
+ // Do not alter, remove, obscure, or replace it except as LICENSE permits:
+ // https://docs.openwebui.com/license.
+-const PLACEHOLDER_IMAGE = '/favicon.png';
++// Appliance serves Open WebUI under /webui. Keep the placeholder under /static
++// so WEBUI_BASE_URL + PLACEHOLDER resolves to /webui/static/favicon.png.
++const PLACEHOLDER_IMAGE = '/static/favicon.png';
+ 
+ /**
+  * Validates an image URL against an allowlist of safe patterns and returns

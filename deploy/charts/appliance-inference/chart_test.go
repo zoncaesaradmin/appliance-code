@@ -221,6 +221,19 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 	if strings.Contains(out, "appliance-control-plane.ace-system") {
 		t.Fatal("gateway must call controlplane Service DNS, not the chart/image name")
 	}
+	// Open WebUI must resolve inference-gateway Service DNS to list models.
+	openWebUINP := "name: inference-gateway-open-webui\n"
+	idx := strings.Index(out, openWebUINP)
+	if idx < 0 {
+		t.Fatal("open-webui NetworkPolicy missing")
+	}
+	npSlice := out[idx:]
+	if end := strings.Index(npSlice[1:], "\n---\n"); end > 0 {
+		npSlice = npSlice[:end+1]
+	}
+	if !strings.Contains(npSlice, "kubernetes.io/metadata.name: kube-system") || !strings.Contains(npSlice, "port: 53") {
+		t.Fatal("open-webui NetworkPolicy must allow DNS to kube-system so OPENAI_API_BASE_URL resolves")
+	}
 	if strings.Contains(out, "kind: Ingress") {
 		t.Fatal("the session bridge must own the future public route; chart must not expose Open WebUI directly")
 	}

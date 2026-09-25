@@ -28,7 +28,10 @@ identity. The sixth patch removes the upstream production build's unconditional
 Pyodide download. The seventh patch pins SvelteKit `paths.base` and
 `WEBUI_BASE_URL` to `/webui` so Traefik PathPrefix routing can serve static
 assets, API calls, and socket.io under the session bridge (Open WebUI has no
-supported subpath mode upstream). The appliance build must use `USE_SLIM=true`;
+supported subpath mode upstream). The eighth patch stops model-image error
+handlers from falling back to host-root `/favicon.png` (which 404s outside
+`/webui` and causes a continuous request/flicker loop) and points placeholders
+at `/webui/static/favicon.png`. The appliance build must use `USE_SLIM=true`;
 that is the upstream mode which omits local embedding, speech, and
 document-processing model downloads. The gate rejects a non-slim image.
 
