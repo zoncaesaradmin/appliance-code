@@ -76,6 +76,11 @@ Options:
                                    Canonical
                                    registry.local/inference-manager@sha256:...
                                    platform-manifest reference.
+  --open-webui-image PATH           Pinned trusted-header Open WebUI OCI archive.
+  --open-webui-image-reference REF  Canonical registry.local/open-webui@sha256:...
+  --open-webui-gateway-image PATH   Pinned appliance session-bridge OCI archive.
+  --open-webui-gateway-image-reference REF
+                                   Canonical registry.local/open-webui-gateway@sha256:...
   --inference-version VERSION      Inference compatibility version. Defaults to
                                    the appliance-inference chart appVersion.
   --extra-oci-image PATH           Repeatable additional OCI image archive to
@@ -154,6 +159,10 @@ INFERENCE_RUNTIME_IMAGE=""
 INFERENCE_RUNTIME_IMAGE_REFERENCE=""
 INFERENCE_MANAGER_IMAGE=""
 INFERENCE_MANAGER_IMAGE_REFERENCE=""
+OPEN_WEBUI_IMAGE=""
+OPEN_WEBUI_IMAGE_REFERENCE=""
+OPEN_WEBUI_GATEWAY_IMAGE=""
+OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE=""
 INFERENCE_VERSION=""
 WORKFLOWS_VERSION=""
 WORKFLOW_CONTROLLER_IMAGE=""
@@ -278,6 +287,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --inference-manager-image-reference)
       INFERENCE_MANAGER_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --open-webui-image)
+      OPEN_WEBUI_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --open-webui-image-reference)
+      OPEN_WEBUI_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
+    --open-webui-gateway-image)
+      OPEN_WEBUI_GATEWAY_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --open-webui-gateway-image-reference)
+      OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
     --inference-version)
@@ -614,6 +639,14 @@ if [[ -n "${INFERENCE_MANAGER_IMAGE}" && ! -f "${INFERENCE_MANAGER_IMAGE}" ]]; t
   echo "archive-release-input: inference-manager image not found: ${INFERENCE_MANAGER_IMAGE}" >&2
   exit 1
 fi
+if [[ -n "${OPEN_WEBUI_IMAGE}" && ! -f "${OPEN_WEBUI_IMAGE}" ]]; then
+  echo "archive-release-input: Open WebUI image not found: ${OPEN_WEBUI_IMAGE}" >&2
+  exit 1
+fi
+if [[ -n "${OPEN_WEBUI_GATEWAY_IMAGE}" && ! -f "${OPEN_WEBUI_GATEWAY_IMAGE}" ]]; then
+  echo "archive-release-input: Open WebUI gateway image not found: ${OPEN_WEBUI_GATEWAY_IMAGE}" >&2
+  exit 1
+fi
 if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" || -n "${INFERENCE_MANAGER_IMAGE}" || -n "${INFERENCE_MANAGER_IMAGE_REFERENCE}" || -n "${INFERENCE_VERSION}" ]]; then
   if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_RUNTIME_IMAGE_REFERENCE}" || -z "${INFERENCE_MANAGER_IMAGE}" || -z "${INFERENCE_MANAGER_IMAGE_REFERENCE}" ]]; then
     echo "archive-release-input: --inference-runtime-image/--inference-runtime-image-reference and --inference-manager-image/--inference-manager-image-reference must be provided together" >&2
@@ -625,6 +658,18 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" || -n "${INFERENCE_RUNTIME_IMAGE_REFERENCE
   fi
   if [[ ! "${INFERENCE_MANAGER_IMAGE_REFERENCE}" =~ ^registry\.local/inference-manager@sha256:[0-9a-f]{64}$ ]]; then
     echo "archive-release-input: --inference-manager-image-reference must be registry.local/inference-manager@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  if [[ -n "${OPEN_WEBUI_IMAGE}${OPEN_WEBUI_IMAGE_REFERENCE}${OPEN_WEBUI_GATEWAY_IMAGE}${OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE}" ]] && [[ -z "${OPEN_WEBUI_IMAGE}" || -z "${OPEN_WEBUI_IMAGE_REFERENCE}" || -z "${OPEN_WEBUI_GATEWAY_IMAGE}" || -z "${OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE}" ]]; then
+    echo "archive-release-input: Open WebUI and Open WebUI gateway image archives and references must be provided together" >&2
+    exit 2
+  fi
+  if [[ -n "${OPEN_WEBUI_IMAGE_REFERENCE}" && ! "${OPEN_WEBUI_IMAGE_REFERENCE}" =~ ^registry\.local/open-webui@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --open-webui-image-reference must be registry.local/open-webui@sha256:<64 lowercase hex>" >&2
+    exit 2
+  fi
+  if [[ -n "${OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE}" && ! "${OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE}" =~ ^registry\.local/open-webui-gateway@sha256:[0-9a-f]{64}$ ]]; then
+    echo "archive-release-input: --open-webui-gateway-image-reference must be registry.local/open-webui-gateway@sha256:<64 lowercase hex>" >&2
     exit 2
   fi
   if [[ ! -d "${INFERENCE_CHART_DIR}" ]]; then
@@ -703,6 +748,10 @@ if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_MANAGER_IMAGE}" ]]; the
   INFERENCE_RUNTIME_IMAGE_REFERENCE=""
   INFERENCE_MANAGER_IMAGE=""
   INFERENCE_MANAGER_IMAGE_REFERENCE=""
+  OPEN_WEBUI_IMAGE=""
+  OPEN_WEBUI_IMAGE_REFERENCE=""
+  OPEN_WEBUI_GATEWAY_IMAGE=""
+  OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE=""
 fi
 if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" && ! -f "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
   echo "archive-release-input: workflow controller image not found: ${WORKFLOW_CONTROLLER_IMAGE}" >&2
@@ -856,6 +905,8 @@ ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 INFERENCE_RUNTIME_BASENAME=""
 INFERENCE_MANAGER_BASENAME=""
+OPEN_WEBUI_BASENAME=""
+OPEN_WEBUI_GATEWAY_BASENAME=""
 BLOB_STORAGE_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 MESSAGE_BROKER_CHART_ARCHIVE="appliance-message-broker-${CODE_VERSION}.tgz"
@@ -909,6 +960,14 @@ fi
 if [[ -n "${INFERENCE_MANAGER_IMAGE}" ]]; then
   INFERENCE_MANAGER_BASENAME="$(basename "${INFERENCE_MANAGER_IMAGE}")"
   link_or_copy_file "${INFERENCE_MANAGER_IMAGE}" "${RELEASE_INPUT_DIR}/${INFERENCE_MANAGER_BASENAME}"
+fi
+if [[ -n "${OPEN_WEBUI_IMAGE}" ]]; then
+  OPEN_WEBUI_BASENAME="$(basename "${OPEN_WEBUI_IMAGE}")"
+  link_or_copy_file "${OPEN_WEBUI_IMAGE}" "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_BASENAME}"
+fi
+if [[ -n "${OPEN_WEBUI_GATEWAY_IMAGE}" ]]; then
+  OPEN_WEBUI_GATEWAY_BASENAME="$(basename "${OPEN_WEBUI_GATEWAY_IMAGE}")"
+  link_or_copy_file "${OPEN_WEBUI_GATEWAY_IMAGE}" "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_GATEWAY_BASENAME}"
 fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
@@ -1046,6 +1105,12 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -n "${INFERENCE_MANAGER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${INFERENCE_MANAGER_BASENAME}" | sed 's/^sha256://')" "${INFERENCE_MANAGER_BASENAME}"
   fi
+  if [[ -n "${OPEN_WEBUI_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_BASENAME}" | sed 's/^sha256://')" "${OPEN_WEBUI_BASENAME}"
+  fi
+  if [[ -n "${OPEN_WEBUI_GATEWAY_BASENAME}" ]]; then
+    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_GATEWAY_BASENAME}" | sed 's/^sha256://')" "${OPEN_WEBUI_GATEWAY_BASENAME}"
+  fi
   if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_CONTROLLER_BASENAME}"
   fi
@@ -1154,6 +1219,14 @@ if [[ -n "${INFERENCE_CHART_BASENAME}" ]]; then
   if [[ -n "${INFERENCE_MANAGER_BASENAME}" ]]; then
     OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
     "inferenceManagerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${INFERENCE_MANAGER_BASENAME}" "${INFERENCE_MANAGER_BASENAME}" "${INFERENCE_MANAGER_IMAGE_REFERENCE}")"
+  fi
+  if [[ -n "${OPEN_WEBUI_BASENAME}" ]]; then
+    OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
+    "openWebUIImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_BASENAME}" "${OPEN_WEBUI_BASENAME}" "${OPEN_WEBUI_IMAGE_REFERENCE}")"
+  fi
+  if [[ -n "${OPEN_WEBUI_GATEWAY_BASENAME}" ]]; then
+    OPTIONAL_INFERENCE_ARTIFACTS_JSON+=',
+    "openWebUIGatewayImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_GATEWAY_BASENAME}" "${OPEN_WEBUI_GATEWAY_BASENAME}" "${OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE}")"
   fi
 fi
 

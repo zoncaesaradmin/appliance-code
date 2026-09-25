@@ -4,6 +4,11 @@ This is **not yet a release image**. Do not add it to the appliance chart or
 air-gap bundle until the compatibility gate in
 `docs/open-webui-integration-plan.md` passes on the exact built image.
 
+The implementation order and package boundary are recorded in
+[`IMPLEMENTATION.md`](IMPLEMENTATION.md). Open WebUI is an optional `std-llm`
+or `acc-llm` artifact only; `foundation` must remain free of its source,
+image, chart, gateway, and storage resources.
+
 The reviewed source is Open WebUI `v0.11.4`, commit
 `8bd8b4fac5e059578ac0c74b3c18d11139f88b7d`. Apply both patches in
 `patches/` in numeric order to that exact commit. The auth patch separates

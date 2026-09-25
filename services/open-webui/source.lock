@@ -1,0 +1,6 @@
+# Open WebUI appliance source identity. Build tooling must verify this exact
+# revision before applying appliance patches; never substitute a floating tag.
+UPSTREAM_URL=https://github.com/open-webui/open-webui.git
+UPSTREAM_REF=v0.11.4
+UPSTREAM_COMMIT=8bd8b4fac5e059578ac0c74b3c18d11139f88b7d
+BUILD_MODE=USE_SLIM=true
