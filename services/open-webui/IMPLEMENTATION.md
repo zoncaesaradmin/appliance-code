@@ -1,20 +1,25 @@
 # Open WebUI implementation sequence
 
-Open WebUI is an optional inference-pack component. It is never built,
-exported, preloaded, deployed, or referenced by `foundation`.
+Open WebUI is an optional `open-webui` capability and delivery pack. It is
+never built, exported, preloaded, deployed, or referenced by `foundation` or
+by `std-llm` / `acc-llm` alone.
 
 ## Pack contract
 
 | Resolved pack | Open WebUI |
 | --- | --- |
 | `foundation` | absent |
-| `std-llm` | included |
-| `acc-llm` | included |
+| `std-llm` | absent (inference API/runtime only) |
+| `acc-llm` | absent (inference API/runtime only) |
+| `open-webui` | included (requires `std-llm` or `acc-llm` in the same selection) |
+
+Showcase / inference-chat SKUs select packs explicitly, for example
+`foundation,std-llm,open-webui`. Integrated or API-only SKUs omit `open-webui`.
 
 The release resolver, offline seed, release-input archive, installer preload,
-and Helm deployment must all use the same condition: `std-llm || acc-llm`.
-No profile, UI toggle, or host condition may cause foundation to acquire the
-artifact.
+and Helm deployment must all use the same condition: pack `open-webui` is
+selected. No profile, UI toggle, or host condition may cause foundation or an
+LLM pack alone to acquire the artifact.
 
 ## Remaining end-to-end work
 
@@ -27,7 +32,8 @@ be treated as optional when exposing the feature.
    path in `appliance-release/deps/open-webui`: online obtains the exact
    `source.lock` revision; offline consumes only the LAN-seeded equivalent.
    Build the patched slim image and a gateway image for both supported target
-   architectures. Export both only for `std-llm` / `acc-llm`, never foundation.
+   architectures. Export both only for the `open-webui` pack, never foundation
+   or bare `std-llm` / `acc-llm`.
 2. **Compatibility gate.** Run `tests/gate-smoke.sh` against the exact exported
    digest, then extend it for the fixed inference-manager OpenAI provider,
    streamed responses, WebSockets, restart persistence, and egress denial.
@@ -58,19 +64,19 @@ be treated as optional when exposing the feature.
    root paths after the gateway strips `/webui`). The core appliance readiness
    must not depend on WebUI. The bridge cookie must be ignored/stripped by
    non-WebUI routes.
-7. **Installer/release wiring.** Make the image pair required together in new
-   LLM packs, preload them, pass digest values to Helm, and keep old bundles
-   inference-only. Update release contracts, offline docs, tests, and pack
-   resolver assertions.
+7. **Installer/release wiring.** Make the image pair required together only
+   for the `open-webui` pack, preload them, pass digest values to Helm, and
+   keep bare LLM packs inference-only. Update release contracts, offline docs,
+   tests, and pack resolver assertions.
 8. **Appliance UI.** Add an enabled-state-aware “Open AI Workspace” action to
    AI Services. It calls the launch API and form-POSTs the raw grant to the
    gateway; it must not recreate chat UI, place a grant in a URL, or persist it
-   in JavaScript storage. Explain unavailable states (no LLM pack, no loaded
-   model, WebUI not ready, or missing permission).
+   in JavaScript storage. Explain unavailable states (no open-webui pack, no
+   loaded model, WebUI not ready, or missing permission).
 9. **End-to-end verification.** Cover successful launch; expired/replayed
    grant; API-token rejection; permission/user/session revocation; restart;
    SSE; WebSocket close after revocation; direct Open WebUI denial; no public
-   egress; backup/restore; and foundation-pack absence.
+   egress; backup/restore; and foundation/LLM-pack-without-open-webui absence.
 
 ## Ordered work
 
@@ -83,7 +89,7 @@ be treated as optional when exposing the feature.
 4. Export `registry.local/open-webui:bundled` and its platform digest from
    `appliance-code`; add both release-input and `zonctl` consumers.
 5. Deploy the image with the WebUI gateway, separate RWO PVC, and restricted
-   ingress/egress policy only when an LLM pack is installed.
+   ingress/egress policy only when the `open-webui` pack is installed.
 6. Implement the one-time appliance launch grant and opaque bridge session
    before exposing the UI route.
 

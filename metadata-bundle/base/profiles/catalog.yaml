@@ -13,13 +13,13 @@ profiles:
     capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, applications]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
-    description: "Full union: builder, registry/storage, LAN DNS, and CPU LLM inference."
-    capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, inference, applications]
+    description: "Full union: builder, registry/storage, LAN DNS, CPU LLM inference, and optional Open WebUI chat."
+    capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, inference, open-webui, applications]
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
     capabilities: [base, lan-discovery, host, files, video, guest-access, focus-content, applications, plaintext-http]
   private-ai:
     displayName: private-ai
-    description: "Private ai appliance providing multi user inference"
-    capabilities: [base, lan-discovery, inference]
+    description: "Private ai appliance providing multi user inference and optional Open WebUI chat."
+    capabilities: [base, lan-discovery, inference, open-webui]

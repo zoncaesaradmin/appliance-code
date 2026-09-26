@@ -14,7 +14,7 @@ func TestResolveProfileUsesCanonicalMetadataCatalog(t *testing.T) {
 		{"core", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityFiles}},
 		{"storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityFiles, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
 		{"builder-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
-		{"builder-lanllm-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS, appliance.CapabilityInference}},
+		{"builder-lanllm-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS, appliance.CapabilityInference, appliance.CapabilityOpenWebUI}},
 		{"training", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityVideo, appliance.CapabilityApplications, appliance.CapabilityPlaintextHTTP}},
 	}
 	for _, tc := range tests {

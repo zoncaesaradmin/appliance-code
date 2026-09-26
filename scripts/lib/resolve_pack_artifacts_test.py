@@ -45,12 +45,20 @@ class ResolvePackArtifactsTest(unittest.TestCase):
     def test_foundation_plus_acc_llm(self):
         arts = self._resolve("foundation", "acc-llm")
         self.assertIn("inference-runtime-image", arts)
-        self.assertIn("open-webui-image", arts)
-        self.assertIn("open-webui-gateway-image", arts)
+        self.assertNotIn("open-webui-image", arts)
+        self.assertNotIn("open-webui-gateway-image", arts)
         self.assertIn("inference-manager-image", arts)
         self.assertIn("appliance-inference-chart", arts)
         self.assertNotIn("artifact-server-image", arts)
         self.assertNotIn("host-agent-image", arts)
+
+    def test_foundation_plus_acc_llm_plus_open_webui(self):
+        arts = self._resolve("foundation", "acc-llm", "open-webui")
+        self.assertIn("inference-runtime-image", arts)
+        self.assertIn("open-webui-image", arts)
+        self.assertIn("open-webui-gateway-image", arts)
+        self.assertIn("inference-manager-image", arts)
+        self.assertIn("appliance-inference-chart", arts)
 
     def test_dev_platform_includes_registry_dns_workflows(self):
         arts = self._resolve("foundation", "dev-platform")
@@ -85,6 +93,7 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertIn("NEED_INFERENCE_RUNTIME_IMAGE=1", out)
         self.assertIn("NEED_INFERENCE_MANAGER_IMAGE=1", out)
         self.assertIn("NEED_CONTROL_PLANE_IMAGE=1", out)
+        self.assertIn("NEED_OPEN_WEBUI_IMAGE=0", out)
 
 
 if __name__ == "__main__":

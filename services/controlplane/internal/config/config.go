@@ -378,6 +378,7 @@ func (c Config) Validate() error {
 	artifactEnabled := false
 	dnsEnabled := false
 	inferenceEnabled := false
+	openWebUIEnabled := false
 	videoEnabled := false
 	if profileErr != nil {
 		errs = append(errs, fmt.Sprintf("applianceProfile %q is invalid: %v", c.ApplianceProfile, profileErr))
@@ -391,6 +392,7 @@ func (c Config) Validate() error {
 		artifactEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry)
 		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
 		inferenceEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime)
+		openWebUIEnabled = resolved.Capabilities.Enabled(appliance.CapabilityOpenWebUI)
 		videoEnabled = resolved.Capabilities.Enabled(appliance.CapabilityVideo)
 	}
 	if profileErr == nil && buildEnabled {
@@ -509,8 +511,8 @@ func (c Config) Validate() error {
 			}
 		}
 	}
-	if profileErr == nil && c.WebUIEnabled && !inferenceEnabled {
-		errs = append(errs, "webUIEnabled requires an inference-capable appliance profile")
+	if profileErr == nil && c.WebUIEnabled && !openWebUIEnabled {
+		errs = append(errs, "webUIEnabled requires an open-webui-capable appliance profile")
 	}
 	if profileErr == nil && videoEnabled {
 		if u, err := url.Parse(c.BlobStorageEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {

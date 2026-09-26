@@ -80,10 +80,20 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.inference
     artifacts:
-      # The workspace is part of the inference delivery closure, never the
-      # foundation closure. Keep the runtime and bridge inseparable: the
-      # bridge is the only supported public route to Open WebUI.
-      required: [inference-runtime-image, inference-manager-image, open-webui-image, open-webui-gateway-image, appliance-inference-chart]
+      # Inference delivery is API/runtime only. Open WebUI is a separate
+      # optional capability/pack and is never part of this closure.
+      required: [inference-runtime-image, inference-manager-image, appliance-inference-chart]
+  open-webui:
+    displayName: Open WebUI
+    requires: [inference]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.open-webui
+    artifacts:
+      # Temporary optional chat showcase over local inference. Product-specific
+      # UIs may replace this; omit the open-webui pack for API-only or
+      # integrated SKUs that do not want the third-party Web UI.
+      required: [open-webui-image, open-webui-gateway-image]
   video:
     displayName: Video
     requires: [base]

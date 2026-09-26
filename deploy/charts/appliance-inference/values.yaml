@@ -42,8 +42,8 @@ managerImage:
   digest: ""
   pullPolicy: IfNotPresent
 
-# Open WebUI is opt-in and is only enabled by a delivery pack that supplies
-# both digest-pinned images. It has no Ingress here: the appliance session
+# Open WebUI is opt-in via the open-webui delivery pack, which supplies both
+# digest-pinned images. Bare std-llm / acc-llm packs leave this disabled. It has no Ingress here: the appliance session
 # bridge will own the public route once its launch-grant API is implemented.
 openWebUI:
   enabled: false

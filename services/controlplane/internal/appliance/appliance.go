@@ -39,6 +39,7 @@ const (
 	CapabilityArtifact      Capability = "artifact"
 	CapabilityDNS           Capability = "dns"
 	CapabilityInference     Capability = "inference"
+	CapabilityOpenWebUI     Capability = "open-webui"
 	CapabilityVideo         Capability = "video"
 	CapabilityGuestAccess   Capability = "guest-access"
 	CapabilityFocusContent  Capability = "focus-content"

@@ -74,11 +74,11 @@ func TestLoadRejectsMalformedDuration(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsWebUIWithoutInferenceCapability(t *testing.T) {
+func TestValidateRejectsWebUIWithoutOpenWebUICapability(t *testing.T) {
 	cfg := config.Default()
 	cfg.WebUIEnabled = true
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "webUIEnabled requires") {
-		t.Fatalf("WebUI without inference profile must be rejected, got %v", err)
+		t.Fatalf("WebUI without open-webui profile must be rejected, got %v", err)
 	}
 }
 

@@ -13,11 +13,15 @@ packages:
     capabilities: [host, applications]
   std-llm:
     displayName: Standard LLM
-    description: Standard inference using Ollama for simpler, lower-capacity deployments. The runtime uses CPU or a host GPU when one is available.
+    description: Standard inference using Ollama for simpler, lower-capacity deployments. The runtime uses CPU or a host GPU when one is available. Does not include Open WebUI; add the open-webui pack for the optional chat UI.
     capabilities: [inference]
     runtime: {inferenceEngine: ollama}
   acc-llm:
     displayName: Accelerated LLM
-    description: Accelerated inference using vLLM. Requires a proper GPU on the install host.
+    description: Accelerated inference using vLLM. Requires a proper GPU on the install host. Does not include Open WebUI; add the open-webui pack for the optional chat UI.
     capabilities: [inference]
     runtime: {inferenceEngine: vllm}
+  open-webui:
+    displayName: Open WebUI
+    description: Optional temporary chat UI (Open WebUI + session bridge) over local inference. Requires std-llm or acc-llm in the same APPLIANCE_PACKS selection. Omit for API-only or integrated products that supply their own UI.
+    capabilities: [open-webui]
