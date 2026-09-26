@@ -42,6 +42,8 @@ source "${SCRIPT_DIR}/oci-pull.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/target-arch.sh"
 target_arch_resolve
+host_arch_resolve
+REWRITE_PY="${SCRIPT_DIR}/open-webui-dockerfile-rewrite.py"
 
 SOURCE_DIR=""
 OUT_FILE=""
@@ -69,7 +71,7 @@ done
 [[ -n "${SOURCE_DIR}" && -d "${SOURCE_DIR}/.git" ]] || { echo "export-open-webui-image-archive: --source-dir must be a Git checkout" >&2; exit 2; }
 [[ -n "${OUT_FILE}" ]] || { echo "export-open-webui-image-archive: --out-file is required" >&2; exit 2; }
 [[ -n "${NODE_IMAGE}" && -n "${PYTHON_IMAGE}" && -n "${UV_IMAGE}" ]] || { echo "export-open-webui-image-archive: --node-image, --python-image, and --uv-image are required" >&2; exit 2; }
-for tool in git buildah skopeo python3 tar; do
+for tool in git buildah skopeo podman python3 tar; do
   command -v "${tool}" >/dev/null 2>&1 || { echo "export-open-webui-image-archive: ${tool} is required" >&2; exit 1; }
 done
 
@@ -81,7 +83,14 @@ actual_commit="$(git -C "${SOURCE_DIR}" rev-parse HEAD)"
 git -C "${SOURCE_DIR}" diff --quiet || { echo "export-open-webui-image-archive: source checkout must be clean before appliance patches" >&2; exit 2; }
 
 workdir="$(mktemp -d)"
-trap 'rm -rf "${workdir}"' EXIT
+frontend_extract=""
+cleanup() {
+  if [[ -n "${frontend_extract}" ]]; then
+    podman rm -f "${frontend_extract}" >/dev/null 2>&1 || true
+  fi
+  rm -rf "${workdir}"
+}
+trap cleanup EXIT
 build_source="${workdir}/source"
 git clone --no-hardlinks --no-local "${SOURCE_DIR}" "${build_source}" >/dev/null
 git -C "${build_source}" checkout --detach "${UPSTREAM_COMMIT}" >/dev/null
@@ -91,17 +100,22 @@ for patch in "${PATCH_DIR}"/*.patch; do
   git -C "${build_source}" apply "${patch}"
 done
 
-# Frontend build stage follows BUILDPLATFORM (host); final python stage follows
-# TARGET_ARCH. Prefer HOST_ARCH for the node prefetch when set by the caller.
-node_arch="${HOST_ARCH:-${TARGET_ARCH}}"
-case "${node_arch}" in amd64|arm64) ;; *) node_arch="${TARGET_ARCH}" ;; esac
+# Multi-arch packaging (same path for same-arch and cross-arch):
+#   1) Build Node frontend on HOST_ARCH (BUILDPLATFORM) into a throwaway image.
+#   2) Extract /app artifacts to a directory --build-context (plain files).
+#   3) Build Python runtime on TARGET_ARCH, COPY --from=frontend <paths>.
+# Never COPY --from=<frontend image ref>: Buildah only resolves that when the
+# image platform matches --arch, so cross-arch freezes would fail while
+# same-arch accidentally succeeds.
+#
+# Frontend base follows HOST_ARCH; python/uv follow TARGET_ARCH. Offline
+# freezes therefore need both deps/open-webui seeds when HOST_ARCH != TARGET_ARCH.
+node_arch="${HOST_ARCH}"
 node_local="localhost/open-webui-node:${node_arch}"
 python_local="localhost/open-webui-python:${TARGET_ARCH}"
 uv_local="localhost/open-webui-uv:${TARGET_ARCH}"
 frontend_local="localhost/open-webui-frontend:build"
-# Frontend base follows BUILDPLATFORM (host); python/uv follow TARGET_ARCH.
-# Cross-arch offline freezes therefore need both HOST_ARCH and TARGET_ARCH
-# seeds from deps/open-webui (node-${HOST_ARCH}, python/uv-${TARGET_ARCH}).
+echo "export-open-webui-image-archive: HOST_ARCH=${HOST_ARCH} TARGET_ARCH=${TARGET_ARCH}" >&2
 if ! oci_skopeo_prefetch_docker "${NODE_IMAGE}" "${node_local}" "${node_arch}"; then
   echo "export-open-webui-image-archive: missing node base ${NODE_IMAGE}" >&2
   echo "export-open-webui-image-archive: seed with TARGET_ARCH=${node_arch} make -C deps/open-webui release" >&2
@@ -118,70 +132,23 @@ if ! oci_skopeo_prefetch_docker "${UV_IMAGE}" "${uv_local}" "${TARGET_ARCH}"; th
   exit 1
 fi
 
-# Upstream Dockerfile hard-codes registry names. Rewrite to the prefetched
-# local refs so --pull-never works offline.
-#
-# Cross-arch note: `buildah bud --arch <target>` cannot see a differently
-# arch'd FROM image even with --platform=$BUILDPLATFORM ("image not known").
-# Build the node/frontend stage on the host arch first (frontend-only
-# Dockerfile so the foreign-arch python base is not resolved), then build the
-# final image with COPY --from=<frontend image> (file copy works across arches).
 dockerfile="${build_source}/Dockerfile"
 frontend_dockerfile="${build_source}/Dockerfile.frontend"
 [[ -f "${dockerfile}" ]] || { echo "export-open-webui-image-archive: missing Dockerfile in source" >&2; exit 1; }
+[[ -f "${REWRITE_PY}" ]] || { echo "export-open-webui-image-archive: missing ${REWRITE_PY}" >&2; exit 1; }
 
-python3 - "${dockerfile}" "${frontend_dockerfile}" "${node_local}" "${python_local}" "${uv_local}" "${frontend_local}" <<'PY'
-import pathlib, re, sys
-
-dockerfile = pathlib.Path(sys.argv[1])
-frontend_df = pathlib.Path(sys.argv[2])
-node_ref = sys.argv[3]
-python_ref = sys.argv[4]
-uv_ref = sys.argv[5]
-frontend_ref = sys.argv[6]
-text = dockerfile.read_text(encoding="utf-8")
-old_node = "FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build"
-old_python = "FROM python:3.11-slim-bookworm AS base"
-old_uv = "RUN --mount=from=ghcr.io/astral-sh/uv:0.12.10,source=/uv,target=/bin/uv"
-if old_node not in text:
-    raise SystemExit(f"open-webui Dockerfile missing expected node FROM line: {old_node!r}")
-if old_python not in text:
-    raise SystemExit(f"open-webui Dockerfile missing expected python FROM line: {old_python!r}")
-if old_uv not in text:
-    raise SystemExit(f"open-webui Dockerfile missing expected uv mount: {old_uv!r}")
-
-# Frontend-only file for host-arch stage build (no foreign-arch FROM lines).
-frontend_text = text.replace(old_node, f"FROM {node_ref} AS build", 1)
-# Truncate at the backend stage so buildah --target build never resolves python/uv.
-parts = re.split(r"(?m)^(FROM python:3\.11-slim-bookworm AS base\s*)$", frontend_text, maxsplit=1)
-if len(parts) < 2:
-    raise SystemExit("open-webui Dockerfile: could not locate backend FROM for frontend-only split")
-frontend_df.write_text(parts[0], encoding="utf-8")
-
-# Final runtime Dockerfile: local python/uv + COPY --from=prebuilt frontend image.
-final = text.replace(old_node, f"FROM {node_ref} AS build", 1)
-final = final.replace(old_python, f"FROM {python_ref} AS base", 1)
-final = final.replace(old_uv, f"RUN --mount=from={uv_ref},source=/uv,target=/bin/uv", 1)
-final, n = re.subn(
-    r"(?ms)^FROM .+ AS build\n.*?^(?=FROM )",
-    "",
-    final,
-    count=1,
-)
-if n != 1:
-    raise SystemExit("open-webui Dockerfile: could not remove frontend build stage for final image")
-final = final.replace("COPY --chown=$UID:$GID --from=build ", f"COPY --chown=$UID:$GID --from={frontend_ref} ")
-final = final.replace("COPY --from=build ", f"COPY --from={frontend_ref} ")
-if " --from=build " in final:
-    raise SystemExit("open-webui Dockerfile: leftover COPY --from=build after rewrite")
-dockerfile.write_text(final, encoding="utf-8")
-PY
+python3 "${REWRITE_PY}" \
+  "${dockerfile}" \
+  "${frontend_dockerfile}" \
+  "${node_local}" \
+  "${python_local}" \
+  "${uv_local}"
 
 IMAGE_TAG="${IMAGE_TAG:-${UPSTREAM_REF#v}-appliance}"
 IMAGE_TAG="$(printf '%s' "${IMAGE_TAG}" | sed 's/[^A-Za-z0-9_.-]/-/g')"
 local_ref="localhost/open-webui:${IMAGE_TAG}"
 
-echo "export-open-webui-image-archive: building frontend stage on ${node_arch}" >&2
+echo "export-open-webui-image-archive: building frontend stage on HOST_ARCH=${node_arch}" >&2
 buildah bud --arch "${node_arch}" --target build --pull-never --ulimit nofile=65535:65535 \
   --build-arg USE_SLIM=true \
   --build-arg UID=10011 \
@@ -189,8 +156,27 @@ buildah bud --arch "${node_arch}" --target build --pull-never --ulimit nofile=65
   -f "${frontend_dockerfile}" \
   --tag "${frontend_local}" "${build_source}"
 
-echo "export-open-webui-image-archive: building runtime image for ${TARGET_ARCH}" >&2
+# Always materialize frontend outputs as a directory context — including when
+# HOST_ARCH == TARGET_ARCH — so both arches share one packaging path.
+frontend_ctx="${workdir}/frontend-context"
+frontend_extract="zon-open-webui-frontend-extract-$$"
+mkdir -p "${frontend_ctx}"
+echo "export-open-webui-image-archive: extracting frontend /app into build-context for TARGET_ARCH=${TARGET_ARCH}" >&2
+podman create --arch "${node_arch}" --name "${frontend_extract}" "${frontend_local}" >/dev/null
+# Copy the whole /app tree so COPY --from=frontend paths stay in sync with
+# whatever the rewritten Dockerfile requests (build, backend, package.json, …).
+podman cp "${frontend_extract}:/app/." "${frontend_ctx}/"
+podman rm -f "${frontend_extract}" >/dev/null
+frontend_extract=""
+[[ -d "${frontend_ctx}/build" && -d "${frontend_ctx}/backend" && -f "${frontend_ctx}/package.json" ]] || {
+  echo "export-open-webui-image-archive: frontend extract incomplete under ${frontend_ctx}" >&2
+  exit 1
+}
+buildah rmi "${frontend_local}" >/dev/null 2>&1 || true
+
+echo "export-open-webui-image-archive: building runtime image for TARGET_ARCH=${TARGET_ARCH}" >&2
 buildah bud --arch "${TARGET_ARCH}" --pull-never --ulimit nofile=65535:65535 \
+  --build-context "frontend=${frontend_ctx}" \
   --build-arg USE_SLIM=true \
   --build-arg UID=10011 \
   --build-arg GID=10011 \

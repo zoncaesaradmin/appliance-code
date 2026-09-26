@@ -31,7 +31,11 @@ assets, API calls, and socket.io under the session bridge (Open WebUI has no
 supported subpath mode upstream). The eighth patch stops model-image error
 handlers from falling back to host-root `/favicon.png` (which 404s outside
 `/webui` and causes a continuous request/flicker loop) and points placeholders
-at `/webui/static/favicon.png`. The appliance build must use `USE_SLIM=true`;
+at `/webui/static/favicon.png`. Cross-arch packaging (`HOST_ARCH` ≠ `TARGET_ARCH`) and same-arch packaging
+share one path: build the Node frontend on `HOST_ARCH`, extract `/app` into a
+directory `--build-context`, then build the Python runtime for `TARGET_ARCH`.
+Buildah must not `COPY --from=` a frontend image ref (that only resolves when
+platforms match). The appliance build must use `USE_SLIM=true`;
 that is the upstream mode which omits local embedding, speech, and
 document-processing model downloads. The gate rejects a non-slim image.
 

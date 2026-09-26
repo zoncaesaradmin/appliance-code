@@ -62,6 +62,9 @@ HOST_ARCH := $(shell go env GOARCH)
 ifeq ($(filter $(HOST_ARCH),amd64 arm64),)
 $(error HOST_ARCH must be amd64|arm64 (got "$(HOST_ARCH)" from go env GOARCH))
 endif
+# Export so package recipes and DEV_FORWARD_ENV (-e HOST_ARCH) see Make's value,
+# not only an ambient shell export from build-full-bundle.
+export HOST_ARCH
 ifeq ($(strip $(TARGET_ARCH)),)
 TOOLING_ARCH := $(HOST_ARCH)
 else ifeq ($(filter $(TARGET_ARCH),amd64 arm64),)
@@ -230,6 +233,13 @@ verify:
 		exit 1; \
 	fi; \
 	echo "verify stage: dev-run storage mounts passed"; \
+	echo "verify stage: open-webui multi-arch packaging contract"; \
+	if ! bash ./scripts/test-export-open-webui-multiarch.sh >"$(VERIFY_LOG_DIR)/verify-open-webui-multiarch.log" 2>&1; then \
+		echo "verify: open-webui multi-arch packaging contract failed"; \
+		echo "verify: inspect $(VERIFY_LOG_DIR)/verify-open-webui-multiarch.log"; \
+		exit 1; \
+	fi; \
+	echo "verify stage: open-webui multi-arch packaging contract passed"; \
 	echo "verify stage: backend curl checks"; \
 	if ! $(MAKE) --no-print-directory test-curl >"$(VERIFY_CURL_LOG)" 2>&1; then \
 		echo "verify: backend curl checks failed"; \
@@ -393,10 +403,13 @@ package-inference-manager-image-archive:
 
 ## package-open-webui-image-archive: build the locked, patched Open WebUI
 ## source and export the optional appliance OCI archive. SOURCE_DIR is required.
+## HOST_ARCH (BUILDPLATFORM frontend) and TARGET_ARCH/PRODUCT_ARCH (runtime)
+## are both required; the exporter uses one path for same-arch and cross-arch.
 package-open-webui-image-archive:
 	@out_file="$${OUT_FILE:-$(CURDIR)/.run/open-webui-image.tar}"; \
 	reference_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
 	if [ -z "$${OPEN_WEBUI_SOURCE_DIR:-}" ]; then echo "package-open-webui-image-archive: OPEN_WEBUI_SOURCE_DIR is required" >&2; exit 2; fi; \
+	HOST_ARCH="$(HOST_ARCH)" TARGET_ARCH="$(PRODUCT_ARCH)" \
 	bash ./scripts/package/export-open-webui-image-archive.sh \
 		--source-dir "$${OPEN_WEBUI_SOURCE_DIR}" \
 		--out-file "$$out_file" \
