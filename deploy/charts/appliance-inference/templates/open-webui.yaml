@@ -106,6 +106,13 @@ spec:
               value: "true"
             - name: DEFAULT_USER_ROLE
               value: user
+            # Appliance users are always role=user (gateway injects X-Appliance-Role).
+            # Open WebUI otherwise hides OpenAI provider models from non-admins unless
+            # each model has a workspace DB ACL entry. Model access is already gated by
+            # appliance inference.use + AI Services load; only the served model appears
+            # on OPENAI_API_BASE_URL /v1/models.
+            - name: BYPASS_MODEL_ACCESS_CONTROL
+              value: "true"
             - name: ENABLE_PASSWORD_AUTH
               value: "false"
             - name: ENABLE_SIGNUP
@@ -256,12 +263,16 @@ spec:
               {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
       ports: [{protocol: TCP, port: 8080}]
   egress:
-    # OpenAI provider calls go to inference-gateway Service DNS.
+    # OpenAI provider calls go to inference-gateway Service DNS (ClusterIP
+    # service.port) and land on the manager container (targetPort). CNI
+    # NetworkPolicy often evaluates the post-DNAT pod port.
     - to:
         - podSelector:
             matchLabels:
               {{- include "appliance-inference.selectorLabels" . | nindent 14 }}
-      ports: [{protocol: TCP, port: {{ .Values.service.port }}}]
+      ports:
+        - {protocol: TCP, port: {{ .Values.service.port }}}
+        - {protocol: TCP, port: {{ .Values.service.targetPort }}}
     {{- if .Values.networkPolicy.allowDNSToKubeSystem }}
     - to:
         - namespaceSelector:

@@ -44,7 +44,10 @@ read-only root, dropped capabilities, separate writable data/cache volumes,
 and `STATIC_DIR=/app/backend/data/static`. The test denies local signup,
 requires the trusted header for sign-in, verifies the first user remains
 ordinary, denies that user native admin access, and rejects edits to
-appliance-owned profile fields.
+appliance-owned profile fields. The chart sets `BYPASS_MODEL_ACCESS_CONTROL=true`
+so trusted-header `role=user` accounts still see the served OpenAI model from
+`OPENAI_API_BASE_URL` (native Open WebUI ACLs would otherwise hide provider
+models without a workspace DB entry).
 
 The patch **does not** make the release ready. Before building the image,
 finish the identity/UI review (including any synthetic address still shown to

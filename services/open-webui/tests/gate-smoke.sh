@@ -51,6 +51,7 @@ if ! podman run -d --name "${container}" --network=none --read-only \
   -e WEBUI_AUTH_TRUSTED_NAME_HEADER=X-Appliance-Name \
   -e WEBUI_AUTH_TRUSTED_ROLE_HEADER=X-Appliance-Role \
   -e DEFAULT_USER_ROLE=user \
+  -e BYPASS_MODEL_ACCESS_CONTROL=true \
   -e ENABLE_PASSWORD_AUTH=false \
   -e ENABLE_SIGNUP=false \
   -e ENABLE_LOGIN_FORM=false \

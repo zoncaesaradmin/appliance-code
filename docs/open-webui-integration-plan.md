@@ -84,7 +84,10 @@ No `host.docker.internal`, host port 8000, Docker daemon, second Ollama, GPU
 request, NodePort, or direct pod exposure. Configure `ENABLE_OLLAMA_API=false`,
 `ENABLE_OPENAI_API=true`, and `OPENAI_API_BASE_URL` to the in-cluster gateway.
 Use `GET /v1/models` only for the currently served model; downloaded inventory
-and model lifecycle stay in the existing AI Services API. Confirm that the
+and model lifecycle stay in the existing AI Services API. Set
+`BYPASS_MODEL_ACCESS_CONTROL=true` because appliance accounts are always
+trusted-header `role=user` and native Open WebUI ACLs would otherwise hide
+provider models that have no workspace DB entry. Confirm that the
 chosen Open WebUI release handles gateway `503`/no active engine, streaming,
 model switches, and both engines without stale model selection.
 

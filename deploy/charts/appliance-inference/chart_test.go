@@ -206,6 +206,7 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 		"ENABLE_INITIAL_ADMIN_SIGNUP",
 		"ENABLE_PERSISTENT_CONFIG",
 		"ENABLE_OLLAMA_API",
+		"BYPASS_MODEL_ACCESS_CONTROL",
 		"OPENAI_API_BASE_URL",
 		"http://inference-gateway.inference.svc.cluster.local:8080/v1",
 		"CONTROL_PLANE_URL",
@@ -233,6 +234,12 @@ func TestOpenWebUIWorkloadsAreExplicitlyOptIn(t *testing.T) {
 	}
 	if !strings.Contains(npSlice, "kubernetes.io/metadata.name: kube-system") || !strings.Contains(npSlice, "port: 53") {
 		t.Fatal("open-webui NetworkPolicy must allow DNS to kube-system so OPENAI_API_BASE_URL resolves")
+	}
+	if !strings.Contains(npSlice, "port: 8080") || !strings.Contains(npSlice, "port: 11434") {
+		t.Fatal("open-webui NetworkPolicy must allow egress to inference-gateway on service.port and targetPort")
+	}
+	if !strings.Contains(out, "BYPASS_MODEL_ACCESS_CONTROL\n              value: \"true\"") {
+		t.Fatal("Open WebUI must bypass native model ACLs so role=user can see the served OpenAI model")
 	}
 	if strings.Contains(out, "kind: Ingress") {
 		t.Fatal("the session bridge must own the future public route; chart must not expose Open WebUI directly")
