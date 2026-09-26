@@ -51,13 +51,16 @@ esac
 
 # Do not use --rm: if the process exits we need logs. Trap removes the container.
 # Runtime identity must match the image build UID/GID (10011) and chart securityContext.
-# tmpfs uid/gid is explicit and arch-agnostic (avoids nested volume :U ownership bugs).
+# Writable paths are tmpfs with mode=1777 (world-writable + sticky). Do not use
+# uid=/gid= mount options: several Podman/buildah versions reject them
+# ("unknown mount option uid=…"). Named volumes with :U are also avoided —
+# nested/rootless packaging often leaves those root-owned.
 if ! podman run -d --name "${container}" --network=none --read-only \
   --arch "${image_arch}" \
   --user 10011:10011 --cap-drop=ALL --security-opt no-new-privileges \
-  --tmpfs /tmp:rw,uid=10011,gid=10011,mode=1777 \
-  --tmpfs /app/backend/data:rw,uid=10011,gid=10011,mode=1777 \
-  --tmpfs /app/.cache:rw,uid=10011,gid=10011,mode=1777 \
+  --tmpfs /tmp:rw,mode=1777 \
+  --tmpfs /app/backend/data:rw,mode=1777 \
+  --tmpfs /app/.cache:rw,mode=1777 \
   -e HOME=/app \
   -e DATA_DIR=/app/backend/data \
   -e STATIC_DIR=/app/backend/data/static \
