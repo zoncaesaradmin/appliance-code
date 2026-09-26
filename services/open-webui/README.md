@@ -44,7 +44,9 @@ Pyodide assets and Hugging Face models while constructing the image. The
 appliance compatibility image must be built with `USE_SLIM=true` and this
 patch set; no prior image ID is a release candidate. `tests/gate-smoke.sh`
 requires the slim image and checks egress-denied startup under UID/GID 10011,
-read-only root, dropped capabilities, separate writable data/cache volumes,
+read-only root, dropped capabilities, tmpfs writable mounts for
+`/app/backend/data`, `/app/.cache`, and `/tmp` (chart-aligned; avoids nested
+volume `:U` ownership failures on both same-arch and cross-arch packaging),
 and `STATIC_DIR=/app/backend/data/static`. The test denies local signup,
 requires the trusted header for sign-in, verifies the first user remains
 ordinary, denies that user native admin access, and rejects edits to

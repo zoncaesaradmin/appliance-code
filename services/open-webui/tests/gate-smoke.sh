@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Run inside the appliance dev-build image, with the compatibility image in its
 # local Podman store. This checks startup/auth under an egress-denied filesystem.
+#
+# Writable paths match the chart (data + cache + tmp) and are always tmpfs owned
+# by UID/GID 10011. Named volumes with :U are not used: nested/rootless and
+# cross-arch (qemu) packaging often leaves those mounts root-owned, which makes
+# SQLite fail with "unable to open database file" for both arches.
 set -euo pipefail
 
 image="${1:?usage: gate-smoke.sh IMAGE_REF}"
 suffix="${RANDOM}-$$"
 container="zon-open-webui-gate-${suffix}"
-data_volume="zon-open-webui-gate-data-${suffix}"
-cache_volume="zon-open-webui-gate-cache-${suffix}"
 
 cleanup() {
   podman rm -f "${container}" >/dev/null 2>&1 || true
-  podman volume rm "${data_volume}" "${cache_volume}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -20,7 +22,7 @@ dump_gate_failure() {
   echo "Open WebUI gate failure: ${reason}" >&2
   if podman container exists "${container}" 2>/dev/null; then
     echo "--- container inspect ---" >&2
-    podman inspect "${container}" --format 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} oom={{.State.OOMKilled}}' >&2 || true
+    podman inspect "${container}" --format 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} oom={{.State.OOMKilled}} arch={{.ImageArch}}' >&2 || true
     echo "--- container logs (tail 120) ---" >&2
     podman logs --tail 120 "${container}" >&2 || true
   else
@@ -28,8 +30,6 @@ dump_gate_failure() {
   fi
 }
 
-podman volume create "${data_volume}" >/dev/null
-podman volume create "${cache_volume}" >/dev/null
 if podman image inspect "${image}" --format '{{range .Config.Env}}{{println .}}{{end}}' | \
   grep -q '^USE_SLIM_DOCKER=true$'; then
   :
@@ -38,14 +38,30 @@ else
   exit 1
 fi
 
+# Run as the image's platform so same-arch and cross-arch freezes share one gate.
+image_arch="$(podman image inspect "${image}" --format '{{.Architecture}}' 2>/dev/null || true)"
+case "${image_arch}" in
+  amd64|x86_64) image_arch=amd64 ;;
+  arm64|aarch64) image_arch=arm64 ;;
+  *)
+    echo "Open WebUI gate: unsupported image architecture ${image_arch:-unknown}" >&2
+    exit 1
+    ;;
+esac
+
 # Do not use --rm: if the process exits we need logs. Trap removes the container.
 # Runtime identity must match the image build UID/GID (10011) and chart securityContext.
+# tmpfs uid/gid is explicit and arch-agnostic (avoids nested volume :U ownership bugs).
 if ! podman run -d --name "${container}" --network=none --read-only \
+  --arch "${image_arch}" \
   --user 10011:10011 --cap-drop=ALL --security-opt no-new-privileges \
-  --tmpfs /tmp:rw,mode=1777 \
-  -v "${data_volume}:/app/backend/data:U" \
-  -v "${cache_volume}:/root/.cache:U" \
+  --tmpfs /tmp:rw,uid=10011,gid=10011,mode=1777 \
+  --tmpfs /app/backend/data:rw,uid=10011,gid=10011,mode=1777 \
+  --tmpfs /app/.cache:rw,uid=10011,gid=10011,mode=1777 \
+  -e HOME=/app \
+  -e DATA_DIR=/app/backend/data \
   -e STATIC_DIR=/app/backend/data/static \
+  -e DATABASE_URL=sqlite:////app/backend/data/webui.db \
   -e WEBUI_SECRET_KEY=test-only-not-release-secret \
   -e WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-Appliance-User \
   -e WEBUI_AUTH_TRUSTED_NAME_HEADER=X-Appliance-Name \
@@ -145,8 +161,8 @@ profile_status="$(podman exec "${container}" curl -sS -o /dev/null -w '%{http_co
   http://127.0.0.1:8080/api/v1/auths/update/profile)"
 [[ "${profile_status}" == 403 ]] || { echo "native profile mutation: ${profile_status}" >&2; exit 1; }
 
-if podman logs "${container}" 2>&1 | grep -E 'Read-only file system|Permission denied' >/dev/null; then
-  dump_gate_failure "read-only or permission error during startup"
+if podman logs "${container}" 2>&1 | grep -E 'Read-only file system|Permission denied|unable to open database file' >/dev/null; then
+  dump_gate_failure "read-only, permission, or sqlite error during startup"
   exit 1
 fi
 
