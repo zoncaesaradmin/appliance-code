@@ -56,6 +56,9 @@ describe("navigation model", () => {
     expect(manage?.features.some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
     expect(visibleFeatures(manage!, []).some((feature) => feature.path === "/manage/coding-chat")).toBe(false);
     expect(visibleFeatures(manage!, ["inference"]).some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
+    // open-webui is not required to see the nav entry; the Coding Chat page
+    // explains when the Web UI is not enabled in the profile.
+    expect(visibleFeatures(manage!, ["inference", "open-webui"]).some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
   });
 
   it("lists LAN Services under Admin and not under Manage", () => {

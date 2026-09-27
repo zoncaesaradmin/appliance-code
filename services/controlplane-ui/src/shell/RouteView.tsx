@@ -53,7 +53,7 @@ export function RouteView(props: {
     return <ArtifactsPage pathname={props.pathname} />;
   }
   if (props.pathname.startsWith("/manage/coding-chat")) {
-    return <CodingChatPage />;
+    return <CodingChatPage capabilities={props.capabilities} />;
   }
   if (props.pathname.startsWith("/analyze/workflows")) {
     return <AnalyzePage />;

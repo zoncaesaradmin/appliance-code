@@ -6,9 +6,10 @@ import { navigate } from "../lib/navigate";
 // Coding Chat is deliberately a small appliance-owned launch surface. The
 // chat application itself remains behind the session bridge; this page never
 // renders, stores, or exposes its one-time grant.
-export function CodingChatPage(): React.JSX.Element {
+export function CodingChatPage(props: { capabilities: string[] }): React.JSX.Element {
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState("");
+  const webUIEnabled = props.capabilities.includes("open-webui");
 
   async function openCodingChat() {
     setOpening(true);
@@ -32,19 +33,32 @@ export function CodingChatPage(): React.JSX.Element {
     >
       <div className="stack">
         {error ? <div className="message message--error" role="alert">{error}</div> : null}
-        <Card
-          title="Start a coding chat"
-          subtitle="Your appliance session is used to open a private workspace. A ready model and inference access are required."
-        >
-          <div className="button-row">
-            <Button type="button" onClick={() => void openCodingChat()} disabled={opening}>
-              {opening ? "Opening Coding Chat…" : "Open Coding Chat"}
-            </Button>
-          </div>
-          <p className="muted">
-            If this is unavailable, ask an appliance administrator to install an LLM pack and load a model, or grant you inference access.
-          </p>
-        </Card>
+        {webUIEnabled ? (
+          <Card
+            title="Start a coding chat"
+            subtitle="Your appliance session is used to open a private workspace. A ready model and inference access are required."
+          >
+            <div className="button-row">
+              <Button type="button" onClick={() => void openCodingChat()} disabled={opening}>
+                {opening ? "Opening Coding Chat…" : "Open Coding Chat"}
+              </Button>
+            </div>
+            <p className="muted">
+              If this is unavailable, ask an appliance administrator to install the open-webui pack and load a
+              model, or grant you inference access.
+            </p>
+          </Card>
+        ) : (
+          <Card
+            title="Web UI is not enabled in this profile"
+            subtitle="Coding Chat needs the open-webui capability. This appliance profile provides inference without the optional chat Web UI."
+          >
+            <p className="muted" role="status">
+              Use an open-webui profile such as private-ai-webui, or ask an administrator to change the
+              appliance profile and install the open-webui pack, if chat is required.
+            </p>
+          </Card>
+        )}
       </div>
     </PageFrame>
   );
