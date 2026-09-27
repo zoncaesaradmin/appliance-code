@@ -21,5 +21,9 @@ profiles:
     capabilities: [base, lan-discovery, host, files, video, guest-access, focus-content, applications, plaintext-http]
   private-ai:
     displayName: private-ai
+    description: "Private ai appliance providing multi user inference."
+    capabilities: [base, lan-discovery, inference]
+  private-ai-webui:
+    displayName: private-ai-webui
     description: "Private ai appliance providing multi user inference and optional Open WebUI chat."
     capabilities: [base, lan-discovery, inference, open-webui]
