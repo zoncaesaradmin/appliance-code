@@ -31,7 +31,7 @@ func main() {
 		log.Printf("upstream error: %v", err)
 		http.Error(w, "workspace unavailable", http.StatusBadGateway)
 	}
-	h := gateway{control: control, proxy: proxy, client: &http.Client{Timeout: 10 * time.Second}}
+	h := gateway{control: control, upstream: upstream, proxy: proxy, client: &http.Client{Timeout: 10 * time.Second}}
 	server := &http.Server{Addr: listen, Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	log.Fatal(server.ListenAndServe())
 }
@@ -45,14 +45,15 @@ func requiredEnv(name string) string {
 }
 
 type gateway struct {
-	control string
-	proxy   *httputil.ReverseProxy
-	client  *http.Client
+	control  string
+	upstream *url.URL
+	proxy    *httputil.ReverseProxy
+	client   *http.Client
 }
 
 func (g gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/healthz" {
-		w.WriteHeader(http.StatusOK)
+		g.health(w, r)
 		return
 	}
 	if r.URL.Path == "/webui/launch" && r.Method == http.MethodPost {
@@ -80,6 +81,37 @@ func (g gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.proxy.ServeHTTP(w, r)
+}
+
+// health proves that the bridge can reach the locked-down WebUI process. This
+// is intentionally stronger than a process-only gateway probe: the control
+// plane uses it to avoid minting a one-time launch grant for a dead workspace.
+func (g gateway) health(w http.ResponseWriter, r *http.Request) {
+	if g.upstream == nil {
+		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	target := g.upstream.ResolveReference(&url.URL{Path: "/health"})
+	client := g.client
+	if client == nil {
+		client = &http.Client{Timeout: 2 * time.Second}
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target.String(), nil)
+	if err != nil {
+		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (g gateway) prepareUpstreamRequest(r *http.Request, identity bridgeResponse) {

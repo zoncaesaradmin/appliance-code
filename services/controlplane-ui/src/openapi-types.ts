@@ -1200,6 +1200,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inference/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List configured inference nodes
+         * @description Returns control-plane scheduled node identities. The ref is a Kubernetes node UID and is the only accepted target for model lifecycle requests.
+         */
+        get: operations["listInferenceNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inference/models/imports": {
         parameters: {
             query?: never;
@@ -1736,6 +1756,12 @@ export interface components {
         };
         InferenceServingInstance: {
             id: string;
+            /** @description Appliance-managed node selected for this serving instance. */
+            nodeRef?: string;
+            /** @description Runtime selected for this serving instance. */
+            runtimeRef?: string;
+            /** @description Appliance-managed in-cluster endpoint identity for this instance. */
+            endpointRef?: string;
             models: string[];
             replicas: number;
         };
@@ -1805,6 +1831,8 @@ export interface components {
             modelId: string;
             /** @description Revalidate this cached selection against current capacity and use its runtime launch settings. modelId and source must match the cached selection. */
             catalogId?: string;
+            /** @description Kubernetes node UID returned by listInferenceNodes. The server resolves this through Kubernetes; endpoints and node names are not accepted. */
+            nodeRef?: string;
             source: string;
             digest?: string;
             /** @description Validated vLLM server arguments, represented as an argv array without shell evaluation. */
@@ -1812,6 +1840,7 @@ export interface components {
         };
         InferenceModelImportProgress: {
             modelId?: string;
+            nodeRef?: string;
             source?: string;
             /** @enum {string} */
             state: "idle" | "downloading" | "verifying" | "installing" | "complete" | "failed";
@@ -1825,6 +1854,7 @@ export interface components {
         };
         InferenceModelLoadProgress: {
             modelId?: string;
+            nodeRef?: string;
             /** @enum {string} */
             state: "idle" | "loading" | "ready" | "failed";
             message?: string;
@@ -1835,6 +1865,13 @@ export interface components {
             oomKilled?: boolean;
             /** Format: date-time */
             updatedAt?: string;
+        };
+        InferenceNode: {
+            /** @description Kubernetes node UID used for scheduling. */
+            ref: string;
+            /** @description Informational Kubernetes node name; not accepted as a scheduling target. */
+            name: string;
+            ready: boolean;
         };
         Problem: {
             type: string;
@@ -3886,6 +3923,31 @@ export interface operations {
             502: components["responses"]["ValidationProblem"];
         };
     };
+    listInferenceNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered inference nodes with a deployed manager service. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["InferenceNode"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            502: components["responses"]["ValidationProblem"];
+        };
+    };
     importInferenceModel: {
         parameters: {
             query?: never;
@@ -3917,7 +3979,10 @@ export interface operations {
     };
     getInferenceImportProgress: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Kubernetes node UID returned by listInferenceNodes. */
+                nodeRef?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3949,6 +4014,8 @@ export interface operations {
             content: {
                 "application/json": {
                     modelId: string;
+                    /** @description Kubernetes node UID returned by listInferenceNodes. */
+                    nodeRef?: string;
                 };
             };
         };
@@ -3970,7 +4037,10 @@ export interface operations {
     };
     getInferenceLoadProgress: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Kubernetes node UID returned by listInferenceNodes. */
+                nodeRef?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -4002,6 +4072,8 @@ export interface operations {
             content: {
                 "application/json": {
                     modelId: string;
+                    /** @description Kubernetes node UID returned by listInferenceNodes. */
+                    nodeRef?: string;
                 };
             };
         };

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -218,10 +219,21 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	var inferenceSvc *inference.Service
 	var webuiSvc *webui.Service
 	if inferenceEnabled {
+		var scheduler inference.NodeScheduler
+		// The control plane is the sole scheduler in a cluster. Unit tests and
+		// the supported legacy single-node development mode do not have a pod
+		// service-account, so retain the local manager path there.
+		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+			scheduler, err = inference.NewInClusterScheduler("inference")
+			if err != nil {
+				db.Close()
+				return nil, fmt.Errorf("app: wiring Kubernetes inference scheduler: %w", err)
+			}
+		}
 		inferenceSvc, err = inference.New(inference.Config{
 			BaseURL: cfg.InferenceGatewayBaseURL, Package: cfg.InferenceRuntimePackage,
 			Engine: cfg.InferenceEngine, Architecture: cfg.InferenceArchitecture,
-		}, nil)
+		}, nil, scheduler)
 		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring inference management: %w", err)

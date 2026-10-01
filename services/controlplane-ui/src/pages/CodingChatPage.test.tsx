@@ -62,14 +62,14 @@ it("explains when open-webui is not enabled in the profile", () => {
     root.render(<CodingChatPage capabilities={["inference"]} />);
   });
   expect(container.textContent).toContain("Web UI is not enabled in this profile");
-  expect(container.textContent).not.toContain("Open Coding Chat");
+  expect(container.textContent).not.toContain("Open AI Chat");
   expect(api.launchAIWorkspace).not.toHaveBeenCalled();
 });
 
-it("offers Open Coding Chat when open-webui is enabled", () => {
+it("offers Open AI Chat when open-webui is enabled", () => {
   act(() => {
     root.render(<CodingChatPage capabilities={["inference", "open-webui"]} />);
   });
-  expect(container.textContent).toContain("Open Coding Chat");
+  expect(container.textContent).toContain("Open AI Chat");
   expect(container.textContent).not.toContain("Web UI is not enabled in this profile");
 });

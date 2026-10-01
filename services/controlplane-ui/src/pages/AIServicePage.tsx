@@ -9,6 +9,7 @@ import type {
   InferenceLoadProgress,
   InferenceModel,
   InferenceModelCapabilities,
+  InferenceNode,
   InferenceRuntimeStatus
 } from "../types";
 
@@ -30,7 +31,7 @@ function capabilitiesFor(model?: InferenceModel, entry?: InferenceCatalogEntry):
 
 function experienceLabel(capabilities: InferenceModelCapabilities): string {
   if (capabilities.verification === "unverified") return "Capability unverified";
-  return capabilities.codexCompatible ? "Coding agent" : "Chat assistant";
+  return capabilities.codexCompatible ? "Tool capable" : "Chat capable";
 }
 
 /** Soften catalog LastError for expected partial/upstream refresh noise. */
@@ -365,6 +366,8 @@ export function AIServicePage(): React.JSX.Element {
   const [status, setStatus] = useState<InferenceRuntimeStatus | null>(null);
   const [models, setModels] = useState<InferenceModel[]>([]);
   const [catalog, setCatalog] = useState<InferenceCatalog | null>(null);
+	const [nodes, setNodes] = useState<InferenceNode[]>([]);
+	const [selectedNodeRef, setSelectedNodeRef] = useState("");
   const [catalogError, setCatalogError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [busy, setBusy] = useState("");
@@ -402,6 +405,13 @@ export function AIServicePage(): React.JSX.Element {
     }).catch(() => {
       setCatalogError("Model discovery is unavailable. Downloaded models remain accessible.");
     });
+	void client.listInferenceNodes().then((available) => {
+		setNodes(available);
+		setSelectedNodeRef((current) => current || available.find((node) => node.ready)?.ref || available[0]?.ref || "");
+	}).catch(() => {
+		// A legacy single-node release has no scheduler node list.
+		setNodes([]);
+	});
     void client.getIdentity().then((identity) => {
       setClientOrigin(inferenceClientOrigin(identity.canonicalOrigin, window.location.origin));
     }).catch(() => {
@@ -475,8 +485,8 @@ export function AIServicePage(): React.JSX.Element {
     void (async () => {
       try {
         const [download, load] = await Promise.all([
-          client.getInferenceImportProgress(),
-          client.getInferenceLoadProgress()
+			client.getInferenceImportProgress(selectedNodeRef || undefined),
+			client.getInferenceLoadProgress(selectedNodeRef || undefined)
         ]);
         if (cancelled) {
           return;
@@ -499,7 +509,7 @@ export function AIServicePage(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedNodeRef]);
 
   useEffect(() => {
     if (!importInFlight(importProgress?.state)) {
@@ -508,7 +518,7 @@ export function AIServicePage(): React.JSX.Element {
     const timer = window.setInterval(() => {
       void (async () => {
         try {
-          const progress = await client.getInferenceImportProgress();
+				const progress = await client.getInferenceImportProgress(importProgress?.nodeRef || selectedNodeRef || undefined);
           setImportProgress(progress);
           if (progress.state === "complete") {
             setBusy("");
@@ -532,7 +542,7 @@ export function AIServicePage(): React.JSX.Element {
       })();
     }, IMPORT_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [importProgress?.state]);
+	}, [importProgress?.nodeRef, importProgress?.state, selectedNodeRef]);
 
   useEffect(() => {
     if (!loadInFlight(loadProgress?.state)) {
@@ -541,7 +551,7 @@ export function AIServicePage(): React.JSX.Element {
     const timer = window.setInterval(() => {
       void (async () => {
         try {
-          const progress = await client.getInferenceLoadProgress();
+				const progress = await client.getInferenceLoadProgress(loadProgress?.nodeRef || selectedNodeRef || undefined);
           setLoadProgress(progress);
           if (progress.state === "ready") {
             setBusy("");
@@ -566,7 +576,7 @@ export function AIServicePage(): React.JSX.Element {
       })();
     }, IMPORT_POLL_MS);
     return () => window.clearInterval(timer);
-  }, [loadProgress?.state]);
+  }, [loadProgress?.nodeRef, loadProgress?.state, selectedNodeRef]);
 
   async function run(label: string, operation: () => Promise<void>, success: string) {
     setBusy(label);
@@ -591,7 +601,8 @@ export function AIServicePage(): React.JSX.Element {
       const accepted = await client.importInferenceModel({
         catalogId: entry.id,
         modelId: entry.id,
-        source: entry.source
+		source: entry.source,
+		...(selectedNodeRef ? { nodeRef: selectedNodeRef } : {})
       });
       setImportProgress(accepted);
       if (accepted.state === "complete") {
@@ -614,7 +625,7 @@ export function AIServicePage(): React.JSX.Element {
     setError("");
     setMessage("");
     try {
-      const accepted = await client.loadInferenceModel(modelId);
+		const accepted = await client.loadInferenceModel(modelId, selectedNodeRef || undefined);
       setLoadProgress(accepted);
       if (accepted.state === "ready") {
         setBusy("");
@@ -697,7 +708,7 @@ export function AIServicePage(): React.JSX.Element {
     : loadBusy
       ? "Enabling…"
       : enabledModelIDs.size > 0
-        ? "Enable and replace"
+        ? "Enable on this node"
         : "Enable";
   const readyContextWindow = useMemo(() => {
     if (!readyModelId) {
@@ -748,7 +759,7 @@ export function AIServicePage(): React.JSX.Element {
     <PageFrame
       title="AI Services"
       eyebrow="Admin"
-      description="Download models to this appliance, then enable one model for inference."
+		description="Download models to an inference node, then enable one model on that node."
       pathname="/admin/ai-services"
       onNavigate={navigate}
       tabs={[]}
@@ -768,8 +779,16 @@ export function AIServicePage(): React.JSX.Element {
           <Card
             className="ai-services-layout__models"
             title="Model library"
-            subtitle="Downloaded models are stored locally. Enabling a model replaces the current enabled model."
+			subtitle="Downloaded models stay on the selected inference node. Each node serves one model at a time."
           >
+			{nodes.length > 0 ? (
+				<label className="flex flex-col gap-1">
+					Inference node
+					<select className="rounded-lg border border-slate-300 px-3 py-2" value={selectedNodeRef} onChange={(event) => setSelectedNodeRef(event.target.value)} disabled={busy !== ""} aria-label="Select inference node">
+						{nodes.map((node) => <option key={node.ref} value={node.ref}>{`${node.name}${node.ready ? "" : " (not ready)"}`}</option>)}
+					</select>
+				</label>
+			) : null}
             {catalogStatus.text ? (
               <p
                 className={catalogStatus.tone === "error" ? "message message--error" : "message"}
@@ -794,7 +813,7 @@ export function AIServicePage(): React.JSX.Element {
                   <div className="model-inventory__heading">
                     <div>
                       <h3 id="downloaded-models-title">Downloaded models</h3>
-                      <p>Stored locally. You can enable one model at a time.</p>
+                      <p>Stored locally. One model can be enabled on this inference node.</p>
                     </div>
                     <span className="pill">{models.length}</span>
                   </div>
@@ -851,8 +870,8 @@ export function AIServicePage(): React.JSX.Element {
 								{selectedCapabilities.verification === "unverified"
 									? "Capability unverified: registry metadata was unavailable. Download the model to check its tool support with the local runtime."
 									: selectedCapabilities.codexCompatible
-										? "Coding agent: workspace tools and Codex-compatible client settings are available after this model is enabled."
-										: "Chat assistant: this model can answer questions but is not configured for workspace tools or Codex."}
+									? "Tool-capable: workspace tools and compatible client settings are available after this model is enabled."
+									: "Chat-capable: this model can answer questions but is not configured for workspace tools or Codex."}
 							</p>
                     {showProgress && importProgress ? (
                       <div className="import-progress" role="status" aria-live="polite">
@@ -904,7 +923,7 @@ export function AIServicePage(): React.JSX.Element {
                             variant="ghost"
                             disabled={busy !== ""}
                             onClick={() =>
-                              void run(`remove:${selected.id}`, () => client.deleteInferenceModel(selected.id), `${selected.id} was removed.`)
+							void run(`remove:${selected.id}`, () => client.deleteInferenceModel(selected.id, selectedNodeRef || undefined), `${selected.id} was removed.`)
                             }
                           >
                             Remove
@@ -927,8 +946,8 @@ export function AIServicePage(): React.JSX.Element {
           </Card>
           <Card
             className="ai-services-layout__status"
-            title="Enabled model"
-            subtitle="Alpha supports one enabled model at a time. Enabling another replaces it."
+            title="Enabled models"
+            subtitle="This appliance currently supports one enabled model per inference node."
           >
             {status ? (
               <div className="stack">
@@ -956,12 +975,16 @@ export function AIServicePage(): React.JSX.Element {
                   </div>
                 </div>
                 {enabledInstances.length > 0 ? (
-                  <div className="enabled-model-list" aria-label="Enabled model">
+                  <div className="enabled-model-list" aria-label="Enabled models">
                     {enabledInstances.map((instance) => (
                       <section className="enabled-model-list__instance" key={instance.id}>
                         <div className="enabled-model-list__heading">
                           <strong>{instance.id === "default" ? "Default instance" : instance.id}</strong>
-                          <span>{instance.replicas} replica{instance.replicas === 1 ? "" : "s"}</span>
+                          <span>
+                            {[instance.nodeRef, instance.runtimeRef, instance.endpointRef, `${instance.replicas} replica${instance.replicas === 1 ? "" : "s"}`]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
                         </div>
                         {instance.models.map((modelID) => (
                           <div className="enabled-model-list__model" key={modelID}>
@@ -984,7 +1007,7 @@ export function AIServicePage(): React.JSX.Element {
                 ) : null}
 				{readyModelId && !readyCapabilities.codexCompatible ? (
 				  <p className="text-sm text-slate-600">
-					This enabled model is available for chat only. Codex settings are hidden because its runtime profile has not been configured for tool calling.
+					This enabled model is chat-capable. Client settings are hidden because its runtime profile has not been configured for tool calling.
 				  </p>
 				) : null}
               </div>

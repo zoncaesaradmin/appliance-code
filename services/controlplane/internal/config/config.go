@@ -62,6 +62,7 @@ type Config struct {
 	InferenceEngine           string                   `json:"inferenceEngine"`
 	InferenceArchitecture     string                   `json:"inferenceArchitecture"`
 	WebUIEnabled              bool                     `json:"webUIEnabled"`
+	WebUIHealthURL            string                   `json:"webUIHealthURL"`
 	BlobStorageEndpoint       string                   `json:"blobStorageEndpoint"`
 	BlobStorageBucket         string                   `json:"blobStorageBucket"`
 	BlobStorageAccessKey      string                   `json:"blobStorageAccessKey"`
@@ -243,6 +244,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		}
 		cfg.WebUIEnabled = b
 	}
+	str("WEBUI_HEALTH_URL", &cfg.WebUIHealthURL)
 	str("BLOB_STORAGE_ENDPOINT", &cfg.BlobStorageEndpoint)
 	str("BLOB_STORAGE_BUCKET", &cfg.BlobStorageBucket)
 	str("BLOB_STORAGE_ACCESS_KEY", &cfg.BlobStorageAccessKey)

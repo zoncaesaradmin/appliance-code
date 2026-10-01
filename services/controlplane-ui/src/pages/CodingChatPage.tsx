@@ -3,7 +3,7 @@ import { Button, Card, PageFrame } from "../components";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
 
-// Coding Chat is deliberately a small appliance-owned launch surface. The
+// AI Chat is deliberately a small appliance-owned launch surface. The
 // chat application itself remains behind the session bridge; this page never
 // renders, stores, or exposes its one-time grant.
 export function CodingChatPage(props: { capabilities: string[] }): React.JSX.Element {
@@ -17,17 +17,17 @@ export function CodingChatPage(props: { capabilities: string[] }): React.JSX.Ele
     try {
       await client.launchAIWorkspace();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Coding Chat is unavailable.");
+      setError(err instanceof Error ? err.message : "AI Chat is unavailable.");
       setOpening(false);
     }
   }
 
   return (
     <PageFrame
-      title="Coding Chat"
+      title="AI Chat"
       eyebrow="Manage"
       description="Use the appliance-hosted chat workspace with the currently loaded model."
-      pathname="/manage/coding-chat"
+      pathname="/manage/ai-chat"
       onNavigate={navigate}
       tabs={[]}
     >
@@ -35,12 +35,12 @@ export function CodingChatPage(props: { capabilities: string[] }): React.JSX.Ele
         {error ? <div className="message message--error" role="alert">{error}</div> : null}
         {webUIEnabled ? (
           <Card
-            title="Start a coding chat"
+            title="Start a chat"
             subtitle="Your appliance session is used to open a private workspace. A ready model and inference access are required."
           >
             <div className="button-row">
               <Button type="button" onClick={() => void openCodingChat()} disabled={opening}>
-                {opening ? "Opening Coding Chat…" : "Open Coding Chat"}
+                {opening ? "Opening AI Chat…" : "Open AI Chat"}
               </Button>
             </div>
             <p className="muted">
@@ -51,7 +51,7 @@ export function CodingChatPage(props: { capabilities: string[] }): React.JSX.Ele
         ) : (
           <Card
             title="Web UI is not enabled in this profile"
-            subtitle="Coding Chat needs the open-webui capability. This appliance profile provides inference without the optional chat Web UI."
+            subtitle="AI Chat needs the open-webui capability. This appliance profile provides inference without the optional chat Web UI."
           >
             <p className="muted" role="status">
               Use an open-webui profile such as private-ai-webui, or ask an administrator to change the

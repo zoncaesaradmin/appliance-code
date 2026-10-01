@@ -23,6 +23,22 @@ engine:
   # emptyDir /dev/shm for vLLM (counts against the engine memory limit).
   sharedMemorySize: 4Gi
 
+# Empty is the single-node default. A future cluster controller sets this to
+# the verified inference node name so the manager, engine, and local model PV
+# are co-located. This is not an end-user scheduling control.
+placement:
+  nodeName: ""
+  # Controller-recorded Kubernetes node UID. This is durable instance identity;
+  # nodeName remains placement-only because a replacement host may reuse it.
+  nodeUID: ""
+  requireInferenceNode: false
+
+# A multi-node controller sets one ConfigMap name for every node-bound
+# inference release. The manager then shares only validated ready aliases.
+# Empty keeps the single-node release self-contained.
+routing:
+  registryName: ""
+
 gpu:
   enabled: false
   runtimeClassName: nvidia

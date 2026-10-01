@@ -15,6 +15,15 @@ spec:
   hostPath:
     path: {{ .Values.persistence.hostPath.path | quote }}
     type: DirectoryOrCreate
+  {{- if .Values.placement.nodeName }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [{{ .Values.placement.nodeName | quote }}]
+  {{- end }}
   claimRef:
     namespace: {{ include "appliance-inference.namespace" . }}
     name: {{ .Values.persistence.claimName }}
@@ -88,6 +97,19 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  {{- if .Values.routing.registryName }}
+  # The shared ConfigMap is a routing registry, never a user-provided
+  # upstream. A manager can update only this named registry. Kubernetes does
+  # not support resourceName restrictions for create, so create is required
+  # only to converge safely if the first node starts before the controller.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ .Values.routing.registryName | quote }}]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -105,6 +127,37 @@ subjects:
     name: {{ include "appliance-inference.serviceAccountName" . }}
     namespace: {{ include "appliance-inference.namespace" . }}
 ---
+{{- if .Values.routing.registryName }}
+# A routing record is keyed by the immutable Kubernetes Node UID.  The
+# manager gets only its own name from the downward API and resolves that name
+# to the UID here; it never accepts an identity from an API caller.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "appliance-inference.serviceAccountName" . }}-node-identity
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "appliance-inference.serviceAccountName" . }}-node-identity
+  labels:
+    {{- include "appliance-inference.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "appliance-inference.serviceAccountName" . }}-node-identity
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "appliance-inference.serviceAccountName" . }}
+    namespace: {{ include "appliance-inference.namespace" . }}
+---
+{{- end }}
 {{- if eq .Values.runtime.engine "vllm" }}
 apiVersion: v1
 kind: ConfigMap
@@ -193,6 +246,14 @@ metadata:
   namespace: {{ include "appliance-inference.namespace" . }}
   labels:
     {{- include "appliance-inference.labels" . | nindent 4 }}
+    {{- if .Values.placement.nodeName }}
+    # The installer supplies the first node's name before the API has a node
+    # UID. The control-plane scheduler resolves it back to the live UID.
+    zon.io/inference-node-name: {{ .Values.placement.nodeName | quote }}
+    {{- end }}
+    {{- if .Values.placement.nodeUID }}
+    zon.io/inference-node-uid: {{ .Values.placement.nodeUID | quote }}
+    {{- end }}
 spec:
   type: ClusterIP
   selector:
@@ -223,6 +284,13 @@ spec:
         {{- include "appliance-inference.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "appliance-inference.serviceAccountName" . }}
+      {{- if .Values.placement.nodeName }}
+      nodeName: {{ .Values.placement.nodeName | quote }}
+      {{- end }}
+      {{- if .Values.placement.requireInferenceNode }}
+      nodeSelector:
+        zon.io/inference-node: "true"
+      {{- end }}
       automountServiceAccountToken: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:

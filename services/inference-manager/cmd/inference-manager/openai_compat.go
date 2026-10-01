@@ -214,6 +214,38 @@ func prepareOpenAIProxyRequest(r *http.Request, opts openaiCompatConfig) error {
 	return nil
 }
 
+// openAIRequestedModel reads the public OpenAI model field without consuming
+// the request body. It intentionally applies to every JSON POST endpoint so
+// chat-completions, completions, and responses all use the same appliance
+// routing table.
+func openAIRequestedModel(r *http.Request) (string, error) {
+	if r == nil || r.Body == nil || r.Method != http.MethodPost {
+		return "", nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxOpenAIProxyBody+1))
+	_ = r.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	if len(raw) > maxOpenAIProxyBody {
+		return "", fmt.Errorf("request body exceeds %d bytes", maxOpenAIProxyBody)
+	}
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+	r.ContentLength = int64(len(raw))
+	r.Header.Set("Content-Length", strconv.Itoa(len(raw)))
+	r.Header.Del("Transfer-Encoding")
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return "", nil
+	}
+	var payload struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(payload.Model), nil
+}
+
 // openaiCompatOptions returns rewrite policy for the active device.
 // CPU paths stay fail-closed against structured_outputs (grammar pin_memory).
 func openaiCompatOptions(usingGPU bool) openaiCompatConfig {

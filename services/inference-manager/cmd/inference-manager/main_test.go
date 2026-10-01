@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -66,7 +67,7 @@ func TestManagerHTTPRouting(t *testing.T) {
 				{"GET", "/internal/v1/models", http.StatusOK, false},
 				{"GET", "/internal/v1/models/catalog", http.StatusServiceUnavailable, false},
 				{"GET", "/internal/v1/runtime/capabilities", http.StatusOK, false},
-				{"GET", "/v1/models", http.StatusAccepted, true},
+				{"GET", "/v1/models", http.StatusOK, false},
 				{"POST", "/v1/chat/completions?stream=true", http.StatusAccepted, true},
 				{"GET", "/v1/responses/example", http.StatusAccepted, true},
 				{"DELETE", "/v1/responses/example", http.StatusAccepted, true},
@@ -84,6 +85,61 @@ func TestManagerHTTPRouting(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProxyOpenAIRoutesKnownRemoteModelToRecordedEndpoint(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("remote path = %q", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["model"] != "org/remote" {
+			t.Fatalf("remote model = %#v", payload["model"])
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer remote.Close()
+
+	m := testManager(t)
+	m.nodeID = "node-a"
+	m.active = "org/local"
+	m.instances = instanceRegistry{
+		Instances: map[string]modelInstance{
+			"local":  {ID: "local", NodeRef: "node-a", Models: []string{"org/local"}, Replicas: 1},
+			"remote": {ID: "remote", NodeRef: "node-b", EndpointRef: remote.URL, Models: []string{"org/remote"}, Replicas: 1},
+		},
+		Bindings: map[string]modelBinding{
+			"org/local":  {ModelAlias: "org/local", InstanceID: "local"},
+			"org/remote": {ModelAlias: "org/remote", InstanceID: "remote"},
+		},
+	}
+	response := httptest.NewRecorder()
+	m.proxyOpenAI(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"org/remote","messages":[]}`)))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("remote route status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestProxyOpenAIListsOnlyRoutedAliases(t *testing.T) {
+	m := testManager(t)
+	m.instances = instanceRegistry{
+		Instances: map[string]modelInstance{
+			"a": {ID: "a", NodeRef: "node-a", Models: []string{"org/local"}, Replicas: 1},
+			"b": {ID: "b", NodeRef: "node-b", EndpointRef: "http://manager-b.inference.svc", Models: []string{"org/remote"}, Replicas: 1},
+		},
+		Bindings: map[string]modelBinding{
+			"org/local":  {ModelAlias: "org/local", InstanceID: "a"},
+			"org/remote": {ModelAlias: "org/remote", InstanceID: "b"},
+		},
+	}
+	response := httptest.NewRecorder()
+	m.proxyOpenAI(response, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"org/local"`) || !strings.Contains(response.Body.String(), `"org/remote"`) {
+		t.Fatalf("routed model list = status %d body %s", response.Code, response.Body.String())
 	}
 }
 
@@ -598,6 +654,32 @@ func TestLoadAlreadyReadyIsIdempotent(t *testing.T) {
 	}
 	if len(fake.applied) != before {
 		t.Fatal("already-ready load restarted the engine")
+	}
+}
+
+func TestFailedLoadDoesNotPublishRoutedModel(t *testing.T) {
+	m := testManager(t)
+	m.engine = "vllm"
+	m.gpuProbe = func(context.Context) bool { return true }
+	m.engineOrch = &fakeEngine{applyErr: errors.New("engine deployment rejected")}
+	t.Setenv("INFERENCE_ENGINE_MAX_MEMORY", "")
+	t.Setenv("INFERENCE_ENGINE_SHARED_MEMORY", "4Gi")
+	modelDir := filepath.Join(m.modelsDir, "tiny")
+	if err := os.MkdirAll(modelDir, 0o770); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelDir, "weights.bin"), make([]byte, 1024), 0o660); err != nil {
+		t.Fatal(err)
+	}
+	m.reg.Models["test/tiny"] = model{ID: "test/tiny", Path: modelDir}
+	w := httptest.NewRecorder()
+	m.loadModel(w, httptest.NewRequest(http.MethodPost, "/internal/v1/models/load", strings.NewReader(`{"modelId":"test/tiny"}`)))
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("load status %d: %s", w.Code, w.Body.String())
+	}
+	waitLoadState(t, m, "failed")
+	if got := m.instanceSummaries(); len(got) != 0 {
+		t.Fatalf("failed load published routed instances: %+v", got)
 	}
 }
 

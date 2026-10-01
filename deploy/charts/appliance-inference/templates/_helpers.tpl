@@ -88,12 +88,38 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: "0.0.0.0:11434"
 - name: INFERENCE_BACKEND_URL
   value: {{ printf "http://%s.%s.svc.cluster.local:%v" (include "appliance-inference.engineName" .) (include "appliance-inference.namespace" .) .Values.engine.servicePort | quote }}
+- name: INFERENCE_MANAGER_ENDPOINT
+  # This is the node-bound manager OpenAI endpoint, not the engine endpoint.
+  # A cluster controller records it for model-to-instance routing.
+  value: {{ printf "http://%s.%s.svc.cluster.local:%v" (include "appliance-inference.fullname" .) (include "appliance-inference.namespace" .) .Values.service.port | quote }}
 - name: INFERENCE_MODELS_DIR
   value: "/models"
+- name: INFERENCE_NODE_ID
+  valueFrom:
+    fieldRef:
+      fieldPath: spec.nodeName
+{{- if .Values.placement.nodeUID }}
+- name: INFERENCE_NODE_UID
+  value: {{ .Values.placement.nodeUID | quote }}
+{{- end }}
+{{- if .Values.placement.nodeName }}
+- name: INFERENCE_NODE_NAME
+  value: {{ .Values.placement.nodeName | quote }}
+{{- end }}
+{{- if .Values.placement.requireInferenceNode }}
+- name: INFERENCE_REQUIRE_INFERENCE_NODE
+  value: "true"
+{{- end }}
 - name: INFERENCE_NAMESPACE
   valueFrom:
     fieldRef:
       fieldPath: metadata.namespace
+{{- if .Values.routing.registryName }}
+- name: INFERENCE_ROUTING_CONFIGMAP
+  # A controller supplies one shared name for all node-bound releases. Leaving
+  # this empty preserves the standalone single-node registry behavior.
+  value: {{ .Values.routing.registryName | quote }}
+{{- end }}
 - name: INFERENCE_ENGINE_DEPLOYMENT
   value: {{ include "appliance-inference.engineName" . | quote }}
 - name: INFERENCE_ENGINE_SERVICE

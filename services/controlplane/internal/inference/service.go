@@ -72,9 +72,12 @@ type RuntimeStatus struct {
 }
 
 type ServingInstance struct {
-	ID       string   `json:"id"`
-	Models   []string `json:"models"`
-	Replicas int32    `json:"replicas"`
+	ID          string   `json:"id"`
+	NodeRef     string   `json:"nodeRef,omitempty"`
+	RuntimeRef  string   `json:"runtimeRef,omitempty"`
+	EndpointRef string   `json:"endpointRef,omitempty"`
+	Models      []string `json:"models"`
+	Replicas    int32    `json:"replicas"`
 }
 
 type Model struct {
@@ -98,7 +101,10 @@ type ModelCapabilities struct {
 }
 
 type ImportRequest struct {
-	CatalogID       string   `json:"catalogId,omitempty"`
+	CatalogID string `json:"catalogId,omitempty"`
+	// NodeRef is the Kubernetes node UID selected by the control-plane
+	// scheduler. It is deliberately not an endpoint or node name.
+	NodeRef         string   `json:"nodeRef,omitempty"`
 	ModelID         string   `json:"modelId"`
 	Source          string   `json:"source"`
 	Digest          string   `json:"digest,omitempty"`
@@ -106,6 +112,7 @@ type ImportRequest struct {
 }
 
 type ImportProgress struct {
+	NodeRef         string `json:"nodeRef,omitempty"`
 	ModelID         string `json:"modelId,omitempty"`
 	Source          string `json:"source,omitempty"`
 	State           string `json:"state"`
@@ -118,6 +125,7 @@ type ImportProgress struct {
 }
 
 type LoadProgress struct {
+	NodeRef     string `json:"nodeRef,omitempty"`
 	ModelID     string `json:"modelId,omitempty"`
 	State       string `json:"state"` // idle|loading|ready|failed
 	Message     string `json:"message,omitempty"`
@@ -162,13 +170,14 @@ func (s *Service) Catalog(ctx context.Context, sortBy, order string) (json.RawMe
 }
 
 type Service struct {
-	cfg            Config
-	base           *url.URL
-	client         *http.Client
-	modelOperation sync.Mutex
+	cfg        Config
+	base       *url.URL
+	client     *http.Client
+	scheduler  NodeScheduler
+	operations sync.Map // map[node UID]*sync.Mutex; isolated per inference node
 }
 
-func New(cfg Config, client *http.Client) (*Service, error) {
+func New(cfg Config, client *http.Client, schedulers ...NodeScheduler) (*Service, error) {
 	base, err := url.Parse(strings.TrimSpace(cfg.BaseURL))
 	if err != nil || base.Scheme == "" || base.Host == "" || base.Path != "" {
 		return nil, fmt.Errorf("inference: base URL must be absolute with no path")
@@ -180,7 +189,41 @@ func New(cfg Config, client *http.Client) (*Service, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Minute}
 	}
-	return &Service{cfg: cfg, base: base, client: client}, nil
+	var scheduler NodeScheduler
+	if len(schedulers) > 0 {
+		scheduler = schedulers[0]
+	}
+	return &Service{cfg: cfg, base: base, client: client, scheduler: scheduler}, nil
+}
+
+// Nodes returns controller-scheduled inference nodes. A nil scheduler means
+// this is the legacy single-node deployment and exposes its implicit local
+// target only through the regular lifecycle APIs.
+func (s *Service) Nodes(ctx context.Context) ([]Node, error) {
+	if s.scheduler == nil {
+		return []Node{}, nil
+	}
+	return s.scheduler.List(ctx)
+}
+
+func (s *Service) baseForNode(ctx context.Context, nodeRef string) (*url.URL, error) {
+	nodeRef = strings.TrimSpace(nodeRef)
+	if nodeRef == "" {
+		return s.base, nil
+	}
+	if s.scheduler == nil {
+		return nil, fmt.Errorf("%w: node selection is unavailable on this single-node inference deployment", ErrUnsupported)
+	}
+	return s.scheduler.Resolve(ctx, nodeRef)
+}
+
+func (s *Service) operationLock(nodeRef string) *sync.Mutex {
+	key := strings.TrimSpace(nodeRef)
+	if key == "" {
+		key = "local"
+	}
+	lock, _ := s.operations.LoadOrStore(key, &sync.Mutex{})
+	return lock.(*sync.Mutex)
 }
 
 func (s *Service) Capabilities(ctx context.Context) RuntimeCapabilities {
@@ -229,7 +272,11 @@ func (s *Service) Capabilities(ctx context.Context) RuntimeCapabilities {
 }
 
 func (s *Service) getJSON(ctx context.Context, path string, target any) error {
-	resp, err := s.do(ctx, http.MethodGet, path, nil)
+	return s.getJSONAt(ctx, s.base, path, target)
+}
+
+func (s *Service) getJSONAt(ctx context.Context, base *url.URL, path string, target any) error {
+	resp, err := s.doAt(ctx, base, http.MethodGet, path, nil)
 	if err != nil {
 		return err
 	}
@@ -316,10 +363,16 @@ func (s *Service) ListModels(ctx context.Context) ([]Model, error) {
 }
 
 func (s *Service) Import(ctx context.Context, req ImportRequest) (ImportProgress, error) {
-	if !s.modelOperation.TryLock() {
+	req.NodeRef = strings.TrimSpace(req.NodeRef)
+	lock := s.operationLock(req.NodeRef)
+	if !lock.TryLock() {
 		return ImportProgress{}, ErrBusy
 	}
-	defer s.modelOperation.Unlock()
+	defer lock.Unlock()
+	base, err := s.baseForNode(ctx, req.NodeRef)
+	if err != nil {
+		return ImportProgress{}, err
+	}
 	req.ModelID = strings.TrimSpace(req.ModelID)
 	req.Source = strings.TrimSpace(req.Source)
 	if req.ModelID == "" || req.Source == "" {
@@ -343,7 +396,7 @@ func (s *Service) Import(ctx context.Context, req ImportRequest) (ImportProgress
 		}
 	}
 	var progress ImportProgress
-	if err := s.callJSON(ctx, http.MethodPost, "/internal/v1/models/imports", req, &progress); err != nil {
+	if err := s.callJSONAt(ctx, base, http.MethodPost, "/internal/v1/models/imports", req, &progress); err != nil {
 		return ImportProgress{}, err
 	}
 	if progress.State == "" {
@@ -351,19 +404,26 @@ func (s *Service) Import(ctx context.Context, req ImportRequest) (ImportProgress
 		progress.ModelID = req.ModelID
 		progress.Source = req.Source
 	}
+	progress.NodeRef = req.NodeRef
 	return progress, nil
 }
 
-func (s *Service) ImportProgress(ctx context.Context) (ImportProgress, error) {
+func (s *Service) ImportProgress(ctx context.Context, nodeRefs ...string) (ImportProgress, error) {
+	nodeRef := optionalNodeRef(nodeRefs)
+	base, err := s.baseForNode(ctx, nodeRef)
+	if err != nil {
+		return ImportProgress{}, err
+	}
 	progressCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var progress ImportProgress
-	if err := s.getJSON(progressCtx, "/internal/v1/models/imports/progress", &progress); err != nil {
+	if err := s.getJSONAt(progressCtx, base, "/internal/v1/models/imports/progress", &progress); err != nil {
 		return ImportProgress{}, err
 	}
 	if progress.State == "" {
 		progress.State = "idle"
 	}
+	progress.NodeRef = nodeRef
 	return progress, nil
 }
 
@@ -406,53 +466,83 @@ func validateLaunchArguments(engine string, arguments []string) error {
 	return nil
 }
 
-func (s *Service) Load(ctx context.Context, modelID string) (LoadProgress, error) {
-	if !s.modelOperation.TryLock() {
+func (s *Service) Load(ctx context.Context, modelID string, nodeRefs ...string) (LoadProgress, error) {
+	nodeRef := optionalNodeRef(nodeRefs)
+	lock := s.operationLock(nodeRef)
+	if !lock.TryLock() {
 		return LoadProgress{}, ErrBusy
 	}
-	defer s.modelOperation.Unlock()
+	defer lock.Unlock()
+	base, err := s.baseForNode(ctx, nodeRef)
+	if err != nil {
+		return LoadProgress{}, err
+	}
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return LoadProgress{}, fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
 	var progress LoadProgress
-	if err := s.callJSON(ctx, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID}, &progress); err != nil {
+	if err := s.callJSONAt(ctx, base, http.MethodPost, "/internal/v1/models/load", map[string]any{"modelId": modelID}, &progress); err != nil {
 		return LoadProgress{}, err
 	}
 	if progress.State == "" {
 		progress.State = "loading"
 		progress.ModelID = modelID
 	}
+	progress.NodeRef = nodeRef
 	return progress, nil
 }
 
-func (s *Service) LoadProgress(ctx context.Context) (LoadProgress, error) {
+func (s *Service) LoadProgress(ctx context.Context, nodeRefs ...string) (LoadProgress, error) {
+	nodeRef := optionalNodeRef(nodeRefs)
+	base, err := s.baseForNode(ctx, nodeRef)
+	if err != nil {
+		return LoadProgress{}, err
+	}
 	progressCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var progress LoadProgress
-	if err := s.getJSON(progressCtx, "/internal/v1/models/load/progress", &progress); err != nil {
+	if err := s.getJSONAt(progressCtx, base, "/internal/v1/models/load/progress", &progress); err != nil {
 		return LoadProgress{}, err
 	}
 	if progress.State == "" {
 		progress.State = "idle"
 	}
+	progress.NodeRef = nodeRef
 	return progress, nil
 }
 
-func (s *Service) Delete(ctx context.Context, modelID string) error {
-	if !s.modelOperation.TryLock() {
+func optionalNodeRef(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(values[0])
+}
+
+func (s *Service) Delete(ctx context.Context, modelID string, nodeRefs ...string) error {
+	nodeRef := optionalNodeRef(nodeRefs)
+	lock := s.operationLock(nodeRef)
+	if !lock.TryLock() {
 		return ErrBusy
 	}
-	defer s.modelOperation.Unlock()
+	defer lock.Unlock()
+	base, err := s.baseForNode(ctx, nodeRef)
+	if err != nil {
+		return err
+	}
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
 		return fmt.Errorf("%w: model id is required", ErrInvalidRequest)
 	}
-	return s.callJSON(ctx, http.MethodPost, "/internal/v1/models/delete", map[string]any{"modelId": modelID}, nil)
+	return s.callJSONAt(ctx, base, http.MethodPost, "/internal/v1/models/delete", map[string]any{"modelId": modelID}, nil)
 }
 
 func (s *Service) callJSON(ctx context.Context, method, path string, body any, target any) error {
-	resp, err := s.do(ctx, method, path, body)
+	return s.callJSONAt(ctx, s.base, method, path, body, target)
+}
+
+func (s *Service) callJSONAt(ctx context.Context, base *url.URL, method, path string, body any, target any) error {
+	resp, err := s.doAt(ctx, base, method, path, body)
 	if err != nil {
 		return err
 	}
@@ -467,6 +557,10 @@ func (s *Service) callJSON(ctx context.Context, method, path string, body any, t
 }
 
 func (s *Service) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
+	return s.doAt(ctx, s.base, method, path, body)
+}
+
+func (s *Service) doAt(ctx context.Context, base *url.URL, method, path string, body any) (*http.Response, error) {
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -479,7 +573,7 @@ func (s *Service) do(ctx context.Context, method, path string, body any) (*http.
 	if err != nil {
 		return nil, fmt.Errorf("inference: invalid path %q: %w", path, err)
 	}
-	target := s.base.ResolveReference(rel)
+	target := base.ResolveReference(rel)
 	req, err := http.NewRequestWithContext(ctx, method, target.String(), reader)
 	if err != nil {
 		return nil, err

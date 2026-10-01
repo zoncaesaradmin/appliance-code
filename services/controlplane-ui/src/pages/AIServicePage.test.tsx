@@ -6,6 +6,7 @@ import { AIServicePage, buildOpenAIClientSettings } from "./AIServicePage";
 const api = vi.hoisted(() => ({
   getInferenceStatus: vi.fn(),
   listInferenceModels: vi.fn(),
+	listInferenceNodes: vi.fn(),
   getInferenceCatalog: vi.fn(),
   importInferenceModel: vi.fn(),
   getInferenceImportProgress: vi.fn(),
@@ -65,6 +66,7 @@ beforeEach(() => {
     servingState: "inactive"
   });
   api.listInferenceModels.mockResolvedValue([{ id: "retired:1b" }]);
+	api.listInferenceNodes.mockResolvedValue([]);
   api.getInferenceCatalog.mockResolvedValue({
     lastSuccess: "2026-09-15T00:00:00Z",
     stale: true,
@@ -114,7 +116,7 @@ afterEach(async () => {
 it("puts the downloaded library beside the enabled-model view", async () => {
   await act(async () => root.render(<AIServicePage />));
   const headings = [...element.querySelectorAll("h2")].map((node) => node.textContent);
-  expect(headings.indexOf("Model library")).toBeLessThan(headings.indexOf("Enabled model"));
+  expect(headings.indexOf("Model library")).toBeLessThan(headings.indexOf("Enabled models"));
   expect(element.querySelector(".ai-services-layout__models")).not.toBeNull();
   expect(element.querySelector(".ai-services-layout__status")).not.toBeNull();
 });
@@ -124,7 +126,7 @@ it("shows cached models without waiting for a slow runtime status request", asyn
   api.getInferenceStatus.mockReturnValue(new Promise((resolve) => { releaseStatus = resolve; }));
   await act(async () => root.render(<AIServicePage />));
   const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
-  expect(labels).toContain("available:1b (Coding agent)");
+  expect(labels).toContain("available:1b (Tool capable)");
   releaseStatus({ engine: "ollama", ready: true, servingState: "inactive" });
   await act(async () => {});
 });
@@ -145,7 +147,7 @@ it("updates a first-run catalog when background discovery finishes", async () =>
     await act(async () => root.render(<AIServicePage />));
     expect(element.textContent).toContain("Discovering models…");
     await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
-    expect([...element.querySelector("select")!.options].map((option) => option.textContent)).toContain("available:1b (Chat assistant)");
+    expect([...element.querySelector("select")!.options].map((option) => option.textContent)).toContain("available:1b (Chat capable)");
   } finally {
     vi.useRealTimers();
   }
@@ -175,7 +177,7 @@ it("separates downloaded inventory from enabled model instances", async () => {
   expect(element.querySelector("input")).toBeNull();
   expect(element.querySelector("textarea")).toBeNull();
   const labels = [...select!.options].map((option) => option.textContent);
-  expect(labels).toContain("available:1b (Coding agent)");
+  expect(labels).toContain("available:1b (Tool capable)");
   expect(labels.some((label) => label?.includes("retired:1b") || label?.includes("stored:2b"))).toBe(false);
   expect(labels.some((label) => label?.includes("too-large:100b"))).toBe(false);
   await act(async () => {
@@ -295,7 +297,7 @@ it("clears a stale downloaded-models refresh error after a successful post-downl
   expect(element.textContent).not.toContain("Could not refresh downloaded models");
   expect(element.textContent).toContain("available:1b downloaded");
   expect([...element.querySelectorAll("option")].map((option) => option.textContent)).toContain(
-    "available:1b (Coding agent · downloaded)"
+    "available:1b (Tool capable · downloaded)"
   );
 });
 
@@ -376,9 +378,9 @@ it("sorts the model dropdown by estimated parameters descending", async () => {
   const labels = [...element.querySelector("select")!.options].map((option) => option.textContent);
   expect(labels).toEqual([
     "Choose a fitting model",
-    "org/large-7B (Chat assistant)",
-    "org/mid-3B (Chat assistant)",
-    "org/tiny-0.5B (Chat assistant)"
+    "org/large-7B (Chat capable)",
+    "org/mid-3B (Chat capable)",
+    "org/tiny-0.5B (Chat capable)"
   ]);
   expect(api.getInferenceCatalog).toHaveBeenCalledWith({ sort: "parameters", order: "desc" });
 });
@@ -429,7 +431,7 @@ it("shows serving ready-for-use and disables Enable when the selected model is a
   expect(element.textContent).toContain("zon_model_catalog.json");
 });
 
-it("keeps Codex settings unavailable for a chat-only enabled model", async () => {
+it("keeps client settings unavailable for a chat-capable enabled model", async () => {
   api.getInferenceStatus.mockResolvedValue({
     engine: "ollama",
     architecture: "amd64",
@@ -452,7 +454,7 @@ it("keeps Codex settings unavailable for a chat-only enabled model", async () =>
     }
   ]);
   await act(async () => root.render(<AIServicePage />));
-  expect(element.textContent).toContain("available for chat only");
+  expect(element.textContent).toContain("is chat-capable");
   expect([...element.querySelectorAll("button")].some((button) => button.textContent === "Copy OpenAI client settings")).toBe(false);
 });
 

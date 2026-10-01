@@ -41,6 +41,15 @@ func (h *InferenceHandlers) Catalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, catalog)
 }
 
+func (h *InferenceHandlers) Nodes(w http.ResponseWriter, r *http.Request) {
+	nodes, err := h.Inference.Nodes(r.Context())
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": nodes})
+}
+
 func (h *InferenceHandlers) Import(w http.ResponseWriter, r *http.Request) {
 	var req inference.ImportRequest
 	if err := decodeJSON(w, r, &req); err != nil {
@@ -51,12 +60,12 @@ func (h *InferenceHandlers) Import(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err)
 		return
 	}
-	h.record(r, "inference.model.import", req.ModelID)
+	h.record(r, "inference.model.import", req.ModelID, req.NodeRef)
 	writeJSON(w, http.StatusAccepted, progress)
 }
 
 func (h *InferenceHandlers) ImportProgress(w http.ResponseWriter, r *http.Request) {
-	progress, err := h.Inference.ImportProgress(r.Context())
+	progress, err := h.Inference.ImportProgress(r.Context(), r.URL.Query().Get("nodeRef"))
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -67,22 +76,23 @@ func (h *InferenceHandlers) ImportProgress(w http.ResponseWriter, r *http.Reques
 func (h *InferenceHandlers) Load(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ModelID string `json:"modelId"`
+		NodeRef string `json:"nodeRef,omitempty"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		return
 	}
 	id := strings.TrimSpace(req.ModelID)
-	progress, err := h.Inference.Load(r.Context(), id)
+	progress, err := h.Inference.Load(r.Context(), id, req.NodeRef)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
 	}
-	h.record(r, "inference.model.load", id)
+	h.record(r, "inference.model.load", id, req.NodeRef)
 	writeJSON(w, http.StatusAccepted, progress)
 }
 
 func (h *InferenceHandlers) LoadProgress(w http.ResponseWriter, r *http.Request) {
-	progress, err := h.Inference.LoadProgress(r.Context())
+	progress, err := h.Inference.LoadProgress(r.Context(), r.URL.Query().Get("nodeRef"))
 	if err != nil {
 		h.writeError(w, r, err)
 		return
@@ -93,16 +103,17 @@ func (h *InferenceHandlers) LoadProgress(w http.ResponseWriter, r *http.Request)
 func (h *InferenceHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ModelID string `json:"modelId"`
+		NodeRef string `json:"nodeRef,omitempty"`
 	}
 	if err := decodeJSON(w, r, &req); err != nil {
 		return
 	}
 	id := strings.TrimSpace(req.ModelID)
-	if err := h.Inference.Delete(r.Context(), id); err != nil {
+	if err := h.Inference.Delete(r.Context(), id, req.NodeRef); err != nil {
 		h.writeError(w, r, err)
 		return
 	}
-	h.record(r, "inference.model.delete", id)
+	h.record(r, "inference.model.delete", id, req.NodeRef)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -130,7 +141,7 @@ func (h *InferenceHandlers) writeError(w http.ResponseWriter, r *http.Request, e
 	WriteProblem(w, r, http.StatusBadGateway, "inference_operation_failed", "The inference runtime rejected the operation", "")
 }
 
-func (h *InferenceHandlers) record(r *http.Request, action, target string) {
+func (h *InferenceHandlers) record(r *http.Request, action, target string, nodeRefs ...string) {
 	if h.Audit == nil {
 		return
 	}
@@ -138,6 +149,13 @@ func (h *InferenceHandlers) record(r *http.Request, action, target string) {
 	_ = h.Audit.Record(r.Context(), principal.Actor(requestIDFromRequest(r), r.RemoteAddr), audit.Event{
 		Action: action, TargetType: "inference_model", TargetID: target,
 		Outcome: storage.AuditOutcomeSuccess,
-		Details: map[string]any{"method": r.Method},
+		Details: map[string]any{"method": r.Method, "nodeRef": strings.TrimSpace(firstString(nodeRefs))},
 	})
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }

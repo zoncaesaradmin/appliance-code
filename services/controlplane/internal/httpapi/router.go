@@ -107,6 +107,7 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 		mux.Handle("GET /api/v1/inference/status", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Status))
 		mux.Handle("GET /api/v1/inference/models", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Models))
 		mux.Handle("GET /api/v1/inference/models/catalog", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.Catalog))
+		mux.Handle("GET /api/v1/inference/nodes", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Nodes))
 		mux.Handle("POST /api/v1/inference/models/imports", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Import))
 		mux.Handle("GET /api/v1/inference/models/imports/progress", w.protect(roles.PermInferenceModelsRead, deps.InferenceH.ImportProgress))
 		mux.Handle("POST /api/v1/inference/models/load", w.protect(roles.PermInferenceAdmin, deps.InferenceH.Load))

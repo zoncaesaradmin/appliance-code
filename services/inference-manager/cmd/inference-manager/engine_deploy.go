@@ -80,21 +80,23 @@ type memoryPlan struct {
 }
 
 type k8sEngine struct {
-	client      kubernetes.Interface
-	namespace   string
-	deployment  string
-	service     string
-	port        int32
-	image       string
-	instance    string
-	modelsClaim string
-	shmSize     resource.Quantity
-	gpuEnabled  bool
-	gpuRuntime  string
-	gpuDevices  string
-	gpuCaps     string
-	pullSecrets []string
-	engine      string // vllm|ollama
+	client               kubernetes.Interface
+	namespace            string
+	deployment           string
+	service              string
+	port                 int32
+	image                string
+	instance             string
+	nodeName             string
+	requireInferenceNode bool
+	modelsClaim          string
+	shmSize              resource.Quantity
+	gpuEnabled           bool
+	gpuRuntime           string
+	gpuDevices           string
+	gpuCaps              string
+	pullSecrets          []string
+	engine               string // vllm|ollama
 }
 
 func newEngineOrchestratorFromEnv(engine string) (engineOrchestrator, error) {
@@ -118,21 +120,23 @@ func newEngineOrchestratorFromEnv(engine string) (engineOrchestrator, error) {
 	}
 	shm := resource.MustParse(env("INFERENCE_ENGINE_SHARED_MEMORY", "4Gi"))
 	return &k8sEngine{
-		client:      client,
-		namespace:   env("INFERENCE_NAMESPACE", "inference"),
-		deployment:  env("INFERENCE_ENGINE_DEPLOYMENT", "inference-engine"),
-		service:     env("INFERENCE_ENGINE_SERVICE", "inference-engine"),
-		port:        int32(port),
-		image:       env("INFERENCE_RUNTIME_IMAGE", ""),
-		instance:    env("INFERENCE_RELEASE_INSTANCE", "appliance-inference"),
-		modelsClaim: env("INFERENCE_MODELS_CLAIM", "models"),
-		shmSize:     shm,
-		gpuEnabled:  strings.EqualFold(env("INFERENCE_GPU_ENABLED", "false"), "true"),
-		gpuRuntime:  env("INFERENCE_GPU_RUNTIME_CLASS", "nvidia"),
-		gpuDevices:  env("INFERENCE_GPU_VISIBLE_DEVICES", "all"),
-		gpuCaps:     env("INFERENCE_GPU_DRIVER_CAPABILITIES", "all"),
-		pullSecrets: splitCSV(env("INFERENCE_IMAGE_PULL_SECRETS", "")),
-		engine:      engine,
+		client:               client,
+		namespace:            env("INFERENCE_NAMESPACE", "inference"),
+		deployment:           env("INFERENCE_ENGINE_DEPLOYMENT", "inference-engine"),
+		service:              env("INFERENCE_ENGINE_SERVICE", "inference-engine"),
+		port:                 int32(port),
+		image:                env("INFERENCE_RUNTIME_IMAGE", ""),
+		instance:             env("INFERENCE_RELEASE_INSTANCE", "appliance-inference"),
+		nodeName:             strings.TrimSpace(env("INFERENCE_NODE_NAME", "")),
+		requireInferenceNode: strings.EqualFold(env("INFERENCE_REQUIRE_INFERENCE_NODE", "false"), "true"),
+		modelsClaim:          env("INFERENCE_MODELS_CLAIM", "models"),
+		shmSize:              shm,
+		gpuEnabled:           strings.EqualFold(env("INFERENCE_GPU_ENABLED", "false"), "true"),
+		gpuRuntime:           env("INFERENCE_GPU_RUNTIME_CLASS", "nvidia"),
+		gpuDevices:           env("INFERENCE_GPU_VISIBLE_DEVICES", "all"),
+		gpuCaps:              env("INFERENCE_GPU_DRIVER_CAPABILITIES", "all"),
+		pullSecrets:          splitCSV(env("INFERENCE_IMAGE_PULL_SECRETS", "")),
+		engine:               engine,
 	}, nil
 }
 
@@ -388,6 +392,15 @@ func (e *k8sEngine) ApplyEngine(ctx context.Context, spec enginePodSpec) error {
 		},
 		Containers: []corev1.Container{container},
 		Volumes:    volumes,
+	}
+	// The manager and engine share a node-local model volume. In the current
+	// single-node release this is empty; a future cluster controller supplies
+	// a verified node name and never lets a user choose arbitrary placement.
+	if e.nodeName != "" {
+		podSpec.NodeName = e.nodeName
+	}
+	if e.requireInferenceNode {
+		podSpec.NodeSelector = map[string]string{"zon.io/inference-node": "true"}
 	}
 	if e.gpuEnabled && e.gpuRuntime != "" {
 		podSpec.RuntimeClassName = &e.gpuRuntime

@@ -29,6 +29,18 @@ func NewAIProxyHandler(logger logging.Logger, baseURL string) (http.Handler, err
 			// be disclosed to the engine container.
 			pr.Out.Header.Del("Authorization")
 			pr.Out.Header.Del("Cookie")
+			// These headers are assertions from the authenticated control-plane
+			// context, never caller-provided values. The shared inference gateway
+			// records them with the routed model instance as the usage-accounting
+			// foundation.
+			pr.Out.Header.Del("X-Appliance-User-Id")
+			pr.Out.Header.Del("X-Appliance-Request-Id")
+			if principal, ok := PrincipalFromContext(pr.In.Context()); ok {
+				pr.Out.Header.Set("X-Appliance-User-Id", principal.UserID)
+			}
+			if requestID := requestIDFromRequest(pr.In); requestID != "" {
+				pr.Out.Header.Set("X-Appliance-Request-Id", requestID)
+			}
 			path := strings.TrimPrefix(pr.In.URL.Path, "/ai")
 			if path == "" {
 				path = "/"

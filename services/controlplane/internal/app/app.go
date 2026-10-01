@@ -113,7 +113,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			return nil, fmt.Errorf("building AI proxy: %w", err)
 		}
 		deps.InferenceH = &httpapi.InferenceHandlers{Inference: services.Inference, Audit: services.Audit}
-		deps.WebUIH = &httpapi.WebUIHandlers{WebUI: services.WebUI, Inference: services.Inference, Enabled: cfg.WebUIEnabled}
+		deps.WebUIH = &httpapi.WebUIHandlers{WebUI: services.WebUI, Inference: services.Inference, Enabled: cfg.WebUIEnabled, HealthURL: cfg.WebUIHealthURL}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameArtifactRegistry) {
 		deps.RegistryH = &httpapi.RegistryTokenHandlers{

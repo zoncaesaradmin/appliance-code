@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"appliance-code/services/controlplane/internal/inference"
 	"appliance-code/services/controlplane/internal/webui"
@@ -15,11 +16,17 @@ type WebUIHandlers struct {
 	WebUI     *webui.Service
 	Inference *inference.Service
 	Enabled   bool
+	HealthURL string
+	Client    *http.Client
 }
 
 func (h *WebUIHandlers) Launch(w http.ResponseWriter, r *http.Request) {
 	if !h.Enabled {
 		WriteProblem(w, r, http.StatusNotFound, "webui_unavailable", "Open AI Workspace is not installed", "")
+		return
+	}
+	if !h.ready(r) {
+		WriteProblem(w, r, http.StatusServiceUnavailable, "webui_unavailable", "Open AI Workspace is not ready", "")
 		return
 	}
 	p, ok := PrincipalFromContext(r.Context())
@@ -39,6 +46,29 @@ func (h *WebUIHandlers) Launch(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, map[string]string{"grant": grant})
+}
+
+func (h *WebUIHandlers) ready(r *http.Request) bool {
+	url := strings.TrimSpace(h.HealthURL)
+	if url == "" {
+		// Older installations without the health endpoint remain compatible;
+		// product-generated values always provide it when the pack is enabled.
+		return true
+	}
+	client := h.Client
+	if client == nil {
+		client = &http.Client{Timeout: 2 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // Consume is called by the session bridge after a browser form POST. It is an

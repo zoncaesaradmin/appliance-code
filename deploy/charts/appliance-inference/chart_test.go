@@ -44,6 +44,8 @@ func TestInferenceGatewayRender(t *testing.T) {
 		"runAsUser: 10006",
 		"name: inference-manager",
 		"name: INFERENCE_BACKEND_URL\n              value: \"http://inference-engine.inference.svc.cluster.local:8001\"",
+		"name: INFERENCE_MANAGER_ENDPOINT",
+		"value: \"http://inference-gateway.inference.svc.cluster.local:8080\"",
 		"name: INFERENCE_ENGINE\n              value: \"ollama\"",
 		"name: INFERENCE_RUNTIME_IMAGE",
 		"kind: PersistentVolume",
@@ -88,6 +90,40 @@ func TestInferenceGatewayRender(t *testing.T) {
 	}
 }
 
+func TestNodeBoundReleaseUsesUniqueEngineAndModelStorageNames(t *testing.T) {
+	out := render(t,
+		"--set", "fullnameOverride=inference-node-gpu-2",
+		"--set", "engine.serviceName=inference-engine-gpu-2",
+		"--set", "persistence.claimName=models-gpu-2",
+		"--set", "placement.nodeName=gpu-2",
+		"--set", "placement.nodeUID=8ec4f2b0-1234-5678-9abc-def012345678",
+		"--set", "placement.requireInferenceNode=true",
+		"--set", "routing.registryName=appliance-inference-routing",
+	)
+	for _, want := range []string{
+		"name: inference-node-gpu-2",
+		"name: inference-engine-gpu-2",
+		"claimName: models-gpu-2",
+		"path: \"/data/zon/inference/models\"",
+		"nodeName: \"gpu-2\"",
+		"name: INFERENCE_NODE_UID",
+		"value: \"8ec4f2b0-1234-5678-9abc-def012345678\"",
+		"value: \"http://inference-node-gpu-2.inference.svc.cluster.local:8080\"",
+		"name: INFERENCE_BACKEND_URL\n              value: \"http://inference-engine-gpu-2.inference.svc.cluster.local:8001\"",
+		"name: INFERENCE_ROUTING_CONFIGMAP",
+		"value: \"appliance-inference-routing\"",
+		"resources: [\"configmaps\"]",
+		"resourceNames: [\"appliance-inference-routing\"]",
+		"kind: ClusterRole",
+		"resources: [\"nodes\"]",
+		"kind: ClusterRoleBinding",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("node-bound release missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestGPUEnvPassedToManager(t *testing.T) {
 	out := render(t, "--set", "runtime.engine=vllm", "--set", "gpu.enabled=true")
 	for _, want := range []string{
@@ -117,6 +153,23 @@ func TestModelsStorageClassPVCWhenHostPathDisabled(t *testing.T) {
 	}
 	if !strings.Contains(out, "volumes:\n        - name: models\n          persistentVolumeClaim:\n            claimName: models") {
 		t.Error("models volume must still mount the models PVC")
+	}
+}
+
+func TestInferencePlacementPinsManagerAndLocalPV(t *testing.T) {
+	out := render(t, "--set", "placement.nodeName=gpu-worker-1", "--set", "placement.requireInferenceNode=true")
+	for _, want := range []string{
+		"nodeName: \"gpu-worker-1\"",
+		"key: kubernetes.io/hostname",
+		"values: [\"gpu-worker-1\"]",
+		"name: INFERENCE_NODE_NAME\n              value: \"gpu-worker-1\"",
+		"fieldPath: spec.nodeName",
+		"zon.io/inference-node: \"true\"",
+		"name: INFERENCE_REQUIRE_INFERENCE_NODE\n              value: \"true\"",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("placement render missing %q:\n%s", want, out)
+		}
 	}
 }
 

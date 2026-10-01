@@ -51,14 +51,14 @@ describe("navigation model", () => {
     ).toBe(true);
   });
 
-  it("lists Coding Chat under Manage for every inference-capable appliance user", () => {
+  it("lists AI Chat under Manage for every inference-capable appliance user", () => {
     const manage = MODES.find((mode) => mode.id === "manage");
-    expect(manage?.features.some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
-    expect(visibleFeatures(manage!, []).some((feature) => feature.path === "/manage/coding-chat")).toBe(false);
-    expect(visibleFeatures(manage!, ["inference"]).some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
+    expect(manage?.features.some((feature) => feature.path === "/manage/ai-chat")).toBe(true);
+    expect(visibleFeatures(manage!, []).some((feature) => feature.path === "/manage/ai-chat")).toBe(false);
+    expect(visibleFeatures(manage!, ["inference"]).some((feature) => feature.path === "/manage/ai-chat")).toBe(true);
     // open-webui is not required to see the nav entry; the Coding Chat page
     // explains when the Web UI is not enabled in the profile.
-    expect(visibleFeatures(manage!, ["inference", "open-webui"]).some((feature) => feature.path === "/manage/coding-chat")).toBe(true);
+    expect(visibleFeatures(manage!, ["inference", "open-webui"]).some((feature) => feature.path === "/manage/ai-chat")).toBe(true);
   });
 
   it("lists LAN Services under Admin and not under Manage", () => {

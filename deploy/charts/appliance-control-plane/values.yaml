@@ -148,6 +148,9 @@ config:
   inferenceEngine: ""
   inferenceArchitecture: ""
   webUIEnabled: false
+  # Product-generated gateway health endpoint. Required only when the
+  # open-webui pack is enabled; launch grants are not issued while it is down.
+  webUIHealthURL: ""
   # Bundled manifest describing in-cluster services whose selected routes are
   # exposed through the appliance API. zonctl injects host-agent here today;
   # post-install addon lifecycle is intentionally a later step.

@@ -522,6 +522,10 @@ export interface InferenceCheck {
 
 export interface InferenceServingInstance {
   id: string;
+  /** Appliance-managed node selected for this serving instance. */
+  nodeRef?: string;
+  runtimeRef?: string;
+  endpointRef?: string;
   models: string[];
   replicas: number;
 }
@@ -562,7 +566,8 @@ export interface InferenceModelCapabilities {
 }
 
 export interface ImportInferenceModelRequest {
-	 catalogId?: string;
+  catalogId?: string;
+  nodeRef?: string;
   modelId: string;
   source: string;
   digest?: string;
@@ -570,6 +575,7 @@ export interface ImportInferenceModelRequest {
 }
 
 export interface InferenceImportProgress {
+	nodeRef?: string;
   modelId?: string;
   source?: string;
   state: "idle" | "downloading" | "verifying" | "installing" | "complete" | "failed";
@@ -582,6 +588,7 @@ export interface InferenceImportProgress {
 }
 
 export interface InferenceLoadProgress {
+	nodeRef?: string;
   modelId?: string;
   state: "idle" | "loading" | "ready" | "failed";
   message?: string;
@@ -589,6 +596,12 @@ export interface InferenceLoadProgress {
   enginePhase?: string;
   oomKilled?: boolean;
   updatedAt?: string;
+}
+
+export interface InferenceNode {
+  ref: string;
+  name: string;
+  ready: boolean;
 }
 
 export interface InferenceCatalogEntry {

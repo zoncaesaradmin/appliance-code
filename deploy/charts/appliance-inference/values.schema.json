@@ -30,7 +30,11 @@
       "additionalProperties": false,
       "required": ["serviceName", "servicePort", "sharedMemorySize"],
       "properties": {
-        "serviceName": {"type": "string", "const": "inference-engine"},
+        "serviceName": {
+          "type": "string",
+          "description": "Appliance-controller-generated engine Service/Deployment name. Must be unique for each node-bound inference release.",
+          "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+        },
         "servicePort": {"type": "integer", "minimum": 1},
         "maxMemory": {
           "type": "string",
@@ -59,6 +63,26 @@
         "runtimeClassName": {"type": "string", "minLength": 1},
         "visibleDevices": {"type": "string", "minLength": 1},
         "driverCapabilities": {"type": "string", "minLength": 1}
+      }
+    },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeName": {"type": "string", "pattern": "^$|^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$"},
+        "nodeUID": {"type": "string", "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9-]{0,127}$"},
+        "requireInferenceNode": {"type": "boolean"}
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registryName": {
+          "type": "string",
+          "description": "Controller-selected shared ConfigMap for validated node-to-model routing. Empty disables cluster registry integration.",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+        }
       }
     },
     "replicaCount": {"type": "integer", "const": 1},
@@ -140,7 +164,11 @@
             "path": {"type": "string", "minLength": 1}
           }
         },
-        "claimName": {"type": "string", "const": "models"},
+        "claimName": {
+          "type": "string",
+          "description": "Appliance-controller-generated node-local model claim. Must be unique for each node-bound inference release.",
+          "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+        },
         "storageClassName": {"type": "string"},
         "accessMode": {"const": "ReadWriteOnce"},
         "size": {"type": "string", "minLength": 1}

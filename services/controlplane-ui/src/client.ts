@@ -57,7 +57,8 @@ import type {
   InferenceModel,
   ImportInferenceModelRequest,
   InferenceImportProgress,
-  InferenceLoadProgress
+  InferenceLoadProgress,
+  InferenceNode
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -208,11 +209,12 @@ export interface ControlPlaneClient {
   getInferenceStatus(): Promise<InferenceRuntimeStatus>;
   getInferenceCatalog(params?: { sort?: "parameters" | "memory" | "name"; order?: "asc" | "desc" }): Promise<InferenceCatalog>;
   listInferenceModels(): Promise<InferenceModel[]>;
+	listInferenceNodes(): Promise<InferenceNode[]>;
   importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress>;
-  getInferenceImportProgress(): Promise<InferenceImportProgress>;
-  loadInferenceModel(modelId: string): Promise<InferenceLoadProgress>;
-  getInferenceLoadProgress(): Promise<InferenceLoadProgress>;
-  deleteInferenceModel(modelId: string): Promise<void>;
+  getInferenceImportProgress(nodeRef?: string): Promise<InferenceImportProgress>;
+  loadInferenceModel(modelId: string, nodeRef?: string): Promise<InferenceLoadProgress>;
+  getInferenceLoadProgress(nodeRef?: string): Promise<InferenceLoadProgress>;
+  deleteInferenceModel(modelId: string, nodeRef?: string): Promise<void>;
   launchAIWorkspace(): Promise<void>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
@@ -783,24 +785,29 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 	return result.items || [];
   }
 
+  async listInferenceNodes(): Promise<InferenceNode[]> {
+	const result = await this.request<{ items?: InferenceNode[] }>("/api/v1/inference/nodes");
+	return result.items || [];
+  }
+
   async importInferenceModel(request: ImportInferenceModelRequest): Promise<InferenceImportProgress> {
 	return this.request("/api/v1/inference/models/imports", { method: "POST", body: request });
   }
 
-  async getInferenceImportProgress(): Promise<InferenceImportProgress> {
-    return this.request("/api/v1/inference/models/imports/progress");
+  async getInferenceImportProgress(nodeRef?: string): Promise<InferenceImportProgress> {
+    return this.request(`/api/v1/inference/models/imports/progress${nodeRef ? `?nodeRef=${encodeURIComponent(nodeRef)}` : ""}`);
   }
 
-  async loadInferenceModel(modelId: string): Promise<InferenceLoadProgress> {
-    return this.request(`/api/v1/inference/models/load`, { method: "POST", body: { modelId } });
+  async loadInferenceModel(modelId: string, nodeRef?: string): Promise<InferenceLoadProgress> {
+    return this.request(`/api/v1/inference/models/load`, { method: "POST", body: { modelId, ...(nodeRef ? { nodeRef } : {}) } });
   }
 
-  async getInferenceLoadProgress(): Promise<InferenceLoadProgress> {
-    return this.request("/api/v1/inference/models/load/progress");
+  async getInferenceLoadProgress(nodeRef?: string): Promise<InferenceLoadProgress> {
+    return this.request(`/api/v1/inference/models/load/progress${nodeRef ? `?nodeRef=${encodeURIComponent(nodeRef)}` : ""}`);
   }
 
-  async deleteInferenceModel(modelId: string): Promise<void> {
-    await this.request(`/api/v1/inference/models/delete`, { method: "POST", body: { modelId } });
+  async deleteInferenceModel(modelId: string, nodeRef?: string): Promise<void> {
+    await this.request(`/api/v1/inference/models/delete`, { method: "POST", body: { modelId, ...(nodeRef ? { nodeRef } : {}) } });
   }
 
   async launchAIWorkspace(): Promise<void> {

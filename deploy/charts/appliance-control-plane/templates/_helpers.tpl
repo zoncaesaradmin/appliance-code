@@ -227,7 +227,7 @@ Whether the control plane manages LAN DNS zone ConfigMap sync.
 Whether the control-plane ServiceAccount token must be mounted.
 */}}
 {{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
-{{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationsEnabled" .) "true") -}}true{{- else -}}false{{- end -}}
+{{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationsEnabled" .) "true") (has "inference" (.Values.config.enabledCapabilities | default (list))) -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*

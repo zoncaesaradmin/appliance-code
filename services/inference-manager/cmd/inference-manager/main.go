@@ -123,6 +123,7 @@ type registry struct {
 
 type manager struct {
 	engine     string
+	nodeID     string
 	modelsDir  string
 	backend    *url.URL
 	proxy      *httputil.ReverseProxy
@@ -139,9 +140,13 @@ type manager struct {
 	ollama     ollamaInventory
 	instanceMu sync.RWMutex
 	instances  instanceRegistry
-	download   func(context.Context, string, string) error
-	gpuProbe   func(context.Context) bool
-	catalog    *modelCatalog
+	// routingStore is set only for a node-bound inference release. It is the
+	// shared, validated source of model aliases; the PVC registry remains a
+	// restart cache and preserves a single-node installation's behavior.
+	routingStore routingRegistryStore
+	download     func(context.Context, string, string) error
+	gpuProbe     func(context.Context) bool
+	catalog      *modelCatalog
 }
 
 type importRequest struct {
@@ -167,6 +172,7 @@ func main() {
 	}
 	m := &manager{
 		engine:     engine,
+		nodeID:     env("INFERENCE_NODE_UID", env("INFERENCE_NODE_ID", "local")),
 		modelsDir:  modelsDir,
 		backend:    backend,
 		proxy:      newOpenAIReverseProxy(backend),
@@ -183,9 +189,23 @@ func main() {
 	if err := m.loadInstanceRegistry(); err != nil {
 		log.Fatalf("load instance registry: %v", err)
 	}
+	routingStore, nodeUID, err := newRoutingRegistryFromEnv()
+	if err != nil {
+		log.Fatalf("initialize cluster routing registry: %v", err)
+	}
+	m.routingStore = routingStore
+	if nodeUID != "" {
+		// The UID came from the Kubernetes API, not a chart value or request.
+		// This also upgrades the bootstrap node from its initial node-name
+		// placement to durable node identity before it publishes routing state.
+		m.nodeID = nodeUID
+	}
 	m.reconcileInterruptedProgress()
 	if err := m.migrateLegacyDefaultInstance(); err != nil {
 		log.Fatalf("migrate legacy default instance: %v", err)
+	}
+	if err := m.syncLocalRoutingRegistry(ctx); err != nil {
+		log.Fatalf("synchronize cluster routing registry: %v", err)
 	}
 	// Start discovery and runtime reconciliation at process start. Both run
 	// behind the API: cached catalog and inventory must be readable immediately,
@@ -193,6 +213,7 @@ func main() {
 	m.catalog = newModelCatalog(m)
 	go m.catalog.run(ctx)
 	m.startRuntimeInitialization(ctx)
+	m.startRoutingRegistryRefresh(ctx)
 
 	server := &http.Server{Addr: env("INFERENCE_LISTEN_ADDRESS", "0.0.0.0:11434"), Handler: m.handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -662,11 +683,6 @@ func (m *manager) loadModel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := m.setDefaultInstance(id); err != nil {
-		m.opMu.Unlock()
-		writeError(w, http.StatusInternalServerError, "persist default model instance: "+err.Error())
-		return
-	}
 	m.beginLoadProgress(id, "Loading model into the inference engine")
 	go m.runLoad(context.Background(), id)
 	writeJSON(w, http.StatusAccepted, m.currentLoadProgress())
@@ -688,6 +704,15 @@ func (m *manager) runLoad(ctx context.Context, id string) {
 		m.processMu.Lock()
 		m.active = id
 		m.processMu.Unlock()
+		if err := m.setDefaultInstance(id); err != nil {
+			_ = m.engineOrch.DeleteEngine(ctx)
+			clearEngineDesire(m.modelsDir)
+			m.processMu.Lock()
+			m.active = ""
+			m.processMu.Unlock()
+			m.finishLoadProgress("failed", id, "publish ready inference instance: "+err.Error())
+			return
+		}
 		m.finishLoadProgress("ready", id, "Model is ready for use")
 		return
 	}
@@ -705,6 +730,15 @@ func (m *manager) runLoad(ctx context.Context, id string) {
 	m.processMu.Lock()
 	m.active = id
 	m.processMu.Unlock()
+	if err := m.setDefaultInstance(id); err != nil {
+		_ = m.engineOrch.DeleteEngine(ctx)
+		clearEngineDesire(m.modelsDir)
+		m.processMu.Lock()
+		m.active = ""
+		m.processMu.Unlock()
+		m.finishLoadProgress("failed", id, "publish ready inference instance: "+err.Error())
+		return
+	}
 	m.finishLoadProgress("ready", id, "Model is ready for use")
 }
 
@@ -1010,11 +1044,57 @@ func (m *manager) deleteModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+		m.listRoutedOpenAIModels(w)
+		return
+	}
+	requestedModel, err := openAIRequestedModel(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid OpenAI request body: "+err.Error())
+		return
+	}
 	m.processMu.Lock()
 	active := m.active
 	m.processMu.Unlock()
-	if active == "" {
+	modelID := requestedModel
+	if modelID == "" {
+		modelID = active
+	}
+	if modelID == "" {
 		writeError(w, http.StatusServiceUnavailable, "no model is loaded")
+		return
+	}
+	instance, known := m.instanceForModel(modelID)
+	// Before the first persisted instance migration, retain compatibility with
+	// the legacy singleton engine. Once a routing table exists, unknown aliases
+	// fail closed and cannot accidentally land on the local model.
+	if requestedModel != "" && !known && m.hasRoutedModels() {
+		writeError(w, http.StatusNotFound, "requested model is not served by this appliance")
+		return
+	}
+	instanceID := instance.ID
+	if instanceID == "" {
+		instanceID = m.instanceIDForModel(modelID)
+	}
+	// This intentionally records identity only after the control-plane proxy
+	// has authenticated and injected it. It is an audit/usage foundation, not
+	// billing: token accounting can consume these correlated events later.
+	log.Printf("inference request user_id=%q request_id=%q model_id=%q instance_id=%q method=%q path=%q", r.Header.Get("X-Appliance-User-Id"), r.Header.Get("X-Appliance-Request-Id"), modelID, instanceID, r.Method, r.URL.Path)
+
+	// A non-local instance is reached through its manager OpenAI endpoint, not
+	// directly through a runtime pod. That preserves the remote node's engine
+	// readiness checks, request compatibility rules, and usage attribution.
+	if known && strings.TrimSpace(instance.NodeRef) != "" && instance.NodeRef != m.instanceNodeID() {
+		target, err := applianceEndpointURL(instance.EndpointRef)
+		if err != nil {
+			writeError(w, http.StatusServiceUnavailable, "requested model has no valid serving endpoint")
+			return
+		}
+		newOpenAIReverseProxy(target).ServeHTTP(w, r)
+		return
+	}
+	if requestedModel != "" && active != modelID {
+		writeError(w, http.StatusServiceUnavailable, "requested model is not ready on its assigned node")
 		return
 	}
 	status, err := m.engineOrch.EngineStatus(r.Context())
@@ -1036,6 +1116,24 @@ func (m *manager) proxyOpenAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.proxy.ServeHTTP(w, r)
+}
+
+func (m *manager) listRoutedOpenAIModels(w http.ResponseWriter) {
+	data := make([]map[string]any, 0)
+	for _, modelID := range m.routedModelIDs() {
+		data = append(data, map[string]any{
+			"id": modelID, "object": "model", "created": int64(0), "owned_by": "zon",
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": data})
+}
+
+func applianceEndpointURL(raw string) (*url.URL, error) {
+	target, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || target == nil || target.Host == "" || (target.Scheme != "http" && target.Scheme != "https") || target.User != nil || target.RawQuery != "" || target.Fragment != "" {
+		return nil, fmt.Errorf("invalid appliance inference endpoint")
+	}
+	return target, nil
 }
 
 func (m *manager) runOllamaImport(ctx context.Context, req importRequest) {

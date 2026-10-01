@@ -1642,6 +1642,26 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "502": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/inference/nodes:
+    get:
+      summary: List configured inference nodes
+      description: Returns control-plane scheduled node identities. The ref is a Kubernetes node UID and is the only accepted target for model lifecycle requests.
+      operationId: listInferenceNodes
+      responses:
+        "200":
+          description: Registered inference nodes with a deployed manager service.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/InferenceNode" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/inference/models/imports:
     post:
       summary: Start a model download
@@ -1668,6 +1688,12 @@ paths:
       summary: Read in-flight or recent model import progress
       description: Returns idle when no import has run. During download the manager updates bytes from the on-disk staging directory under the inference models volume.
       operationId: getInferenceImportProgress
+      parameters:
+        - name: nodeRef
+          in: query
+          required: false
+          description: Kubernetes node UID returned by listInferenceNodes.
+          schema: { type: string }
       responses:
         "200":
           description: Current import progress.
@@ -1691,6 +1717,7 @@ paths:
               required: [modelId]
               properties:
                 modelId: { type: string, minLength: 1 }
+                nodeRef: { type: string, description: Kubernetes node UID returned by listInferenceNodes. }
       responses:
         "202":
           description: Load accepted and running asynchronously.
@@ -1706,6 +1733,12 @@ paths:
       summary: Read in-flight or recent model load progress
       description: Returns idle when no load has run. Ready means the selected model is serving and ready for use.
       operationId: getInferenceLoadProgress
+      parameters:
+        - name: nodeRef
+          in: query
+          required: false
+          description: Kubernetes node UID returned by listInferenceNodes.
+          schema: { type: string }
       responses:
         "200":
           description: Current load progress.
@@ -1729,6 +1762,7 @@ paths:
               required: [modelId]
               properties:
                 modelId: { type: string, minLength: 1 }
+                nodeRef: { type: string, description: Kubernetes node UID returned by listInferenceNodes. }
       responses:
         "204": { description: Model removed. }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -2651,6 +2685,15 @@ components:
       required: [id, models, replicas]
       properties:
         id: { type: string }
+        nodeRef:
+          type: string
+          description: Appliance-managed node selected for this serving instance.
+        runtimeRef:
+          type: string
+          description: Runtime selected for this serving instance.
+        endpointRef:
+          type: string
+          description: Appliance-managed in-cluster endpoint identity for this instance.
         models:
           type: array
           maxItems: 1
@@ -2747,6 +2790,9 @@ components:
         catalogId:
           type: string
           description: Revalidate this cached selection against current capacity and use its runtime launch settings. modelId and source must match the cached selection.
+        nodeRef:
+          type: string
+          description: Kubernetes node UID returned by listInferenceNodes. The server resolves this through Kubernetes; endpoints and node names are not accepted.
         source: { type: string, minLength: 1 }
         digest:
           type: string
@@ -2761,6 +2807,7 @@ components:
       required: [state]
       properties:
         modelId: { type: string }
+        nodeRef: { type: string }
         source: { type: string }
         state:
           type: string
@@ -2776,6 +2823,7 @@ components:
       required: [state]
       properties:
         modelId: { type: string }
+        nodeRef: { type: string }
         state:
           type: string
           enum: [idle, loading, ready, failed]
@@ -2784,6 +2832,13 @@ components:
         enginePhase: { type: string, description: Engine pod phase while loading }
         oomKilled: { type: boolean, description: True when the engine container was OOMKilled }
         updatedAt: { type: string, format: date-time }
+    InferenceNode:
+      type: object
+      required: [ref, name, ready]
+      properties:
+        ref: { type: string, description: Kubernetes node UID used for scheduling. }
+        name: { type: string, description: Informational Kubernetes node name; not accepted as a scheduling target. }
+        ready: { type: boolean }
     Problem:
       type: object
       required: [type, title, status, code, instance]

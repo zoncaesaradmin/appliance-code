@@ -52,7 +52,12 @@ export function RouteView(props: {
   if (props.pathname.startsWith("/manage/artifacts")) {
     return <ArtifactsPage pathname={props.pathname} />;
   }
+  // Keep existing bookmarks working while the product wording and primary
+  // route remain model-neutral.
   if (props.pathname.startsWith("/manage/coding-chat")) {
+    return <Redirect to="/manage/ai-chat" />;
+  }
+  if (props.pathname.startsWith("/manage/ai-chat")) {
     return <CodingChatPage capabilities={props.capabilities} />;
   }
   if (props.pathname.startsWith("/analyze/workflows")) {

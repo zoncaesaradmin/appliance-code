@@ -93,9 +93,9 @@ export const MODES: Mode[] = [
         icon: "artifacts"
       },
       {
-        label: "Coding Chat",
-        path: "/manage/coding-chat",
-        description: "Open the appliance-hosted coding chat workspace",
+        label: "AI Chat",
+        path: "/manage/ai-chat",
+        description: "Open the appliance-hosted chat workspace",
         icon: "analyze",
         requiredCapability: "inference"
       }

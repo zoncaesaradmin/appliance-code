@@ -21,9 +21,31 @@ func testGateway(t *testing.T, control http.Handler, upstream http.Handler) gate
 		t.Fatal(err)
 	}
 	return gateway{
-		control: controlServer.URL,
-		proxy:   httputil.NewSingleHostReverseProxy(target),
-		client:  controlServer.Client(),
+		control:  controlServer.URL,
+		upstream: target,
+		proxy:    httputil.NewSingleHostReverseProxy(target),
+		client:   controlServer.Client(),
+	}
+}
+
+func TestGatewayHealthRequiresHealthyWorkspace(t *testing.T) {
+	status := http.StatusServiceUnavailable
+	g := testGateway(t, http.NotFoundHandler(), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			t.Fatalf("health upstream path = %q", r.URL.Path)
+		}
+		w.WriteHeader(status)
+	}))
+	response := httptest.NewRecorder()
+	g.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unhealthy workspace status=%d", response.Code)
+	}
+	status = http.StatusOK
+	response = httptest.NewRecorder()
+	g.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("healthy workspace status=%d", response.Code)
 	}
 }
 

@@ -59,7 +59,8 @@ import type {
   InferenceModel,
   ImportInferenceModelRequest,
   InferenceImportProgress,
-  InferenceLoadProgress
+  InferenceLoadProgress,
+  InferenceNode
 } from "./types";
 
 function now(): string {
@@ -1369,6 +1370,10 @@ export class MockControlPlaneClient {
     return mockState.inferenceModels.map((model) => ({ ...model }));
   }
 
+  async listInferenceNodes(): Promise<InferenceNode[]> {
+    return [];
+  }
+
   async getInferenceCatalog(
     params: { sort?: "parameters" | "memory" | "name"; order?: "asc" | "desc" } = { sort: "parameters", order: "desc" }
   ): Promise<InferenceCatalog> {
@@ -1414,11 +1419,11 @@ export class MockControlPlaneClient {
     };
   }
 
-  async getInferenceImportProgress(): Promise<InferenceImportProgress> {
+  async getInferenceImportProgress(_nodeRef?: string): Promise<InferenceImportProgress> {
     return { state: "idle", updatedAt: now() };
   }
 
-  async loadInferenceModel(modelId: string): Promise<InferenceLoadProgress> {
+  async loadInferenceModel(modelId: string, _nodeRef?: string): Promise<InferenceLoadProgress> {
     return {
       modelId,
       state: "ready",
@@ -1427,11 +1432,11 @@ export class MockControlPlaneClient {
     };
   }
 
-  async getInferenceLoadProgress(): Promise<InferenceLoadProgress> {
+  async getInferenceLoadProgress(_nodeRef?: string): Promise<InferenceLoadProgress> {
     return { state: "idle", updatedAt: now() };
   }
 
-  async deleteInferenceModel(modelId: string): Promise<void> {
+  async deleteInferenceModel(modelId: string, _nodeRef?: string): Promise<void> {
     mockState.inferenceModels = mockState.inferenceModels.filter((model) => model.id !== modelId);
   }
 

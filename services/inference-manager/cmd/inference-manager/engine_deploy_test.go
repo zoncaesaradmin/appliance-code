@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestPlanModelMemoryIncludesShmAndMargin(t *testing.T) {
@@ -16,6 +19,21 @@ func TestPlanModelMemoryIncludesShmAndMargin(t *testing.T) {
 	want := uint64(4<<30) + uint64(4<<30) + podMarginBytes
 	if plan.RequiredBytes != want {
 		t.Fatalf("required=%d want=%d", plan.RequiredBytes, want)
+	}
+}
+
+func TestEngineDeploymentRequiresVerifiedInferenceNode(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	engine := &k8sEngine{client: client, namespace: "inference", deployment: "engine-a", service: "engine-a", image: "registry.local/runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", nodeName: "gpu-1", requireInferenceNode: true, modelsClaim: "models", engine: "vllm"}
+	if err := engine.ApplyEngine(context.Background(), enginePodSpec{ModelID: "org/model", Command: []string{"serve"}, MemoryLimit: resource.MustParse("2Gi"), MemoryReq: resource.MustParse("1Gi"), CPULimit: resource.MustParse("1"), CPURequest: resource.MustParse("1")}); err != nil {
+		t.Fatal(err)
+	}
+	deployment, err := client.AppsV1().Deployments("inference").Get(context.Background(), "engine-a", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deployment.Spec.Template.Spec.NodeName != "gpu-1" || deployment.Spec.Template.Spec.NodeSelector["zon.io/inference-node"] != "true" {
+		t.Fatalf("engine placement = %+v", deployment.Spec.Template.Spec)
 	}
 }
 

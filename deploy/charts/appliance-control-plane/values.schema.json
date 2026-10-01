@@ -395,6 +395,7 @@
         "inferenceRuntimePackage": {"type": "string"},
         "inferenceEngine": {"type": "string"},
         "inferenceArchitecture": {"type": "string"},
+        "webUIHealthURL": {"type": "string"},
         "dnsZoneName": {
           "type": "string"
         },
