@@ -36,6 +36,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 
 {{- define "appliance-dns.podNodeName" -}}
 {{- if .Values.placement.nodeName }}
-      nodeName: {{ .Values.placement.nodeName | quote }}
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.placement.nodeName | quote }}
 {{- end }}
 {{- end -}}

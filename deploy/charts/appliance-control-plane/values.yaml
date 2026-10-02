@@ -415,5 +415,7 @@ priorityClassName: ""
 
 # Advertised prime Kubernetes node name. zonctl injects this so hostPath,
 # host-agent, and LAN-facing workloads stay on the appliance identity host.
+# Pods use nodeSelector (not spec.nodeName) so the scheduler still runs and
+# WaitForFirstConsumer PVCs such as controlplane-data can bind.
 placement:
   nodeName: ""

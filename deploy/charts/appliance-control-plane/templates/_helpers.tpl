@@ -374,7 +374,8 @@ ForwardAuth middleware name.
 
 {{- define "appliance-control-plane.podNodeName" -}}
 {{- if .Values.placement.nodeName }}
-      nodeName: {{ .Values.placement.nodeName | quote }}
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.placement.nodeName | quote }}
 {{- end }}
 {{- end -}}
 

@@ -127,7 +127,11 @@ func TestWorkflowsPinsToAdvertisedPrime(t *testing.T) {
 	if dep == nil {
 		t.Fatal("expected workflow-controller deployment")
 	}
-	if got, _ := at(dep, "spec", "template", "spec", "nodeName").(string); got != "192-168-1-151" {
-		t.Fatalf("workflow-controller nodeName = %q, want advertised prime", got)
+	if _, ok := at(dep, "spec", "template", "spec", "nodeName").(string); ok {
+		t.Fatal("workflow-controller must not set spec.nodeName (bypasses scheduler and blocks WaitForFirstConsumer PVCs)")
+	}
+	selector, _ := at(dep, "spec", "template", "spec", "nodeSelector").(map[string]any)
+	if got, _ := selector["kubernetes.io/hostname"].(string); got != "192-168-1-151" {
+		t.Fatalf("workflow-controller nodeSelector hostname = %q, want advertised prime", got)
 	}
 }

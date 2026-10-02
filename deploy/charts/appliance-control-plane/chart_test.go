@@ -1495,8 +1495,12 @@ func TestHostPathWorkloadsPinToAdvertisedPrime(t *testing.T) {
 		if doc == nil {
 			t.Fatalf("expected Deployment/%s", name)
 		}
-		if got, _ := at(doc, "spec", "template", "spec", "nodeName").(string); got != "192-168-1-151" {
-			t.Fatalf("%s nodeName = %q, want advertised prime", name, got)
+		if _, ok := at(doc, "spec", "template", "spec", "nodeName").(string); ok {
+			t.Fatalf("%s must not set spec.nodeName (bypasses scheduler and blocks WaitForFirstConsumer PVCs)", name)
+		}
+		selector, _ := at(doc, "spec", "template", "spec", "nodeSelector").(map[string]any)
+		if got, _ := selector["kubernetes.io/hostname"].(string); got != "192-168-1-151" {
+			t.Fatalf("%s nodeSelector hostname = %q, want advertised prime", name, got)
 		}
 	}
 	foundPVAffinity := 0
