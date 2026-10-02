@@ -99,6 +99,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- include "appliance-dns.podNodeName" . }}
       hostNetwork: {{ .Values.hostNetwork }}
       dnsPolicy: {{ .Values.dnsPolicy }}
       securityContext:

@@ -76,3 +76,6 @@ containerSecurityContext:
 
 networkPolicy:
   enabled: false
+
+placement:
+  nodeName: ""

@@ -76,3 +76,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" $image.repository ($image.tag | default $.Chart.AppVersion) -}}
 {{- end -}}
 {{- end -}}
+
+{{- define "appliance-workflows.podNodeName" -}}
+{{- if .Values.placement.nodeName }}
+      nodeName: {{ .Values.placement.nodeName | quote }}
+{{- end }}
+{{- end -}}

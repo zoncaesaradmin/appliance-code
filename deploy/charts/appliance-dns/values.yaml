@@ -98,3 +98,6 @@ probes:
   readyPort: 8181
   startupFailureThreshold: 30
   startupPeriodSeconds: 2
+
+placement:
+  nodeName: ""

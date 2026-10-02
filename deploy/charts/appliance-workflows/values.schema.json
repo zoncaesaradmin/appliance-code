@@ -191,6 +191,13 @@
       },
       "required": ["enabled"]
     },
+    "placement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nodeName": { "type": "string" }
+      }
+    },
     "fullnameOverride": { "type": "string" },
     "deploymentNameOverride": { "type": "string" }
   },

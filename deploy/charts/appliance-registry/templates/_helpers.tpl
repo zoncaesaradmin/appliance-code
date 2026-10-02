@@ -32,3 +32,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{ printf "%s:%s" .Values.image.repository (default .Chart.AppVersion .Values.image.tag) }}
 {{- end -}}
 {{- end -}}
+
+{{- define "appliance-registry.podNodeName" -}}
+{{- if .Values.placement.nodeName }}
+      nodeName: {{ .Values.placement.nodeName | quote }}
+{{- end }}
+{{- end -}}

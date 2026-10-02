@@ -371,3 +371,22 @@ ForwardAuth middleware name.
       port: {{ .Values.ui.service.port }}
 {{- end }}
 {{- end -}}
+
+{{- define "appliance-control-plane.podNodeName" -}}
+{{- if .Values.placement.nodeName }}
+      nodeName: {{ .Values.placement.nodeName | quote }}
+{{- end }}
+{{- end -}}
+
+{{- define "appliance-control-plane.pvNodeAffinity" -}}
+{{- if .Values.placement.nodeName }}
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - {{ .Values.placement.nodeName | quote }}
+{{- end }}
+{{- end -}}

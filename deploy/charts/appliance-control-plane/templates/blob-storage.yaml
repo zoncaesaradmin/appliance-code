@@ -30,6 +30,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath: {path: {{ .Values.blobStorage.persistence.hostPath | quote }}, type: DirectoryOrCreate}
+  {{- include "appliance-control-plane.pvNodeAffinity" . }}
   claimRef:
     namespace: {{ $ns }}
     name: {{ .Values.blobStorage.persistence.claimName }}
@@ -68,6 +69,7 @@ spec:
       labels: {app.kubernetes.io/name: blob-storage}
     spec:
       automountServiceAccountToken: false
+      {{- include "appliance-control-plane.podNodeName" . }}
       {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
       securityContext:
         runAsNonRoot: true

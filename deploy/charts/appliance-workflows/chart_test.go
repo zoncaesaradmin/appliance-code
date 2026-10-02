@@ -120,3 +120,14 @@ func TestBuildNamespaceIsInstallerOwned(t *testing.T) {
 		t.Fatal("build namespace must be installer-owned, not Helm-owned")
 	}
 }
+
+func TestWorkflowsPinsToAdvertisedPrime(t *testing.T) {
+	docs := renderChart(t, "--set", "placement.nodeName=192-168-1-151")
+	dep := findByKindAndName(docs, "Deployment", "workflow-controller")
+	if dep == nil {
+		t.Fatal("expected workflow-controller deployment")
+	}
+	if got, _ := at(dep, "spec", "template", "spec", "nodeName").(string); got != "192-168-1-151" {
+		t.Fatalf("workflow-controller nodeName = %q, want advertised prime", got)
+	}
+}

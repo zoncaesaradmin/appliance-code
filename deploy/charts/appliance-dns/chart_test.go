@@ -100,6 +100,13 @@ func TestHardenedDNSRender(t *testing.T) {
 	}
 }
 
+func TestDNSPinsToAdvertisedPrime(t *testing.T) {
+	out := render(t, "--set", "placement.nodeName=192-168-1-151")
+	if !strings.Contains(out, "nodeName: \"192-168-1-151\"") && !strings.Contains(out, "nodeName: 192-168-1-151") {
+		t.Fatalf("dns deployment missing advertised prime pin:\n%s", out)
+	}
+}
+
 func TestNamespaceCreateRendersPSALabels(t *testing.T) {
 	out := render(t, "--set", "namespace.create=true")
 	for _, want := range []string{

@@ -86,3 +86,6 @@ probes:
   # Use a plain TCP probe so auth configuration does not flap pod health.
   startupFailureThreshold: 30
   startupPeriodSeconds: 2
+
+placement:
+  nodeName: ""

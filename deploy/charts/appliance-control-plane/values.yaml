@@ -412,3 +412,8 @@ probes:
   startupPeriodSeconds: 2
 
 priorityClassName: ""
+
+# Advertised prime Kubernetes node name. zonctl injects this so hostPath,
+# host-agent, and LAN-facing workloads stay on the appliance identity host.
+placement:
+  nodeName: ""

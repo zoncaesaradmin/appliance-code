@@ -19,6 +19,7 @@ spec:
   hostPath:
     path: {{ .Values.workspaceStorage.rootDir | quote }}
     type: DirectoryOrCreate
+  {{- include "appliance-control-plane.pvNodeAffinity" . }}
   claimRef:
     namespace: {{ include "appliance-control-plane.workflowNamespace" . }}
     name: {{ include "appliance-control-plane.workspaceClaimName" . }}

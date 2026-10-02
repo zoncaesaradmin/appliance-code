@@ -46,6 +46,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   hostPath: {path: {{ .Values.videoLibrary.projection.hostPath | quote }}, type: Directory}
+  {{- include "appliance-control-plane.pvNodeAffinity" . }}
   claimRef:
     namespace: {{ include "appliance-control-plane.applicationNamespace" . }}
     name: {{ .Values.videoLibrary.projection.claimName }}

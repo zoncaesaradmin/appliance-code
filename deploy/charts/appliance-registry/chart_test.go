@@ -231,3 +231,10 @@ func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 		t.Fatalf("unpaired Artifact Server image was not rejected: err=%v output=%s", err, out)
 	}
 }
+
+func TestRegistryPinsToAdvertisedPrime(t *testing.T) {
+	out := render(t, "--set", "placement.nodeName=192-168-1-151", "--set", "networkPolicy.traefikNamespaceLabel.kubernetes\\.io/metadata\\.name=kube-system")
+	if !strings.Contains(out, "nodeName: \"192-168-1-151\"") && !strings.Contains(out, "nodeName: 192-168-1-151") {
+		t.Fatalf("registry deployment missing advertised prime pin:\n%s", out)
+	}
+}

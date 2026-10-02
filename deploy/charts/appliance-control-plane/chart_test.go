@@ -1483,3 +1483,29 @@ func containsString(values []any, want string) bool {
 	}
 	return false
 }
+
+func TestHostPathWorkloadsPinToAdvertisedPrime(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "placement.nodeName=192-168-1-151",
+		"--set", "hostAgent.enabled=true",
+		"--set", "hostAgent.image.reference=registry.local/host-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	)...)
+	for _, name := range []string{controlPlaneDeploymentName, controlPlaneUIName, "host-agent", automationRuntimeName, "blob-storage"} {
+		doc := findByKindAndName(docs, "Deployment", name)
+		if doc == nil {
+			t.Fatalf("expected Deployment/%s", name)
+		}
+		if got, _ := at(doc, "spec", "template", "spec", "nodeName").(string); got != "192-168-1-151" {
+			t.Fatalf("%s nodeName = %q, want advertised prime", name, got)
+		}
+	}
+	foundPVAffinity := 0
+	for _, doc := range findByKind(docs, "PersistentVolume") {
+		if _, ok := at(doc, "spec", "nodeAffinity").(map[string]any); ok {
+			foundPVAffinity++
+		}
+	}
+	if foundPVAffinity < 1 {
+		t.Fatal("expected hostPath PVs to pin nodeAffinity to the advertised prime")
+	}
+}
