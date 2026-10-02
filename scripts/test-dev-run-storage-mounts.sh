@@ -46,11 +46,20 @@ assert_contains "${out}" '/tmp/appliance-code-dev-cache-test/containers/vfs/syst
 
 # Cross-arch packaging: outer tooling stays host-native; product TARGET_ARCH is
 # forwarded for GOARCH / buildah --arch (nested buildah under qemu fails).
-host_arch="$(go env GOARCH)"
+host_arch=""
+if command -v go >/dev/null 2>&1; then
+  host_arch="$(go env GOARCH 2>/dev/null || true)"
+fi
+if [[ -z "${host_arch}" ]]; then
+  case "$(uname -m 2>/dev/null || true)" in
+    x86_64|amd64) host_arch=amd64 ;;
+    aarch64|arm64) host_arch=arm64 ;;
+  esac
+fi
 case "${host_arch}" in
   amd64) foreign_arch=arm64 ;;
   arm64) foreign_arch=amd64 ;;
-  *) fail "unsupported host Go arch ${host_arch}" ;;
+  *) fail "unsupported host arch ${host_arch:-(empty)}" ;;
 esac
 cross_out="$(make -n \
   SUDO= \

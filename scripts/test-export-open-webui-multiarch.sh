@@ -102,4 +102,13 @@ echo "${pkg_out}" | grep -Eq "HOST_ARCH=\"?${host_go}\"?" \
 echo "${pkg_out}" | grep -Eq "TARGET_ARCH=\"?${foreign_arch}\"?" \
   || fail "package-open-webui dry-run must set TARGET_ARCH=${foreign_arch}"
 
+# Makefile must detect HOST_ARCH without host Go (bare build-host bootstrap).
+no_go_host="$(PATH=/usr/bin:/bin:/usr/sbin:/sbin make -C "${ROOT}" -n \
+  SUDO= CONTAINER_ENGINE=podman DEV_REGISTRY_USER=u DEV_REGISTRY_TOKEN=t \
+  TARGET_ARCH="${foreign_arch}" \
+  OPEN_WEBUI_SOURCE_DIR=/tmp/owui-src \
+  package-open-webui-image-archive 2>&1)" || true
+echo "${no_go_host}" | grep -Eq "HOST_ARCH=\"?${host_go}\"?" \
+  || fail "Makefile must resolve HOST_ARCH=${host_go} when go is absent from PATH"
+
 echo "test-export-open-webui-multiarch: ok"

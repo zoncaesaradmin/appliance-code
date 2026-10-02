@@ -19,9 +19,14 @@ VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
+# Host machine arch for BUILDPLATFORM / nested tooling. Prefer go when present;
+# build hosts often have no host Go (tooling lives in the container), so fall
+# back to uname — never fail Makefile parse with an empty HOST_ARCH.
+# Detection lives in a script: Make $(shell) quoting differs across GNU/BSD make.
+_host_arch_detect = $(shell bash "$(CURDIR)/scripts/package/detect-host-arch.sh" 2>/dev/null)
 # Inference-manager requires an explicit arch (no Makefile default). Local
-# verify/build pass TARGET_ARCH when set, otherwise the host go env arch.
-INFERENCE_GOARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(shell go env GOARCH))
+# verify/build pass TARGET_ARCH when set, otherwise the detected host arch.
+INFERENCE_GOARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(_host_arch_detect))
 
 GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR) services/open-webui-gateway
 # Product/release version for packaged images and /version. Prefer an explicit
@@ -58,9 +63,11 @@ DEV_REGISTRY_HOST ?= $(firstword $(subst /, ,$(DEV_REGISTRY)))
 # differ (cross-arch packaging): nested buildah/skopeo under qemu-foreign
 # tooling fails with unshare(CLONE_NEWUSER). Always run host-native tooling;
 # TARGET_ARCH still drives GOARCH / buildah --arch / skopeo --override-arch.
-HOST_ARCH := $(shell go env GOARCH)
+# Detection must not require host Go: bootstrap targets (dev-registry-login,
+# dev-sudo-setup) run on bare Linux build hosts that only have Podman.
+HOST_ARCH := $(_host_arch_detect)
 ifeq ($(filter $(HOST_ARCH),amd64 arm64),)
-$(error HOST_ARCH must be amd64|arm64 (got "$(HOST_ARCH)" from go env GOARCH))
+$(error HOST_ARCH must be amd64|arm64 (got "$(HOST_ARCH)" from go/uname; set HOST_ARCH explicitly))
 endif
 # Export so package recipes and DEV_FORWARD_ENV (-e HOST_ARCH) see Make's value,
 # not only an ambient shell export from build-full-bundle.
