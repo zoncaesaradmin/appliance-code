@@ -36,7 +36,6 @@ import (
 	"appliance-code/services/controlplane/internal/registryauth"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
 	"appliance-code/services/controlplane/internal/tokens"
 	"appliance-code/services/controlplane/internal/users"
 	"appliance-code/services/controlplane/internal/webui"
@@ -113,6 +112,10 @@ func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
 }
 
 func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger logging.Logger) (*Services, error) {
+	return wireServicesWithStorageProvider(cfg, resolved, logger, sqliteStorageProvider{})
+}
+
+func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.ResolvedProfile, logger logging.Logger, provider StorageProvider) (*Services, error) {
 	resolvedModules, err := cfg.ResolveModules(resolved)
 	if err != nil {
 		return nil, fmt.Errorf("app: resolving modules: %w", err)
@@ -121,18 +124,14 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 	buildEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameBuild)
 	dnsEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameLANDNS)
 	inferenceEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameInferenceRuntime)
-	db, err := sqlite.Open(cfg.SQLitePath())
+	ctx := context.Background()
+	stores, err := provider.Open(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("app: opening storage: %w", err)
 	}
+	db := stores.DB
 
-	ctx := context.Background()
-	if err := db.Migrate(ctx); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("app: migrating storage: %w", err)
-	}
-
-	roleStore := sqlite.NewRoleStore(db)
+	roleStore := stores.RoleStore
 	if err := roles.Seed(ctx, roleStore); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: seeding roles: %w", err)
@@ -144,21 +143,21 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		return nil, fmt.Errorf("app: loading key material: %w", err)
 	}
 
-	userStore := sqlite.NewUserStore(db)
+	userStore := stores.UserStore
 	if resolved.Capabilities.Enabled(appliance.CapabilityGuestAccess) {
 		if err := ensureGuestUser(ctx, db, userStore, roleStore); err != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: ensuring guest user: %w", err)
 		}
 	}
-	tokenStore := sqlite.NewTokenStore(db)
-	sessionStore := sqlite.NewSessionStore(db)
-	throttleStore := sqlite.NewThrottleStore(db)
-	auditStore := sqlite.NewAuditStore(db)
-	operationsStore := sqlite.NewOperationsStore(db)
-	registryGrantStore := sqlite.NewRegistryGrantStore(db)
-	dnsRecordStore := sqlite.NewDNSRecordStore(db)
-	licensingStore := sqlite.NewLicensingStore(db)
+	tokenStore := stores.TokenStore
+	sessionStore := stores.SessionStore
+	throttleStore := stores.ThrottleStore
+	auditStore := stores.AuditStore
+	operationsStore := stores.OperationsStore
+	registryGrantStore := stores.RegistryGrantStore
+	dnsRecordStore := stores.DNSRecordStore
+	licensingStore := stores.LicensingStore
 	recorder := audit.NewRecorder(auditStore)
 	capabilityCatalog, err := appliance.CapabilityCatalogFromMetadata(cfg.Metadata.Capabilities)
 	if err != nil {
@@ -179,7 +178,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 			return nil, fmt.Errorf("app: initializing automation runtime client: %w", err)
 		}
 	} else {
-		metadataStore := sqlite.NewMetadataBundleStore(db)
+		metadataStore := stores.MetadataStore
 		metadataSvc, err = metadatabundle.NewService(db, metadataStore, recorder, auditOps, cfg.DataDir)
 		if err != nil {
 			db.Close()
@@ -203,14 +202,14 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		}
 	}
 
-	buildStore := sqlite.NewBuildStore(db)
-	idempotencyStore := sqlite.NewIdempotencyStore(db)
-	workspaceStore := sqlite.NewWorkspaceStore(db)
-	jobStore := sqlite.NewJobStore(db)
-	applicationStore := sqlite.NewApplicationStore(db)
-	focusContentStore := sqlite.NewFocusContentStore(db)
-	webuiGrantStore := sqlite.NewWebUILaunchGrantStore(db)
-	webuiBridgeStore := sqlite.NewWebUIBridgeSessionStore(db)
+	buildStore := stores.BuildStore
+	idempotencyStore := stores.IdempotencyStore
+	workspaceStore := stores.WorkspaceStore
+	jobStore := stores.JobStore
+	applicationStore := stores.ApplicationStore
+	focusContentStore := stores.FocusContentStore
+	webuiGrantStore := stores.WebUIGrantStore
+	webuiBridgeStore := stores.WebUIBridgeStore
 	applicationsSvc, err := applications.NewService(applicationStore, cfg.ApplicationCatalog)
 	if err != nil {
 		db.Close()
@@ -252,7 +251,7 @@ func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger 
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application resource manager: %w", err)
 	}
-	builderCatalogStore := sqlite.NewBuilderCatalogStore(db)
+	builderCatalogStore := stores.BuilderCatalogStore
 	usersSvc := users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial)
 	tokensSvc := tokens.NewService(db, tokenStore, recorder, keyMaterial)
 	var workflowEngine workflows.Engine
