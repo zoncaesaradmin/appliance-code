@@ -22,11 +22,12 @@ import (
 )
 
 const (
-	sessionPrivateFile  = "session_ed25519_private.key"
-	registryPrivateFile = "registry_ed25519_private.key"
-	apiTokenPepperFile  = "api_token_pepper.key"
-	refreshPepperFile   = "refresh_pepper.key"
-	cursorHMACFile      = "cursor_hmac.key"
+	sessionPrivateFile       = "session_ed25519_private.key"
+	registryPrivateFile      = "registry_ed25519_private.key"
+	apiTokenPepperFile       = "api_token_pepper.key"
+	refreshPepperFile        = "refresh_pepper.key"
+	cursorHMACFile           = "cursor_hmac.key"
+	configurationArchiveFile = "configuration_archive.key"
 
 	pepperLength = 32
 )
@@ -47,6 +48,10 @@ type Material struct {
 	APITokenPepper []byte
 	RefreshPepper  []byte
 	CursorHMACKey  []byte
+	// ConfigurationArchiveKey protects configuration archives only. It must
+	// never be substituted with a session key, token pepper, or cursor key.
+	ConfigurationArchiveKey   []byte
+	ConfigurationArchiveKeyID string
 }
 
 // LoadOrGenerate reads key material from dir, generating and persisting any
@@ -86,17 +91,23 @@ func LoadOrGenerate(dir string) (*Material, error) {
 	if err != nil {
 		return nil, err
 	}
+	configurationArchiveKey, err := loadOrGenerateBytes(filepath.Join(dir, configurationArchiveFile), pepperLength)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Material{
-		SessionPrivateKey:  priv,
-		SessionPublicKey:   pub,
-		SessionKeyID:       keyID(pub),
-		RegistryPrivateKey: registryPriv,
-		RegistryPublicKey:  registryPub,
-		RegistryKeyID:      keyID(registryPub),
-		APITokenPepper:     apiTokenPepper,
-		RefreshPepper:      refreshPepper,
-		CursorHMACKey:      cursorHMAC,
+		SessionPrivateKey:         priv,
+		SessionPublicKey:          pub,
+		SessionKeyID:              keyID(pub),
+		RegistryPrivateKey:        registryPriv,
+		RegistryPublicKey:         registryPub,
+		RegistryKeyID:             keyID(registryPub),
+		APITokenPepper:            apiTokenPepper,
+		RefreshPepper:             refreshPepper,
+		CursorHMACKey:             cursorHMAC,
+		ConfigurationArchiveKey:   configurationArchiveKey,
+		ConfigurationArchiveKeyID: keyIDBytes(configurationArchiveKey),
 	}, nil
 }
 
@@ -104,6 +115,11 @@ func LoadOrGenerate(dir string) (*Material, error) {
 // key, used as the JWT "kid" header.
 func keyID(pub ed25519.PublicKey) string {
 	sum := sha256.Sum256(pub)
+	return hex.EncodeToString(sum[:8])
+}
+
+func keyIDBytes(key []byte) string {
+	sum := sha256.Sum256(key)
 	return hex.EncodeToString(sum[:8])
 }
 
