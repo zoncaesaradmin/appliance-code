@@ -42,6 +42,8 @@ data:
   APPLIANCE_BLOB_STORAGE_ENDPOINT: {{ .Values.blobStorage.endpoint | quote }}
   APPLIANCE_BLOB_STORAGE_BUCKET: {{ .Values.blobStorage.bucket | quote }}
   APPLIANCE_BLOB_STORAGE_REGION: {{ .Values.blobStorage.region | quote }}
+  APPLIANCE_CONFIGURATION_ARCHIVE_TARGET: {{ .Values.config.configurationArchiveTarget | quote }}
+  APPLIANCE_CONFIGURATION_ARCHIVE_PREFIX: {{ .Values.config.configurationArchivePrefix | quote }}
   APPLIANCE_VIDEO_LIBRARY_OBJECT_PREFIX: {{ .Values.videoLibrary.objectPrefix | quote }}
   APPLIANCE_VIDEO_LIBRARY_PROJECTION_DIR: {{ .Values.videoLibrary.projection.mountPath | quote }}
   APPLIANCE_VIDEO_MAX_UPLOAD_BYTES: {{ printf "%s" .Values.videoLibrary.maxUploadBytes | quote }}

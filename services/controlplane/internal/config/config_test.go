@@ -66,6 +66,19 @@ func TestLoadAppliesPostgresDatabaseProviderConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadAppliesS3ConfigurationArchiveTarget(t *testing.T) {
+	cfg, err := config.Load([]string{
+		"APPLIANCE_CONFIGURATION_ARCHIVE_TARGET=s3",
+		"APPLIANCE_CONFIGURATION_ARCHIVE_PREFIX=controlplane-config",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ConfigurationArchiveTarget != "s3" || cfg.ConfigurationArchivePrefix != "controlplane-config" {
+		t.Fatalf("archive configuration = %q/%q", cfg.ConfigurationArchiveTarget, cfg.ConfigurationArchivePrefix)
+	}
+}
+
 func TestLoadRejectsInvalidPostgresDatabaseProviderConfiguration(t *testing.T) {
 	_, err := config.Load([]string{
 		"APPLIANCE_DATABASE_DRIVER=postgres",

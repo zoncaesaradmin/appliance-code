@@ -109,6 +109,10 @@ config:
   # Derived by zonctl as https://<applianceName>.<dnsZoneName>.
   canonicalOrigin: "https://appliance.example.internal"
   logLevel: info
+  # file is appliance-local staging. Cloud profiles may select s3; it uses
+  # blobStorage credentials but a dedicated archive prefix.
+  configurationArchiveTarget: file
+  configurationArchivePrefix: configuration-archives
   trustedProxyCount: 1
   workflowInstanceID: appliance
   # Must match the ServiceAccount the appliance-workflows chart actually

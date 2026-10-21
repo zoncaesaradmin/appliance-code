@@ -52,36 +52,41 @@ type Config struct {
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	// ApplicationCatalog is parsed from the bundled metadata catalog. Helm and
 	// process environment cannot supply application contracts.
-	ApplicationCatalog        applications.Catalog     `json:"-"`
-	AutomationRuntimeBaseURL  string                   `json:"automationRuntimeBaseURL"`
-	ArtifactServerBaseURL     string                   `json:"artifactServerBaseURL"`
-	ArtifactServerAllowFake   bool                     `json:"artifactServerAllowFake"`
-	ServiceRegistry           serviceregistry.Registry `json:"serviceRegistry"`
-	FilesObjectPrefix         string                   `json:"filesObjectPrefix"`
-	FilesTransferTimeout      time.Duration            `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes       int64                    `json:"filesMaxUploadBytes"`
-	DNSReadyURL               string                   `json:"dnsReadyURL"`
-	DNSZoneName               string                   `json:"dnsZoneName"`
-	DNSConfigMapNamespace     string                   `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName          string                   `json:"dnsConfigMapName"`
-	DNSBootstrapHostname      string                   `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4          string                   `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync      bool                     `json:"dnsAllowFakeZoneSync"`
-	InferenceGatewayBaseURL   string                   `json:"inferenceGatewayBaseURL"`
-	InferenceRuntimePackage   string                   `json:"inferenceRuntimePackage"`
-	InferenceEngine           string                   `json:"inferenceEngine"`
-	InferenceArchitecture     string                   `json:"inferenceArchitecture"`
-	WebUIEnabled              bool                     `json:"webUIEnabled"`
-	WebUIHealthURL            string                   `json:"webUIHealthURL"`
-	BlobStorageEndpoint       string                   `json:"blobStorageEndpoint"`
-	BlobStorageBucket         string                   `json:"blobStorageBucket"`
-	BlobStorageAccessKey      string                   `json:"blobStorageAccessKey"`
-	BlobStorageSecretKey      string                   `json:"blobStorageSecretKey"`
-	BlobStorageRegion         string                   `json:"blobStorageRegion"`
-	VideoLibraryObjectPrefix  string                   `json:"videoLibraryObjectPrefix"`
-	VideoLibraryProjectionDir string                   `json:"videoLibraryProjectionDir"`
-	VideoTransferTimeout      time.Duration            `json:"videoTransferTimeout"`
-	VideoMaxUploadBytes       int64                    `json:"videoMaxUploadBytes"`
+	ApplicationCatalog       applications.Catalog     `json:"-"`
+	AutomationRuntimeBaseURL string                   `json:"automationRuntimeBaseURL"`
+	ArtifactServerBaseURL    string                   `json:"artifactServerBaseURL"`
+	ArtifactServerAllowFake  bool                     `json:"artifactServerAllowFake"`
+	ServiceRegistry          serviceregistry.Registry `json:"serviceRegistry"`
+	FilesObjectPrefix        string                   `json:"filesObjectPrefix"`
+	FilesTransferTimeout     time.Duration            `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes      int64                    `json:"filesMaxUploadBytes"`
+	DNSReadyURL              string                   `json:"dnsReadyURL"`
+	DNSZoneName              string                   `json:"dnsZoneName"`
+	DNSConfigMapNamespace    string                   `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName         string                   `json:"dnsConfigMapName"`
+	DNSBootstrapHostname     string                   `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4         string                   `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync     bool                     `json:"dnsAllowFakeZoneSync"`
+	InferenceGatewayBaseURL  string                   `json:"inferenceGatewayBaseURL"`
+	InferenceRuntimePackage  string                   `json:"inferenceRuntimePackage"`
+	InferenceEngine          string                   `json:"inferenceEngine"`
+	InferenceArchitecture    string                   `json:"inferenceArchitecture"`
+	WebUIEnabled             bool                     `json:"webUIEnabled"`
+	WebUIHealthURL           string                   `json:"webUIHealthURL"`
+	BlobStorageEndpoint      string                   `json:"blobStorageEndpoint"`
+	BlobStorageBucket        string                   `json:"blobStorageBucket"`
+	BlobStorageAccessKey     string                   `json:"blobStorageAccessKey"`
+	BlobStorageSecretKey     string                   `json:"blobStorageSecretKey"`
+	BlobStorageRegion        string                   `json:"blobStorageRegion"`
+	// ConfigurationArchiveTarget selects where sealed configuration archives
+	// live. "file" is the appliance default; "s3" uses the same
+	// S3-compatible contract in a dedicated prefix for cloud deployments.
+	ConfigurationArchiveTarget string        `json:"configurationArchiveTarget"`
+	ConfigurationArchivePrefix string        `json:"configurationArchivePrefix"`
+	VideoLibraryObjectPrefix   string        `json:"videoLibraryObjectPrefix"`
+	VideoLibraryProjectionDir  string        `json:"videoLibraryProjectionDir"`
+	VideoTransferTimeout       time.Duration `json:"videoTransferTimeout"`
+	VideoMaxUploadBytes        int64         `json:"videoMaxUploadBytes"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -131,28 +136,30 @@ func Default() Config {
 			MaxIdleConns:    1,
 			ConnMaxLifetime: 0,
 		},
-		ApplicationLogPath:        "/data/zon/logs/api-server/application.log",
-		LogLevel:                  "info",
-		TrustedProxyCount:         0,
-		AutomationRuntimeBaseURL:  "",
-		ArtifactServerAllowFake:   true,
-		FilesObjectPrefix:         "files",
-		FilesTransferTimeout:      30 * time.Minute,
-		FilesMaxUploadBytes:       20 * 1024 * 1024 * 1024,
-		BlobStorageEndpoint:       "http://blob-storage.ace-infra.svc.cluster.local:9000",
-		BlobStorageBucket:         "appliance",
-		BlobStorageAccessKey:      "local-dev",
-		BlobStorageSecretKey:      "local-dev-secret",
-		BlobStorageRegion:         "us-east-1",
-		VideoLibraryObjectPrefix:  "video/library",
-		VideoLibraryProjectionDir: "/var/lib/appliance/video-media",
-		VideoTransferTimeout:      30 * time.Minute,
-		VideoMaxUploadBytes:       20 * 1024 * 1024 * 1024,
-		DNSZoneName:               "appliance.internal",
-		DNSConfigMapNamespace:     "dns",
-		DNSConfigMapName:          "dns-server-config",
-		DNSAllowFakeZoneSync:      true,
-		ReadHeaderTimeout:         5 * time.Second,
+		ApplicationLogPath:         "/data/zon/logs/api-server/application.log",
+		LogLevel:                   "info",
+		TrustedProxyCount:          0,
+		AutomationRuntimeBaseURL:   "",
+		ArtifactServerAllowFake:    true,
+		FilesObjectPrefix:          "files",
+		FilesTransferTimeout:       30 * time.Minute,
+		FilesMaxUploadBytes:        20 * 1024 * 1024 * 1024,
+		BlobStorageEndpoint:        "http://blob-storage.ace-infra.svc.cluster.local:9000",
+		BlobStorageBucket:          "appliance",
+		BlobStorageAccessKey:       "local-dev",
+		BlobStorageSecretKey:       "local-dev-secret",
+		BlobStorageRegion:          "us-east-1",
+		ConfigurationArchiveTarget: "file",
+		ConfigurationArchivePrefix: "configuration-archives",
+		VideoLibraryObjectPrefix:   "video/library",
+		VideoLibraryProjectionDir:  "/var/lib/appliance/video-media",
+		VideoTransferTimeout:       30 * time.Minute,
+		VideoMaxUploadBytes:        20 * 1024 * 1024 * 1024,
+		DNSZoneName:                "appliance.internal",
+		DNSConfigMapNamespace:      "dns",
+		DNSConfigMapName:           "dns-server-config",
+		DNSAllowFakeZoneSync:       true,
+		ReadHeaderTimeout:          5 * time.Second,
 		// Must cover multi-GB /api/v1/files uploads. Keep this aligned with
 		// FilesTransferTimeout; handlers also extend the connection deadline
 		// via ResponseController (requires middleware Unwrap).
@@ -282,6 +289,8 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("BLOB_STORAGE_ACCESS_KEY", &cfg.BlobStorageAccessKey)
 	str("BLOB_STORAGE_SECRET_KEY", &cfg.BlobStorageSecretKey)
 	str("BLOB_STORAGE_REGION", &cfg.BlobStorageRegion)
+	str("CONFIGURATION_ARCHIVE_TARGET", &cfg.ConfigurationArchiveTarget)
+	str("CONFIGURATION_ARCHIVE_PREFIX", &cfg.ConfigurationArchivePrefix)
 	str("VIDEO_LIBRARY_OBJECT_PREFIX", &cfg.VideoLibraryObjectPrefix)
 	str("VIDEO_LIBRARY_PROJECTION_DIR", &cfg.VideoLibraryProjectionDir)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
@@ -520,6 +529,21 @@ func (c Config) Validate() error {
 		}
 		if c.FilesMaxUploadBytes <= 0 {
 			errs = append(errs, "filesMaxUploadBytes must be positive when the files capability is enabled")
+		}
+	}
+	archiveTarget := strings.ToLower(strings.TrimSpace(c.ConfigurationArchiveTarget))
+	if archiveTarget != "file" && archiveTarget != "s3" {
+		errs = append(errs, "configurationArchiveTarget must be file or s3")
+	}
+	if archiveTarget == "s3" {
+		if u, err := url.Parse(c.BlobStorageEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "blobStorageEndpoint must be an absolute http(s) URL with no path when configurationArchiveTarget is s3")
+		}
+		if strings.TrimSpace(c.BlobStorageBucket) == "" || strings.TrimSpace(c.BlobStorageAccessKey) == "" || strings.TrimSpace(c.BlobStorageSecretKey) == "" {
+			errs = append(errs, "blob storage bucket and credentials must be configured when configurationArchiveTarget is s3")
+		}
+		if strings.Trim(strings.TrimSpace(c.ConfigurationArchivePrefix), "/") == "" {
+			errs = append(errs, "configurationArchivePrefix must not be empty when configurationArchiveTarget is s3")
 		}
 	}
 	if profileErr == nil && dnsEnabled {

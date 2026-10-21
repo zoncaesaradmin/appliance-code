@@ -22,6 +22,7 @@ import (
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/automationruntimeauth"
 	"appliance-code/services/controlplane/internal/automationruntimeclient"
+	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
@@ -236,14 +237,23 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		db.Close()
 		return nil, fmt.Errorf("app: wiring configuration revisions: %w", err)
 	}
+	var archiveTarget configuration.ArchiveTarget = configuration.FileArchiveTarget{Root: filepath.Join(cfg.DataDir, "configuration-archives")}
+	if strings.EqualFold(strings.TrimSpace(cfg.ConfigurationArchiveTarget), "s3") {
+		archiveClient, archiveErr := blobstore.New(cfg.BlobStorageEndpoint, cfg.BlobStorageBucket, cfg.BlobStorageAccessKey, cfg.BlobStorageSecretKey, cfg.BlobStorageRegion)
+		if archiveErr != nil {
+			db.Close()
+			return nil, fmt.Errorf("app: wiring configuration archive target: %w", archiveErr)
+		}
+		archiveTarget = configuration.S3ArchiveTarget{Client: archiveClient, Prefix: cfg.ConfigurationArchivePrefix}
+	}
 	configurationArchive := configuration.ArchiveService{
 		Revisions: stores.ConfigurationStore,
 		Config:    configurationSvc,
 		Keys:      keyMaterial,
-		// This first wired target deliberately remains same-appliance storage.
-		// Exporting it to a disconnected file or external S3 target is an
-		// explicit operator action, never an implicit durability claim.
-		Target: configuration.FileArchiveTarget{Root: filepath.Join(cfg.DataDir, "configuration-archives")},
+		// ArchiveTarget is deliberately storage-neutral: appliance profiles use
+		// a local protected directory, while cloud profiles use a dedicated
+		// S3-compatible prefix with separately scoped credentials.
+		Target: archiveTarget,
 	}
 	var inferenceSvc *inference.Service
 	var webuiSvc *webui.Service
