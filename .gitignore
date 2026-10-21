@@ -13,7 +13,9 @@
 
 # Code coverage profiles and other test artifacts
 *.out
-coverage.*
+# Keep this root-level only: vendored dependencies legitimately contain source
+# files named coverage.go (for example golang.org/x/text/language).
+/coverage.*
 *.coverprofile
 profile.cov
 
