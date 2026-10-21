@@ -39,6 +39,7 @@ type StorageSet struct {
 	WebUIGrantStore     storage.WebUILaunchGrantStore
 	WebUIBridgeStore    storage.WebUIBridgeSessionStore
 	BuilderCatalogStore storage.BuilderCatalogStore
+	ConfigurationStore  storage.ConfigurationRevisionStore
 }
 
 // StorageProvider opens and migrates one complete persistence backend. The
@@ -96,6 +97,7 @@ func (sqliteStorageProvider) Open(ctx context.Context, cfg config.Config) (Stora
 		WebUIGrantStore:     sqlite.NewWebUILaunchGrantStore(db),
 		WebUIBridgeStore:    sqlite.NewWebUIBridgeSessionStore(db),
 		BuilderCatalogStore: sqlite.NewBuilderCatalogStore(db),
+		ConfigurationStore:  sqlite.NewConfigurationRevisionStore(db),
 	}, nil
 }
 
@@ -132,5 +134,6 @@ func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 		WebUIGrantStore:     sqlite.NewWebUILaunchGrantStore(db),
 		WebUIBridgeStore:    sqlite.NewWebUIBridgeSessionStore(db),
 		BuilderCatalogStore: sqlite.NewBuilderCatalogStore(db),
+		ConfigurationStore:  sqlite.NewConfigurationRevisionStore(db),
 	}, nil
 }

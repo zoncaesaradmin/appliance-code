@@ -98,6 +98,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		FocusContentH:  &httpapi.FocusContentHandlers{Store: services.FocusContentStore, Audit: services.Audit},
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
+		ConfigurationH: &httpapi.ConfigurationHandlers{Configuration: services.Configuration},
 		AuditH: &httpapi.AuditHandlers{
 			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
 		},

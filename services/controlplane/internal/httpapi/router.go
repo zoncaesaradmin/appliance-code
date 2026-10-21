@@ -46,6 +46,7 @@ type Deps struct {
 	AIProxy          http.Handler
 	InferenceH       *InferenceHandlers
 	WebUIH           *WebUIHandlers
+	ConfigurationH   *ConfigurationHandlers
 	ProxiedServices  []ServiceProxyRegistration
 	Audit            *audit.Recorder
 }
@@ -138,6 +139,14 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 			return nil, fmt.Errorf("%s: %w", route.pattern, err)
 		}
 		mux.Handle(route.pattern, handler)
+	}
+	// Configuration revisions are intentionally optional while older embedded
+	// callers/tests construct a smaller dependency set. Production wiring
+	// always supplies this handler; when absent, the surface is simply not
+	// advertised rather than making unrelated APIs fail to start.
+	if deps.ConfigurationH != nil && deps.ConfigurationH.Configuration != nil {
+		mux.Handle("POST /api/v1/configuration/revisions", w.protect(roles.PermSystemOperate, deps.ConfigurationH.Capture))
+		mux.Handle("GET /api/v1/configuration/revisions/latest", w.protect(roles.PermSystemRead, deps.ConfigurationH.Latest))
 	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -24,6 +24,7 @@ import (
 	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
+	"appliance-code/services/controlplane/internal/configuration"
 	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/dnsrecords"
 	"appliance-code/services/controlplane/internal/inference"
@@ -90,6 +91,7 @@ type Services struct {
 	ApplicationRuntime applications.ResourceManager
 	Inference          *inference.Service
 	WebUI              *webui.Service
+	Configuration      *configuration.Service
 
 	Keys     *keys.Material
 	Audit    *audit.Recorder
@@ -218,6 +220,19 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application management: %w", err)
+	}
+	configurationSvc, err := configuration.NewService(configuration.Stores{
+		DB:             db,
+		Revisions:      stores.ConfigurationStore,
+		Licensing:      licensingStore,
+		DNS:            dnsRecordStore,
+		BuilderCatalog: stores.BuilderCatalogStore,
+		Applications:   applicationStore,
+		Metadata:       stores.MetadataStore,
+	})
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("app: wiring configuration revisions: %w", err)
 	}
 	var inferenceSvc *inference.Service
 	var webuiSvc *webui.Service
@@ -409,6 +424,7 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		ApplicationRuntime: applicationRuntime,
 		Inference:          inferenceSvc,
 		WebUI:              webuiSvc,
+		Configuration:      configurationSvc,
 		Keys:               keyMaterial,
 		Audit:              recorder,
 		AuditOps:           auditOps,
