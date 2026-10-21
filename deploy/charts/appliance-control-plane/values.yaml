@@ -187,7 +187,7 @@ database:
     # this workload disabled.
     local:
       enabled: false
-      serviceName: postgresql
+      serviceName: controlplane-database
       databaseName: controlplane
       username: controlplane
       image:
@@ -196,8 +196,8 @@ database:
         pullPolicy: IfNotPresent
       persistence:
         size: 4Gi
-        hostPath: /data/zon/postgres
-        claimName: postgresql-data
+        hostPath: /data/zon/controlplane-database
+        claimName: controlplane-database-data
       resources:
         requests:
           cpu: 100m

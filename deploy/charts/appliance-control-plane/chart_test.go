@@ -182,11 +182,11 @@ func TestLocalPostgresProfileRendersPinnedStatefulSet(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "rollout.aceInfra.enabled=true",
 		"--set", "database.driver=postgres",
-		"--set", "database.postgres.connectionSecretName=postgresql-connection",
+		"--set", "database.postgres.connectionSecretName=controlplane-database-connection",
 		"--set", "database.postgres.local.enabled=true",
 		"--set", "database.postgres.local.image.digest="+digest,
 	)...)
-	statefulSet := findByKindAndName(docs, "StatefulSet", "postgresql")
+	statefulSet := findByKindAndName(docs, "StatefulSet", "controlplane-database")
 	if statefulSet == nil {
 		t.Fatal("local PostgreSQL profile must render its StatefulSet")
 	}

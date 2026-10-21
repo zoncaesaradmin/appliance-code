@@ -23,7 +23,7 @@ data:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: postgresql-data
+  name: controlplane-database-data
 spec:
   capacity: {storage: {{ $local.persistence.size | quote }}}
   accessModes: [ReadWriteOnce]
@@ -47,7 +47,7 @@ metadata:
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: ""
-  volumeName: postgresql-data
+  volumeName: controlplane-database-data
   resources: {requests: {storage: {{ $local.persistence.size | quote }}}}
 ---
 apiVersion: v1
@@ -56,7 +56,7 @@ metadata:
   name: {{ $local.serviceName }}
   namespace: {{ $ns }}
 spec:
-  selector: {app.kubernetes.io/name: postgresql}
+  selector: {app.kubernetes.io/name: controlplane-database}
   ports: [{name: postgres, port: 5432, targetPort: postgres}]
 ---
 # PostgreSQL is an appliance-private control-plane dependency. Restrict access
@@ -65,10 +65,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: postgresql-allow
+  name: controlplane-database-allow
   namespace: {{ $ns }}
 spec:
-  podSelector: {matchLabels: {app.kubernetes.io/name: postgresql}}
+  podSelector: {matchLabels: {app.kubernetes.io/name: controlplane-database}}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -92,10 +92,10 @@ metadata:
 spec:
   serviceName: {{ $local.serviceName }}
   replicas: 1
-  selector: {matchLabels: {app.kubernetes.io/name: postgresql}}
+  selector: {matchLabels: {app.kubernetes.io/name: controlplane-database}}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: postgresql}
+      labels: {app.kubernetes.io/name: controlplane-database}
     spec:
       automountServiceAccountToken: false
       {{- include "appliance-control-plane.podNodeName" . }}
