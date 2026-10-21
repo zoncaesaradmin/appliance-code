@@ -29,7 +29,11 @@ spec:
   accessModes: [ReadWriteOnce]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
-  hostPath: {path: {{ $local.persistence.hostPath | quote }}, type: DirectoryOrCreate}
+  # zonctl prepares this directory with PostgreSQL's fixed UID/GID before
+  # Helm runs. Directory (rather than DirectoryOrCreate) keeps a broken
+  # installer/host-path contract visible instead of creating a root-owned
+  # directory that makes PostgreSQL crash-loop under Restricted security.
+  hostPath: {path: {{ $local.persistence.hostPath | quote }}, type: Directory}
   {{- include "appliance-control-plane.pvNodeAffinity" . }}
   claimRef:
     namespace: {{ $ns }}
