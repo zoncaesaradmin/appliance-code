@@ -1,8 +1,8 @@
 # Appliance Message Broker
 
-The `appliance-message-broker` chart deploys the always-on internal NATS
-JetStream service in the `ace-system` namespace. It has no public route or
-capability gate. Its file-backed state is kept in a dedicated PVC so durable
+The signed `appliance-message-broker` chart deploys the always-on internal
+`message-broker` NATS JetStream service in the `ace-infra` namespace. It has
+no public route or capability gate. Its file-backed state is kept in a dedicated PVC so durable
 consumer delivery survives pod restarts and signed bundle upgrades.
 
 Services use `sdk/golang/messaging`; direct NATS imports are not part of the

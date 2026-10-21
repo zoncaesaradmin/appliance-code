@@ -1,8 +1,8 @@
 {{- define "appliance-message-broker.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- default "message-broker" .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- define "appliance-message-broker.fullname" -}}
-{{- default "appliance-message-broker" .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
+{{- default "message-broker" .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- define "appliance-message-broker.labels" -}}
 app.kubernetes.io/name: {{ include "appliance-message-broker.name" . }}
