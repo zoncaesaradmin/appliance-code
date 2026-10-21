@@ -11,15 +11,46 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
-// DB is the SQLite-backed storage.DB implementation. Exactly one control
-// plane replica may hold an open DB against a given file, per ADR 0004.
+// DB is the repository backing connection. Its SQLite opening path exists
+// only while local fixtures are being replaced; appliance runtime uses
+// OpenPostgres.
 type DB struct {
-	sqlDB *sql.DB
-	path  string
+	sqlDB    *sql.DB
+	path     string
+	postgres bool
+}
+
+// OpenPostgres opens the PostgreSQL implementation behind the existing
+// repository contracts. The package name is a temporary source-layout
+// artifact while those repositories are moved; no SQLite driver or file is
+// used by this path.
+func OpenPostgres(ctx context.Context, dsn string, maxOpenConns, maxIdleConns int, maxLifetime time.Duration) (*DB, error) {
+	if strings.TrimSpace(dsn) == "" {
+		return nil, fmt.Errorf("postgres: DSN is required")
+	}
+	if maxOpenConns <= 0 || maxIdleConns < 0 || maxIdleConns > maxOpenConns {
+		return nil, fmt.Errorf("postgres: invalid connection pool limits")
+	}
+	sqlDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: opening database: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(maxOpenConns)
+	sqlDB.SetMaxIdleConns(maxIdleConns)
+	sqlDB.SetConnMaxLifetime(maxLifetime)
+	if err := sqlDB.PingContext(ctx); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("postgres: pinging database: %w", err)
+	}
+	return &DB{sqlDB: sqlDB, postgres: true}, nil
 }
 
 type txKey struct{}
@@ -94,10 +125,52 @@ type querier interface {
 // pooled *sql.DB otherwise, so repository code always writes through
 // whichever is correct without needing to know which one is active.
 func (db *DB) q(ctx context.Context) querier {
+	var q querier
 	if tx, ok := ctx.Value(txKey{}).(*sql.Tx); ok {
-		return tx
+		q = tx
+	} else {
+		q = db.sqlDB
 	}
-	return db.sqlDB
+	if db.postgres {
+		return postgresQuerier{querier: q}
+	}
+	return q
+}
+
+type postgresQuerier struct{ querier }
+
+func (q postgresQuerier) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return q.querier.ExecContext(ctx, postgresPlaceholders(query), args...)
+}
+
+func (q postgresQuerier) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return q.querier.QueryContext(ctx, postgresPlaceholders(query), args...)
+}
+
+func (q postgresQuerier) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return q.querier.QueryRowContext(ctx, postgresPlaceholders(query), args...)
+}
+
+// postgresPlaceholders rewrites repository positional placeholders while
+// preserving question marks inside single-quoted SQL literals.
+func postgresPlaceholders(query string) string {
+	var out strings.Builder
+	out.Grow(len(query) + 8)
+	inQuote := false
+	index := 0
+	for _, r := range query {
+		if r == '\'' {
+			inQuote = !inQuote
+		}
+		if r == '?' && !inQuote {
+			index++
+			out.WriteByte('$')
+			out.WriteString(strconv.Itoa(index))
+			continue
+		}
+		out.WriteRune(r)
+	}
+	return out.String()
 }
 
 // Ping reports whether the database is reachable and accepting queries, for
@@ -111,6 +184,9 @@ func (db *DB) Ping(ctx context.Context) error {
 // without requiring CGo-only backup-API bindings. destPath must not already
 // exist.
 func (db *DB) Backup(ctx context.Context, destPath string) error {
+	if db.postgres {
+		return fmt.Errorf("postgres: database backup is provided by the coordinated PostgreSQL recovery-set implementation")
+	}
 	if _, err := os.Stat(destPath); err == nil {
 		return fmt.Errorf("sqlite: backup destination %s already exists", destPath)
 	} else if !os.IsNotExist(err) {

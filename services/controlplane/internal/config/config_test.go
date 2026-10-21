@@ -44,6 +44,38 @@ func TestLoadAppliesEnvironmentOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadAppliesPostgresDatabaseProviderConfiguration(t *testing.T) {
+	cfg, err := config.Load([]string{
+		"APPLIANCE_DATABASE_DRIVER=postgres",
+		"APPLIANCE_DATABASE_DSN=postgresql://postgres.example.internal:5432/controlplane?sslmode=require",
+		"APPLIANCE_DATABASE_MAX_OPEN_CONNS=12",
+		"APPLIANCE_DATABASE_MAX_IDLE_CONNS=4",
+		"APPLIANCE_DATABASE_CONN_MAX_LIFETIME=30m",
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Database.Driver != "postgres" {
+		t.Errorf("Database.Driver = %q, want postgres", cfg.Database.Driver)
+	}
+	if cfg.Database.MaxOpenConns != 12 || cfg.Database.MaxIdleConns != 4 {
+		t.Errorf("database connection limits = %d/%d, want 12/4", cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns)
+	}
+	if cfg.Database.ConnMaxLifetime.String() != "30m0s" {
+		t.Errorf("Database.ConnMaxLifetime = %s, want 30m", cfg.Database.ConnMaxLifetime)
+	}
+}
+
+func TestLoadRejectsInvalidPostgresDatabaseProviderConfiguration(t *testing.T) {
+	_, err := config.Load([]string{
+		"APPLIANCE_DATABASE_DRIVER=postgres",
+		"APPLIANCE_DATABASE_DSN=sqlite:///tmp/controlplane.db",
+	})
+	if err == nil || !strings.Contains(err.Error(), "database.dsn") {
+		t.Fatalf("Load invalid PostgreSQL configuration error = %v, want database.dsn validation error", err)
+	}
+}
+
 func TestLoadRejectsInvalidOverride(t *testing.T) {
 	environ := []string{"APPLIANCE_LOG_LEVEL=verbose"}
 	_, err := config.Load(environ)

@@ -86,7 +86,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 			name       TEXT NOT NULL,
 			applied_at TEXT NOT NULL
 		)`); err != nil {
-		return fmt.Errorf("sqlite: creating schema_migrations table: %w", err)
+		return fmt.Errorf("creating schema_migrations table: %w", err)
 	}
 
 	applied, err := db.appliedVersions(ctx)
@@ -148,14 +148,38 @@ func (db *DB) applyMigration(ctx context.Context, m migration) error {
 	}
 	defer tx.Rollback() //nolint:errcheck // rollback after commit is a no-op
 
-	if _, err := tx.ExecContext(ctx, m.SQL); err != nil {
+	sql := m.SQL
+	if db.postgres {
+		sql = postgresMigrationSQL(sql)
+	}
+	if _, err := tx.ExecContext(ctx, sql); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
+		db.placeholderSQL(`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`),
 		m.Version, m.Name, time.Now().UTC().Format(time.RFC3339Nano),
 	); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// postgresMigrationSQL converts the baseline schema's two SQLite-specific
+// declarations to their PostgreSQL equivalents. Application timestamps remain
+// RFC3339 text intentionally because the repository contract serializes and
+// hashes them in that representation.
+func postgresMigrationSQL(sql string) string {
+	sql = strings.ReplaceAll(sql, "BLOB", "BYTEA")
+	sql = strings.ReplaceAll(sql,
+		"strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+		`to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+	)
+	return sql
+}
+
+func (db *DB) placeholderSQL(sql string) string {
+	if !db.postgres {
+		return sql
+	}
+	return postgresPlaceholders(sql)
 }

@@ -114,6 +114,8 @@ Options:
   --message-broker-image PATH        Pinned NATS/JetStream OCI archive. Required.
   --message-broker-image-reference REF
                                    Canonical registry.local/nats@sha256:... reference.
+  --postgres-image PATH             Pinned PostgreSQL OCI archive.
+  --postgres-image-reference REF    Canonical registry.local/postgres@sha256:... reference.
   --help                           Show this help.
 USAGE
 }
@@ -181,6 +183,8 @@ TESTS_DIR=""
 METADATA_BUNDLE=""
 MESSAGE_BROKER_IMAGE=""
 MESSAGE_BROKER_IMAGE_REFERENCE=""
+POSTGRES_IMAGE=""
+POSTGRES_IMAGE_REFERENCE=""
 SUPPORTED_UPGRADE_SOURCES=()
 
 while [[ $# -gt 0 ]]; do
@@ -381,6 +385,14 @@ while [[ $# -gt 0 ]]; do
       MESSAGE_BROKER_IMAGE_REFERENCE="${2:-}"
       shift 2
       ;;
+    --postgres-image)
+      POSTGRES_IMAGE="${2:-}"
+      shift 2
+      ;;
+    --postgres-image-reference)
+      POSTGRES_IMAGE_REFERENCE="${2:-}"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -439,6 +451,45 @@ fi
 if [[ -n "${MESSAGE_BROKER_IMAGE}" || -n "${MESSAGE_BROKER_IMAGE_REFERENCE}" ]]; then
   if [[ ! -f "${MESSAGE_BROKER_IMAGE}" ]]; then echo "archive-release-input: message broker image not found: ${MESSAGE_BROKER_IMAGE}" >&2; exit 1; fi
   if [[ ! "${MESSAGE_BROKER_IMAGE_REFERENCE}" =~ ^registry\.local/nats@sha256:[0-9a-f]{64}$ ]]; then echo "archive-release-input: --message-broker-image-reference must be registry.local/nats@sha256:<64 lowercase hex>" >&2; exit 2; fi
+fi
+if [[ -n "${POSTGRES_IMAGE}" || -n "${POSTGRES_IMAGE_REFERENCE}" ]]; then
+if [[ -z "${POSTGRES_IMAGE}" || -z "${POSTGRES_IMAGE_REFERENCE}" ]]; then
+  echo "archive-release-input: --postgres-image and --postgres-image-reference must be provided together" >&2
+  exit 2
+fi
+if [[ ! -f "${POSTGRES_IMAGE}" ]]; then
+  echo "archive-release-input: PostgreSQL image not found: ${POSTGRES_IMAGE}" >&2
+  exit 1
+fi
+if [[ ! "${POSTGRES_IMAGE_REFERENCE}" =~ ^registry\.local/postgres@sha256:[0-9a-f]{64}$ ]]; then
+  echo "archive-release-input: --postgres-image-reference must be registry.local/postgres@sha256:<64 lowercase hex>" >&2
+  exit 2
+fi
+python3 - "${POSTGRES_IMAGE}" "${POSTGRES_IMAGE_REFERENCE}" <<'PY'
+import json
+import sys
+import tarfile
+
+archive, reference = sys.argv[1:]
+with tarfile.open(archive, "r:*") as tf:
+    member = next((m for m in tf.getmembers() if m.name.lstrip("./") == "index.json"), None)
+    if member is None:
+        raise SystemExit("archive-release-input: PostgreSQL OCI archive has no index.json")
+    stream = tf.extractfile(member)
+    if stream is None:
+        raise SystemExit("archive-release-input: PostgreSQL OCI index.json is not a regular file")
+    index = json.load(stream)
+manifests = index.get("manifests", [])
+if len(manifests) != 1:
+    raise SystemExit(f"archive-release-input: PostgreSQL OCI index must contain one platform manifest, found {len(manifests)}")
+descriptor = manifests[0]
+annotation = descriptor.get("annotations", {}).get("org.opencontainers.image.ref.name")
+if annotation != "registry.local/postgres:bundled":
+    raise SystemExit(f"archive-release-input: PostgreSQL OCI annotation is {annotation!r}, want 'registry.local/postgres:bundled'")
+digest = descriptor.get("digest", "")
+if reference != "registry.local/postgres@" + digest:
+    raise SystemExit(f"archive-release-input: PostgreSQL image reference {reference!r} does not match index digest {digest!r}")
+PY
 fi
 
 if [[ ! -f "${CONTROL_PLANE_IMAGE}" ]]; then
@@ -932,6 +983,8 @@ if [[ ! "${METADATA_BUNDLE_BASENAME}" =~ ^appliance-metadata-bundle-[0-9]+\.[0-9
 fi
 MESSAGE_BROKER_BASENAME=""
 if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then MESSAGE_BROKER_BASENAME="$(basename "${MESSAGE_BROKER_IMAGE}")"; fi
+POSTGRES_BASENAME=""
+if [[ -n "${POSTGRES_IMAGE}" ]]; then POSTGRES_BASENAME="$(basename "${POSTGRES_IMAGE}")"; fi
 
 link_or_copy_file "${CONTROL_PLANE_IMAGE}" "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}"
 link_or_copy_file "${UI_IMAGE}" "${RELEASE_INPUT_DIR}/${UI_BASENAME}"
@@ -942,6 +995,7 @@ fi
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
 cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
 if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then link_or_copy_file "${MESSAGE_BROKER_IMAGE}" "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}"; fi
+if [[ -n "${POSTGRES_IMAGE}" ]]; then link_or_copy_file "${POSTGRES_IMAGE}" "${RELEASE_INPUT_DIR}/${POSTGRES_BASENAME}"; fi
 copy_dir_or_empty "${HOST_PACKAGES_DIR}" "${RELEASE_INPUT_DIR}/host-packages"
 if [[ -n "${ARTIFACT_SERVER_IMAGE}" ]]; then
   ARTIFACT_SERVER_BASENAME="$(basename "${ARTIFACT_SERVER_IMAGE}")"
@@ -1281,6 +1335,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
     "messageBrokerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" "${MESSAGE_BROKER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_CHART_JSON}${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON}${OPTIONAL_DNS_CHART_JSON}${OPTIONAL_DNS_IMAGE_JSON}${BLOB_STORAGE_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
 $(if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then printf '    "messageBrokerImage": %s,\n' "$(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_BASENAME}" "${MESSAGE_BROKER_IMAGE_REFERENCE}")"; fi)
+$(if [[ -n "${POSTGRES_IMAGE}" ]]; then printf '    "postgresImage": %s,\n' "$(render_file_artifact "${RELEASE_INPUT_DIR}/${POSTGRES_BASENAME}" "${POSTGRES_BASENAME}" "${POSTGRES_IMAGE_REFERENCE}")"; fi)
     "configurationSchema": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}" "${CONFIG_SCHEMA_BASENAME}"),
     "compatibility": $(render_file_artifact "${RELEASE_INPUT_DIR}/${COMPATIBILITY_BASENAME}" "${COMPATIBILITY_BASENAME}"),
     "checksums": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHECKSUMS_BASENAME}" "${CHECKSUMS_BASENAME}"),

@@ -165,6 +165,15 @@ spec:
       ports:
         - protocol: TCP
           port: 9000
+    {{- if and (eq .Values.database.driver "postgres") .Values.database.postgres.local.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
     # Cluster DNS is required for Service name lookup (registry, dns, …).
     - to:
         - namespaceSelector:

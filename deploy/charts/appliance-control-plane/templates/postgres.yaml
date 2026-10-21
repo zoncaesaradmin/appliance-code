@@ -1,0 +1,126 @@
+{{- if and (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") .Values.database.postgres.local.enabled }}
+{{- $ns := include "appliance-control-plane.namespace" . -}}
+{{- $local := .Values.database.postgres.local -}}
+{{- $existing := lookup "v1" "Secret" $ns .Values.database.postgres.connectionSecretName -}}
+{{- $password := "" -}}
+{{- if $existing -}}
+{{- $password = required "local PostgreSQL connection Secret is missing password" (index $existing.data "password") -}}
+{{- else -}}
+{{- $password = randAlphaNum 40 | b64enc -}}
+{{- end -}}
+{{- $plainPassword := $password | b64dec -}}
+{{- $dsn := printf "postgresql://%s:%s@%s.%s.svc.cluster.local:5432/%s?sslmode=disable" $local.username $plainPassword $local.serviceName $ns $local.databaseName | b64enc -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ required "database.postgres.connectionSecretName is required for local PostgreSQL" .Values.database.postgres.connectionSecretName }}
+  namespace: {{ $ns }}
+type: Opaque
+data:
+  password: {{ $password }}
+  dsn: {{ $dsn }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: appliance-postgres-data
+spec:
+  capacity: {storage: {{ $local.persistence.size | quote }}}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath: {path: {{ $local.persistence.hostPath | quote }}, type: DirectoryOrCreate}
+  {{- include "appliance-control-plane.pvNodeAffinity" . }}
+  claimRef:
+    namespace: {{ $ns }}
+    name: {{ $local.persistence.claimName }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $local.persistence.claimName }}
+  namespace: {{ $ns }}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: appliance-postgres-data
+  resources: {requests: {storage: {{ $local.persistence.size | quote }}}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $local.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  selector: {app.kubernetes.io/name: postgres}
+  ports: [{name: postgres, port: 5432, targetPort: postgres}]
+---
+# PostgreSQL is an appliance-private control-plane dependency. Restrict access
+# to the control-plane pod; DNS egress remains necessary for normal service
+# resolution and avoids an implicit namespace-wide policy exception.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: appliance-postgres-allow
+  namespace: {{ $ns }}
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: postgres}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: controlplane}}
+      ports: [{protocol: TCP, port: 5432}]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $local.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  serviceName: {{ $local.serviceName }}
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: postgres}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: postgres}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.podNodeName" . }}
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: {{ required "database.postgres.local.image.digest is required" $local.image.digest | printf "%s@%s" $local.image.repository }}
+          imagePullPolicy: {{ $local.image.pullPolicy }}
+          ports: [{name: postgres, containerPort: 5432}]
+          env:
+            - name: POSTGRES_DB
+              value: {{ $local.databaseName | quote }}
+            - name: POSTGRES_USER
+              value: {{ $local.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.database.postgres.connectionSecretName }}, key: password}}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, capabilities: {drop: ["ALL"]}}
+          resources:
+            {{- toYaml $local.resources | nindent 12 }}
+          readinessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]}, initialDelaySeconds: 5, periodSeconds: 5}
+          livenessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]}, initialDelaySeconds: 15, periodSeconds: 10}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}, {name: tmp, mountPath: /tmp}]
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: {{ $local.persistence.claimName }}}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

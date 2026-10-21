@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/storage"
@@ -14,9 +15,8 @@ import (
 // transaction boundaries remain meaningful across domain services.
 //
 // Keeping this construction boundary here prevents application wiring from
-// depending on a concrete SQL backend. PostgreSQL will supply the same set in
-// a subsequent change; SQLite remains the local-development provider during
-// the transition.
+// depending on a concrete SQL backend. The PostgreSQL provider supplies this
+// complete set for appliance and cloud deployments.
 type StorageSet struct {
 	DB                  storage.DB
 	UserStore           storage.UserStore
@@ -48,6 +48,21 @@ type StorageProvider interface {
 	Open(context.Context, config.Config) (StorageSet, error)
 }
 
+// storageProviderFor is the sole backend-selection point. Appliance-local
+// PostgreSQL and a cloud-managed PostgreSQL instance both select "postgres";
+// only the secret-supplied DSN differs. Unsupported drivers never fall back
+// to another backend.
+func storageProviderFor(cfg config.Config) (StorageProvider, error) {
+	switch strings.ToLower(strings.TrimSpace(cfg.Database.Driver)) {
+	case "sqlite":
+		return sqliteStorageProvider{}, nil
+	case "postgres":
+		return postgresStorageProvider{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported database driver %q", cfg.Database.Driver)
+	}
+}
+
 type sqliteStorageProvider struct{}
 
 func (sqliteStorageProvider) Open(ctx context.Context, cfg config.Config) (StorageSet, error) {
@@ -58,6 +73,42 @@ func (sqliteStorageProvider) Open(ctx context.Context, cfg config.Config) (Stora
 	if err := db.Migrate(ctx); err != nil {
 		_ = db.Close()
 		return StorageSet{}, fmt.Errorf("migrating SQLite storage: %w", err)
+	}
+	return StorageSet{
+		DB:                  db,
+		UserStore:           sqlite.NewUserStore(db),
+		RoleStore:           sqlite.NewRoleStore(db),
+		TokenStore:          sqlite.NewTokenStore(db),
+		SessionStore:        sqlite.NewSessionStore(db),
+		ThrottleStore:       sqlite.NewThrottleStore(db),
+		AuditStore:          sqlite.NewAuditStore(db),
+		OperationsStore:     sqlite.NewOperationsStore(db),
+		RegistryGrantStore:  sqlite.NewRegistryGrantStore(db),
+		DNSRecordStore:      sqlite.NewDNSRecordStore(db),
+		LicensingStore:      sqlite.NewLicensingStore(db),
+		MetadataStore:       sqlite.NewMetadataBundleStore(db),
+		BuildStore:          sqlite.NewBuildStore(db),
+		IdempotencyStore:    sqlite.NewIdempotencyStore(db),
+		WorkspaceStore:      sqlite.NewWorkspaceStore(db),
+		JobStore:            sqlite.NewJobStore(db),
+		ApplicationStore:    sqlite.NewApplicationStore(db),
+		FocusContentStore:   sqlite.NewFocusContentStore(db),
+		WebUIGrantStore:     sqlite.NewWebUILaunchGrantStore(db),
+		WebUIBridgeStore:    sqlite.NewWebUIBridgeSessionStore(db),
+		BuilderCatalogStore: sqlite.NewBuilderCatalogStore(db),
+	}, nil
+}
+
+type postgresStorageProvider struct{}
+
+func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (StorageSet, error) {
+	db, err := sqlite.OpenPostgres(ctx, cfg.Database.DSN, cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns, cfg.Database.ConnMaxLifetime)
+	if err != nil {
+		return StorageSet{}, fmt.Errorf("opening PostgreSQL storage: %w", err)
+	}
+	if err := db.Migrate(ctx); err != nil {
+		_ = db.Close()
+		return StorageSet{}, fmt.Errorf("migrating PostgreSQL storage: %w", err)
 	}
 	return StorageSet{
 		DB:                  db,

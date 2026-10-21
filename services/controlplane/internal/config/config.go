@@ -36,6 +36,10 @@ type Config struct {
 	PublicAddr    string `json:"publicAddr"`
 	InternalAddr  string `json:"internalAddr"`
 	DataDir       string `json:"dataDir"`
+	// Database selects the durable control-plane store. PostgreSQL is the
+	// appliance and cloud provider; an unsupported driver never falls back to
+	// another backend.
+	Database DatabaseConfig `json:"database"`
 
 	ApplicationLogPath string `json:"applicationLogPath"`
 	LogLevel           string `json:"logLevel"`
@@ -93,15 +97,34 @@ type Config struct {
 	AuditRetentionDays int           `json:"auditRetentionDays"`
 }
 
+// DatabaseConfig is the backend-neutral database connection contract. The
+// same fields are populated by an appliance-local PostgreSQL Service or by a
+// cloud-managed PostgreSQL service; deployment code is responsible for
+// providing the DSN through a protected runtime secret, never through a Helm
+// ConfigMap or release artifact.
+type DatabaseConfig struct {
+	Driver          string        `json:"driver"`
+	DSN             string        `json:"-"`
+	MaxOpenConns    int           `json:"maxOpenConns"`
+	MaxIdleConns    int           `json:"maxIdleConns"`
+	ConnMaxLifetime time.Duration `json:"connMaxLifetime"`
+}
+
 // Default returns the local-development default configuration.
 func Default() Config {
 	return Config{
-		ApplianceProfile:          string(appliance.ProfileCore),
-		CanonicalOrigin:           "http://localhost:8080",
-		TLSCACertPath:             "/var/run/appliance/tls/ca.crt",
-		PublicAddr:                "127.0.0.1:8080",
-		InternalAddr:              "127.0.0.1:8081",
-		DataDir:                   "./data",
+		ApplianceProfile: string(appliance.ProfileCore),
+		CanonicalOrigin:  "http://localhost:8080",
+		TLSCACertPath:    "/var/run/appliance/tls/ca.crt",
+		PublicAddr:       "127.0.0.1:8080",
+		InternalAddr:     "127.0.0.1:8081",
+		DataDir:          "./data",
+		Database: DatabaseConfig{
+			Driver:          "sqlite",
+			MaxOpenConns:    1,
+			MaxIdleConns:    1,
+			ConnMaxLifetime: 0,
+		},
 		ApplicationLogPath:        "/data/zon/logs/api-server/application.log",
 		LogLevel:                  "info",
 		TrustedProxyCount:         0,
@@ -222,6 +245,8 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
 	str("DATA_DIR", &cfg.DataDir)
+	str("DATABASE_DRIVER", &cfg.Database.Driver)
+	str("DATABASE_DSN", &cfg.Database.DSN)
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
 	str("AUTOMATION_RUNTIME_BASE_URL", &cfg.AutomationRuntimeBaseURL)
@@ -261,6 +286,30 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
 	var errs []string
+	for _, databaseInt := range []struct {
+		key string
+		dst *int
+	}{
+		{"DATABASE_MAX_OPEN_CONNS", &cfg.Database.MaxOpenConns},
+		{"DATABASE_MAX_IDLE_CONNS", &cfg.Database.MaxIdleConns},
+	} {
+		if value, ok := env[envPrefix+databaseInt.key]; ok {
+			parsed, err := strconv.Atoi(value)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", databaseInt.key, err))
+			} else {
+				*databaseInt.dst = parsed
+			}
+		}
+	}
+	if value, ok := env[envPrefix+"DATABASE_CONN_MAX_LIFETIME"]; ok {
+		parsed, err := time.ParseDuration(value)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("DATABASE_CONN_MAX_LIFETIME: %v", err))
+		} else {
+			cfg.Database.ConnMaxLifetime = parsed
+		}
+	}
 
 	if v, ok := env[envPrefix+"ARTIFACT_SERVER_ALLOW_FAKE"]; ok {
 		parsed, err := strconv.ParseBool(v)
@@ -563,6 +612,29 @@ func (c Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		errs = append(errs, "dataDir must not be empty")
+	}
+
+	switch strings.ToLower(strings.TrimSpace(c.Database.Driver)) {
+	case "sqlite":
+		if strings.TrimSpace(c.Database.DSN) != "" {
+			errs = append(errs, "database.dsn must be empty when database.driver is sqlite")
+		}
+		if c.Database.MaxOpenConns != 1 || c.Database.MaxIdleConns != 1 {
+			errs = append(errs, "sqlite database connection limits must both be 1")
+		}
+	case "postgres":
+		parsed, err := url.Parse(c.Database.DSN)
+		if err != nil || parsed == nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Host == "" {
+			errs = append(errs, "database.dsn must be an absolute postgres:// or postgresql:// URL when database.driver is postgres")
+		}
+		if c.Database.MaxOpenConns <= 0 || c.Database.MaxIdleConns < 0 || c.Database.MaxIdleConns > c.Database.MaxOpenConns {
+			errs = append(errs, "postgres database connection limits must be positive and idle must not exceed open")
+		}
+		if c.Database.ConnMaxLifetime < 0 {
+			errs = append(errs, "postgres database connection max lifetime must not be negative")
+		}
+	default:
+		errs = append(errs, `database.driver must be "sqlite" or "postgres"`)
 	}
 
 	switch c.LogLevel {

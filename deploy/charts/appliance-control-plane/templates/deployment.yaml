@@ -54,6 +54,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.blobStorage.credentialsSecretName }}
                   key: secretKey
+            {{- if eq .Values.database.driver "postgres" }}
+            - name: APPLIANCE_DATABASE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "database.postgres.connectionSecretName is required when database.driver is postgres" .Values.database.postgres.connectionSecretName }}
+                  key: {{ .Values.database.postgres.connectionSecretKey | quote }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:

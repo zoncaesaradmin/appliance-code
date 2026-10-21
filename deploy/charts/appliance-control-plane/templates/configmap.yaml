@@ -51,6 +51,10 @@ data:
   APPLIANCE_PUBLIC_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.publicPort | int) | quote }}
   APPLIANCE_INTERNAL_ADDR: {{ printf "0.0.0.0:%d" (.Values.service.internalPort | int) | quote }}
   APPLIANCE_DATA_DIR: {{ .Values.persistence.dataDir | quote }}
+  APPLIANCE_DATABASE_DRIVER: {{ .Values.database.driver | quote }}
+  APPLIANCE_DATABASE_MAX_OPEN_CONNS: {{ .Values.database.maxOpenConns | quote }}
+  APPLIANCE_DATABASE_MAX_IDLE_CONNS: {{ .Values.database.maxIdleConns | quote }}
+  APPLIANCE_DATABASE_CONN_MAX_LIFETIME: {{ .Values.database.connMaxLifetime | quote }}
   APPLIANCE_AUTOMATION_RUNTIME_BASE_URL: {{ include "appliance-control-plane.automationRuntimeBaseURL" . | quote }}
 {{- end }}
 {{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled }}

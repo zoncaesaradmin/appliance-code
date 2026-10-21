@@ -168,6 +168,44 @@ config:
   dnsBootstrapIPv4: ""
   dnsAllowFakeZoneSync: false
 
+# One database-provider contract serves appliance and cloud deployments.
+# PostgreSQL uses the same provider contract for appliance-local and managed
+# cloud deployments. Its DSN is always sourced from the referenced Secret
+# (never this values file or a ConfigMap); only that Secret's value differs.
+# The SQLite value is retained temporarily for local source-tree tests and is
+# not a production deployment profile.
+database:
+  driver: sqlite
+  maxOpenConns: 1
+  maxIdleConns: 1
+  connMaxLifetime: "0s"
+  postgres:
+    connectionSecretName: ""
+    connectionSecretKey: dsn
+    # Local PostgreSQL is enabled only by the signed deployment profile.
+    # A managed-cloud profile supplies the same connection Secret but leaves
+    # this workload disabled.
+    local:
+      enabled: false
+      serviceName: appliance-postgres
+      databaseName: controlplane
+      username: controlplane
+      image:
+        repository: registry.local/postgres
+        digest: ""
+        pullPolicy: IfNotPresent
+      persistence:
+        size: 4Gi
+        hostPath: /data/zon/postgres
+        claimName: appliance-postgres-data
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 384Mi
+
 files:
   # Logical object prefix for the files capability (/api/v1/files). Content
   # is stored in foundation blob-storage; physical paths stay private.

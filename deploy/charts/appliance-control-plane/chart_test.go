@@ -147,6 +147,59 @@ func TestExactlyOneReplicaWithRecreateStrategy(t *testing.T) {
 	}
 }
 
+func TestPostgresProviderUsesOnlyASecretBackedDSN(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "database.driver=postgres",
+		"--set", "database.postgres.connectionSecretName=managed-postgres-connection",
+		"--set", "database.postgres.connectionSecretKey=dsn",
+	)...)
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
+	}
+	containers, _ := at(dep, "spec", "template", "spec", "containers").([]any)
+	if len(containers) != 1 {
+		t.Fatalf("expected one control-plane container, got %d", len(containers))
+	}
+	container, _ := containers[0].(map[string]any)
+	env, _ := container["env"].([]any)
+	for _, raw := range env {
+		item, _ := raw.(map[string]any)
+		if item["name"] != "APPLIANCE_DATABASE_DSN" {
+			continue
+		}
+		secretRef, _ := at(item, "valueFrom", "secretKeyRef").(map[string]any)
+		if secretRef["name"] != "managed-postgres-connection" || secretRef["key"] != "dsn" {
+			t.Fatalf("PostgreSQL DSN secret reference = %#v, want managed-postgres-connection/dsn", secretRef)
+		}
+		return
+	}
+	t.Fatal("PostgreSQL DSN must be injected through a Secret reference")
+}
+
+func TestLocalPostgresProfileRendersPinnedStatefulSet(t *testing.T) {
+	digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceSystem.enabled=true",
+		"--set", "database.driver=postgres",
+		"--set", "database.postgres.connectionSecretName=appliance-postgres",
+		"--set", "database.postgres.local.enabled=true",
+		"--set", "database.postgres.local.image.digest="+digest,
+	)...)
+	statefulSet := findByKindAndName(docs, "StatefulSet", "appliance-postgres")
+	if statefulSet == nil {
+		t.Fatal("local PostgreSQL profile must render its StatefulSet")
+	}
+	containers, _ := at(statefulSet, "spec", "template", "spec", "containers").([]any)
+	if len(containers) != 1 {
+		t.Fatalf("PostgreSQL containers = %d, want 1", len(containers))
+	}
+	container, _ := containers[0].(map[string]any)
+	if image, _ := container["image"].(string); image != "registry.local/postgres@"+digest {
+		t.Fatalf("PostgreSQL image = %q, want digest-pinned image", image)
+	}
+}
+
 func TestPodAndContainerSecurityHardening(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)

@@ -112,7 +112,11 @@ func WireServices(cfg config.Config, logger logging.Logger) (*Services, error) {
 }
 
 func wireServices(cfg config.Config, resolved appliance.ResolvedProfile, logger logging.Logger) (*Services, error) {
-	return wireServicesWithStorageProvider(cfg, resolved, logger, sqliteStorageProvider{})
+	provider, err := storageProviderFor(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return wireServicesWithStorageProvider(cfg, resolved, logger, provider)
 }
 
 func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.ResolvedProfile, logger logging.Logger, provider StorageProvider) (*Services, error) {
