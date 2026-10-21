@@ -213,7 +213,7 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
 		ApplicationsH:  &httpapi.ApplicationHandlers{Applications: services.Applications},
-		ConfigurationH: &httpapi.ConfigurationHandlers{Configuration: services.Configuration},
+		ConfigurationH: &httpapi.ConfigurationHandlers{Configuration: services.Configuration, Archives: services.ConfigurationArchive},
 		AuditH: &httpapi.AuditHandlers{
 			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
 		},

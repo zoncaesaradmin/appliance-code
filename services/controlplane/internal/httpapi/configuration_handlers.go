@@ -15,6 +15,75 @@ import (
 // desired-state snapshot and refuses to merge it into existing state.
 type ConfigurationHandlers struct {
 	Configuration *configuration.Service
+	Archives      configuration.ArchiveService
+}
+
+type configurationArchiveRequest struct {
+	RevisionID string `json:"revisionId,omitempty"`
+}
+
+// Archive captures the current desired configuration unless the caller
+// selects an existing immutable revision, then seals it into the configured
+// same-appliance archive target. It returns only non-secret manifest data.
+func (h *ConfigurationHandlers) Archive(w http.ResponseWriter, r *http.Request) {
+	var request configurationArchiveRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "configuration_archive_invalid", "Configuration archive request is invalid", "")
+		return
+	}
+	revisionID := request.RevisionID
+	if revisionID == "" {
+		principal, _ := PrincipalFromContext(r.Context())
+		revision, err := h.Configuration.Capture(r.Context(), principal.UserID)
+		if err != nil {
+			WriteProblem(w, r, http.StatusInternalServerError, "configuration_capture_failed", "Configuration capture failed", "")
+			return
+		}
+		revisionID = revision.ID
+	}
+	manifest, err := h.Archives.Export(r.Context(), revisionID)
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "configuration_archive_failed", "Configuration archive failed", "")
+		return
+	}
+	writeJSON(w, http.StatusCreated, manifest)
+}
+
+// VerifyArchive authenticates and decrypts an archive without changing
+// configuration. This is the required precondition for restore authorization.
+func (h *ConfigurationHandlers) VerifyArchive(w http.ResponseWriter, r *http.Request) {
+	manifest, err := h.Archives.Verify(r.Context(), r.PathValue("archiveID"))
+	if errors.Is(err, configuration.ErrArchiveNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "configuration_archive_not_found", "Configuration archive not found", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusConflict, "configuration_archive_invalid", "Configuration archive verification failed", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, manifest)
+}
+
+// ImportArchive is limited to the encrypted archive target configured on this
+// appliance. Cross-appliance imports use the portable archive/key handoff
+// path and the plain Import endpoint only after zonctl has authenticated and
+// decrypted that external archive.
+func (h *ConfigurationHandlers) ImportArchive(w http.ResponseWriter, r *http.Request) {
+	principal, _ := PrincipalFromContext(r.Context())
+	revision, err := h.Archives.Import(r.Context(), r.PathValue("archiveID"), principal.UserID)
+	if errors.Is(err, configuration.ErrArchiveNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "configuration_archive_not_found", "Configuration archive not found", "")
+		return
+	}
+	if errors.Is(err, configuration.ErrDestinationNotClean) || errors.Is(err, configuration.ErrIncompatibleSnapshot) {
+		WriteProblem(w, r, http.StatusConflict, "configuration_archive_import_refused", "Configuration archive import was refused", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "configuration_archive_invalid", "Configuration archive import failed", "")
+		return
+	}
+	writeJSON(w, http.StatusCreated, configurationRevisionResponseFrom(revision))
 }
 
 type configurationRevisionResponse struct {

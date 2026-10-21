@@ -148,6 +148,9 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 		mux.Handle("POST /api/v1/configuration/revisions", w.protect(roles.PermSystemOperate, deps.ConfigurationH.Capture))
 		mux.Handle("GET /api/v1/configuration/revisions/latest", w.protect(roles.PermSystemRead, deps.ConfigurationH.Latest))
 		mux.Handle("POST /api/v1/configuration/revisions/import", w.protect(roles.PermSystemOperate, deps.ConfigurationH.Import))
+		mux.Handle("POST /api/v1/configuration/archives", w.protect(roles.PermSystemOperate, deps.ConfigurationH.Archive))
+		mux.Handle("GET /api/v1/configuration/archives/{archiveID}/verify", w.protect(roles.PermSystemRead, deps.ConfigurationH.VerifyArchive))
+		mux.Handle("POST /api/v1/configuration/archives/{archiveID}/import", w.protect(roles.PermSystemOperate, deps.ConfigurationH.ImportArchive))
 	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

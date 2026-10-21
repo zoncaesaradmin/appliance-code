@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -71,27 +72,28 @@ type Services struct {
 	WebUIGrantStore    storage.WebUILaunchGrantStore
 	WebUIBridgeStore   storage.WebUIBridgeSessionStore
 
-	Users              *users.Service
-	Roles              *roles.Service
-	Tokens             *tokens.Service
-	Sessions           *authn.SessionService
-	Authz              *authz.Service
-	RegistryAuthorizer *registryauth.Authorizer
-	ArtifactServer     artifactserver.Client
-	WorkflowEngine     workflows.Engine
-	Builds             *builds.Service
-	Devflows           *devflows.Service
-	BuilderGit         *buildergit.Service
-	DNS                *dnsrecords.Service
-	Licensing          *licensing.Service
-	Metadata           metadatabundle.Runtime
-	Profiles           *profiles.Service
-	Notifications      *notifications.Service
-	Applications       *applications.Service
-	ApplicationRuntime applications.ResourceManager
-	Inference          *inference.Service
-	WebUI              *webui.Service
-	Configuration      *configuration.Service
+	Users                *users.Service
+	Roles                *roles.Service
+	Tokens               *tokens.Service
+	Sessions             *authn.SessionService
+	Authz                *authz.Service
+	RegistryAuthorizer   *registryauth.Authorizer
+	ArtifactServer       artifactserver.Client
+	WorkflowEngine       workflows.Engine
+	Builds               *builds.Service
+	Devflows             *devflows.Service
+	BuilderGit           *buildergit.Service
+	DNS                  *dnsrecords.Service
+	Licensing            *licensing.Service
+	Metadata             metadatabundle.Runtime
+	Profiles             *profiles.Service
+	Notifications        *notifications.Service
+	Applications         *applications.Service
+	ApplicationRuntime   applications.ResourceManager
+	Inference            *inference.Service
+	WebUI                *webui.Service
+	Configuration        *configuration.Service
+	ConfigurationArchive configuration.ArchiveService
 
 	Keys     *keys.Material
 	Audit    *audit.Recorder
@@ -233,6 +235,15 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("app: wiring configuration revisions: %w", err)
+	}
+	configurationArchive := configuration.ArchiveService{
+		Revisions: stores.ConfigurationStore,
+		Config:    configurationSvc,
+		Keys:      keyMaterial,
+		// This first wired target deliberately remains same-appliance storage.
+		// Exporting it to a disconnected file or external S3 target is an
+		// explicit operator action, never an implicit durability claim.
+		Target: configuration.FileArchiveTarget{Root: filepath.Join(cfg.DataDir, "configuration-archives")},
 	}
 	var inferenceSvc *inference.Service
 	var webuiSvc *webui.Service
@@ -388,46 +399,47 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 	}
 
 	return &Services{
-		ApplianceProfile:   resolved,
-		Modules:            resolvedModules,
-		DB:                 db,
-		UserStore:          userStore,
-		RoleStore:          roleStore,
-		AuditStore:         auditStore,
-		RegistryGrantStore: registryGrantStore,
-		DNSRecordStore:     dnsRecordStore,
-		BuildStore:         buildStore,
-		IdempotencyStore:   idempotencyStore,
-		WorkspaceStore:     workspaceStore,
-		JobStore:           jobStore,
-		ApplicationStore:   applicationStore,
-		FocusContentStore:  focusContentStore,
-		WebUIGrantStore:    webuiGrantStore,
-		WebUIBridgeStore:   webuiBridgeStore,
-		Users:              usersSvc,
-		Roles:              roles.NewService(db, roleStore, userStore, recorder),
-		Tokens:             tokensSvc,
-		Sessions:           authn.NewSessionService(db, userStore, sessionStore, throttleStore, recorder, keyMaterial, cfg.CanonicalOrigin, SessionAudience),
-		Authz:              authz.NewService(roleStore),
-		RegistryAuthorizer: registryAuthorizer,
-		ArtifactServer:     artifactServerClient,
-		WorkflowEngine:     workflowEngine,
-		Builds:             buildsSvc,
-		Devflows:           devflowsSvc,
-		BuilderGit:         builderGitSvc,
-		DNS:                dnsSvc,
-		Licensing:          licensingSvc,
-		Metadata:           metadataSvc,
-		Profiles:           profilesSvc,
-		Notifications:      notificationsSvc,
-		Applications:       applicationsSvc,
-		ApplicationRuntime: applicationRuntime,
-		Inference:          inferenceSvc,
-		WebUI:              webuiSvc,
-		Configuration:      configurationSvc,
-		Keys:               keyMaterial,
-		Audit:              recorder,
-		AuditOps:           auditOps,
+		ApplianceProfile:     resolved,
+		Modules:              resolvedModules,
+		DB:                   db,
+		UserStore:            userStore,
+		RoleStore:            roleStore,
+		AuditStore:           auditStore,
+		RegistryGrantStore:   registryGrantStore,
+		DNSRecordStore:       dnsRecordStore,
+		BuildStore:           buildStore,
+		IdempotencyStore:     idempotencyStore,
+		WorkspaceStore:       workspaceStore,
+		JobStore:             jobStore,
+		ApplicationStore:     applicationStore,
+		FocusContentStore:    focusContentStore,
+		WebUIGrantStore:      webuiGrantStore,
+		WebUIBridgeStore:     webuiBridgeStore,
+		Users:                usersSvc,
+		Roles:                roles.NewService(db, roleStore, userStore, recorder),
+		Tokens:               tokensSvc,
+		Sessions:             authn.NewSessionService(db, userStore, sessionStore, throttleStore, recorder, keyMaterial, cfg.CanonicalOrigin, SessionAudience),
+		Authz:                authz.NewService(roleStore),
+		RegistryAuthorizer:   registryAuthorizer,
+		ArtifactServer:       artifactServerClient,
+		WorkflowEngine:       workflowEngine,
+		Builds:               buildsSvc,
+		Devflows:             devflowsSvc,
+		BuilderGit:           builderGitSvc,
+		DNS:                  dnsSvc,
+		Licensing:            licensingSvc,
+		Metadata:             metadataSvc,
+		Profiles:             profilesSvc,
+		Notifications:        notificationsSvc,
+		Applications:         applicationsSvc,
+		ApplicationRuntime:   applicationRuntime,
+		Inference:            inferenceSvc,
+		WebUI:                webuiSvc,
+		Configuration:        configurationSvc,
+		ConfigurationArchive: configurationArchive,
+		Keys:                 keyMaterial,
+		Audit:                recorder,
+		AuditOps:             auditOps,
 	}, nil
 }
 

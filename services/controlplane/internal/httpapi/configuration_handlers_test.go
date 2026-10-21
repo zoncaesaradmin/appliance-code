@@ -25,6 +25,25 @@ func TestConfigurationRevisionCaptureAndImport(t *testing.T) {
 	if !json.Valid(revision.Payload) {
 		t.Fatalf("captured payload is not JSON: %q", revision.Payload)
 	}
+	archive := source.doJSON(t, http.MethodPost, "/api/v1/configuration/archives", adminToken, "{}")
+	defer archive.Body.Close()
+	if archive.StatusCode != http.StatusCreated {
+		t.Fatalf("archive status = %d, want %d", archive.StatusCode, http.StatusCreated)
+	}
+	var archiveBody struct {
+		ArchiveID string `json:"archiveId"`
+	}
+	if err := json.NewDecoder(archive.Body).Decode(&archiveBody); err != nil {
+		t.Fatalf("decode archive response: %v", err)
+	}
+	if archiveBody.ArchiveID == "" {
+		t.Fatal("archive response omitted archiveId")
+	}
+	verified := source.doJSON(t, http.MethodGet, "/api/v1/configuration/archives/"+archiveBody.ArchiveID+"/verify", adminToken, "")
+	defer verified.Body.Close()
+	if verified.StatusCode != http.StatusOK {
+		t.Fatalf("archive verify status = %d, want %d", verified.StatusCode, http.StatusOK)
+	}
 
 	target := newTestServer(t)
 	target.bootstrapAdmin(t, "admin", testPassword)
