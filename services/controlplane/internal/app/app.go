@@ -66,6 +66,10 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		services.DB.Close()
 		return nil, err
 	}
+	if _, err := services.Configuration.ReconcileLatest(context.Background()); err != nil && !errors.Is(err, storage.ErrNotFound) {
+		services.DB.Close()
+		return nil, fmt.Errorf("reconcile persisted configuration: %w", err)
+	}
 
 	startup := &httpapi.StartupState{}
 	startup.MarkStarted()

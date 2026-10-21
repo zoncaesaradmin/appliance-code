@@ -157,6 +157,43 @@ func (s *Service) Latest(ctx context.Context) (storage.ConfigurationRevision, er
 	return s.stores.Revisions.LatestConfigurationRevision(ctx)
 }
 
+// ReconcileLatest revalidates the latest persisted desired-state snapshot at
+// startup and records a durable state transition. Import writes all supported
+// desired-state tables atomically; this step proves the resulting snapshot is
+// still compatible with the staged metadata before readiness is advertised.
+// A failed attempt is retried on the next process start rather than being
+// silently represented as applied.
+func (s *Service) ReconcileLatest(ctx context.Context) (storage.ConfigurationRevision, error) {
+	revision, err := s.stores.Revisions.LatestConfigurationRevision(ctx)
+	if err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	if revision.Status == storage.ConfigurationRevisionApplied {
+		return revision, nil
+	}
+	if err := s.stores.Revisions.SetConfigurationRevisionStatus(ctx, revision.ID, storage.ConfigurationRevisionApplying, "validating persisted desired configuration", nil); err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	_, _, reconcileErr := validateSnapshot(revision.Payload)
+	if reconcileErr == nil {
+		var snapshot Snapshot
+		reconcileErr = json.Unmarshal(revision.Payload, &snapshot)
+		if reconcileErr == nil {
+			reconcileErr = s.validateStagedMetadata(ctx, snapshot.Metadata)
+		}
+	}
+	if reconcileErr != nil {
+		_ = s.stores.Revisions.SetConfigurationRevisionStatus(ctx, revision.ID, storage.ConfigurationRevisionFailed, "reconciliation failed: "+reconcileErr.Error(), nil)
+		return storage.ConfigurationRevision{}, fmt.Errorf("configuration: reconcile revision %s: %w", revision.ID, reconcileErr)
+	}
+	now := time.Now().UTC()
+	if err := s.stores.Revisions.SetConfigurationRevisionStatus(ctx, revision.ID, storage.ConfigurationRevisionApplied, "persisted desired configuration reconciled", &now); err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	revision.Status, revision.ApplyMessage, revision.AppliedAt = storage.ConfigurationRevisionApplied, "persisted desired configuration reconciled", &now
+	return revision, nil
+}
+
 // Import validates and persists a desired-state snapshot into an empty
 // configuration destination. It deliberately refuses a merge: configuration
 // restore is a clean-target operation, and applying a backup over unknown

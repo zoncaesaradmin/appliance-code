@@ -22,9 +22,10 @@ type ConfigurationRevision struct {
 }
 
 const (
-	ConfigurationRevisionPending = "pending"
-	ConfigurationRevisionApplied = "applied"
-	ConfigurationRevisionFailed  = "failed"
+	ConfigurationRevisionPending  = "pending"
+	ConfigurationRevisionApplying = "applying"
+	ConfigurationRevisionApplied  = "applied"
+	ConfigurationRevisionFailed   = "failed"
 )
 
 // ConfigurationRevisionStore persists immutable desired-configuration

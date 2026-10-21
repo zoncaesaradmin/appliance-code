@@ -51,4 +51,11 @@ func TestImportRequiresMatchingStagedMetadataBundle(t *testing.T) {
 	if _, err := service.Import(ctx, payload, "operator"); err != nil {
 		t.Fatalf("Import with matching staged metadata: %v", err)
 	}
+	reconciled, err := service.ReconcileLatest(ctx)
+	if err != nil {
+		t.Fatalf("ReconcileLatest: %v", err)
+	}
+	if reconciled.Status != storage.ConfigurationRevisionApplied || reconciled.AppliedAt == nil {
+		t.Fatalf("reconciliation state = %#v, want applied with timestamp", reconciled)
+	}
 }
