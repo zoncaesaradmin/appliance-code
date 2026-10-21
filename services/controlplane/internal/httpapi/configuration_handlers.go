@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"appliance-code/services/controlplane/internal/configuration"
@@ -9,9 +10,9 @@ import (
 )
 
 // ConfigurationHandlers exposes the desired-state revision boundary. Archive
-// encryption, target storage, and destructive import are intentionally not
-// public HTTP operations yet; those require the coordinated recovery-set
-// protocol and installer bootstrap state machine.
+// encryption and target storage are handled by the caller's explicit backup
+// target/key contract; this API only accepts a validated, already-decrypted
+// desired-state snapshot and refuses to merge it into existing state.
 type ConfigurationHandlers struct {
 	Configuration *configuration.Service
 }
@@ -48,6 +49,37 @@ func (h *ConfigurationHandlers) Latest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, configurationRevisionResponseFrom(revision))
+}
+
+type configurationImportRequest struct {
+	Payload json.RawMessage `json:"payload"`
+}
+
+// Import applies a portable desired-state payload only to a clean
+// destination. It is intentionally a system-operator operation; zonctl uses
+// it after it has staged, authenticated, decrypted, and compatibility-checked
+// an archive. It is not a PostgreSQL recovery-set endpoint.
+func (h *ConfigurationHandlers) Import(w http.ResponseWriter, r *http.Request) {
+	var request configurationImportRequest
+	if err := decodeJSON(w, r, &request); err != nil || len(request.Payload) == 0 {
+		WriteProblem(w, r, http.StatusBadRequest, "configuration_import_invalid", "Configuration import payload is invalid", "")
+		return
+	}
+	principal, _ := PrincipalFromContext(r.Context())
+	revision, err := h.Configuration.Import(r.Context(), request.Payload, principal.UserID)
+	if errors.Is(err, configuration.ErrInvalidSnapshot) {
+		WriteProblem(w, r, http.StatusBadRequest, "configuration_import_invalid", "Configuration import payload is invalid", "")
+		return
+	}
+	if errors.Is(err, configuration.ErrDestinationNotClean) {
+		WriteProblem(w, r, http.StatusConflict, "configuration_import_requires_clean_target", "Configuration import requires a clean target", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "configuration_import_failed", "Configuration import failed", "")
+		return
+	}
+	writeJSON(w, http.StatusCreated, configurationRevisionResponseFrom(revision))
 }
 
 func configurationRevisionResponseFrom(revision storage.ConfigurationRevision) configurationRevisionResponse {

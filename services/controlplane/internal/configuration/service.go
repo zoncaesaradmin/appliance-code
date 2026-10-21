@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -20,6 +21,16 @@ import (
 )
 
 const SchemaVersion = "configuration.zon/v1"
+
+// ErrInvalidSnapshot means a payload does not satisfy the portable
+// desired-configuration schema. Callers can report it as an invalid archive
+// or operator input rather than an internal service failure.
+var ErrInvalidSnapshot = errors.New("configuration: invalid snapshot")
+
+// ErrDestinationNotClean means an import would merge into pre-existing
+// desired state. Configuration restore is intentionally replace-only and
+// must use an explicitly clean target.
+var ErrDestinationNotClean = errors.New("configuration: destination is not clean")
 
 // Snapshot is the portable, desired-state-only configuration payload. The
 // database records only metadata-bundle identity: payload bytes for a signed
@@ -225,7 +236,7 @@ func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (s
 
 func (s *Service) ensureEmpty(ctx context.Context) error {
 	if _, err := s.stores.Revisions.LatestConfigurationRevision(ctx); err == nil {
-		return fmt.Errorf("configuration: destination already contains a configuration revision")
+		return fmt.Errorf("%w: configuration revision already exists", ErrDestinationNotClean)
 	} else if err != storage.ErrNotFound {
 		return fmt.Errorf("configuration: inspect destination revisions: %w", err)
 	}
@@ -246,7 +257,7 @@ func (s *Service) ensureEmpty(ctx context.Context) error {
 		return fmt.Errorf("configuration: inspect destination application instances: %w", err)
 	}
 	if len(profiles) != 0 || len(dnsRecords) != 0 || len(definitions) != 0 || len(instances) != 0 {
-		return fmt.Errorf("configuration: destination already contains desired configuration; import requires a clean target")
+		return fmt.Errorf("%w: desired configuration already exists", ErrDestinationNotClean)
 	}
 	return nil
 }
@@ -254,46 +265,46 @@ func (s *Service) ensureEmpty(ctx context.Context) error {
 func validateSnapshot(payload []byte) (Snapshot, []byte, error) {
 	var snapshot Snapshot
 	if err := json.Unmarshal(payload, &snapshot); err != nil {
-		return Snapshot{}, nil, fmt.Errorf("configuration: decode snapshot: %w", err)
+		return Snapshot{}, nil, fmt.Errorf("%w: decode snapshot: %v", ErrInvalidSnapshot, err)
 	}
 	if snapshot.APIVersion != SchemaVersion {
-		return Snapshot{}, nil, fmt.Errorf("configuration: unsupported snapshot apiVersion %q", snapshot.APIVersion)
+		return Snapshot{}, nil, fmt.Errorf("%w: unsupported snapshot apiVersion %q", ErrInvalidSnapshot, snapshot.APIVersion)
 	}
 	seenProfiles, seenDNS, seenDefinitions, seenInstances := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
 	for _, profile := range snapshot.CustomProfiles {
 		if profile.ID == "" || !json.Valid(profile.Capabilities) {
-			return Snapshot{}, nil, fmt.Errorf("configuration: invalid custom profile")
+			return Snapshot{}, nil, fmt.Errorf("%w: invalid custom profile", ErrInvalidSnapshot)
 		}
 		if _, exists := seenProfiles[profile.ID]; exists {
-			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate custom profile %q", profile.ID)
+			return Snapshot{}, nil, fmt.Errorf("%w: duplicate custom profile %q", ErrInvalidSnapshot, profile.ID)
 		}
 		seenProfiles[profile.ID] = struct{}{}
 	}
 	for _, record := range snapshot.DNSRecords {
 		if record.Name == "" || record.IPv4 == "" || record.TTL <= 0 {
-			return Snapshot{}, nil, fmt.Errorf("configuration: invalid DNS record")
+			return Snapshot{}, nil, fmt.Errorf("%w: invalid DNS record", ErrInvalidSnapshot)
 		}
 		if _, exists := seenDNS[record.Name]; exists {
-			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate DNS record %q", record.Name)
+			return Snapshot{}, nil, fmt.Errorf("%w: duplicate DNS record %q", ErrInvalidSnapshot, record.Name)
 		}
 		seenDNS[record.Name] = struct{}{}
 	}
 	for _, definition := range snapshot.ApplicationDefs {
 		key := definition.Name + "@" + definition.Version
 		if definition.Name == "" || definition.Version == "" || !json.Valid(definition.Document) {
-			return Snapshot{}, nil, fmt.Errorf("configuration: invalid application definition")
+			return Snapshot{}, nil, fmt.Errorf("%w: invalid application definition", ErrInvalidSnapshot)
 		}
 		if _, exists := seenDefinitions[key]; exists {
-			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate application definition %q", key)
+			return Snapshot{}, nil, fmt.Errorf("%w: duplicate application definition %q", ErrInvalidSnapshot, key)
 		}
 		seenDefinitions[key] = struct{}{}
 	}
 	for _, instance := range snapshot.ApplicationInstances {
 		if instance.Name == "" || instance.DefinitionName == "" || instance.DefinitionVersion == "" || instance.DesiredState == "" {
-			return Snapshot{}, nil, fmt.Errorf("configuration: invalid application instance")
+			return Snapshot{}, nil, fmt.Errorf("%w: invalid application instance", ErrInvalidSnapshot)
 		}
 		if _, exists := seenInstances[instance.Name]; exists {
-			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate application instance %q", instance.Name)
+			return Snapshot{}, nil, fmt.Errorf("%w: duplicate application instance %q", ErrInvalidSnapshot, instance.Name)
 		}
 		seenInstances[instance.Name] = struct{}{}
 	}

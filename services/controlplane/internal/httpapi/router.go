@@ -147,6 +147,7 @@ func NewPublicMux(deps Deps, capabilities appliance.Set, modules []appliance.Mod
 	if deps.ConfigurationH != nil && deps.ConfigurationH.Configuration != nil {
 		mux.Handle("POST /api/v1/configuration/revisions", w.protect(roles.PermSystemOperate, deps.ConfigurationH.Capture))
 		mux.Handle("GET /api/v1/configuration/revisions/latest", w.protect(roles.PermSystemRead, deps.ConfigurationH.Latest))
+		mux.Handle("POST /api/v1/configuration/revisions/import", w.protect(roles.PermSystemOperate, deps.ConfigurationH.Import))
 	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
