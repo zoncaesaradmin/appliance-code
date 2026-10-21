@@ -65,6 +65,20 @@ These rules apply to all implementation and documentation in this repository.
 - Do not treat “make verify passed in one repo” as sufficient when the release flow spans `appliance-release`, `appliance-ctl`, and `appliance-code`; verify each edited repo and explicitly re-check the shared contract.
 - Do not hand off another long release-flow run while a known cross-repo contract mismatch remains.
 
+## Change Scope And Frozen-Artifact Discipline
+
+- Do not alter an application catalog reference, third-party image pin, or
+  bundled OCI digest merely because an unrelated packaging or release run
+  exposed a mismatch. Treat that as a separate defect until its full
+  producer-to-consumer chain has been proven and the user has authorized its
+  scope.
+- A catalog/runtime digest change requires matched evidence for the pinned
+  source, online export, offline seeded export, frozen archive, signed bundle,
+  and workload consumer. A digest observed in one mode alone is insufficient.
+- Before requesting an end-to-end run, inspect the complete diff and report
+  any changes outside the requested feature. Revert or isolate unrelated work
+  rather than allowing it to ride with the requested change.
+
 
 ## UI To API Observability Contract
 
