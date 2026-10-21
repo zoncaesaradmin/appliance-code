@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"appliance-code/services/controlplane/internal/appliance"
@@ -58,6 +60,10 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 	}
 	services, err := wireServices(cfg, resolved, logger)
 	if err != nil {
+		return nil, err
+	}
+	if err := importBootstrapConfiguration(context.Background(), cfg.BootstrapConfigurationPayloadPath, services.Configuration); err != nil {
+		services.DB.Close()
 		return nil, err
 	}
 
@@ -205,6 +211,34 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		internal:      internal,
 		startup:       startup,
 	}, nil
+}
+
+// importBootstrapConfiguration consumes the installer-staged configuration
+// payload before the public API is made available. A missing optional file is
+// normal after zonctl has deleted the one-shot Secret; any present file must
+// be valid and is imported only through the same clean-target service used by
+// the authenticated operator API.
+func importBootstrapConfiguration(ctx context.Context, path string, service interface {
+	Import(context.Context, []byte, string) (storage.ConfigurationRevision, error)
+}) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	payload, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read bootstrap configuration payload: %w", err)
+	}
+	if len(payload) == 0 {
+		return errors.New("bootstrap configuration payload is empty")
+	}
+	if _, err := service.Import(ctx, payload, "installer-bootstrap"); err != nil {
+		return fmt.Errorf("import bootstrap configuration: %w", err)
+	}
+	return nil
 }
 
 // Run starts both listeners and blocks until ctx is cancelled, then drains

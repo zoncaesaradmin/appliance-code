@@ -61,6 +61,10 @@ spec:
                   name: {{ required "database.postgres.connectionSecretName is required when database.driver is postgres" .Values.database.postgres.connectionSecretName }}
                   key: {{ .Values.database.postgres.connectionSecretKey | quote }}
             {{- end }}
+            {{- if .Values.secrets.bootstrapConfigurationSecretName }}
+            - name: APPLIANCE_BOOTSTRAP_CONFIGURATION_PAYLOAD_PATH
+              value: /var/run/appliance/bootstrap-configuration/payload.json
+            {{- end }}
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           resources:
@@ -102,6 +106,11 @@ spec:
             - name: appliance-ca
               mountPath: /var/run/appliance/tls
               readOnly: true
+            {{- if .Values.secrets.bootstrapConfigurationSecretName }}
+            - name: bootstrap-configuration
+              mountPath: /var/run/appliance/bootstrap-configuration
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -136,4 +145,14 @@ spec:
             items:
               - key: ca.crt
                 path: ca.crt
+        {{- if .Values.secrets.bootstrapConfigurationSecretName }}
+        - name: bootstrap-configuration
+          secret:
+            secretName: {{ .Values.secrets.bootstrapConfigurationSecretName }}
+            optional: true
+            defaultMode: 0440
+            items:
+              - key: payload.json
+                path: payload.json
+        {{- end }}
 {{- end }}

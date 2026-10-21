@@ -257,6 +257,10 @@ secrets:
   # read-only at dataDir/keys. zonctl generates every file; pods never write
   # key material at runtime.
   keysSecretName: "appliance-keys"
+  # Optional one-shot desired-configuration payload created by zonctl for
+  # `install --bootstrap-mode restore-config`. It is deleted after the first
+  # healthy control-plane start and is never an application credential.
+  bootstrapConfigurationSecretName: ""
   # Installer-managed appliance CA (ca.crt + ca.key). The control plane mounts
   # ca.crt only for authenticated client download; the private key stays out.
   caSecretName: "appliance-ca"

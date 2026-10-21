@@ -36,6 +36,12 @@ type Config struct {
 	PublicAddr    string `json:"publicAddr"`
 	InternalAddr  string `json:"internalAddr"`
 	DataDir       string `json:"dataDir"`
+	// BootstrapConfigurationPayloadPath is an installer-created, short-lived
+	// desired-configuration payload. When present on an otherwise clean
+	// control plane, it is imported before either listener is exposed. The
+	// Kubernetes volume is optional so ordinary restarts after zonctl removes
+	// the one-shot Secret do not depend on it.
+	BootstrapConfigurationPayloadPath string `json:"-"`
 	// Database selects the durable control-plane store. PostgreSQL is the
 	// appliance and cloud provider; an unsupported driver never falls back to
 	// another backend.
@@ -245,6 +251,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
 	str("DATA_DIR", &cfg.DataDir)
+	str("BOOTSTRAP_CONFIGURATION_PAYLOAD_PATH", &cfg.BootstrapConfigurationPayloadPath)
 	str("DATABASE_DRIVER", &cfg.Database.Driver)
 	str("DATABASE_DSN", &cfg.Database.DSN)
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
