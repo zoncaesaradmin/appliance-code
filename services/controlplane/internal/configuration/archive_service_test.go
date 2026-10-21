@@ -58,4 +58,8 @@ func TestArchiveServiceExportAndVerify(t *testing.T) {
 	if verified.ArchiveID != manifest.ArchiveID || verified.PayloadDigest != revision.PayloadDigest {
 		t.Fatalf("verified manifest = %#v", verified)
 	}
+	listed, err := service.ListVerified(context.Background())
+	if err != nil || len(listed) != 1 || listed[0].ArchiveID != manifest.ArchiveID {
+		t.Fatalf("ListVerified = %#v, %v", listed, err)
+	}
 }

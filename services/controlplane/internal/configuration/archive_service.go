@@ -73,6 +73,28 @@ func (s ArchiveService) Verify(ctx context.Context, archiveID string) (ArchiveMa
 	return manifest, err
 }
 
+// ListVerified returns only archives whose envelope authenticates with this
+// appliance's archive key. Targets are untrusted storage: parsed manifests
+// alone must never be presented as recoverable archives.
+func (s ArchiveService) ListVerified(ctx context.Context) ([]ArchiveManifest, error) {
+	if err := s.validateExportDependencies(); err != nil {
+		return nil, err
+	}
+	candidates, err := s.Target.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	verified := make([]ArchiveManifest, 0, len(candidates))
+	for _, candidate := range candidates {
+		manifest, err := s.Verify(ctx, candidate.ArchiveID)
+		if err != nil {
+			return nil, fmt.Errorf("configuration: verify listed archive %s: %w", candidate.ArchiveID, err)
+		}
+		verified = append(verified, manifest)
+	}
+	return verified, nil
+}
+
 // ReadVerified returns the original sealed archive bytes only after their
 // manifest and ciphertext authenticate with the configured archive key. It is
 // used for an explicit operator download; callers must not expose bytes from

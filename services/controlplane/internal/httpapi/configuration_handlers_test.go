@@ -39,6 +39,11 @@ func TestConfigurationRevisionCaptureAndImport(t *testing.T) {
 	if archiveBody.ArchiveID == "" {
 		t.Fatal("archive response omitted archiveId")
 	}
+	listed := source.doJSON(t, http.MethodGet, "/api/v1/configuration/archives", adminToken, "")
+	defer listed.Body.Close()
+	if listed.StatusCode != http.StatusOK {
+		t.Fatalf("archive list status = %d, want %d", listed.StatusCode, http.StatusOK)
+	}
 	verified := source.doJSON(t, http.MethodGet, "/api/v1/configuration/archives/"+archiveBody.ArchiveID+"/verify", adminToken, "")
 	defer verified.Body.Close()
 	if verified.StatusCode != http.StatusOK {

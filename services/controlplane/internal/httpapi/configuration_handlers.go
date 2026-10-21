@@ -22,6 +22,16 @@ type configurationArchiveRequest struct {
 	RevisionID string `json:"revisionId,omitempty"`
 }
 
+// ListArchives returns only cryptographically verified archive manifests.
+func (h *ConfigurationHandlers) ListArchives(w http.ResponseWriter, r *http.Request) {
+	archives, err := h.Archives.ListVerified(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusConflict, "configuration_archive_list_failed", "Configuration archive listing failed", "")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"archives": archives})
+}
+
 // Archive captures the current desired configuration unless the caller
 // selects an existing immutable revision, then seals it into the configured
 // same-appliance archive target. It returns only non-secret manifest data.
