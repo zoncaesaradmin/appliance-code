@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -19,6 +20,16 @@ type migration struct {
 	Version int
 	Name    string
 	SQL     string
+}
+
+// migrationExecutor is satisfied by both *sql.DB and *sql.Conn. PostgreSQL
+// migration coordination deliberately uses one *sql.Conn because advisory
+// locks are session-scoped; acquiring a lock on one pooled connection and
+// running migrations through another would provide no protection.
+type migrationExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 }
 
 // loadMigrations reads embedded migration files, parses their numeric prefix
@@ -79,8 +90,37 @@ func (db *DB) Migrate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("sqlite: loading migrations: %w", err)
 	}
+	if db.postgres {
+		return db.migratePostgres(ctx, migrations)
+	}
+	return db.migrateWith(ctx, db.sqlDB, migrations)
+}
 
-	if _, err := db.sqlDB.ExecContext(ctx, `
+func (db *DB) migratePostgres(ctx context.Context, migrations []migration) error {
+	conn, err := db.sqlDB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("postgres: acquire migration connection: %w", err)
+	}
+	defer conn.Close() //nolint:errcheck // connection closure releases any remaining advisory lock
+
+	// The numeric lock ID is a stable product-wide namespace, not a secret.
+	// It serializes schema changes across all control-plane replicas sharing a
+	// database without preventing ordinary application transactions.
+	const migrationLockID int64 = 0x5a4f4e43504c414e
+	if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, migrationLockID); err != nil {
+		return fmt.Errorf("postgres: acquire migration advisory lock: %w", err)
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = conn.ExecContext(unlockCtx, `SELECT pg_advisory_unlock($1)`, migrationLockID)
+	}()
+	return db.migrateWith(ctx, conn, migrations)
+}
+
+func (db *DB) migrateWith(ctx context.Context, executor migrationExecutor, migrations []migration) error {
+
+	if _, err := executor.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version    INTEGER PRIMARY KEY,
 			name       TEXT NOT NULL,
@@ -89,7 +129,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return fmt.Errorf("creating schema_migrations table: %w", err)
 	}
 
-	applied, err := db.appliedVersions(ctx)
+	applied, err := db.appliedVersions(ctx, executor)
 	if err != nil {
 		return fmt.Errorf("sqlite: reading applied migrations: %w", err)
 	}
@@ -115,7 +155,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 		if m.Version < nextVersion {
 			continue
 		}
-		if err := db.applyMigration(ctx, m); err != nil {
+		if err := db.applyMigration(ctx, executor, m); err != nil {
 			return fmt.Errorf("sqlite: applying migration %d_%s: %w", m.Version, m.Name, err)
 		}
 	}
@@ -123,8 +163,8 @@ func (db *DB) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (db *DB) appliedVersions(ctx context.Context) ([]int, error) {
-	rows, err := db.sqlDB.QueryContext(ctx, `SELECT version FROM schema_migrations ORDER BY version ASC`)
+func (db *DB) appliedVersions(ctx context.Context, executor migrationExecutor) ([]int, error) {
+	rows, err := executor.QueryContext(ctx, `SELECT version FROM schema_migrations ORDER BY version ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +181,8 @@ func (db *DB) appliedVersions(ctx context.Context) ([]int, error) {
 	return versions, rows.Err()
 }
 
-func (db *DB) applyMigration(ctx context.Context, m migration) error {
-	tx, err := db.sqlDB.BeginTx(ctx, nil)
+func (db *DB) applyMigration(ctx context.Context, executor migrationExecutor, m migration) error {
+	tx, err := executor.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
