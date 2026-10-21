@@ -64,6 +64,26 @@ func (h *ConfigurationHandlers) VerifyArchive(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, manifest)
 }
 
+// DownloadArchive returns a sealed archive only after authenticating it. The
+// bytes are deliberately an attachment rather than JSON API data so ordinary
+// API logging/redaction does not attempt to inspect or retain them.
+func (h *ConfigurationHandlers) DownloadArchive(w http.ResponseWriter, r *http.Request) {
+	manifest, data, err := h.Archives.ReadVerified(r.Context(), r.PathValue("archiveID"))
+	if errors.Is(err, configuration.ErrArchiveNotFound) {
+		WriteProblem(w, r, http.StatusNotFound, "configuration_archive_not_found", "Configuration archive not found", "")
+		return
+	}
+	if err != nil {
+		WriteProblem(w, r, http.StatusConflict, "configuration_archive_invalid", "Configuration archive verification failed", "")
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.zon.configuration-archive+json")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+manifest.ArchiveID+`.json"`)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
 // ImportArchive is limited to the encrypted archive target configured on this
 // appliance. Cross-appliance imports use the portable archive/key handoff
 // path and the plain Import endpoint only after zonctl has authenticated and

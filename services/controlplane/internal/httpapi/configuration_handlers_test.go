@@ -44,6 +44,18 @@ func TestConfigurationRevisionCaptureAndImport(t *testing.T) {
 	if verified.StatusCode != http.StatusOK {
 		t.Fatalf("archive verify status = %d, want %d", verified.StatusCode, http.StatusOK)
 	}
+	downloaded := source.doJSON(t, http.MethodGet, "/api/v1/configuration/archives/"+archiveBody.ArchiveID+"/download", adminToken, "")
+	defer downloaded.Body.Close()
+	if downloaded.StatusCode != http.StatusOK {
+		t.Fatalf("archive download status = %d, want %d", downloaded.StatusCode, http.StatusOK)
+	}
+	if downloaded.Header.Get("Content-Type") != "application/vnd.zon.configuration-archive+json" {
+		t.Fatalf("archive content type = %q", downloaded.Header.Get("Content-Type"))
+	}
+	var envelope map[string]any
+	if err := json.NewDecoder(downloaded.Body).Decode(&envelope); err != nil || envelope["ciphertext"] == nil || envelope["manifest"] == nil {
+		t.Fatalf("downloaded archive is not a sealed envelope: %#v, %v", envelope, err)
+	}
 
 	target := newTestServer(t)
 	target.bootstrapAdmin(t, "admin", testPassword)

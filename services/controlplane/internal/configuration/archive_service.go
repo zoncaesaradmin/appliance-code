@@ -69,22 +69,31 @@ func (s ArchiveService) Export(ctx context.Context, revisionID string) (ArchiveM
 // Verify reads and authenticates an archive without mutating a destination.
 // It is required before an operator authorizes a restore/import operation.
 func (s ArchiveService) Verify(ctx context.Context, archiveID string) (ArchiveManifest, error) {
+	manifest, _, err := s.ReadVerified(ctx, archiveID)
+	return manifest, err
+}
+
+// ReadVerified returns the original sealed archive bytes only after their
+// manifest and ciphertext authenticate with the configured archive key. It is
+// used for an explicit operator download; callers must not expose bytes from
+// an unverified target object.
+func (s ArchiveService) ReadVerified(ctx context.Context, archiveID string) (ArchiveManifest, []byte, error) {
 	if err := s.validateExportDependencies(); err != nil {
-		return ArchiveManifest{}, err
+		return ArchiveManifest{}, nil, err
 	}
 	data, err := s.Target.Get(ctx, archiveID)
 	if err != nil {
-		return ArchiveManifest{}, fmt.Errorf("configuration: read archive: %w", err)
+		return ArchiveManifest{}, nil, fmt.Errorf("configuration: read archive: %w", err)
 	}
 	key, keyID, err := s.Keys.ConfigurationArchiveKey(ctx)
 	if err != nil {
-		return ArchiveManifest{}, fmt.Errorf("configuration: resolve archive key: %w", err)
+		return ArchiveManifest{}, nil, fmt.Errorf("configuration: resolve archive key: %w", err)
 	}
 	manifest, _, err := Open(data, key, keyID)
 	if err != nil {
-		return ArchiveManifest{}, err
+		return ArchiveManifest{}, nil, err
 	}
-	return manifest, nil
+	return manifest, data, nil
 }
 
 // Import verifies/decrypts an archive before sending its canonical payload to
