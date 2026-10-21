@@ -140,6 +140,170 @@ func (s *Service) Latest(ctx context.Context) (storage.ConfigurationRevision, er
 	return s.stores.Revisions.LatestConfigurationRevision(ctx)
 }
 
+// Import validates and persists a desired-state snapshot into an empty
+// configuration destination. It deliberately refuses a merge: configuration
+// restore is a clean-target operation, and applying a backup over unknown
+// desired state would make the result impossible to reason about or roll back.
+// Metadata bundle files themselves are staged and signature-validated by the
+// installer before this method is called.
+func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (storage.ConfigurationRevision, error) {
+	snapshot, canonicalPayload, err := validateSnapshot(payload)
+	if err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	var imported storage.ConfigurationRevision
+	err = s.stores.DB.WithTx(ctx, func(txCtx context.Context) error {
+		if err := s.ensureEmpty(txCtx); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		for _, profile := range snapshot.CustomProfiles {
+			if err := s.stores.Licensing.UpsertCustomProfile(txCtx, storage.CustomApplianceProfile{
+				ID: profile.ID, DisplayName: profile.DisplayName, Description: profile.Description,
+				CapabilitiesJSON: string(profile.Capabilities), CreatedAt: now, UpdatedAt: now,
+				CreatedByUserID: strings.TrimSpace(actorID),
+			}); err != nil {
+				return fmt.Errorf("configuration: import custom profile %q: %w", profile.ID, err)
+			}
+		}
+		if err := s.stores.Licensing.PutActivation(txCtx, storage.ProfileActivationRecord{
+			DesiredProfileID: snapshot.ProfileActivation.DesiredProfileID,
+			Status:           storage.ProfileActivationPendingRestart,
+			Message:          "configuration import pending reconciliation",
+			UpdatedAt:        now,
+			UpdatedByUserID:  strings.TrimSpace(actorID),
+		}); err != nil {
+			return fmt.Errorf("configuration: import profile activation: %w", err)
+		}
+		for _, record := range snapshot.DNSRecords {
+			if err := s.stores.DNS.Upsert(txCtx, storage.DNSRecord{
+				Name: record.Name, IPv4: record.IPv4, TTL: record.TTL,
+				Source: storage.DNSRecordSource(record.Source), Owner: record.Owner,
+				CreatedAt: now, UpdatedAt: now,
+			}); err != nil {
+				return fmt.Errorf("configuration: import DNS record %q: %w", record.Name, err)
+			}
+		}
+		if err := s.stores.BuilderCatalog.PutBuilderCatalog(txCtx, storage.BuilderCatalogRecord{
+			DocumentText: snapshot.BuilderCatalog.Document, ContentType: snapshot.BuilderCatalog.ContentType, UpdatedAt: now,
+		}); err != nil {
+			return fmt.Errorf("configuration: import builder catalog: %w", err)
+		}
+		for _, definition := range snapshot.ApplicationDefs {
+			if err := s.stores.Applications.UpsertDefinition(txCtx, storage.ApplicationDefinition{
+				Name: definition.Name, Version: definition.Version, Document: definition.Document, CreatedAt: now, UpdatedAt: now,
+			}); err != nil {
+				return fmt.Errorf("configuration: import application definition %s@%s: %w", definition.Name, definition.Version, err)
+			}
+		}
+		for _, instance := range snapshot.ApplicationInstances {
+			if err := s.stores.Applications.UpsertInstance(txCtx, storage.ApplicationInstance{
+				Name: instance.Name, DefinitionName: instance.DefinitionName, DefinitionVersion: instance.DefinitionVersion,
+				DesiredState: instance.DesiredState, ObservedState: "pending", CreatedAt: now, UpdatedAt: now,
+			}); err != nil {
+				return fmt.Errorf("configuration: import application instance %q: %w", instance.Name, err)
+			}
+		}
+		sum := sha256.Sum256(canonicalPayload)
+		imported = storage.ConfigurationRevision{
+			ID:            uuid.NewString(),
+			SchemaVersion: SchemaVersion,
+			Payload:       canonicalPayload,
+			PayloadDigest: "sha256:" + hex.EncodeToString(sum[:]),
+			CreatedAt:     now,
+			CreatedBy:     strings.TrimSpace(actorID),
+			Status:        storage.ConfigurationRevisionPending,
+			ApplyMessage:  "imported; reconciliation pending",
+		}
+		return s.stores.Revisions.CreateConfigurationRevision(txCtx, imported)
+	})
+	if err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	return imported, nil
+}
+
+func (s *Service) ensureEmpty(ctx context.Context) error {
+	if _, err := s.stores.Revisions.LatestConfigurationRevision(ctx); err == nil {
+		return fmt.Errorf("configuration: destination already contains a configuration revision")
+	} else if err != storage.ErrNotFound {
+		return fmt.Errorf("configuration: inspect destination revisions: %w", err)
+	}
+	profiles, err := s.stores.Licensing.ListCustomProfiles(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: inspect destination profiles: %w", err)
+	}
+	dnsRecords, err := s.stores.DNS.List(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: inspect destination DNS records: %w", err)
+	}
+	definitions, err := s.stores.Applications.ListDefinitions(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: inspect destination application definitions: %w", err)
+	}
+	instances, err := s.stores.Applications.ListInstances(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: inspect destination application instances: %w", err)
+	}
+	if len(profiles) != 0 || len(dnsRecords) != 0 || len(definitions) != 0 || len(instances) != 0 {
+		return fmt.Errorf("configuration: destination already contains desired configuration; import requires a clean target")
+	}
+	return nil
+}
+
+func validateSnapshot(payload []byte) (Snapshot, []byte, error) {
+	var snapshot Snapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		return Snapshot{}, nil, fmt.Errorf("configuration: decode snapshot: %w", err)
+	}
+	if snapshot.APIVersion != SchemaVersion {
+		return Snapshot{}, nil, fmt.Errorf("configuration: unsupported snapshot apiVersion %q", snapshot.APIVersion)
+	}
+	seenProfiles, seenDNS, seenDefinitions, seenInstances := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
+	for _, profile := range snapshot.CustomProfiles {
+		if profile.ID == "" || !json.Valid(profile.Capabilities) {
+			return Snapshot{}, nil, fmt.Errorf("configuration: invalid custom profile")
+		}
+		if _, exists := seenProfiles[profile.ID]; exists {
+			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate custom profile %q", profile.ID)
+		}
+		seenProfiles[profile.ID] = struct{}{}
+	}
+	for _, record := range snapshot.DNSRecords {
+		if record.Name == "" || record.IPv4 == "" || record.TTL <= 0 {
+			return Snapshot{}, nil, fmt.Errorf("configuration: invalid DNS record")
+		}
+		if _, exists := seenDNS[record.Name]; exists {
+			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate DNS record %q", record.Name)
+		}
+		seenDNS[record.Name] = struct{}{}
+	}
+	for _, definition := range snapshot.ApplicationDefs {
+		key := definition.Name + "@" + definition.Version
+		if definition.Name == "" || definition.Version == "" || !json.Valid(definition.Document) {
+			return Snapshot{}, nil, fmt.Errorf("configuration: invalid application definition")
+		}
+		if _, exists := seenDefinitions[key]; exists {
+			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate application definition %q", key)
+		}
+		seenDefinitions[key] = struct{}{}
+	}
+	for _, instance := range snapshot.ApplicationInstances {
+		if instance.Name == "" || instance.DefinitionName == "" || instance.DefinitionVersion == "" || instance.DesiredState == "" {
+			return Snapshot{}, nil, fmt.Errorf("configuration: invalid application instance")
+		}
+		if _, exists := seenInstances[instance.Name]; exists {
+			return Snapshot{}, nil, fmt.Errorf("configuration: duplicate application instance %q", instance.Name)
+		}
+		seenInstances[instance.Name] = struct{}{}
+	}
+	canonical, err := json.Marshal(snapshot)
+	if err != nil {
+		return Snapshot{}, nil, fmt.Errorf("configuration: canonicalize snapshot: %w", err)
+	}
+	return snapshot, canonical, nil
+}
+
 func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	profiles, err := s.stores.Licensing.ListCustomProfiles(ctx)
 	if err != nil {
