@@ -132,9 +132,11 @@ func uuidLike() string {
 	var random [16]byte
 	if _, err := io.ReadFull(rand.Reader, random[:]); err != nil {
 		// Seal has already consumed entropy successfully for the nonce. This is
-		// only a non-secret archive label, so retain progress without exposing
-		// key material if a second entropy read unexpectedly fails.
-		return fmt.Sprintf("archive-%d", time.Now().UTC().UnixNano())
+		// only a non-secret archive label. Retain progress without exposing key
+		// material, while preserving the fixed, path-safe archive-ID shape used
+		// by every backup target.
+		sum := sha256.Sum256([]byte(fmt.Sprintf("%d", time.Now().UTC().UnixNano())))
+		return "archive-" + hex.EncodeToString(sum[:16])
 	}
 	return "archive-" + hex.EncodeToString(random[:])
 }
