@@ -75,6 +75,10 @@ func (h *ConfigurationHandlers) Import(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusConflict, "configuration_import_requires_clean_target", "Configuration import requires a clean target", "")
 		return
 	}
+	if errors.Is(err, configuration.ErrIncompatibleSnapshot) {
+		WriteProblem(w, r, http.StatusConflict, "configuration_import_incompatible", "Configuration import is incompatible with this target", "")
+		return
+	}
 	if err != nil {
 		WriteProblem(w, r, http.StatusInternalServerError, "configuration_import_failed", "Configuration import failed", "")
 		return

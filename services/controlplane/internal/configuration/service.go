@@ -32,6 +32,12 @@ var ErrInvalidSnapshot = errors.New("configuration: invalid snapshot")
 // must use an explicitly clean target.
 var ErrDestinationNotClean = errors.New("configuration: destination is not clean")
 
+// ErrIncompatibleSnapshot means a valid archive cannot be applied to this
+// target because a declared prerequisite (for example a signed metadata
+// bundle) is absent or differs. It is distinct from malformed input and must
+// be surfaced before any target configuration is changed.
+var ErrIncompatibleSnapshot = errors.New("configuration: incompatible snapshot")
+
 // Snapshot is the portable, desired-state-only configuration payload. The
 // database records only metadata-bundle identity: payload bytes for a signed
 // bundle are validated and staged by the installer/recovery coordinator.
@@ -164,6 +170,9 @@ func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (s
 	}
 	var imported storage.ConfigurationRevision
 	err = s.stores.DB.WithTx(ctx, func(txCtx context.Context) error {
+		if err := s.validateStagedMetadata(txCtx, snapshot.Metadata); err != nil {
+			return err
+		}
 		if err := s.ensureEmpty(txCtx); err != nil {
 			return err
 		}
@@ -262,6 +271,29 @@ func (s *Service) ensureEmpty(ctx context.Context) error {
 	return nil
 }
 
+// validateStagedMetadata ensures an imported desired-state payload cannot
+// point to metadata bytes that are absent or different on the target. The
+// installer/recovery coordinator stages and verifies signed metadata before
+// calling Import; this service only confirms that prerequisite atomically
+// with the configuration write.
+func (s *Service) validateStagedMetadata(ctx context.Context, expected *MetadataBundleIdentity) error {
+	if expected == nil {
+		return nil
+	}
+	active, err := s.stores.Metadata.GetMetadataBundle(ctx, "active")
+	if err == storage.ErrNotFound {
+		return fmt.Errorf("%w: required active metadata bundle is not staged", ErrIncompatibleSnapshot)
+	}
+	if err != nil {
+		return fmt.Errorf("configuration: inspect active metadata bundle: %w", err)
+	}
+	if active.MetadataVersion != expected.Version || active.SoftwareVersion != expected.SoftwareVersion || active.Digest != expected.Digest ||
+		(expected.Signature != "" && active.Signature != expected.Signature) {
+		return fmt.Errorf("%w: staged active metadata bundle does not match archive identity", ErrIncompatibleSnapshot)
+	}
+	return nil
+}
+
 func validateSnapshot(payload []byte) (Snapshot, []byte, error) {
 	var snapshot Snapshot
 	if err := json.Unmarshal(payload, &snapshot); err != nil {
@@ -308,6 +340,9 @@ func validateSnapshot(payload []byte) (Snapshot, []byte, error) {
 		}
 		seenInstances[instance.Name] = struct{}{}
 	}
+	if metadata := snapshot.Metadata; metadata != nil && (metadata.Version == "" || metadata.SoftwareVersion == "" || metadata.Digest == "") {
+		return Snapshot{}, nil, fmt.Errorf("%w: incomplete metadata bundle identity", ErrInvalidSnapshot)
+	}
 	canonical, err := json.Marshal(snapshot)
 	if err != nil {
 		return Snapshot{}, nil, fmt.Errorf("configuration: canonicalize snapshot: %w", err)
@@ -342,9 +377,13 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	}
 
 	snapshot := Snapshot{
-		APIVersion:        SchemaVersion,
-		ProfileActivation: ProfileActivation{DesiredProfileID: activation.DesiredProfileID},
-		BuilderCatalog:    BuilderCatalog{Document: catalog.DocumentText, ContentType: catalog.ContentType},
+		APIVersion:           SchemaVersion,
+		ProfileActivation:    ProfileActivation{DesiredProfileID: activation.DesiredProfileID},
+		BuilderCatalog:       BuilderCatalog{Document: catalog.DocumentText, ContentType: catalog.ContentType},
+		CustomProfiles:       []CustomProfile{},
+		DNSRecords:           []DNSRecord{},
+		ApplicationDefs:      []ApplicationDefinition{},
+		ApplicationInstances: []ApplicationInstance{},
 	}
 	for _, profile := range profiles {
 		capabilities := json.RawMessage(profile.CapabilitiesJSON)
@@ -366,7 +405,13 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 		snapshot.ApplicationInstances = append(snapshot.ApplicationInstances, ApplicationInstance{Name: instance.Name, DefinitionName: instance.DefinitionName, DefinitionVersion: instance.DefinitionVersion, DesiredState: instance.DesiredState})
 	}
 	if active, err := s.stores.Metadata.GetMetadataBundle(ctx, "active"); err == nil {
-		snapshot.Metadata = &MetadataBundleIdentity{Version: active.MetadataVersion, SoftwareVersion: active.SoftwareVersion, Digest: active.Digest, Signature: active.Signature}
+		// Development/bootstrap metadata can exist before it has a signed,
+		// immutable identity. It is not portable configuration until all three
+		// identity fields are known; omit it rather than emitting an archive
+		// that cannot be validated on a target.
+		if active.MetadataVersion != "" && active.SoftwareVersion != "" && active.Digest != "" {
+			snapshot.Metadata = &MetadataBundleIdentity{Version: active.MetadataVersion, SoftwareVersion: active.SoftwareVersion, Digest: active.Digest, Signature: active.Signature}
+		}
 	} else if err != storage.ErrNotFound {
 		return Snapshot{}, fmt.Errorf("configuration: get active metadata bundle: %w", err)
 	}
