@@ -12,7 +12,7 @@ applications:
       image:
         # jellyfin/jellyfin:10.10.7 linux/amd64, re-exported into the signed
         # appliance OCI layout as registry.local/jellyfin.
-        reference: registry.local/jellyfin@sha256:097b8601dab0a261cddae37e14d8d65c561d3a6009ecae7ac6b13b960c9e4657
+        reference: registry.local/jellyfin@sha256:47b47ee4ffa13c7a900318eb501664204ac95f7142cfe1b754a9ab4f9704b4b8
       port: 8096
       environment:
         - name: JELLYFIN_PublishedServerUrl
