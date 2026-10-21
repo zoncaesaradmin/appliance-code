@@ -1,5 +1,5 @@
-{{- if and (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") .Values.database.postgres.local.enabled }}
-{{- $ns := include "appliance-control-plane.namespace" . -}}
+{{- if and (eq (include "appliance-control-plane.aceInfraEnabled" .) "true") .Values.database.postgres.local.enabled }}
+{{- $ns := include "appliance-control-plane.infraNamespace" . -}}
 {{- $local := .Values.database.postgres.local -}}
 {{- $existing := lookup "v1" "Secret" $ns .Values.database.postgres.connectionSecretName -}}
 {{- $password := "" -}}
@@ -23,7 +23,7 @@ data:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: appliance-postgres-data
+  name: postgresql-data
 spec:
   capacity: {storage: {{ $local.persistence.size | quote }}}
   accessModes: [ReadWriteOnce]
@@ -47,7 +47,7 @@ metadata:
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: ""
-  volumeName: appliance-postgres-data
+  volumeName: postgresql-data
   resources: {requests: {storage: {{ $local.persistence.size | quote }}}}
 ---
 apiVersion: v1
@@ -56,7 +56,7 @@ metadata:
   name: {{ $local.serviceName }}
   namespace: {{ $ns }}
 spec:
-  selector: {app.kubernetes.io/name: postgres}
+  selector: {app.kubernetes.io/name: postgresql}
   ports: [{name: postgres, port: 5432, targetPort: postgres}]
 ---
 # PostgreSQL is an appliance-private control-plane dependency. Restrict access
@@ -65,14 +65,19 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: appliance-postgres-allow
+  name: postgresql-allow
   namespace: {{ $ns }}
 spec:
-  podSelector: {matchLabels: {app.kubernetes.io/name: postgres}}
+  podSelector: {matchLabels: {app.kubernetes.io/name: postgresql}}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        - podSelector: {matchLabels: {app.kubernetes.io/name: controlplane}}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.namespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
       ports: [{protocol: TCP, port: 5432}]
   egress:
     - to:
@@ -87,10 +92,10 @@ metadata:
 spec:
   serviceName: {{ $local.serviceName }}
   replicas: 1
-  selector: {matchLabels: {app.kubernetes.io/name: postgres}}
+  selector: {matchLabels: {app.kubernetes.io/name: postgresql}}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: postgres}
+      labels: {app.kubernetes.io/name: postgresql}
     spec:
       automountServiceAccountToken: false
       {{- include "appliance-control-plane.podNodeName" . }}

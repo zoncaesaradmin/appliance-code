@@ -180,15 +180,19 @@ func TestPostgresProviderUsesOnlyASecretBackedDSN(t *testing.T) {
 func TestLocalPostgresProfileRendersPinnedStatefulSet(t *testing.T) {
 	digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "rollout.aceSystem.enabled=true",
+		"--set", "rollout.aceInfra.enabled=true",
 		"--set", "database.driver=postgres",
-		"--set", "database.postgres.connectionSecretName=appliance-postgres",
+		"--set", "database.postgres.connectionSecretName=postgresql-connection",
 		"--set", "database.postgres.local.enabled=true",
 		"--set", "database.postgres.local.image.digest="+digest,
 	)...)
-	statefulSet := findByKindAndName(docs, "StatefulSet", "appliance-postgres")
+	statefulSet := findByKindAndName(docs, "StatefulSet", "postgresql")
 	if statefulSet == nil {
 		t.Fatal("local PostgreSQL profile must render its StatefulSet")
+	}
+	metadata, _ := statefulSet["metadata"].(map[string]any)
+	if namespace, _ := metadata["namespace"].(string); namespace != "ace-infra" {
+		t.Fatalf("PostgreSQL StatefulSet namespace = %q, want ace-infra", namespace)
 	}
 	containers, _ := at(statefulSet, "spec", "template", "spec", "containers").([]any)
 	if len(containers) != 1 {

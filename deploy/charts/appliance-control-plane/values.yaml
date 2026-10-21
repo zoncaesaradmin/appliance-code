@@ -187,7 +187,7 @@ database:
     # this workload disabled.
     local:
       enabled: false
-      serviceName: appliance-postgres
+      serviceName: postgresql
       databaseName: controlplane
       username: controlplane
       image:
@@ -197,7 +197,7 @@ database:
       persistence:
         size: 4Gi
         hostPath: /data/zon/postgres
-        claimName: appliance-postgres-data
+        claimName: postgresql-data
       resources:
         requests:
           cpu: 100m
