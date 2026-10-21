@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// MaintenanceStore is the SQLite-backed storage.MaintenanceStore.
+// MaintenanceStore is the SQL-backed storage.MaintenanceStore.
 type MaintenanceStore struct {
 	db *DB
 }

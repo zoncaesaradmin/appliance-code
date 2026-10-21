@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// OperationsStore is the SQLite-backed storage.OperationsStore.
+// OperationsStore is the SQL-backed storage.OperationsStore.
 type OperationsStore struct {
 	db *DB
 }

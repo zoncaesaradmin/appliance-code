@@ -1,6 +1,6 @@
 // Package storage defines the repository interfaces that sit between
 // business logic and persistence. Concrete backends (starting with SQLite in
-// internal/storage/sqlite) implement these interfaces; handlers and services
+// internal/storage/sqlstore) implement these interfaces; handlers and services
 // depend only on this package so a future Postgres-backed implementation can
 // be added without touching call sites.
 package storage

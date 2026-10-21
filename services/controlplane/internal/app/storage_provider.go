@@ -7,7 +7,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 // StorageSet is the complete set of persistence contracts needed by the
@@ -56,7 +56,7 @@ type StorageProvider interface {
 func storageProviderFor(cfg config.Config) (StorageProvider, error) {
 	switch strings.ToLower(strings.TrimSpace(cfg.Database.Driver)) {
 	case "sqlite":
-		return sqliteStorageProvider{}, nil
+		return localSQLStorageProvider{}, nil
 	case "postgres":
 		return postgresStorageProvider{}, nil
 	default:
@@ -64,10 +64,10 @@ func storageProviderFor(cfg config.Config) (StorageProvider, error) {
 	}
 }
 
-type sqliteStorageProvider struct{}
+type localSQLStorageProvider struct{}
 
-func (sqliteStorageProvider) Open(ctx context.Context, cfg config.Config) (StorageSet, error) {
-	db, err := sqlite.Open(cfg.SQLitePath())
+func (localSQLStorageProvider) Open(ctx context.Context, cfg config.Config) (StorageSet, error) {
+	db, err := sqlstore.OpenSQLite(cfg.SQLitePath())
 	if err != nil {
 		return StorageSet{}, fmt.Errorf("opening SQLite storage: %w", err)
 	}
@@ -77,34 +77,34 @@ func (sqliteStorageProvider) Open(ctx context.Context, cfg config.Config) (Stora
 	}
 	return StorageSet{
 		DB:                  db,
-		UserStore:           sqlite.NewUserStore(db),
-		RoleStore:           sqlite.NewRoleStore(db),
-		TokenStore:          sqlite.NewTokenStore(db),
-		SessionStore:        sqlite.NewSessionStore(db),
-		ThrottleStore:       sqlite.NewThrottleStore(db),
-		AuditStore:          sqlite.NewAuditStore(db),
-		OperationsStore:     sqlite.NewOperationsStore(db),
-		RegistryGrantStore:  sqlite.NewRegistryGrantStore(db),
-		DNSRecordStore:      sqlite.NewDNSRecordStore(db),
-		LicensingStore:      sqlite.NewLicensingStore(db),
-		MetadataStore:       sqlite.NewMetadataBundleStore(db),
-		BuildStore:          sqlite.NewBuildStore(db),
-		IdempotencyStore:    sqlite.NewIdempotencyStore(db),
-		WorkspaceStore:      sqlite.NewWorkspaceStore(db),
-		JobStore:            sqlite.NewJobStore(db),
-		ApplicationStore:    sqlite.NewApplicationStore(db),
-		FocusContentStore:   sqlite.NewFocusContentStore(db),
-		WebUIGrantStore:     sqlite.NewWebUILaunchGrantStore(db),
-		WebUIBridgeStore:    sqlite.NewWebUIBridgeSessionStore(db),
-		BuilderCatalogStore: sqlite.NewBuilderCatalogStore(db),
-		ConfigurationStore:  sqlite.NewConfigurationRevisionStore(db),
+		UserStore:           sqlstore.NewUserStore(db),
+		RoleStore:           sqlstore.NewRoleStore(db),
+		TokenStore:          sqlstore.NewTokenStore(db),
+		SessionStore:        sqlstore.NewSessionStore(db),
+		ThrottleStore:       sqlstore.NewThrottleStore(db),
+		AuditStore:          sqlstore.NewAuditStore(db),
+		OperationsStore:     sqlstore.NewOperationsStore(db),
+		RegistryGrantStore:  sqlstore.NewRegistryGrantStore(db),
+		DNSRecordStore:      sqlstore.NewDNSRecordStore(db),
+		LicensingStore:      sqlstore.NewLicensingStore(db),
+		MetadataStore:       sqlstore.NewMetadataBundleStore(db),
+		BuildStore:          sqlstore.NewBuildStore(db),
+		IdempotencyStore:    sqlstore.NewIdempotencyStore(db),
+		WorkspaceStore:      sqlstore.NewWorkspaceStore(db),
+		JobStore:            sqlstore.NewJobStore(db),
+		ApplicationStore:    sqlstore.NewApplicationStore(db),
+		FocusContentStore:   sqlstore.NewFocusContentStore(db),
+		WebUIGrantStore:     sqlstore.NewWebUILaunchGrantStore(db),
+		WebUIBridgeStore:    sqlstore.NewWebUIBridgeSessionStore(db),
+		BuilderCatalogStore: sqlstore.NewBuilderCatalogStore(db),
+		ConfigurationStore:  sqlstore.NewConfigurationRevisionStore(db),
 	}, nil
 }
 
 type postgresStorageProvider struct{}
 
 func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (StorageSet, error) {
-	db, err := sqlite.OpenPostgres(ctx, cfg.Database.DSN, cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns, cfg.Database.ConnMaxLifetime)
+	db, err := sqlstore.OpenPostgres(ctx, cfg.Database.DSN, cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns, cfg.Database.ConnMaxLifetime)
 	if err != nil {
 		return StorageSet{}, fmt.Errorf("opening PostgreSQL storage: %w", err)
 	}
@@ -114,26 +114,26 @@ func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 	}
 	return StorageSet{
 		DB:                  db,
-		UserStore:           sqlite.NewUserStore(db),
-		RoleStore:           sqlite.NewRoleStore(db),
-		TokenStore:          sqlite.NewTokenStore(db),
-		SessionStore:        sqlite.NewSessionStore(db),
-		ThrottleStore:       sqlite.NewThrottleStore(db),
-		AuditStore:          sqlite.NewAuditStore(db),
-		OperationsStore:     sqlite.NewOperationsStore(db),
-		RegistryGrantStore:  sqlite.NewRegistryGrantStore(db),
-		DNSRecordStore:      sqlite.NewDNSRecordStore(db),
-		LicensingStore:      sqlite.NewLicensingStore(db),
-		MetadataStore:       sqlite.NewMetadataBundleStore(db),
-		BuildStore:          sqlite.NewBuildStore(db),
-		IdempotencyStore:    sqlite.NewIdempotencyStore(db),
-		WorkspaceStore:      sqlite.NewWorkspaceStore(db),
-		JobStore:            sqlite.NewJobStore(db),
-		ApplicationStore:    sqlite.NewApplicationStore(db),
-		FocusContentStore:   sqlite.NewFocusContentStore(db),
-		WebUIGrantStore:     sqlite.NewWebUILaunchGrantStore(db),
-		WebUIBridgeStore:    sqlite.NewWebUIBridgeSessionStore(db),
-		BuilderCatalogStore: sqlite.NewBuilderCatalogStore(db),
-		ConfigurationStore:  sqlite.NewConfigurationRevisionStore(db),
+		UserStore:           sqlstore.NewUserStore(db),
+		RoleStore:           sqlstore.NewRoleStore(db),
+		TokenStore:          sqlstore.NewTokenStore(db),
+		SessionStore:        sqlstore.NewSessionStore(db),
+		ThrottleStore:       sqlstore.NewThrottleStore(db),
+		AuditStore:          sqlstore.NewAuditStore(db),
+		OperationsStore:     sqlstore.NewOperationsStore(db),
+		RegistryGrantStore:  sqlstore.NewRegistryGrantStore(db),
+		DNSRecordStore:      sqlstore.NewDNSRecordStore(db),
+		LicensingStore:      sqlstore.NewLicensingStore(db),
+		MetadataStore:       sqlstore.NewMetadataBundleStore(db),
+		BuildStore:          sqlstore.NewBuildStore(db),
+		IdempotencyStore:    sqlstore.NewIdempotencyStore(db),
+		WorkspaceStore:      sqlstore.NewWorkspaceStore(db),
+		JobStore:            sqlstore.NewJobStore(db),
+		ApplicationStore:    sqlstore.NewApplicationStore(db),
+		FocusContentStore:   sqlstore.NewFocusContentStore(db),
+		WebUIGrantStore:     sqlstore.NewWebUILaunchGrantStore(db),
+		WebUIBridgeStore:    sqlstore.NewWebUIBridgeSessionStore(db),
+		BuilderCatalogStore: sqlstore.NewBuilderCatalogStore(db),
+		ConfigurationStore:  sqlstore.NewConfigurationRevisionStore(db),
 	}, nil
 }

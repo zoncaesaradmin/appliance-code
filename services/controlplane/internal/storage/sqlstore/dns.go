@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// DNSRecordStore is the SQLite-backed storage.DNSRecordStore.
+// DNSRecordStore is the SQL-backed storage.DNSRecordStore.
 type DNSRecordStore struct {
 	db *DB
 }

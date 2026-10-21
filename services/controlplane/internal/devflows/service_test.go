@@ -12,7 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 	"appliance-code/services/controlplane/internal/workflows"
 	"github.com/zoncaesaradmin/platformkit/ctxutil"
 )
@@ -40,7 +40,7 @@ func TestWorkspaceProvisioningLogsSubmissionAndStatus(t *testing.T) {
 		return workflows.Status{Phase: workflows.PhasePending}
 	}
 	now := time.Now().UTC()
-	if err := sqlite.NewUserStore(db).Create(ctx, storage.User{
+	if err := sqlstore.NewUserStore(db).Create(ctx, storage.User{
 		ID:          "user-1",
 		Username:    "alice",
 		DisplayName: "Alice",
@@ -51,7 +51,7 @@ func TestWorkspaceProvisioningLogsSubmissionAndStatus(t *testing.T) {
 		t.Fatalf("Create user: %v", err)
 	}
 
-	svc, err := NewService(testProvisionCatalog(), sqlite.NewBuilderCatalogStore(db), sqlite.NewWorkspaceStore(db), sqlite.NewJobStore(db), nil, engine, "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "/data/zon/workspaces", "appliance-workspaces", nil, logger, nil)
+	svc, err := NewService(testProvisionCatalog(), sqlstore.NewBuilderCatalogStore(db), sqlstore.NewWorkspaceStore(db), sqlstore.NewJobStore(db), nil, engine, "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "/data/zon/workspaces", "appliance-workspaces", nil, logger, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -110,11 +110,11 @@ func TestWorkspaceProvisioningLogsSubmissionAndStatus(t *testing.T) {
 	}
 }
 
-func openDevflowsTestDB(t *testing.T) *sqlite.DB {
+func openDevflowsTestDB(t *testing.T) *sqlstore.DB {
 	t.Helper()
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "devflows.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "devflows.db"))
 	if err != nil {
-		t.Fatalf("sqlite.Open: %v", err)
+		t.Fatalf("sqlstore.Open: %v", err)
 	}
 	if err := db.Migrate(context.Background()); err != nil {
 		t.Fatalf("db.Migrate: %v", err)

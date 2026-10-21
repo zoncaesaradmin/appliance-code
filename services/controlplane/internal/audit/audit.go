@@ -46,7 +46,7 @@ type Event struct {
 // Recorder appends Event records as storage.AuditEvent rows. Call Record
 // inside the same storage.DB.WithTx block as the state mutation it
 // documents so the plan's "audit write fails the mutation closed"
-// requirement holds: internal/storage/sqlite's WithTx detects an
+// requirement holds: internal/storage/sqlstore's WithTx detects an
 // already-active transaction on ctx and joins it rather than nesting.
 type Recorder struct {
 	store storage.AuditStore

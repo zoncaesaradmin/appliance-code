@@ -1,4 +1,4 @@
-package sqlite_test
+package sqlstore_test
 
 import (
 	"testing"
@@ -7,12 +7,12 @@ import (
 	"github.com/google/uuid"
 
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func TestWorkspaceCurrentIsUserScoped(t *testing.T) {
 	db := openTestDB(t)
-	store := sqlite.NewWorkspaceStore(db)
+	store := sqlstore.NewWorkspaceStore(db)
 	ctx := t.Context()
 	ownerA, ownerB := createUser(t, db, "alice"), createUser(t, db, "bob")
 	wsA := testWorkspace(ownerA, "alice-ws")
@@ -44,7 +44,7 @@ func TestWorkspaceCurrentIsUserScoped(t *testing.T) {
 
 func TestWorkspaceDeletedHiddenByDefault(t *testing.T) {
 	db := openTestDB(t)
-	store := sqlite.NewWorkspaceStore(db)
+	store := sqlstore.NewWorkspaceStore(db)
 	ctx := t.Context()
 	owner := createUser(t, db, "alice")
 	ws := testWorkspace(owner, "app")
@@ -65,7 +65,7 @@ func TestWorkspaceDeletedHiddenByDefault(t *testing.T) {
 
 func TestJobAndStepsPersist(t *testing.T) {
 	db := openTestDB(t)
-	jobs := sqlite.NewJobStore(db)
+	jobs := sqlstore.NewJobStore(db)
 	ctx := t.Context()
 	owner := createUser(t, db, "alice")
 	job := storage.Job{ID: uuid.Must(uuid.NewV7()).String(), OwnerID: owner, Type: storage.JobTypeBuild, Status: storage.JobStatusRunning, ArtifactRef: "users/alice/app:v1", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
@@ -92,9 +92,9 @@ func TestJobAndStepsPersist(t *testing.T) {
 	}
 }
 
-func createUser(t *testing.T, db *sqlite.DB, username string) string {
+func createUser(t *testing.T, db *sqlstore.DB, username string) string {
 	t.Helper()
-	store := sqlite.NewUserStore(db)
+	store := sqlstore.NewUserStore(db)
 	id := uuid.Must(uuid.NewV7()).String()
 	now := time.Now().UTC()
 	if err := store.Create(t.Context(), storage.User{ID: id, Username: username, DisplayName: username, State: storage.UserStateActive, CreatedAt: now, UpdatedAt: now}); err != nil {

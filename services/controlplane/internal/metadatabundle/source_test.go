@@ -9,7 +9,7 @@ import (
 
 	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 	"appliance-code/services/controlplane/internal/version"
 )
 
@@ -19,7 +19,7 @@ func TestReleaseServiceDoesNotReuseDevelopmentSourceRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	dataDir := t.TempDir()
-	db, err := sqlite.Open(filepath.Join(dataDir, "test.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(dataDir, "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestReleaseServiceDoesNotReuseDevelopmentSourceRecord(t *testing.T) {
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	store := sqlite.NewMetadataBundleStore(db)
+	store := sqlstore.NewMetadataBundleStore(db)
 	if err := store.PutMetadataBundle(ctx, storage.MetadataBundleRecord{
 		Slot: "active", MetadataVersion: "0.0.0.0", SoftwareVersion: "0.0.0-dev",
 		DirectoryName: "base", DirectoryPath: source, Signature: "development-only",

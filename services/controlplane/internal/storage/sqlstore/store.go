@@ -1,9 +1,8 @@
-// Package sqlite implements the appliance-code/services/controlplane/internal/storage interfaces
-// on top of modernc.org/sqlite, a CGo-free SQLite driver. Local development
-// and the first appliance release both use this single implementation, kept
-// behind the storage.DB interface so a future Postgres adapter can be added
-// without changing call sites, per ADR 0004.
-package sqlite
+// Package sqlstore implements the control-plane storage interfaces over SQL.
+// Appliance and cloud deployments use PostgreSQL; SQLite is retained solely
+// for local development and isolated tests behind the same repository and
+// transaction contracts.
+package sqlstore
 
 import (
 	"context"
@@ -19,19 +18,16 @@ import (
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
-// DB is the repository backing connection. Its SQLite opening path exists
-// only while local fixtures are being replaced; appliance runtime uses
-// OpenPostgres.
+// DB is the dialect-aware repository backing connection. Its SQLite opening
+// path is development-only; appliance runtime uses OpenPostgres.
 type DB struct {
 	sqlDB    *sql.DB
 	path     string
 	postgres bool
 }
 
-// OpenPostgres opens the PostgreSQL implementation behind the existing
-// repository contracts. The package name is a temporary source-layout
-// artifact while those repositories are moved; no SQLite driver or file is
-// used by this path.
+// OpenPostgres opens the PostgreSQL implementation behind the repository
+// contracts. No SQLite driver or file is used by this path.
 func OpenPostgres(ctx context.Context, dsn string, maxOpenConns, maxIdleConns int, maxLifetime time.Duration) (*DB, error) {
 	if strings.TrimSpace(dsn) == "" {
 		return nil, fmt.Errorf("postgres: DSN is required")
@@ -55,12 +51,12 @@ func OpenPostgres(ctx context.Context, dsn string, maxOpenConns, maxIdleConns in
 
 type txKey struct{}
 
-// Open creates the data directory if needed, opens the SQLite file at path,
+// OpenSQLite creates the data directory if needed, opens the SQLite file at path,
 // and configures it for single-writer appliance use: foreign keys on, WAL
 // journaling, a bounded busy timeout, and a single open connection so SQLite
 // itself serializes writers instead of returning spurious "database is
 // locked" errors under Go's connection pool.
-func Open(path string) (*DB, error) {
+func OpenSQLite(path string) (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, fmt.Errorf("sqlite: creating data directory: %w", err)
 	}

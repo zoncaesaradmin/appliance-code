@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func TestImportRequiresMatchingStagedMetadataBundle(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "controlplane.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "controlplane.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -22,11 +22,11 @@ func TestImportRequiresMatchingStagedMetadataBundle(t *testing.T) {
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	metadata := sqlite.NewMetadataBundleStore(db)
+	metadata := sqlstore.NewMetadataBundleStore(db)
 	service, err := NewService(Stores{
-		DB: db, Revisions: sqlite.NewConfigurationRevisionStore(db), Licensing: sqlite.NewLicensingStore(db),
-		DNS: sqlite.NewDNSRecordStore(db), BuilderCatalog: sqlite.NewBuilderCatalogStore(db),
-		Applications: sqlite.NewApplicationStore(db), Metadata: metadata,
+		DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db),
+		DNS: sqlstore.NewDNSRecordStore(db), BuilderCatalog: sqlstore.NewBuilderCatalogStore(db),
+		Applications: sqlstore.NewApplicationStore(db), Metadata: metadata,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

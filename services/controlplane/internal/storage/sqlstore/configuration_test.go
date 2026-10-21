@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 func TestConfigurationRevisionStorePreservesImmutablePayloadAndApplyStatus(t *testing.T) {
 	ctx := context.Background()
-	db, err := Open(filepath.Join(t.TempDir(), "configuration.db"))
+	db, err := OpenSQLite(filepath.Join(t.TempDir(), "configuration.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

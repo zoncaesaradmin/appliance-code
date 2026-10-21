@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// RoleStore is the SQLite-backed storage.RoleStore.
+// RoleStore is the SQL-backed storage.RoleStore.
 type RoleStore struct {
 	db *DB
 }

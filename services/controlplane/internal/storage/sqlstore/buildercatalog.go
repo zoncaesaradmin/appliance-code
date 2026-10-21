@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// BuilderCatalogStore is the SQLite-backed storage.BuilderCatalogStore.
+// BuilderCatalogStore is the SQL-backed storage.BuilderCatalogStore.
 type BuilderCatalogStore struct {
 	db *DB
 }

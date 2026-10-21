@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// LicensingStore is the SQLite-backed storage.LicensingStore.
+// LicensingStore is the SQL-backed storage.LicensingStore.
 type LicensingStore struct {
 	db *DB
 }

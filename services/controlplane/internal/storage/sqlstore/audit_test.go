@@ -1,4 +1,4 @@
-package sqlite_test
+package sqlstore_test
 
 import (
 	"context"
@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func TestAuditListCursorAndCheckpointRetention(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "audit.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "audit.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestAuditListCursorAndCheckpointRetention(t *testing.T) {
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	store := sqlite.NewAuditStore(db)
+	store := sqlstore.NewAuditStore(db)
 
 	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 5; i++ {

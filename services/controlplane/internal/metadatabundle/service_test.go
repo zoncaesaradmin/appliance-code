@@ -10,12 +10,12 @@ import (
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func TestInvokeAutomationExportsAuditEvents(t *testing.T) {
 	dir := t.TempDir()
-	db, err := sqlite.Open(dir + "/test.db")
+	db, err := sqlstore.OpenSQLite(dir + "/test.db")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -27,13 +27,13 @@ func TestInvokeAutomationExportsAuditEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logging: %v", err)
 	}
-	auditStore := sqlite.NewAuditStore(db)
+	auditStore := sqlstore.NewAuditStore(db)
 	recorder := audit.NewRecorder(auditStore)
-	auditOps, err := auditops.NewService(auditStore, sqlite.NewOperationsStore(db), dir, 90, logger)
+	auditOps, err := auditops.NewService(auditStore, sqlstore.NewOperationsStore(db), dir, 90, logger)
 	if err != nil {
 		t.Fatalf("audit ops: %v", err)
 	}
-	svc, err := metadatabundle.NewService(db, sqlite.NewMetadataBundleStore(db), recorder, auditOps, dir)
+	svc, err := metadatabundle.NewService(db, sqlstore.NewMetadataBundleStore(db), recorder, auditOps, dir)
 	if err != nil {
 		t.Fatalf("metadata: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestInvokeAutomationExportsAuditEvents(t *testing.T) {
 
 func TestInvokeAutomationRejectsUnexpectedInput(t *testing.T) {
 	dir := t.TempDir()
-	db, err := sqlite.Open(dir + "/test.db")
+	db, err := sqlstore.OpenSQLite(dir + "/test.db")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -70,13 +70,13 @@ func TestInvokeAutomationRejectsUnexpectedInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logging: %v", err)
 	}
-	auditStore := sqlite.NewAuditStore(db)
+	auditStore := sqlstore.NewAuditStore(db)
 	recorder := audit.NewRecorder(auditStore)
-	auditOps, err := auditops.NewService(auditStore, sqlite.NewOperationsStore(db), dir, 90, logger)
+	auditOps, err := auditops.NewService(auditStore, sqlstore.NewOperationsStore(db), dir, 90, logger)
 	if err != nil {
 		t.Fatalf("audit ops: %v", err)
 	}
-	svc, err := metadatabundle.NewService(db, sqlite.NewMetadataBundleStore(db), recorder, auditOps, dir)
+	svc, err := metadatabundle.NewService(db, sqlstore.NewMetadataBundleStore(db), recorder, auditOps, dir)
 	if err != nil {
 		t.Fatalf("metadata: %v", err)
 	}

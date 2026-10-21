@@ -14,13 +14,13 @@ import (
 	"appliance-code/services/controlplane/internal/keys"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 	"appliance-code/services/controlplane/internal/tokens"
 	"appliance-code/services/controlplane/internal/users"
 )
 
 type harness struct {
-	db       *sqlite.DB
+	db       *sqlstore.DB
 	users    *users.Service
 	roles    *roles.Service
 	tokens   *tokens.Service
@@ -33,16 +33,16 @@ func newHarness(t *testing.T) *harness {
 	t.Helper()
 	ctx := context.Background()
 
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "appliance.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "appliance.db"))
 	if err != nil {
-		t.Fatalf("sqlite.Open: %v", err)
+		t.Fatalf("sqlstore.Open: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	roleStore := sqlite.NewRoleStore(db)
+	roleStore := sqlstore.NewRoleStore(db)
 	if err := roles.Seed(ctx, roleStore); err != nil {
 		t.Fatalf("roles.Seed: %v", err)
 	}
@@ -52,13 +52,13 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("keys.LoadOrGenerate: %v", err)
 	}
 
-	auditStore := sqlite.NewAuditStore(db)
+	auditStore := sqlstore.NewAuditStore(db)
 	recorder := audit.NewRecorder(auditStore)
 
-	userStore := sqlite.NewUserStore(db)
-	tokenStore := sqlite.NewTokenStore(db)
-	sessionStore := sqlite.NewSessionStore(db)
-	throttleStore := sqlite.NewThrottleStore(db)
+	userStore := sqlstore.NewUserStore(db)
+	tokenStore := sqlstore.NewTokenStore(db)
+	sessionStore := sqlstore.NewSessionStore(db)
+	throttleStore := sqlstore.NewThrottleStore(db)
 
 	usersSvc := users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial)
 	rolesSvc := roles.NewService(db, roleStore, userStore, recorder)
@@ -77,7 +77,7 @@ func TestBootstrapCreatesAdministrator(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 
-	result, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
+	result, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
 	if err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -97,8 +97,8 @@ func TestBootstrapCreatesAdministrator(t *testing.T) {
 func TestBootstrapRefusesSecondCall(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	userStore := sqlite.NewUserStore(h.db)
-	roleStore := sqlite.NewRoleStore(h.db)
+	userStore := sqlstore.NewUserStore(h.db)
+	roleStore := sqlstore.NewRoleStore(h.db)
 
 	if _, err := bootstrap.Init(ctx, h.db, userStore, roleStore, h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
 		t.Fatalf("first Init: %v", err)
@@ -111,7 +111,7 @@ func TestBootstrapRefusesSecondCall(t *testing.T) {
 func TestLoginRefreshLogoutLifecycle(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	result, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
+	result, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
 	if err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestLoginRefreshLogoutLifecycle(t *testing.T) {
 func TestLoginRejectsWrongPasswordAndUnknownUser(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	if _, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
+	if _, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
 
@@ -181,7 +181,7 @@ func TestDisableRevokesSessionsAndTokens(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 
-	admin, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
+	admin, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
 	if err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestDisableRevokesSessionsAndTokens(t *testing.T) {
 func TestLastAdministratorInvariant(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	admin, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
+	admin, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
 	if err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestLastAdministratorInvariant(t *testing.T) {
 func TestPasswordResetInvalidatesSessionsAndSetsNewPassword(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	admin, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
+	admin, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
 	if err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestPasswordResetInvalidatesSessionsAndSetsNewPassword(t *testing.T) {
 func TestAPITokenCreateAuthenticateRevoke(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	admin, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
+	admin, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator")
 	if err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestAPITokenCreateAuthenticateRevoke(t *testing.T) {
 func TestAuditChainVerifies(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
-	if _, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
+	if _, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
 	if _, err := h.sessions.Login(ctx, "127.0.0.1", "req-1", authn.AuthDomainLocal, "admin", "a-very-long-bootstrap-password"); err != nil {

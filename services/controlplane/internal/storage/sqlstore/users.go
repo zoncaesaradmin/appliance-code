@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// UserStore is the SQLite-backed storage.UserStore.
+// UserStore is the SQL-backed storage.UserStore.
 type UserStore struct {
 	db *DB
 }

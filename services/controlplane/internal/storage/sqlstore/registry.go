@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// RegistryGrantStore is the SQLite-backed storage.RegistryGrantStore.
+// RegistryGrantStore is the SQL-backed storage.RegistryGrantStore.
 type RegistryGrantStore struct {
 	db *DB
 }

@@ -8,7 +8,7 @@ import (
 	"appliance-code/services/controlplane/internal/bootstrap"
 	"appliance-code/services/controlplane/internal/roles"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func TestRoleCRUD(t *testing.T) {
@@ -30,7 +30,7 @@ func TestRoleCRUD(t *testing.T) {
 	if err := h.roles.Update(ctx, systemActor(), role.ID, []string{roles.PermUsersRead}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	perms, err := sqlite.NewRoleStore(h.db).ListRolePermissions(ctx, role.ID)
+	perms, err := sqlstore.NewRoleStore(h.db).ListRolePermissions(ctx, role.ID)
 	if err != nil {
 		t.Fatalf("ListRolePermissions: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestUserEnableUpdateDisplayNameAndUnlock(t *testing.T) {
 	h := newHarness(t)
 	ctx := t.Context()
 
-	if _, err := bootstrap.Init(ctx, h.db, sqlite.NewUserStore(h.db), sqlite.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
+	if _, err := bootstrap.Init(ctx, h.db, sqlstore.NewUserStore(h.db), sqlstore.NewRoleStore(h.db), h.users, "admin", "a-very-long-bootstrap-password", "Administrator"); err != nil {
 		t.Fatalf("bootstrap.Init: %v", err)
 	}
 	dev, err := h.users.Create(ctx, systemActor(), "developer", "Dev", "a-very-long-developer-password")

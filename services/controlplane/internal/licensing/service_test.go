@@ -8,12 +8,12 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/licensing"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func openLicensing(t *testing.T) (*licensing.Service, storage.LicensingStore) {
 	t.Helper()
-	db, err := sqlite.Open(t.TempDir() + "/test.db")
+	db, err := sqlstore.OpenSQLite(t.TempDir() + "/test.db")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -21,8 +21,8 @@ func openLicensing(t *testing.T) (*licensing.Service, storage.LicensingStore) {
 	if err := db.Migrate(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	store := sqlite.NewLicensingStore(db)
-	svc := licensing.NewService(db, store, audit.NewRecorder(sqlite.NewAuditStore(db)))
+	store := sqlstore.NewLicensingStore(db)
+	svc := licensing.NewService(db, store, audit.NewRecorder(sqlstore.NewAuditStore(db)))
 	return svc, store
 }
 

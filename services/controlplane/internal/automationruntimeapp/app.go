@@ -15,7 +15,7 @@ import (
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 type App struct {
@@ -33,7 +33,7 @@ func New(cfg automationruntimeconfig.Config, logger, processLogger logging.Logge
 	if processLogger == nil {
 		return nil, errors.New("process logger is required")
 	}
-	db, err := sqlite.Open(automationruntimeconfig.SQLitePath(cfg.DataDir))
+	db, err := sqlstore.OpenSQLite(automationruntimeconfig.SQLitePath(cfg.DataDir))
 	if err != nil {
 		return nil, fmt.Errorf("automation runtime: opening storage: %w", err)
 	}
@@ -47,15 +47,15 @@ func New(cfg automationruntimeconfig.Config, logger, processLogger logging.Logge
 		db.Close()
 		return nil, fmt.Errorf("automation runtime: loading key material: %w", err)
 	}
-	auditStore := sqlite.NewAuditStore(db)
-	operationsStore := sqlite.NewOperationsStore(db)
+	auditStore := sqlstore.NewAuditStore(db)
+	operationsStore := sqlstore.NewOperationsStore(db)
 	auditOps, err := auditops.NewService(auditStore, operationsStore, cfg.DataDir, cfg.AuditRetentionDays, logger)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("automation runtime: initializing audit ops: %w", err)
 	}
 	recorder := audit.NewRecorder(auditStore)
-	metadataSvc, err := metadatabundle.NewService(db, sqlite.NewMetadataBundleStore(db), recorder, auditOps, cfg.DataDir)
+	metadataSvc, err := metadatabundle.NewService(db, sqlstore.NewMetadataBundleStore(db), recorder, auditOps, cfg.DataDir)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("automation runtime: initializing metadata bundle: %w", err)

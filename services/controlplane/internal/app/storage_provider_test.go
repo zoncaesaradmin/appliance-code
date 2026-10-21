@@ -11,7 +11,7 @@ func TestStorageProviderForSelectsExplicitDatabaseDriver(t *testing.T) {
 		driver string
 		want   any
 	}{
-		{driver: "sqlite", want: sqliteStorageProvider{}},
+		{driver: "sqlite", want: localSQLStorageProvider{}},
 		{driver: " POSTGRES ", want: postgresStorageProvider{}},
 	}
 
@@ -24,9 +24,9 @@ func TestStorageProviderForSelectsExplicitDatabaseDriver(t *testing.T) {
 				t.Fatalf("storageProviderFor: %v", err)
 			}
 			switch tt.want.(type) {
-			case sqliteStorageProvider:
-				if _, ok := provider.(sqliteStorageProvider); !ok {
-					t.Fatalf("provider = %T, want sqliteStorageProvider", provider)
+			case localSQLStorageProvider:
+				if _, ok := provider.(localSQLStorageProvider); !ok {
+					t.Fatalf("provider = %T, want localSQLStorageProvider", provider)
 				}
 			case postgresStorageProvider:
 				if _, ok := provider.(postgresStorageProvider); !ok {

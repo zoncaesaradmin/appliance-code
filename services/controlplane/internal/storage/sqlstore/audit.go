@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// AuditStore is the SQLite-backed storage.AuditStore. Events are chained by
+// AuditStore is the SQL-backed storage.AuditStore. Events are chained by
 // hashing each record together with the previous record's hash, so any
 // retroactive edit or deletion breaks the chain from that point forward.
 // This is tamper-evident, not tamper-proof against host root access, per the

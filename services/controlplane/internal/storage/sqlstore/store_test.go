@@ -1,4 +1,4 @@
-package sqlite_test
+package sqlstore_test
 
 import (
 	"context"
@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
-func openTestDB(t *testing.T) *sqlite.DB {
+func openTestDB(t *testing.T) *sqlstore.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "appliance.db")
-	db, err := sqlite.Open(path)
+	db, err := sqlstore.OpenSQLite(path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestMigrateAppliesOnceAndRestartsWithoutMutation(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "appliance.db")
 
-	db, err := sqlite.Open(path)
+	db, err := sqlstore.OpenSQLite(path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestMigrateAppliesOnceAndRestartsWithoutMutation(t *testing.T) {
 		t.Fatalf("first Migrate: %v", err)
 	}
 
-	ops := sqlite.NewOperationsStore(db)
+	ops := sqlstore.NewOperationsStore(db)
 	if err := ops.Create(ctx, storage.Operation{
 		ID:     "01f0000000000000000000test1",
 		Kind:   "test",
@@ -55,7 +55,7 @@ func TestMigrateAppliesOnceAndRestartsWithoutMutation(t *testing.T) {
 
 	// Reopen and migrate again: this must be a no-op that neither errors nor
 	// touches previously written data, simulating a process restart.
-	db2, err := sqlite.Open(path)
+	db2, err := sqlstore.OpenSQLite(path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestMigrateAppliesOnceAndRestartsWithoutMutation(t *testing.T) {
 		t.Fatalf("second Migrate: %v", err)
 	}
 
-	ops2 := sqlite.NewOperationsStore(db2)
+	ops2 := sqlstore.NewOperationsStore(db2)
 	got, err := ops2.Get(ctx, "01f0000000000000000000test1")
 	if err != nil {
 		t.Fatalf("Get after restart: %v", err)
@@ -77,7 +77,7 @@ func TestMigrateAppliesOnceAndRestartsWithoutMutation(t *testing.T) {
 func TestOperationsStoreLifecycle(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
-	ops := sqlite.NewOperationsStore(db)
+	ops := sqlstore.NewOperationsStore(db)
 
 	op := storage.Operation{ID: "op-1", Kind: "artifact.delete", OwnerID: "user-1", Status: storage.OperationStatusPending}
 	if err := ops.Create(ctx, op); err != nil {
@@ -114,7 +114,7 @@ func TestOperationsStoreLifecycle(t *testing.T) {
 func TestIdempotencyStoreReserveAndComplete(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
-	idem := sqlite.NewIdempotencyStore(db)
+	idem := sqlstore.NewIdempotencyStore(db)
 
 	_, claimed, err := idem.Reserve(ctx, "builds.create", "key-1", "hash-1", time.Hour)
 	if err != nil {
@@ -147,7 +147,7 @@ func TestIdempotencyStoreReserveAndComplete(t *testing.T) {
 func TestMaintenanceStoreSaveAndGet(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
-	m := sqlite.NewMaintenanceStore(db)
+	m := sqlstore.NewMaintenanceStore(db)
 
 	if _, err := m.Get(ctx, "token-cleanup"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("Get(unset) error = %v, want ErrNotFound", err)
@@ -181,7 +181,7 @@ func TestMaintenanceStoreSaveAndGet(t *testing.T) {
 func TestWithTxRollsBackOnError(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
-	ops := sqlite.NewOperationsStore(db)
+	ops := sqlstore.NewOperationsStore(db)
 
 	sentinel := errors.New("boom")
 	err := db.WithTx(ctx, func(ctx context.Context) error {
@@ -202,7 +202,7 @@ func TestWithTxRollsBackOnError(t *testing.T) {
 func TestBackupProducesRestorableSnapshot(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
-	ops := sqlite.NewOperationsStore(db)
+	ops := sqlstore.NewOperationsStore(db)
 
 	if err := ops.Create(ctx, storage.Operation{ID: "backup-1", Kind: "test", Status: storage.OperationStatusPending}); err != nil {
 		t.Fatalf("Create: %v", err)
@@ -213,13 +213,13 @@ func TestBackupProducesRestorableSnapshot(t *testing.T) {
 		t.Fatalf("Backup: %v", err)
 	}
 
-	restored, err := sqlite.Open(backupPath)
+	restored, err := sqlstore.OpenSQLite(backupPath)
 	if err != nil {
-		t.Fatalf("Open(backup): %v", err)
+		t.Fatalf("OpenSQLite(backup): %v", err)
 	}
 	defer restored.Close()
 
-	restoredOps := sqlite.NewOperationsStore(restored)
+	restoredOps := sqlstore.NewOperationsStore(restored)
 	got, err := restoredOps.Get(ctx, "backup-1")
 	if err != nil {
 		t.Fatalf("Get from restored backup: %v", err)

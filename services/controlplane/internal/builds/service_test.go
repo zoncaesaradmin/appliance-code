@@ -11,7 +11,7 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 	"appliance-code/services/controlplane/internal/workflows"
 )
 
@@ -22,7 +22,7 @@ func systemActor() audit.Actor {
 }
 
 type harness struct {
-	db   *sqlite.DB
+	db   *sqlstore.DB
 	svc  *builds.Service
 	fake *workflows.Fake
 }
@@ -71,19 +71,19 @@ func (e *leakingLogEngine) Logs(context.Context, string) (string, error) {
 func newHarness(t *testing.T, deadline time.Duration) *harness {
 	t.Helper()
 	ctx := context.Background()
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "appliance.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "appliance.db"))
 	if err != nil {
-		t.Fatalf("sqlite.Open: %v", err)
+		t.Fatalf("sqlstore.Open: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	auditStore := sqlite.NewAuditStore(db)
+	auditStore := sqlstore.NewAuditStore(db)
 	recorder := audit.NewRecorder(auditStore)
-	buildStore := sqlite.NewBuildStore(db)
-	idempotencyStore := sqlite.NewIdempotencyStore(db)
+	buildStore := sqlstore.NewBuildStore(db)
+	idempotencyStore := sqlstore.NewIdempotencyStore(db)
 	fake := workflows.NewFake()
 
 	svc := builds.NewService(db, buildStore, idempotencyStore, fake, recorder,
@@ -146,7 +146,7 @@ func TestCreateReflectsWorkflowFailure(t *testing.T) {
 
 func TestWorkflowFailureMessageRedactsSensitiveValues(t *testing.T) {
 	h := newHarness(t, time.Hour)
-	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+	svc := builds.NewService(h.db, sqlstore.NewBuildStore(h.db), sqlstore.NewIdempotencyStore(h.db), h.fake, audit.NewRecorder(sqlstore.NewAuditStore(h.db)),
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "controlplane-workspaces", nil, "source-secret-a", "source-secret-b")
 	h.fake.Behavior = func(spec workflows.Spec) workflows.Status {
@@ -174,7 +174,7 @@ func TestWorkflowFailureMessageRedactsSensitiveValues(t *testing.T) {
 func TestLogsRedactSensitiveValues(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	engine := &leakingLogEngine{}
-	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), engine, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+	svc := builds.NewService(h.db, sqlstore.NewBuildStore(h.db), sqlstore.NewIdempotencyStore(h.db), engine, audit.NewRecorder(sqlstore.NewAuditStore(h.db)),
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "controlplane-workspaces", nil, "source-secret-a", "source-secret-b")
 
@@ -199,7 +199,7 @@ func TestLogsRedactSensitiveValues(t *testing.T) {
 func TestCreateRecordsFailedBuildWhenWorkflowSubmitFails(t *testing.T) {
 	h := newHarness(t, time.Hour)
 	submitErr := errors.New("kubernetes API unavailable")
-	svc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), failingSubmitEngine{err: submitErr}, audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+	svc := builds.NewService(h.db, sqlstore.NewBuildStore(h.db), sqlstore.NewIdempotencyStore(h.db), failingSubmitEngine{err: submitErr}, audit.NewRecorder(sqlstore.NewAuditStore(h.db)),
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "controlplane-workspaces", nil)
 
@@ -217,7 +217,7 @@ func TestCreateRecordsFailedBuildWhenWorkflowSubmitFails(t *testing.T) {
 		t.Fatal("failed build should record CompletedAt")
 	}
 
-	persisted, err := sqlite.NewBuildStore(h.db).Get(t.Context(), build.ID)
+	persisted, err := sqlstore.NewBuildStore(h.db).Get(t.Context(), build.ID)
 	if err != nil {
 		t.Fatalf("Get persisted build: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestWorkflowDisappearsTransitionsBuildToFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	missingSvc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), workflows.NewFake(), audit.NewRecorder(sqlite.NewAuditStore(h.db)),
+	missingSvc := builds.NewService(h.db, sqlstore.NewBuildStore(h.db), sqlstore.NewIdempotencyStore(h.db), workflows.NewFake(), audit.NewRecorder(sqlstore.NewAuditStore(h.db)),
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "controlplane-workspaces", nil)
 
@@ -437,8 +437,8 @@ func TestRestartRecovery(t *testing.T) {
 	// and the same underlying engine (simulating workflow engine state
 	// surviving a control-plane restart, which is the plan's stated model:
 	// the workflow engine holds operational state, SQLite holds durable state).
-	recorder := audit.NewRecorder(sqlite.NewAuditStore(h.db))
-	freshSvc := builds.NewService(h.db, sqlite.NewBuildStore(h.db), sqlite.NewIdempotencyStore(h.db), h.fake, recorder,
+	recorder := audit.NewRecorder(sqlstore.NewAuditStore(h.db))
+	freshSvc := builds.NewService(h.db, sqlstore.NewBuildStore(h.db), sqlstore.NewIdempotencyStore(h.db), h.fake, recorder,
 		[]string{"git.internal.example.com"}, []string{"buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, time.Hour,
 		"/data/zon/workspaces", "controlplane-workspaces", nil)
 

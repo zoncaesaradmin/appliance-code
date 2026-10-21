@@ -8,13 +8,13 @@ import (
 	"appliance-code/services/controlplane/internal/licensing"
 	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/profiles"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func openProfiles(t *testing.T, bundle profiles.BundleChecker) (*profiles.Service, *licensing.Service) {
 	t.Helper()
 	dir := t.TempDir()
-	db, err := sqlite.Open(dir + "/test.db")
+	db, err := sqlstore.OpenSQLite(dir + "/test.db")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -22,10 +22,10 @@ func openProfiles(t *testing.T, bundle profiles.BundleChecker) (*profiles.Servic
 	if err := db.Migrate(context.Background()); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	store := sqlite.NewLicensingStore(db)
-	recorder := audit.NewRecorder(sqlite.NewAuditStore(db))
+	store := sqlstore.NewLicensingStore(db)
+	recorder := audit.NewRecorder(sqlstore.NewAuditStore(db))
 	lic := licensing.NewService(db, store, recorder)
-	policy, err := metadatabundle.NewService(db, sqlite.NewMetadataBundleStore(db), recorder, nil, dir)
+	policy, err := metadatabundle.NewService(db, sqlstore.NewMetadataBundleStore(db), recorder, nil, dir)
 	if err != nil {
 		t.Fatalf("metadata: %v", err)
 	}

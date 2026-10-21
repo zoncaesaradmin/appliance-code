@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 	ctx := context.Background()
-	db, err := Open(filepath.Join(t.TempDir(), "appliance.db"))
+	db, err := OpenSQLite(filepath.Join(t.TempDir(), "appliance.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestDeveloperWorkflowSchemaSupportsWorkspaceAndJobLifecycle(t *testing.T) {
 
 func TestDeveloperWorkflowSchemaDoesNotPersistWorkflowLogs(t *testing.T) {
 	ctx := context.Background()
-	db, err := Open(filepath.Join(t.TempDir(), "appliance.db"))
+	db, err := OpenSQLite(filepath.Join(t.TempDir(), "appliance.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

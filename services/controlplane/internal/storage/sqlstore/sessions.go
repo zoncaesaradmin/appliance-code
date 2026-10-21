@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// SessionStore is the SQLite-backed storage.SessionStore.
+// SessionStore is the SQL-backed storage.SessionStore.
 type SessionStore struct {
 	db *DB
 }

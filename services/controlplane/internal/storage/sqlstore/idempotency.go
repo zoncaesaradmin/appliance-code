@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// IdempotencyStore is the SQLite-backed storage.IdempotencyStore.
+// IdempotencyStore is the SQL-backed storage.IdempotencyStore.
 type IdempotencyStore struct {
 	db *DB
 }

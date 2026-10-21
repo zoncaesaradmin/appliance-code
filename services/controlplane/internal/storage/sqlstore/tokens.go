@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// TokenStore is the SQLite-backed storage.TokenStore.
+// TokenStore is the SQL-backed storage.TokenStore.
 type TokenStore struct {
 	db *DB
 }

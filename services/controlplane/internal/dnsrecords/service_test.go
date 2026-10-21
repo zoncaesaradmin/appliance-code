@@ -10,12 +10,12 @@ import (
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/dnsrecords"
 	"appliance-code/services/controlplane/internal/storage"
-	"appliance-code/services/controlplane/internal/storage/sqlite"
+	"appliance-code/services/controlplane/internal/storage/sqlstore"
 )
 
 func openDNSTest(t *testing.T) (*dnsrecords.Service, *dnsrecords.MemoryZoneSyncer, storage.DNSRecordStore) {
 	t.Helper()
-	db, err := sqlite.Open(filepath.Join(t.TempDir(), "dns.db"))
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "dns.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -23,9 +23,9 @@ func openDNSTest(t *testing.T) (*dnsrecords.Service, *dnsrecords.MemoryZoneSynce
 	if err := db.Migrate(context.Background()); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	store := sqlite.NewDNSRecordStore(db)
+	store := sqlstore.NewDNSRecordStore(db)
 	syncer := &dnsrecords.MemoryZoneSyncer{}
-	svc := dnsrecords.NewService(store, db, syncer, audit.NewRecorder(sqlite.NewAuditStore(db)), dnsrecords.Config{
+	svc := dnsrecords.NewService(store, db, syncer, audit.NewRecorder(sqlstore.NewAuditStore(db)), dnsrecords.Config{
 		Zone:              "appliance.internal",
 		BootstrapHostname: "dns1",
 		BootstrapIPv4:     "192.0.2.10",

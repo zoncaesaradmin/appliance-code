@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// BuildStore is the SQLite-backed storage.BuildStore.
+// BuildStore is the SQL-backed storage.BuildStore.
 type BuildStore struct {
 	db *DB
 }

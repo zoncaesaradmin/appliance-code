@@ -1,4 +1,4 @@
-package sqlite
+package sqlstore
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"appliance-code/services/controlplane/internal/storage"
 )
 
-// ThrottleStore is the SQLite-backed storage.ThrottleStore, giving login
+// ThrottleStore is the SQL-backed storage.ThrottleStore, giving login
 // failure counters a durable home so restarts don't reset lockout state,
 // per ADR 0010.
 type ThrottleStore struct {
