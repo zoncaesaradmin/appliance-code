@@ -81,12 +81,17 @@ type Config struct {
 	// ConfigurationArchiveTarget selects where sealed configuration archives
 	// live. "file" is the appliance default; "s3" uses the same
 	// S3-compatible contract in a dedicated prefix for cloud deployments.
-	ConfigurationArchiveTarget string        `json:"configurationArchiveTarget"`
-	ConfigurationArchivePrefix string        `json:"configurationArchivePrefix"`
-	VideoLibraryObjectPrefix   string        `json:"videoLibraryObjectPrefix"`
-	VideoLibraryProjectionDir  string        `json:"videoLibraryProjectionDir"`
-	VideoTransferTimeout       time.Duration `json:"videoTransferTimeout"`
-	VideoMaxUploadBytes        int64         `json:"videoMaxUploadBytes"`
+	ConfigurationArchiveTarget    string        `json:"configurationArchiveTarget"`
+	ConfigurationArchivePrefix    string        `json:"configurationArchivePrefix"`
+	ConfigurationArchiveEndpoint  string        `json:"configurationArchiveEndpoint"`
+	ConfigurationArchiveBucket    string        `json:"configurationArchiveBucket"`
+	ConfigurationArchiveAccessKey string        `json:"configurationArchiveAccessKey"`
+	ConfigurationArchiveSecretKey string        `json:"configurationArchiveSecretKey"`
+	ConfigurationArchiveRegion    string        `json:"configurationArchiveRegion"`
+	VideoLibraryObjectPrefix      string        `json:"videoLibraryObjectPrefix"`
+	VideoLibraryProjectionDir     string        `json:"videoLibraryProjectionDir"`
+	VideoTransferTimeout          time.Duration `json:"videoTransferTimeout"`
+	VideoMaxUploadBytes           int64         `json:"videoMaxUploadBytes"`
 
 	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
 	WorkflowEngine                  string           `json:"workflowEngine"`
@@ -291,6 +296,11 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("BLOB_STORAGE_REGION", &cfg.BlobStorageRegion)
 	str("CONFIGURATION_ARCHIVE_TARGET", &cfg.ConfigurationArchiveTarget)
 	str("CONFIGURATION_ARCHIVE_PREFIX", &cfg.ConfigurationArchivePrefix)
+	str("CONFIGURATION_ARCHIVE_ENDPOINT", &cfg.ConfigurationArchiveEndpoint)
+	str("CONFIGURATION_ARCHIVE_BUCKET", &cfg.ConfigurationArchiveBucket)
+	str("CONFIGURATION_ARCHIVE_ACCESS_KEY", &cfg.ConfigurationArchiveAccessKey)
+	str("CONFIGURATION_ARCHIVE_SECRET_KEY", &cfg.ConfigurationArchiveSecretKey)
+	str("CONFIGURATION_ARCHIVE_REGION", &cfg.ConfigurationArchiveRegion)
 	str("VIDEO_LIBRARY_OBJECT_PREFIX", &cfg.VideoLibraryObjectPrefix)
 	str("VIDEO_LIBRARY_PROJECTION_DIR", &cfg.VideoLibraryProjectionDir)
 	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
@@ -536,11 +546,11 @@ func (c Config) Validate() error {
 		errs = append(errs, "configurationArchiveTarget must be file or s3")
 	}
 	if archiveTarget == "s3" {
-		if u, err := url.Parse(c.BlobStorageEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
-			errs = append(errs, "blobStorageEndpoint must be an absolute http(s) URL with no path when configurationArchiveTarget is s3")
+		if u, err := url.Parse(c.ConfigurationArchiveEndpoint); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			errs = append(errs, "configurationArchiveEndpoint must be an absolute http(s) URL with no path when configurationArchiveTarget is s3")
 		}
-		if strings.TrimSpace(c.BlobStorageBucket) == "" || strings.TrimSpace(c.BlobStorageAccessKey) == "" || strings.TrimSpace(c.BlobStorageSecretKey) == "" {
-			errs = append(errs, "blob storage bucket and credentials must be configured when configurationArchiveTarget is s3")
+		if strings.TrimSpace(c.ConfigurationArchiveBucket) == "" || strings.TrimSpace(c.ConfigurationArchiveAccessKey) == "" || strings.TrimSpace(c.ConfigurationArchiveSecretKey) == "" {
+			errs = append(errs, "configuration archive bucket and credentials must be configured when configurationArchiveTarget is s3")
 		}
 		if strings.Trim(strings.TrimSpace(c.ConfigurationArchivePrefix), "/") == "" {
 			errs = append(errs, "configurationArchivePrefix must not be empty when configurationArchiveTarget is s3")

@@ -54,6 +54,18 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.blobStorage.credentialsSecretName }}
                   key: secretKey
+            {{- if eq .Values.config.configurationArchiveTarget "s3" }}
+            - name: APPLIANCE_CONFIGURATION_ARCHIVE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "configurationArchive.credentialsSecretName is required when config.configurationArchiveTarget is s3" .Values.configurationArchive.credentialsSecretName }}
+                  key: accessKey
+            - name: APPLIANCE_CONFIGURATION_ARCHIVE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.configurationArchive.credentialsSecretName }}
+                  key: secretKey
+            {{- end }}
             {{- if eq .Values.database.driver "postgres" }}
             - name: APPLIANCE_DATABASE_DSN
               valueFrom:

@@ -70,6 +70,10 @@ func TestLoadAppliesS3ConfigurationArchiveTarget(t *testing.T) {
 	cfg, err := config.Load([]string{
 		"APPLIANCE_CONFIGURATION_ARCHIVE_TARGET=s3",
 		"APPLIANCE_CONFIGURATION_ARCHIVE_PREFIX=controlplane-config",
+		"APPLIANCE_CONFIGURATION_ARCHIVE_ENDPOINT=https://archives.example.internal",
+		"APPLIANCE_CONFIGURATION_ARCHIVE_BUCKET=controlplane-backups",
+		"APPLIANCE_CONFIGURATION_ARCHIVE_ACCESS_KEY=archive-access",
+		"APPLIANCE_CONFIGURATION_ARCHIVE_SECRET_KEY=archive-secret",
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -109,10 +109,11 @@ config:
   # Derived by zonctl as https://<applianceName>.<dnsZoneName>.
   canonicalOrigin: "https://appliance.example.internal"
   logLevel: info
-  # file is appliance-local staging. Cloud profiles may select s3; it uses
-  # blobStorage credentials but a dedicated archive prefix.
+  # file is appliance-local staging. Cloud profiles may select s3 with a
+  # dedicated archive prefix and separately scoped credentials.
   configurationArchiveTarget: file
   configurationArchivePrefix: configuration-archives
+
   trustedProxyCount: 1
   workflowInstanceID: appliance
   # Must match the ServiceAccount the appliance-workflows chart actually
@@ -178,6 +179,15 @@ config:
 # (never this values file or a ConfigMap); only that Secret's value differs.
 # The SQLite value is retained temporarily for local source-tree tests and is
 # not a production deployment profile.
+configurationArchive:
+  # Used only when config.configurationArchiveTarget is s3. Keep this
+  # separate from blobStorage so cloud archive credentials can be scoped to
+  # this backup prefix alone.
+  endpoint: ""
+  bucket: ""
+  region: us-east-1
+  credentialsSecretName: ""
+
 database:
   driver: sqlite
   maxOpenConns: 1

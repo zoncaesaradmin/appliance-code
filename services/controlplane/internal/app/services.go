@@ -239,7 +239,7 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 	}
 	var archiveTarget configuration.ArchiveTarget = configuration.FileArchiveTarget{Root: filepath.Join(cfg.DataDir, "configuration-archives")}
 	if strings.EqualFold(strings.TrimSpace(cfg.ConfigurationArchiveTarget), "s3") {
-		archiveClient, archiveErr := blobstore.New(cfg.BlobStorageEndpoint, cfg.BlobStorageBucket, cfg.BlobStorageAccessKey, cfg.BlobStorageSecretKey, cfg.BlobStorageRegion)
+		archiveClient, archiveErr := blobstore.New(cfg.ConfigurationArchiveEndpoint, cfg.ConfigurationArchiveBucket, cfg.ConfigurationArchiveAccessKey, cfg.ConfigurationArchiveSecretKey, cfg.ConfigurationArchiveRegion)
 		if archiveErr != nil {
 			db.Close()
 			return nil, fmt.Errorf("app: wiring configuration archive target: %w", archiveErr)
