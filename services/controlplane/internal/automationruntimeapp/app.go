@@ -42,7 +42,7 @@ func New(cfg automationruntimeconfig.Config, logger, processLogger logging.Logge
 		db.Close()
 		return nil, fmt.Errorf("automation runtime: migrating storage: %w", err)
 	}
-	keyMaterial, err := keys.LoadOrGenerate(cfg.DataDir + "/keys")
+	apiTokenPepper, err := keys.LoadAPITokenPepper(cfg.DataDir + "/keys")
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("automation runtime: loading key material: %w", err)
@@ -63,7 +63,7 @@ func New(cfg automationruntimeconfig.Config, logger, processLogger logging.Logge
 	handler := automationruntimeapi.NewMux(automationruntimeapi.Deps{
 		Logger:        logger,
 		Metadata:      metadataSvc,
-		InternalToken: automationruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper),
+		InternalToken: automationruntimeauth.TokenFromPepper(apiTokenPepper),
 	})
 	server := &http.Server{
 		Addr:              cfg.Addr,

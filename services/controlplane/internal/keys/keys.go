@@ -134,6 +134,26 @@ func (m *Material) ConfigurationArchiveKey(context.Context) ([]byte, string, err
 	return append([]byte(nil), m.ConfigurationArchiveKeyMaterial...), m.ConfigurationArchiveKeyID, nil
 }
 
+// LoadAPITokenPepper loads only the token-digest pepper needed by a limited
+// internal workload. Unlike LoadOrGenerate, it never creates key material:
+// production workloads mount an installer-managed, read-only Secret and must
+// fail closed if the one key they require is absent or invalid.
+func LoadAPITokenPepper(dir string) ([]byte, error) {
+	path := filepath.Join(dir, apiTokenPepperFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("keys: reading %s: %w", path, err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("keys: decoding %s: %w", path, err)
+	}
+	if len(decoded) != pepperLength {
+		return nil, fmt.Errorf("keys: %s has unexpected length %d", path, len(decoded))
+	}
+	return decoded, nil
+}
+
 func loadOrGenerateEd25519(path string) (ed25519.PrivateKey, error) {
 	if data, err := os.ReadFile(path); err == nil {
 		seed, decodeErr := base64.StdEncoding.DecodeString(string(data))

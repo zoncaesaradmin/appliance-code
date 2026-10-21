@@ -95,4 +95,9 @@ spec:
             secretName: {{ .Values.secrets.keysSecretName }}
             # Non-root runtime: key files must be group-readable via fsGroup.
             defaultMode: 0440
+            # automation-runtime verifies its internal caller token only. Do
+            # not mount control-plane session, registry, or archive keys.
+            items:
+              - key: api_token_pepper.key
+                path: api_token_pepper.key
 {{- end }}
