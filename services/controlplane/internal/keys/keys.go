@@ -11,6 +11,7 @@
 package keys
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -50,8 +51,8 @@ type Material struct {
 	CursorHMACKey  []byte
 	// ConfigurationArchiveKey protects configuration archives only. It must
 	// never be substituted with a session key, token pepper, or cursor key.
-	ConfigurationArchiveKey   []byte
-	ConfigurationArchiveKeyID string
+	ConfigurationArchiveKeyMaterial []byte
+	ConfigurationArchiveKeyID       string
 }
 
 // LoadOrGenerate reads key material from dir, generating and persisting any
@@ -97,17 +98,17 @@ func LoadOrGenerate(dir string) (*Material, error) {
 	}
 
 	return &Material{
-		SessionPrivateKey:         priv,
-		SessionPublicKey:          pub,
-		SessionKeyID:              keyID(pub),
-		RegistryPrivateKey:        registryPriv,
-		RegistryPublicKey:         registryPub,
-		RegistryKeyID:             keyID(registryPub),
-		APITokenPepper:            apiTokenPepper,
-		RefreshPepper:             refreshPepper,
-		CursorHMACKey:             cursorHMAC,
-		ConfigurationArchiveKey:   configurationArchiveKey,
-		ConfigurationArchiveKeyID: keyIDBytes(configurationArchiveKey),
+		SessionPrivateKey:               priv,
+		SessionPublicKey:                pub,
+		SessionKeyID:                    keyID(pub),
+		RegistryPrivateKey:              registryPriv,
+		RegistryPublicKey:               registryPub,
+		RegistryKeyID:                   keyID(registryPub),
+		APITokenPepper:                  apiTokenPepper,
+		RefreshPepper:                   refreshPepper,
+		CursorHMACKey:                   cursorHMAC,
+		ConfigurationArchiveKeyMaterial: configurationArchiveKey,
+		ConfigurationArchiveKeyID:       keyIDBytes(configurationArchiveKey),
 	}, nil
 }
 
@@ -121,6 +122,16 @@ func keyID(pub ed25519.PublicKey) string {
 func keyIDBytes(key []byte) string {
 	sum := sha256.Sum256(key)
 	return hex.EncodeToString(sum[:8])
+}
+
+// ConfigurationArchiveKey satisfies configuration.ArchiveKeyProvider without
+// coupling the keys package to the configuration package. It returns a copy
+// so callers cannot mutate process-global key material.
+func (m *Material) ConfigurationArchiveKey(context.Context) ([]byte, string, error) {
+	if m == nil || len(m.ConfigurationArchiveKeyMaterial) != pepperLength || m.ConfigurationArchiveKeyID == "" {
+		return nil, "", fmt.Errorf("keys: configuration archive key is unavailable")
+	}
+	return append([]byte(nil), m.ConfigurationArchiveKeyMaterial...), m.ConfigurationArchiveKeyID, nil
 }
 
 func loadOrGenerateEd25519(path string) (ed25519.PrivateKey, error) {
