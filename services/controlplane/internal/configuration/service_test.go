@@ -117,3 +117,30 @@ func TestReplacePreservesPriorRevisionAndReplacesDesiredState(t *testing.T) {
 		t.Fatalf("latest = %#v, %v", latest, err)
 	}
 }
+
+func TestReplaceAndReconcileReportsAppliedRevision(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "controlplane.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService(Stores{DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db), DNS: sqlstore.NewDNSRecordStore(db), BuilderCatalog: sqlstore.NewBuilderCatalogStore(db), Applications: sqlstore.NewApplicationStore(db), Metadata: sqlstore.NewMetadataBundleStore(db)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(Snapshot{APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{}, DNSRecords: []DNSRecord{}, BuilderCatalog: BuilderCatalog{Document: "", ContentType: "application/json"}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, err := service.ReplaceAndReconcile(ctx, payload, "operator")
+	if err != nil {
+		t.Fatalf("ReplaceAndReconcile: %v", err)
+	}
+	if revision.Status != storage.ConfigurationRevisionApplied || revision.AppliedAt == nil {
+		t.Fatalf("revision = %#v, want applied", revision)
+	}
+}

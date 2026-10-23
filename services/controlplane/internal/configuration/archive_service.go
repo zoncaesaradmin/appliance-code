@@ -141,7 +141,7 @@ func (s ArchiveService) Import(ctx context.Context, archiveID, actorID string, r
 		return storage.ConfigurationRevision{}, err
 	}
 	if replace {
-		return s.Config.Replace(ctx, payload, actorID)
+		return s.Config.ReplaceAndReconcile(ctx, payload, actorID)
 	}
 	return s.Config.Import(ctx, payload, actorID)
 }

@@ -179,7 +179,7 @@ func (h *ConfigurationHandlers) Import(w http.ResponseWriter, r *http.Request) {
 		WriteProblem(w, r, http.StatusConflict, "configuration_import_requires_replace_confirmation", "Configuration import requires replacement confirmation", "Set replace to true after reviewing the import impact.")
 		return
 	}
-	revision, err := h.Configuration.Replace(r.Context(), request.Payload, principal.UserID)
+	revision, err := h.Configuration.ReplaceAndReconcile(r.Context(), request.Payload, principal.UserID)
 	if errors.Is(err, configuration.ErrInvalidSnapshot) {
 		WriteProblem(w, r, http.StatusBadRequest, "configuration_import_invalid", "Configuration import payload is invalid", "")
 		return

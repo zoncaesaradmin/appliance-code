@@ -218,6 +218,25 @@ func (s *Service) Replace(ctx context.Context, payload []byte, actorID string) (
 	return s.importSnapshot(ctx, payload, actorID, true)
 }
 
+// ReplaceAndReconcile is the runtime configuration-import operation. Unlike
+// installer bootstrap, a running appliance has no subsequent process start
+// to reconcile a pending revision, so success is not reported until the
+// replacement has passed the same durable reconciliation boundary.
+func (s *Service) ReplaceAndReconcile(ctx context.Context, payload []byte, actorID string) (storage.ConfigurationRevision, error) {
+	imported, err := s.Replace(ctx, payload, actorID)
+	if err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	reconciled, err := s.ReconcileLatest(ctx)
+	if err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	if reconciled.ID != imported.ID {
+		return storage.ConfigurationRevision{}, fmt.Errorf("configuration: replacement reconciliation selected unexpected revision %s", reconciled.ID)
+	}
+	return reconciled, nil
+}
+
 func (s *Service) importSnapshot(ctx context.Context, payload []byte, actorID string, replace bool) (storage.ConfigurationRevision, error) {
 	snapshot, canonicalPayload, err := validateSnapshot(payload)
 	if err != nil {
