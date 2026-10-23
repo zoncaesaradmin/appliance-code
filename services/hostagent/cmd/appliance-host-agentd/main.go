@@ -15,6 +15,7 @@ import (
 	"appliance-code/services/hostagent/internal/httpapi"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/process"
+	"appliance-code/services/hostagent/internal/systembackup"
 	"appliance-code/services/hostagent/internal/wifiap"
 	"appliance-code/services/hostagent/internal/wificlient"
 )
@@ -64,6 +65,7 @@ func main() {
 	wifiManager := wifiap.NewManager()
 	mdnsManager := mdns.NewManager()
 	firewallManager := firewall.NewManager()
+	backupManager := systembackup.NewManager("", "")
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
 	defer cancelLifecycle()
 	go func() {
@@ -74,7 +76,7 @@ func main() {
 
 	server := &http.Server{
 		Handler: httpapi.NewUnixSocketHandler(
-			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager, Firewall: firewallManager},
+			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager, Firewall: firewallManager, SystemBackup: backupManager},
 			wifiClientManager,
 			wifiManager,
 			mdnsManager,

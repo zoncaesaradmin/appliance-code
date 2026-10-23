@@ -28,10 +28,11 @@ type ServiceProxyRoute struct {
 }
 
 type ServiceProxyRegistration struct {
-	Name       string
-	Capability appliance.Capability
-	BaseURL    string
-	Routes     []ServiceProxyRoute
+	Name          string
+	Capability    appliance.Capability
+	BaseURL       string
+	Routes        []ServiceProxyRoute
+	InternalToken string
 }
 
 func RegistrationsFromRegistry(registry serviceregistry.Registry) []ServiceProxyRegistration {
@@ -104,12 +105,18 @@ func newServiceProxyHandler(logger logging.Logger, recorder *audit.Recorder, reg
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			upstreamPath := route.UpstreamPath
+			if id := pr.In.PathValue("id"); id != "" {
+				upstreamPath = strings.ReplaceAll(upstreamPath, "{id}", url.PathEscape(id))
+			}
 			if route.StripPrefix != "" {
 				upstreamPath = stripProxyPrefix(pr.In.URL.Path, route.StripPrefix)
 			}
 			pr.Out.URL.Path = upstreamPath
 			pr.Out.URL.RawPath = upstreamPath
 			pr.Out.Host = target.Host
+			if registration.InternalToken != "" {
+				pr.Out.Header.Set("X-Appliance-Internal-Auth", registration.InternalToken)
+			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			logger.WithContext(r.Context()).Warnw("proxied service call failed",

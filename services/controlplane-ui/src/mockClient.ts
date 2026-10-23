@@ -1469,6 +1469,16 @@ export class MockControlPlaneClient {
     };
   }
 
+  async createSystemBackup(_archive: Uint8Array): Promise<{ id: string; status: string; message: string; recoverySetPath: string }> {
+    const id = `recovery-${uuid()}`;
+    return { id, status: "succeeded", message: "verified system backup created", recoverySetPath: `/data/zon/backups/${id}` };
+  }
+
+  async getSystemBackup(id: string): Promise<{ id: string; status: string; message: string }> {
+    return { id, status: "succeeded", message: "verified system backup created" };
+  }
+  async restoreSystemBackup(id: string): Promise<{ id: string; status: string; message: string }> { return { id, status: "succeeded", message: "system data restored; import configuration archive" }; }
+
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
     const limit = params?.limit ?? 10;
     const all: AuditEvent[] = [

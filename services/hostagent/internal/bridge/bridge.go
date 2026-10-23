@@ -15,6 +15,7 @@ import (
 	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/host"
 	"appliance-code/services/hostagent/internal/mdns"
+	"appliance-code/services/hostagent/internal/systembackup"
 	"appliance-code/services/hostagent/internal/wifiap"
 	"appliance-code/services/hostagent/internal/wificlient"
 )
@@ -37,14 +38,18 @@ type Bridge interface {
 	ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error
 	ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error)
 	ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error)
+	SystemBackupCreate(ctx context.Context, archive []byte) (systembackup.Status, error)
+	SystemBackupGet(ctx context.Context, id string) (systembackup.Status, error)
+	SystemBackupRestore(ctx context.Context, id string) (systembackup.Status, error)
 }
 
 type Local struct {
-	Root       string
-	WifiClient wificlient.Controller
-	WifiAP     wifiap.Controller
-	MDNS       mdns.Controller
-	Firewall   firewall.Controller
+	Root         string
+	WifiClient   wificlient.Controller
+	WifiAP       wifiap.Controller
+	MDNS         mdns.Controller
+	Firewall     firewall.Controller
+	SystemBackup *systembackup.Manager
 }
 
 func (l Local) wifiClient() wificlient.Controller {
@@ -138,6 +143,24 @@ func (l Local) ApplicationFirewallStatus(ctx context.Context, application string
 
 func (l Local) ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error) {
 	return l.firewallCtrl().Apply(ctx, policy)
+}
+func (l Local) SystemBackupCreate(ctx context.Context, archive []byte) (systembackup.Status, error) {
+	if l.SystemBackup == nil {
+		return systembackup.Status{}, fmt.Errorf("system backup is not configured")
+	}
+	return l.SystemBackup.Create(ctx, archive)
+}
+func (l Local) SystemBackupGet(ctx context.Context, id string) (systembackup.Status, error) {
+	if l.SystemBackup == nil {
+		return systembackup.Status{}, fmt.Errorf("system backup is not configured")
+	}
+	return l.SystemBackup.Get(ctx, id)
+}
+func (l Local) SystemBackupRestore(ctx context.Context, id string) (systembackup.Status, error) {
+	if l.SystemBackup == nil {
+		return systembackup.Status{}, fmt.Errorf("system backup is not configured")
+	}
+	return l.SystemBackup.Restore(ctx, id)
 }
 
 type UnixSocketClient struct {
@@ -250,6 +273,21 @@ func (c *UnixSocketClient) ApplicationFirewallApply(ctx context.Context, policy 
 	var status firewall.Status
 	err := c.do(ctx, http.MethodPut, "/internal/v1/host/application-firewall/"+url.PathEscape(policy.Application), policy, &status)
 	return status, err
+}
+func (c *UnixSocketClient) SystemBackupCreate(ctx context.Context, archive []byte) (systembackup.Status, error) {
+	var s systembackup.Status
+	err := c.do(ctx, http.MethodPost, "/internal/v1/system-backups", map[string][]byte{"archive": archive}, &s)
+	return s, err
+}
+func (c *UnixSocketClient) SystemBackupGet(ctx context.Context, id string) (systembackup.Status, error) {
+	var s systembackup.Status
+	err := c.do(ctx, http.MethodGet, "/internal/v1/system-backups/"+url.PathEscape(id), nil, &s)
+	return s, err
+}
+func (c *UnixSocketClient) SystemBackupRestore(ctx context.Context, id string) (systembackup.Status, error) {
+	var s systembackup.Status
+	err := c.do(ctx, http.MethodPost, "/internal/v1/system-backups/"+url.PathEscape(id)+"/restore", nil, &s)
+	return s, err
 }
 
 // WifiController adapters so the pod can implement wifiap.Controller.

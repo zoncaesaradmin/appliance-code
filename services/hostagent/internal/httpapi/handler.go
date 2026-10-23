@@ -10,6 +10,7 @@ import (
 	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/internalauth"
 	"appliance-code/services/hostagent/internal/mdns"
+	"appliance-code/services/hostagent/internal/systembackup"
 	"appliance-code/services/hostagent/internal/wifiap"
 	"appliance-code/services/hostagent/internal/wificlient"
 )
@@ -79,7 +80,54 @@ func newHandler(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifi
 	mux.HandleFunc("GET /internal/v1/host/application-firewall/{application}", handler.applicationFirewallGet)
 	mux.HandleFunc("PUT /internal/v1/host/application-firewall/{application}", handler.applicationFirewallPut)
 	mux.HandleFunc("PUT /internal/v1/host/application-mdns/{application}", handler.applicationMDNSPut)
+	mux.HandleFunc("POST /internal/v1/system-backups", handler.systemBackupCreate)
+	mux.HandleFunc("GET /internal/v1/system-backups/{id}", handler.systemBackupGet)
+	mux.HandleFunc("POST /internal/v1/system-backups/{id}/restore", handler.systemBackupRestore)
 	return mux
+}
+
+func (h *Handler) systemBackupCreate(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "internal authentication failed")
+		return
+	}
+	var request struct {
+		Archive []byte `json:"archive"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, systembackup.MaxArchiveBytes)).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid system backup request")
+		return
+	}
+	status, err := h.bridge.SystemBackupCreate(r.Context(), request.Archive)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, status)
+}
+func (h *Handler) systemBackupGet(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "internal authentication failed")
+		return
+	}
+	status, err := h.bridge.SystemBackupGet(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+func (h *Handler) systemBackupRestore(w http.ResponseWriter, r *http.Request) {
+	if !h.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "internal authentication failed")
+		return
+	}
+	s, err := h.bridge.SystemBackupRestore(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, s)
 }
 
 func (h *Handler) applicationMDNSPut(w http.ResponseWriter, r *http.Request) {

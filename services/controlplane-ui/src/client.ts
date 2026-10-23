@@ -219,8 +219,12 @@ export interface ControlPlaneClient {
   launchAIWorkspace(): Promise<void>;
   captureConfiguration(): Promise<ConfigurationRevision>;
   importConfigurationPayload(payload: unknown, replace: boolean): Promise<ConfigurationRevision>;
+  createSystemBackup(archive: Uint8Array): Promise<SystemBackupOperation>;
+  getSystemBackup(id: string): Promise<SystemBackupOperation>;
+  restoreSystemBackup(id: string): Promise<SystemBackupOperation>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
+export type SystemBackupOperation = { id: string; status: string; message?: string; recoverySetPath?: string };
 
 type RequestOptions = {
   method?: string;
@@ -840,6 +844,9 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
       body: { payload, replace }
     });
   }
+  async createSystemBackup(archive: Uint8Array): Promise<SystemBackupOperation> { return this.request("/api/v1/system-backups", { method: "POST", body: { archive: btoa(String.fromCharCode(...archive)) } }); }
+  async getSystemBackup(id: string): Promise<SystemBackupOperation> { return this.request(`/api/v1/system-backups/${encodeURIComponent(id)}`); }
+  async restoreSystemBackup(id: string): Promise<SystemBackupOperation> { return this.request(`/api/v1/system-backups/${encodeURIComponent(id)}/restore`, { method: "POST", body: {} }); }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {
     const query = new URLSearchParams();
