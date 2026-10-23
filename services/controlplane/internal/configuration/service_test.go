@@ -59,3 +59,61 @@ func TestImportRequiresMatchingStagedMetadataBundle(t *testing.T) {
 		t.Fatalf("reconciliation state = %#v, want applied with timestamp", reconciled)
 	}
 }
+
+func TestReplacePreservesPriorRevisionAndReplacesDesiredState(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlstore.OpenSQLite(filepath.Join(t.TempDir(), "controlplane.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	service, err := NewService(Stores{
+		DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db),
+		DNS: sqlstore.NewDNSRecordStore(db), BuilderCatalog: sqlstore.NewBuilderCatalogStore(db),
+		Applications: sqlstore.NewApplicationStore(db), Metadata: sqlstore.NewMetadataBundleStore(db),
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	oldPayload, err := json.Marshal(Snapshot{
+		APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{{ID: "old", Capabilities: json.RawMessage(`[]`)}},
+		DNSRecords:     []DNSRecord{{Name: "old", IPv4: "192.0.2.10", TTL: 60, Source: string(storage.DNSRecordSourceAdmin)}},
+		BuilderCatalog: BuilderCatalog{Document: "", ContentType: "application/json"}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Import(ctx, oldPayload, "operator"); err != nil {
+		t.Fatalf("initial import: %v", err)
+	}
+	newPayload, err := json.Marshal(Snapshot{
+		APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{{ID: "new", Capabilities: json.RawMessage(`[]`)}},
+		DNSRecords:     []DNSRecord{{Name: "new", IPv4: "192.0.2.20", TTL: 120, Source: string(storage.DNSRecordSourceAdmin)}},
+		BuilderCatalog: BuilderCatalog{Document: "", ContentType: "application/json"}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := service.Replace(ctx, newPayload, "operator")
+	if err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	if replacement.ApplyMessage != "configuration replaced; reconciliation pending" {
+		t.Fatalf("message = %q", replacement.ApplyMessage)
+	}
+	profiles, err := service.stores.Licensing.ListCustomProfiles(ctx)
+	if err != nil || len(profiles) != 1 || profiles[0].ID != "new" {
+		t.Fatalf("profiles = %#v, %v", profiles, err)
+	}
+	records, err := service.stores.DNS.List(ctx)
+	if err != nil || len(records) != 1 || records[0].Name != "new" {
+		t.Fatalf("DNS records = %#v, %v", records, err)
+	}
+	latest, err := service.Latest(ctx)
+	if err != nil || latest.ID != replacement.ID {
+		t.Fatalf("latest = %#v, %v", latest, err)
+	}
+}

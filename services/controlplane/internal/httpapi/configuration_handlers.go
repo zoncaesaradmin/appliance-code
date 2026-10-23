@@ -22,6 +22,10 @@ type configurationArchiveRequest struct {
 	RevisionID string `json:"revisionId,omitempty"`
 }
 
+type configurationArchiveImportRequest struct {
+	Replace bool `json:"replace,omitempty"`
+}
+
 // ListArchives returns only cryptographically verified archive manifests.
 func (h *ConfigurationHandlers) ListArchives(w http.ResponseWriter, r *http.Request) {
 	archives, err := h.Archives.ListVerified(r.Context())
@@ -99,8 +103,13 @@ func (h *ConfigurationHandlers) DownloadArchive(w http.ResponseWriter, r *http.R
 // path and the plain Import endpoint only after zonctl has authenticated and
 // decrypted that external archive.
 func (h *ConfigurationHandlers) ImportArchive(w http.ResponseWriter, r *http.Request) {
+	var request configurationArchiveImportRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "configuration_archive_import_invalid", "Configuration archive import request is invalid", "")
+		return
+	}
 	principal, _ := PrincipalFromContext(r.Context())
-	revision, err := h.Archives.Import(r.Context(), r.PathValue("archiveID"), principal.UserID)
+	revision, err := h.Archives.Import(r.Context(), r.PathValue("archiveID"), principal.UserID, request.Replace)
 	if errors.Is(err, configuration.ErrArchiveNotFound) {
 		WriteProblem(w, r, http.StatusNotFound, "configuration_archive_not_found", "Configuration archive not found", "")
 		return
@@ -152,6 +161,7 @@ func (h *ConfigurationHandlers) Latest(w http.ResponseWriter, r *http.Request) {
 
 type configurationImportRequest struct {
 	Payload json.RawMessage `json:"payload"`
+	Replace bool            `json:"replace,omitempty"`
 }
 
 // Import applies a portable desired-state payload only to a clean
@@ -165,13 +175,13 @@ func (h *ConfigurationHandlers) Import(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	principal, _ := PrincipalFromContext(r.Context())
-	revision, err := h.Configuration.Import(r.Context(), request.Payload, principal.UserID)
-	if errors.Is(err, configuration.ErrInvalidSnapshot) {
-		WriteProblem(w, r, http.StatusBadRequest, "configuration_import_invalid", "Configuration import payload is invalid", "")
+	if !request.Replace {
+		WriteProblem(w, r, http.StatusConflict, "configuration_import_requires_replace_confirmation", "Configuration import requires replacement confirmation", "Set replace to true after reviewing the import impact.")
 		return
 	}
-	if errors.Is(err, configuration.ErrDestinationNotClean) {
-		WriteProblem(w, r, http.StatusConflict, "configuration_import_requires_clean_target", "Configuration import requires a clean target", "")
+	revision, err := h.Configuration.Replace(r.Context(), request.Payload, principal.UserID)
+	if errors.Is(err, configuration.ErrInvalidSnapshot) {
+		WriteProblem(w, r, http.StatusBadRequest, "configuration_import_invalid", "Configuration import payload is invalid", "")
 		return
 	}
 	if errors.Is(err, configuration.ErrIncompatibleSnapshot) {

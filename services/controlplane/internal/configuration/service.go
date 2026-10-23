@@ -195,12 +195,30 @@ func (s *Service) ReconcileLatest(ctx context.Context) (storage.ConfigurationRev
 }
 
 // Import validates and persists a desired-state snapshot into an empty
-// configuration destination. It deliberately refuses a merge: configuration
-// restore is a clean-target operation, and applying a backup over unknown
-// desired state would make the result impossible to reason about or roll back.
+// configuration destination. Call Replace to explicitly replace the active
+// desired configuration of an already-running appliance.
 // Metadata bundle files themselves are staged and signature-validated by the
-// installer before this method is called.
+// installer before either method is called.
 func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (storage.ConfigurationRevision, error) {
+	return s.importSnapshot(ctx, payload, actorID, false)
+}
+
+// Replace validates a portable desired-state snapshot, preserves the current
+// desired state as an immutable revision, then replaces configuration-owned
+// records atomically. It never touches identities, credentials, sessions,
+// audit history, blob objects, or other runtime data. Callers must require an
+// explicit operator confirmation before using it.
+func (s *Service) Replace(ctx context.Context, payload []byte, actorID string) (storage.ConfigurationRevision, error) {
+	if _, _, err := validateSnapshot(payload); err != nil {
+		return storage.ConfigurationRevision{}, err
+	}
+	if _, err := s.Capture(ctx, actorID); err != nil {
+		return storage.ConfigurationRevision{}, fmt.Errorf("configuration: capture pre-replacement revision: %w", err)
+	}
+	return s.importSnapshot(ctx, payload, actorID, true)
+}
+
+func (s *Service) importSnapshot(ctx context.Context, payload []byte, actorID string, replace bool) (storage.ConfigurationRevision, error) {
 	snapshot, canonicalPayload, err := validateSnapshot(payload)
 	if err != nil {
 		return storage.ConfigurationRevision{}, err
@@ -210,7 +228,11 @@ func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (s
 		if err := s.validateStagedMetadata(txCtx, snapshot.Metadata); err != nil {
 			return err
 		}
-		if err := s.ensureEmpty(txCtx); err != nil {
+		if replace {
+			if err := s.clearDesiredState(txCtx); err != nil {
+				return err
+			}
+		} else if err := s.ensureEmpty(txCtx); err != nil {
 			return err
 		}
 		now := time.Now().UTC()
@@ -270,7 +292,7 @@ func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (s
 			CreatedAt:     now,
 			CreatedBy:     strings.TrimSpace(actorID),
 			Status:        storage.ConfigurationRevisionPending,
-			ApplyMessage:  "imported; reconciliation pending",
+			ApplyMessage:  importMessage(replace),
 		}
 		return s.stores.Revisions.CreateConfigurationRevision(txCtx, imported)
 	})
@@ -278,6 +300,56 @@ func (s *Service) Import(ctx context.Context, payload []byte, actorID string) (s
 		return storage.ConfigurationRevision{}, err
 	}
 	return imported, nil
+}
+
+func importMessage(replace bool) string {
+	if replace {
+		return "configuration replaced; reconciliation pending"
+	}
+	return "imported; reconciliation pending"
+}
+
+// clearDesiredState removes only records represented by Snapshot. It runs in
+// the caller transaction and deliberately leaves immutable revisions in place
+// so a prior configuration remains auditable and exportable.
+func (s *Service) clearDesiredState(ctx context.Context) error {
+	instances, err := s.stores.Applications.ListInstances(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: list instances for replacement: %w", err)
+	}
+	for _, instance := range instances {
+		if err := s.stores.Applications.DeleteInstance(ctx, instance.Name); err != nil {
+			return fmt.Errorf("configuration: remove application instance %q: %w", instance.Name, err)
+		}
+	}
+	definitions, err := s.stores.Applications.ListDefinitions(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: list definitions for replacement: %w", err)
+	}
+	for _, definition := range definitions {
+		if err := s.stores.Applications.DeleteDefinition(ctx, definition.Name, definition.Version); err != nil {
+			return fmt.Errorf("configuration: remove application definition %s@%s: %w", definition.Name, definition.Version, err)
+		}
+	}
+	dnsRecords, err := s.stores.DNS.List(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: list DNS records for replacement: %w", err)
+	}
+	for _, record := range dnsRecords {
+		if err := s.stores.DNS.Delete(ctx, record.Name); err != nil {
+			return fmt.Errorf("configuration: remove DNS record %q: %w", record.Name, err)
+		}
+	}
+	profiles, err := s.stores.Licensing.ListCustomProfiles(ctx)
+	if err != nil {
+		return fmt.Errorf("configuration: list custom profiles for replacement: %w", err)
+	}
+	for _, profile := range profiles {
+		if err := s.stores.Licensing.DeleteCustomProfile(ctx, profile.ID); err != nil {
+			return fmt.Errorf("configuration: remove custom profile %q: %w", profile.ID, err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) ensureEmpty(ctx context.Context) error {

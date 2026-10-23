@@ -60,7 +60,8 @@ import type {
   ImportInferenceModelRequest,
   InferenceImportProgress,
   InferenceLoadProgress,
-  InferenceNode
+  InferenceNode,
+  ConfigurationRevision
 } from "./types";
 
 function now(): string {
@@ -1443,6 +1444,29 @@ export class MockControlPlaneClient {
   async launchAIWorkspace(): Promise<void> {
     // The mock has no browser gateway; preserving the method keeps the UI
     // contract testable without ever fabricating a credential.
+  }
+
+  async captureConfiguration(): Promise<ConfigurationRevision> {
+    return {
+      id: `revision-${uuid()}`,
+      schemaVersion: "configuration.zon/v1",
+      payloadDigest: "sha256:mock",
+      createdAt: now(),
+      status: "pending",
+      payload: { apiVersion: "configuration.zon/v1", customProfiles: [], profileActivation: {}, dnsRecords: [], builderCatalog: { document: "", contentType: "application/json" }, applicationDefinitions: [], applicationInstances: [] }
+    };
+  }
+
+  async importConfigurationPayload(_payload: unknown, replace: boolean): Promise<ConfigurationRevision> {
+    if (!replace) throw new Error("replacement confirmation is required");
+    return {
+      id: `revision-${uuid()}`,
+      schemaVersion: "configuration.zon/v1",
+      payloadDigest: "sha256:mock",
+      createdAt: now(),
+      status: "pending",
+      applyMessage: "configuration replaced; reconciliation pending"
+    };
   }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {

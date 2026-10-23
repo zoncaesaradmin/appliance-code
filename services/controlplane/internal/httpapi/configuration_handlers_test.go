@@ -65,7 +65,7 @@ func TestConfigurationRevisionCaptureAndImport(t *testing.T) {
 	target := newTestServer(t)
 	target.bootstrapAdmin(t, "admin", testPassword)
 	targetToken := target.login(t, "admin", testPassword)
-	request, err := json.Marshal(map[string]json.RawMessage{"payload": revision.Payload})
+	request, err := json.Marshal(map[string]any{"payload": revision.Payload, "replace": true})
 	if err != nil {
 		t.Fatalf("encode import request: %v", err)
 	}
@@ -75,9 +75,9 @@ func TestConfigurationRevisionCaptureAndImport(t *testing.T) {
 		t.Fatalf("import status = %d, want %d", imported.StatusCode, http.StatusCreated)
 	}
 
-	conflict := target.doJSON(t, http.MethodPost, "/api/v1/configuration/revisions/import", targetToken, string(request))
-	defer conflict.Body.Close()
-	if conflict.StatusCode != http.StatusConflict {
-		t.Fatalf("second import status = %d, want %d", conflict.StatusCode, http.StatusConflict)
+	replacement := target.doJSON(t, http.MethodPost, "/api/v1/configuration/revisions/import", targetToken, string(request))
+	defer replacement.Body.Close()
+	if replacement.StatusCode != http.StatusCreated {
+		t.Fatalf("replacement import status = %d, want %d", replacement.StatusCode, http.StatusCreated)
 	}
 }

@@ -58,7 +58,8 @@ import type {
   ImportInferenceModelRequest,
   InferenceImportProgress,
   InferenceLoadProgress,
-  InferenceNode
+  InferenceNode,
+  ConfigurationRevision
 } from "./types";
 
 function encodeApplianceFilePath(path: string): string {
@@ -216,6 +217,8 @@ export interface ControlPlaneClient {
   getInferenceLoadProgress(nodeRef?: string): Promise<InferenceLoadProgress>;
   deleteInferenceModel(modelId: string, nodeRef?: string): Promise<void>;
   launchAIWorkspace(): Promise<void>;
+  captureConfiguration(): Promise<ConfigurationRevision>;
+  importConfigurationPayload(payload: unknown, replace: boolean): Promise<ConfigurationRevision>;
   listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult>;
 }
 
@@ -825,6 +828,17 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     form.append(grant);
     document.body.append(form);
     form.submit();
+  }
+
+  async captureConfiguration(): Promise<ConfigurationRevision> {
+    return this.request("/api/v1/configuration/revisions", { method: "POST", body: {} });
+  }
+
+  async importConfigurationPayload(payload: unknown, replace: boolean): Promise<ConfigurationRevision> {
+    return this.request("/api/v1/configuration/revisions/import", {
+      method: "POST",
+      body: { payload, replace }
+    });
   }
 
   async listAuditEvents(params?: { limit?: number; cursor?: string }): Promise<AuditEventsResult> {

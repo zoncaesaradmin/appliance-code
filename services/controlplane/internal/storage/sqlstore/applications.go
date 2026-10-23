@@ -60,6 +60,21 @@ func (s *applicationStore) ListDefinitions(ctx context.Context) ([]storage.Appli
 	return result, rows.Err()
 }
 
+func (s *applicationStore) DeleteDefinition(ctx context.Context, name, version string) error {
+	result, err := s.db.q(ctx).ExecContext(ctx, `DELETE FROM application_definitions WHERE name = ? AND version = ?`, name, version)
+	if err != nil {
+		return fmt.Errorf("sqlite: deleting application definition: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("sqlite: checking application definition deletion: %w", err)
+	}
+	if count == 0 {
+		return storage.ErrNotFound
+	}
+	return nil
+}
+
 func (s *applicationStore) UpsertInstance(ctx context.Context, i storage.ApplicationInstance) error {
 	_, err := s.db.q(ctx).ExecContext(ctx, `
         INSERT INTO application_instances(name, definition_name, definition_version, desired_state, observed_state, message, created_at, updated_at)
@@ -123,4 +138,19 @@ func (s *applicationStore) ListInstances(ctx context.Context) ([]storage.Applica
 		result = append(result, i)
 	}
 	return result, rows.Err()
+}
+
+func (s *applicationStore) DeleteInstance(ctx context.Context, name string) error {
+	result, err := s.db.q(ctx).ExecContext(ctx, `DELETE FROM application_instances WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("sqlite: deleting application instance: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("sqlite: checking application instance deletion: %w", err)
+	}
+	if count == 0 {
+		return storage.ErrNotFound
+	}
+	return nil
 }

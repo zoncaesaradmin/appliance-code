@@ -156,6 +156,12 @@ export const MODES: Mode[] = [
         icon: "status"
       },
       {
+        label: "Backup & Restore",
+        path: "/admin/backup-restore",
+        description: "Export and import configuration; inspect system-backup readiness",
+        icon: "status"
+      },
+      {
         label: "Applications",
         path: "/admin/applications",
         description: "Enable and disable approved appliance applications",

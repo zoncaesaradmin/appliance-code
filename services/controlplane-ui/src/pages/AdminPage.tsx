@@ -24,6 +24,7 @@ import type {
   Version
 } from "../types";
 import { DNSPage } from "./DNSPage";
+import { BackupRestorePage } from "./BackupRestorePage";
 
 export function AdminPage(props: { pathname: string; capabilities: string[] }): React.JSX.Element {
   const isProfiles = props.pathname === "/admin/profiles" || props.pathname.startsWith("/admin/profiles/");
@@ -38,7 +39,7 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
   const isSystemStatus =
     props.pathname === "/admin/system-status" ||
     props.pathname.startsWith("/admin/system-status/") ||
-    (!isProfiles && !isLicensing && !isMetadata && !isHostServices && !isLANServices);
+    (!isProfiles && !isLicensing && !isMetadata && !isHostServices && !isLANServices && !props.pathname.startsWith("/admin/backup-restore"));
 
   if (isProfiles) {
     return <AdminProfilesPage />;
@@ -54,6 +55,9 @@ export function AdminPage(props: { pathname: string; capabilities: string[] }): 
   }
   if (isLANServices) {
     return <DNSPage />;
+  }
+  if (props.pathname.startsWith("/admin/backup-restore")) {
+    return <BackupRestorePage pathname={props.pathname} />;
   }
   return <AdminSystemStatusPage pathname={props.pathname} capabilities={props.capabilities} />;
 }

@@ -30,6 +30,16 @@ func (m *memoryStore) GetDefinition(_ context.Context, name, version string) (st
 func (m *memoryStore) ListDefinitions(context.Context) ([]storage.ApplicationDefinition, error) {
 	return m.definitions, nil
 }
+
+func (m *memoryStore) DeleteDefinition(_ context.Context, name, version string) error {
+	for index, definition := range m.definitions {
+		if definition.Name == name && definition.Version == version {
+			m.definitions = append(m.definitions[:index], m.definitions[index+1:]...)
+			return nil
+		}
+	}
+	return storage.ErrNotFound
+}
 func (m *memoryStore) UpsertInstance(_ context.Context, i storage.ApplicationInstance) error {
 	for index := range m.instances {
 		if m.instances[index].Name == i.Name {
@@ -60,6 +70,16 @@ func (m *memoryStore) GetInstance(_ context.Context, name string) (storage.Appli
 }
 func (m *memoryStore) ListInstances(context.Context) ([]storage.ApplicationInstance, error) {
 	return m.instances, nil
+}
+
+func (m *memoryStore) DeleteInstance(_ context.Context, name string) error {
+	for index, instance := range m.instances {
+		if instance.Name == name {
+			m.instances = append(m.instances[:index], m.instances[index+1:]...)
+			return nil
+		}
+	}
+	return storage.ErrNotFound
 }
 
 func TestCatalogInstall(t *testing.T) {

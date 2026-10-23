@@ -630,3 +630,24 @@ export interface InferenceCatalog {
   order?: "asc" | "desc";
   items: InferenceCatalogEntry[];
 }
+
+export interface ConfigurationArchiveManifest {
+  format: string;
+  archiveId: string;
+  createdAt: string;
+  revisionId: string;
+  schemaVersion: string;
+  payloadDigest: string;
+  keyId: string;
+}
+
+export interface ConfigurationRevision {
+  id: string;
+  schemaVersion: string;
+  payloadDigest: string;
+  createdAt: string;
+  status: string;
+  applyMessage?: string;
+  appliedAt?: string;
+	payload?: unknown;
+}

@@ -119,9 +119,9 @@ func (s ArchiveService) ReadVerified(ctx context.Context, archiveID string) (Arc
 }
 
 // Import verifies/decrypts an archive before sending its canonical payload to
-// the configuration import service. The latter rejects non-clean targets and
-// validates staged metadata in the same database transaction.
-func (s ArchiveService) Import(ctx context.Context, archiveID, actorID string) (storage.ConfigurationRevision, error) {
+// the configuration import service. replace is explicit because applying an
+// archive over an active appliance replaces desired state.
+func (s ArchiveService) Import(ctx context.Context, archiveID, actorID string, replace bool) (storage.ConfigurationRevision, error) {
 	if err := s.validateExportDependencies(); err != nil {
 		return storage.ConfigurationRevision{}, err
 	}
@@ -139,6 +139,9 @@ func (s ArchiveService) Import(ctx context.Context, archiveID, actorID string) (
 	_, payload, err := Open(data, key, keyID)
 	if err != nil {
 		return storage.ConfigurationRevision{}, err
+	}
+	if replace {
+		return s.Config.Replace(ctx, payload, actorID)
 	}
 	return s.Config.Import(ctx, payload, actorID)
 }

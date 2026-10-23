@@ -105,10 +105,12 @@ type ApplicationStore interface {
 	UpsertDefinition(ctx context.Context, definition ApplicationDefinition) error
 	GetDefinition(ctx context.Context, name, version string) (ApplicationDefinition, error)
 	ListDefinitions(ctx context.Context) ([]ApplicationDefinition, error)
+	DeleteDefinition(ctx context.Context, name, version string) error
 	UpsertInstance(ctx context.Context, instance ApplicationInstance) error
 	UpdateInstanceStatus(ctx context.Context, name, observedState, message string, updatedAt time.Time) error
 	GetInstance(ctx context.Context, name string) (ApplicationInstance, error)
 	ListInstances(ctx context.Context) ([]ApplicationInstance, error)
+	DeleteInstance(ctx context.Context, name string) error
 }
 
 // IdempotencyRecord is a cached response for a previously seen idempotency
