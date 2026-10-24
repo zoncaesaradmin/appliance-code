@@ -101,6 +101,9 @@ Options:
   --workflows-crds-dir DIR         Optional directory containing the versioned
                                    workflow CRD bundle to copy into release-input.
   --k3s-version VERSION            Pinned K3s version. Required.
+  --deployment-topology TOPOLOGY   Required immutable deployment topology.
+                                   The only currently accepted value is
+                                   three-server-etcd-v1.
   --chart-version VERSION          Chart version. Defaults to code version.
   --supported-upgrade-source VER   Repeatable. Adds a supported upgrade
                                    source version to compatibility metadata.
@@ -175,6 +178,7 @@ WORKFLOWS_CRDS_DIR=""
 EXTRA_OCI_IMAGES=()
 EXTRA_OCI_IMAGE_REFERENCES=()
 K3S_VERSION=""
+DEPLOYMENT_TOPOLOGY=""
 CHART_VERSION=""
 SBOM_DIR=""
 PROVENANCE_DIR=""
@@ -349,6 +353,10 @@ while [[ $# -gt 0 ]]; do
       K3S_VERSION="${2:-}"
       shift 2
       ;;
+    --deployment-topology)
+      DEPLOYMENT_TOPOLOGY="${2:-}"
+      shift 2
+      ;;
     --chart-version)
       CHART_VERSION="${2:-}"
       shift 2
@@ -415,6 +423,10 @@ bool_true() {
 
 if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
+fi
+if [[ "${DEPLOYMENT_TOPOLOGY}" != "three-server-etcd-v1" ]]; then
+  echo "archive-release-input: --deployment-topology is required and must be three-server-etcd-v1" >&2
+  exit 2
 fi
 host_packages_required() {
   # Super-set packaging: host package payload is always part of the complete
@@ -1087,6 +1099,7 @@ fi
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
+  printf ',\n  "deploymentTopology": "three-server-etcd-v1"'
   if [[ -n "${ARTIFACT_SERVER_VERSION}" ]]; then
     printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
   fi
@@ -1321,6 +1334,9 @@ fi
 HOST_PACKAGES_JSON=',
     "hostPackages": '"$(render_dir_artifact "host-packages")"
 
+DEPLOYMENT_TOPOLOGY_JSON=',
+    "deploymentTopology": "three-server-etcd-v1"'
+
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {
   "schemaVersion": 1,
@@ -1346,7 +1362,7 @@ $(if [[ -n "${POSTGRES_IMAGE}" ]]; then printf '    "postgresImage": %s,\n' "$(r
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${INFERENCE_COMPATIBILITY_JSON}${WORKFLOWS_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${DEPLOYMENT_TOPOLOGY_JSON}${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${INFERENCE_COMPATIBILITY_JSON}${WORKFLOWS_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

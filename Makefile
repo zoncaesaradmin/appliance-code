@@ -493,9 +493,11 @@ package-metadata-bundle:
 ## (ADR 0011 requires it in the complete v1 appliance), and a bundle
 ## shipping the chart without its CRDs installs a workflow controller
 ## that crash-loops forever on startup.
+## DEPLOYMENT_TOPOLOGY is likewise required so a newly emitted release input
+## cannot silently select the retired one-server/agent topology.
 package-release-input-tar:
-	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${WORKFLOWS_CRDS_DIR:-}" ]; then \
-		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, and WORKFLOWS_CRDS_DIR" >&2; \
+	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${WORKFLOWS_CRDS_DIR:-}" ] || [ -z "$${DEPLOYMENT_TOPOLOGY:-}" ]; then \
+		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, WORKFLOWS_CRDS_DIR, and DEPLOYMENT_TOPOLOGY" >&2; \
 		exit 2; \
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
@@ -578,6 +580,7 @@ package-release-input-tar:
 	if [ -n "$${LATEST_OUT_FILE:-}" ]; then set -- "$$@" --latest-out-file "$${LATEST_OUT_FILE}"; fi; \
 	if [ -n "$${RELEASE_ID:-}" ]; then set -- "$$@" --release-id "$${RELEASE_ID}"; fi; \
 	if [ -n "$${CHART_VERSION:-}" ]; then set -- "$$@" --chart-version "$${CHART_VERSION}"; fi; \
+	set -- "$$@" --deployment-topology "$${DEPLOYMENT_TOPOLOGY}"; \
 	if [ -n "$${SUPPORTED_UPGRADE_SOURCE:-}" ]; then set -- "$$@" --supported-upgrade-source "$${SUPPORTED_UPGRADE_SOURCE}"; fi; \
 	if [ -n "$${SBOM_DIR:-}" ]; then set -- "$$@" --sbom-dir "$${SBOM_DIR}"; fi; \
 	if [ -n "$${PROVENANCE_DIR:-}" ]; then set -- "$$@" --provenance-dir "$${PROVENANCE_DIR}"; fi; \
