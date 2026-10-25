@@ -103,7 +103,7 @@ Options:
   --k3s-version VERSION            Pinned K3s version. Required.
   --deployment-topology TOPOLOGY   Required immutable deployment topology.
                                    The only currently accepted value is
-                                   three-server-etcd-v1.
+                                   embedded-etcd-v1.
   --chart-version VERSION          Chart version. Defaults to code version.
   --supported-upgrade-source VER   Repeatable. Adds a supported upgrade
                                    source version to compatibility metadata.
@@ -424,8 +424,8 @@ bool_true() {
 if [[ -z "${HOST_AGENT_BINARY}" ]]; then
   HOST_AGENT_BINARY="${REPO_ROOT}/services/hostagent/bin/appliance-host-agentd"
 fi
-if [[ "${DEPLOYMENT_TOPOLOGY}" != "three-server-etcd-v1" ]]; then
-  echo "archive-release-input: --deployment-topology is required and must be three-server-etcd-v1" >&2
+if [[ "${DEPLOYMENT_TOPOLOGY}" != "embedded-etcd-v1" ]]; then
+  echo "archive-release-input: --deployment-topology is required and must be embedded-etcd-v1" >&2
   exit 2
 fi
 host_packages_required() {
@@ -1099,7 +1099,7 @@ fi
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
   printf '  "chartVersion": "%s"' "${CHART_VERSION}"
-  printf ',\n  "deploymentTopology": "three-server-etcd-v1"'
+  printf ',\n  "deploymentTopology": "embedded-etcd-v1"'
   if [[ -n "${ARTIFACT_SERVER_VERSION}" ]]; then
     printf ',\n  "artifactServerVersion": "%s"' "${ARTIFACT_SERVER_VERSION}"
   fi
@@ -1335,7 +1335,7 @@ HOST_PACKAGES_JSON=',
     "hostPackages": '"$(render_dir_artifact "host-packages")"
 
 DEPLOYMENT_TOPOLOGY_JSON=',
-    "deploymentTopology": "three-server-etcd-v1"'
+    "deploymentTopology": "embedded-etcd-v1"'
 
 cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
 {

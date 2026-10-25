@@ -146,7 +146,7 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 	}
 	out := filepath.Join(tmp, "release-input.tgz")
 	cmd := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
-		"--out-file", out, "--code-version", "1.2.3", "--k3s-version", "v1.33.0+k3s1", "--deployment-topology", "three-server-etcd-v1",
+		"--out-file", out, "--code-version", "1.2.3", "--k3s-version", "v1.33.0+k3s1", "--deployment-topology", "embedded-etcd-v1",
 		"--control-plane-image", filepath.Join(tmp, "control-plane.tar"),
 		"--ui-image", filepath.Join(tmp, "ui.tar"),
 		"--host-agent-image", hostAgentArchive,
@@ -189,7 +189,7 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 	if got := manifest.Compatibility["artifactServerVersion"]; got != "2.1.8" {
 		t.Fatalf("artifactServerVersion = %#v", got)
 	}
-	if got := manifest.Compatibility["deploymentTopology"]; got != "three-server-etcd-v1" {
+	if got := manifest.Compatibility["deploymentTopology"]; got != "embedded-etcd-v1" {
 		t.Fatalf("deploymentTopology = %#v", got)
 	}
 }
@@ -220,7 +220,7 @@ func TestReleaseInputRejectsUnpairedArtifactServerImage(t *testing.T) {
 	cmd := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", filepath.Join(tmp, "out.tgz"), "--code-version", "1.2.3",
 		"--k3s-version", "v1", "--control-plane-image", artifactServer, "--ui-image", artifactServer,
-		"--deployment-topology", "three-server-etcd-v1",
+		"--deployment-topology", "embedded-etcd-v1",
 		"--host-agent-image", hostAgentArchive,
 		"--host-agent-image-reference", "registry.local/appliance-host-agent@sha256:"+hostDigest,
 		"--host-agent-binary", hostBinary,
@@ -241,7 +241,7 @@ func TestReleaseInputRejectsUnsupportedDeploymentTopology(t *testing.T) {
 	cmd := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"), "--deployment-topology", "single-server")
 	cmd.Env = append(os.Environ(), "TARGET_ARCH=amd64")
 	out, err := cmd.CombinedOutput()
-	if err == nil || !bytes.Contains(out, []byte("must be three-server-etcd-v1")) {
+	if err == nil || !bytes.Contains(out, []byte("must be embedded-etcd-v1")) {
 		t.Fatalf("unsupported topology was accepted: err=%v output=%s", err, out)
 	}
 }
