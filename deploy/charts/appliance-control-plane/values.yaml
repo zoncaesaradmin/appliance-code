@@ -201,7 +201,7 @@ database:
     # this workload disabled.
     local:
       enabled: false
-      serviceName: controlplane-database
+      serviceName: platform-postgres
       databaseName: controlplane
       username: controlplane
       image:
@@ -210,6 +210,8 @@ database:
         pullPolicy: IfNotPresent
       persistence:
         size: 4Gi
+        # Keep these storage identifiers stable across workload renames so an
+        # upgrade reuses the existing local PostgreSQL data.
         hostPath: /data/zon/controlplane-database
         claimName: controlplane-database-data
       resources:

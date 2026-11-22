@@ -186,7 +186,7 @@ func TestLocalPostgresProfileRendersPinnedStatefulSet(t *testing.T) {
 		"--set", "database.postgres.local.enabled=true",
 		"--set", "database.postgres.local.image.digest="+digest,
 	)...)
-	statefulSet := findByKindAndName(docs, "StatefulSet", "controlplane-database")
+	statefulSet := findByKindAndName(docs, "StatefulSet", "platform-postgres")
 	if statefulSet == nil {
 		t.Fatal("local PostgreSQL profile must render its StatefulSet")
 	}
