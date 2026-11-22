@@ -23,6 +23,14 @@ capabilities:
       # Action Runtime shares the control-plane image. This capability
       # controls its deployment and lifecycle rather than a separate archive.
       required: []
+  channel-integrations:
+    displayName: Channel Integrations
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.channel-integrations
+    artifacts:
+      required: [channel-integration-image]
   lan-discovery:
     displayName: LAN Discovery
     requires: [base]

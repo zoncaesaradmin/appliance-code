@@ -77,7 +77,7 @@ releases, enabling only the set it is currently applying.
 
 {{/*
 Namespace for operator-facing apps co-packaged with the control-plane chart:
-ui-server, host-agent, action-runtime. Defaults to co-locating with
+ui-server, host-agent, action-runtime, and channel-integration. Defaults to co-locating with
 controlplane when appsNamespace.name is empty (single-namespace tests);
 production injects ace-apps via zonctl.
 */}}
@@ -311,6 +311,27 @@ Action Runtime Deployment/Service name.
 */}}
 {{- define "appliance-control-plane.actionRuntimeName" -}}
 action-runtime
+{{- end -}}
+
+{{- define "appliance-control-plane.channelIntegrationName" -}}
+channel-integration
+{{- end -}}
+
+{{- define "appliance-control-plane.channelIntegrationsEnabled" -}}
+{{- if and .Values.channelIntegration.enabled (has "channel-integrations" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.channelIntegrationSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.channelIntegrationName" . }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
+{{- end -}}
+
+{{- define "appliance-control-plane.channelIntegrationLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "appliance-control-plane.channelIntegrationSelectorLabels" . }}
+app.kubernetes.io/component: channel-integration
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*

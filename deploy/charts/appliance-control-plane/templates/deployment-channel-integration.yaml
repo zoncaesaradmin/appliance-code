@@ -1,0 +1,61 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.channelIntegrationsEnabled" .) "true") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.channelIntegrationName" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.channelIntegrationLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.channelIntegrationSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.channelIntegrationLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.channelIntegration.podSecurityContext | nindent 8 }}
+      containers:
+        - name: channel-integration
+          image: {{ .Values.channelIntegration.image.reference | quote }}
+          imagePullPolicy: {{ .Values.channelIntegration.image.pullPolicy }}
+          env:
+            - name: CAPP_WHATSAPP_CONFIG_FILE
+              value: /var/run/channel-integration/runtime.json
+          ports:
+            - name: http
+              containerPort: {{ .Values.channelIntegration.service.port }}
+          securityContext:
+            {{- toYaml .Values.channelIntegration.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.channelIntegration.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: runtime
+              mountPath: /var/run/channel-integration
+              readOnly: true
+      volumes:
+        - name: runtime
+          secret:
+            secretName: {{ .Values.channelIntegration.runtimeSecretName }}
+            defaultMode: 0440
+            items:
+              - key: runtime.json
+                path: runtime.json
+{{- end }}

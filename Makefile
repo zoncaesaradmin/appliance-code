@@ -28,7 +28,8 @@ _host_arch_detect = $(shell bash "$(CURDIR)/scripts/package/detect-host-arch.sh"
 # verify/build pass TARGET_ARCH when set, otherwise the detected host arch.
 INFERENCE_GOARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(_host_arch_detect))
 
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR) services/open-webui-gateway
+CHANNEL_INTEGRATION_DIR := services/channel-integration
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(CHANNEL_INTEGRATION_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR) services/open-webui-gateway
 # Product/release version for packaged images and /version. Prefer an explicit
 # CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
 # reachable git tag, not a bare commit SHA from `git describe --always`.
@@ -151,7 +152,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-open-webui-gateway-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-postgresql-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-run dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-channel-integration-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-open-webui-gateway-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-postgresql-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -343,6 +344,18 @@ package-host-agent-image-archive:
 		--reference-out-file "$$reference_out_file" \
 		--image-tag "$$image_tag"
 
+## package-channel-integration-image-archive: build and export the stateless
+## channel integration service as an OCI archive for the signed bundle.
+package-channel-integration-image-archive:
+	@image_tag="$${IMAGE_TAG:-$${CODE_VERSION:-$${PRODUCT_VERSION:-$(CONTROL_PLANE_CODE_VERSION)}}}"; \
+		out_file="$${OUT_FILE:-$(CURDIR)/.run/channel-integration-$$image_tag.tar}"; \
+		reference_out_file="$${REFERENCE_OUT_FILE:-$${out_file%.tar}.reference}"; \
+		mkdir -p "$$(dirname "$$out_file")" "$$(dirname "$$reference_out_file")"; \
+		bash ./scripts/package/export-channel-integration-image-archive.sh \
+			--out-file "$$out_file" \
+			--reference-out-file "$$reference_out_file" \
+			--image-tag "$$image_tag"
+
 ## package-workflow-controller-image-archive: always build and export the
 ## appliance-owned workflow-controller wrapper image as an OCI archive
 ## tarball for release-input packaging.
@@ -517,9 +530,12 @@ package-release-input-tar:
 	dns_reference_file="$(CURDIR)/.run/dns-server-$$dns_version.reference"; \
 	control_plane_image_ref="localhost/appliance-control-plane:$(CONTROL_PLANE_CODE_VERSION)"; \
 	ui_image_ref="localhost/appliance-ui:$(CONTROL_PLANE_CODE_VERSION)"; \
+	channel_integration_image="$(CURDIR)/.run/channel-integration-image.tar"; \
+	channel_integration_reference_file="$(CURDIR)/.run/channel-integration-image.reference"; \
 	workflow_controller_image_ref="localhost/appliance-workflow-controller:$$workflows_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
+	$(MAKE) --no-print-directory package-channel-integration-image-archive OUT_FILE="$$channel_integration_image" REFERENCE_OUT_FILE="$$channel_integration_reference_file"; \
 	$(MAKE) --no-print-directory -C ./services/hostagent build; \
 	$(MAKE) --no-print-directory package-host-agent-image-archive \
 		OUT_FILE="$$host_agent_image" \
@@ -531,6 +547,7 @@ package-release-input-tar:
 			HOST_CAPABILITIES="$${HOST_CAPABILITIES:-mdns wifi-client wifi-ap}"; \
 	fi; \
 	host_agent_image_ref="$$(tr -d '\r\n' < "$$host_agent_reference_file")"; \
+	channel_integration_image_ref="$$(tr -d '\r\n' < "$$channel_integration_reference_file")"; \
 	if [ -n "$$workflows_version" ] && [ -z "$${WORKFLOW_CONTROLLER_IMAGE:-}" ]; then \
 		$(MAKE) --no-print-directory package-workflow-controller-image-archive \
 			OUT_FILE="$$workflow_controller_image" \
@@ -577,6 +594,7 @@ package-release-input-tar:
 		--dns-image-reference "$${DNS_IMAGE_REFERENCE}" \
 		--dns-version "$$dns_version" \
 		--k3s-version "$${K3S_VERSION}"; \
+	set -- "$$@" --extra-oci-image "$$channel_integration_image" --extra-oci-image-reference "$$channel_integration_image_ref"; \
 	if [ -n "$${LATEST_OUT_FILE:-}" ]; then set -- "$$@" --latest-out-file "$${LATEST_OUT_FILE}"; fi; \
 	if [ -n "$${RELEASE_ID:-}" ]; then set -- "$$@" --release-id "$${RELEASE_ID}"; fi; \
 	if [ -n "$${CHART_VERSION:-}" ]; then set -- "$$@" --chart-version "$${CHART_VERSION}"; fi; \

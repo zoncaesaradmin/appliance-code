@@ -30,6 +30,7 @@ KNOWN_ARTIFACTS = (
     "blob-storage-image",
     "message-broker-image",
     "message-broker-chart",
+    "channel-integration-image",
     "host-agent-daemon",
     "mdns-host-packages",
     "host-agent-image",

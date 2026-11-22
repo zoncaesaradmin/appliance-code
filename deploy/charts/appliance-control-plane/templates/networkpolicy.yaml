@@ -338,4 +338,50 @@ spec:
           port: {{ .Values.hostAgent.service.port }}
   egress: []
 {{- end }}
+{{- if eq (include "appliance-control-plane.channelIntegrationsEnabled" .) "true" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.channelIntegrationName" . }}-allow
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.channelIntegrationLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "appliance-control-plane.channelIntegrationSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    {{- if .Values.networkPolicy.traefikNamespaceLabel }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.traefikNamespaceLabel | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.channelIntegration.service.port }}
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # The adapter is intentionally the only appliance workload with an
+    # external egress exception. It is required only while Meta delivery is
+    # configured; the base profile remains public-egress denied.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}
 {{- end }}

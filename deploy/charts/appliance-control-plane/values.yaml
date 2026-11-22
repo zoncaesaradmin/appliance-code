@@ -350,6 +350,42 @@ actionRuntime:
     capabilities:
       drop: ["ALL"]
 
+channelIntegration:
+  # Enabled only when the signed channel-integrations capability is selected.
+  enabled: false
+  image:
+    reference: registry.local/channel-integration@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    pullPolicy: IfNotPresent
+  runtimeSecretName: channel-integration-runtime
+  service:
+    port: 8080
+  ingress:
+    enabled: true
+    entryPoints:
+      - websecure
+    host: ""
+    tlsSecretName: appliance-tls
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10013
+    runAsGroup: 10013
+    fsGroup: 10013
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
 ingress:
   enabled: true
   # Traefik IngressRoute (CRD). The CRD itself is provided by the K3s-bundled

@@ -1,0 +1,17 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.channelIntegrationsEnabled" .) "true") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-control-plane.channelIntegrationName" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.channelIntegrationLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "appliance-control-plane.channelIntegrationSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.channelIntegration.service.port }}
+      targetPort: http
+{{- end }}

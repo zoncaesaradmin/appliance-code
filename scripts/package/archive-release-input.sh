@@ -38,6 +38,8 @@ Options:
                                    Required together with --host-agent-image.
   --host-agent-binary PATH         Host-side appliance host-agent daemon binary.
                                    Defaults to services/hostagent/bin/appliance-host-agentd.
+  --cloudflared-binary PATH        Pinned host-native Cloudflare Tunnel connector
+                                   binary included in the foundation bundle.
   --host-packages-dir DIR          Offline host package directory to copy into
                                    release-input as host-packages/ (required for
                                    the complete product super-set).
@@ -150,6 +152,7 @@ UI_IMAGE_REFERENCE=""
 HOST_AGENT_IMAGE=""
 HOST_AGENT_IMAGE_REFERENCE=""
 HOST_AGENT_BINARY=""
+CLOUDFLARED_BINARY=""
 HOST_PACKAGES_DIR=""
 HOST_PACKAGES_OS_VERSION="${OS_VERSION:-}"
 ARTIFACT_SERVER_IMAGE=""
@@ -239,6 +242,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --host-agent-binary)
       HOST_AGENT_BINARY="${2:-}"
+      shift 2
+      ;;
+    --cloudflared-binary)
+      CLOUDFLARED_BINARY="${2:-}"
       shift 2
       ;;
     --host-packages-dir)
@@ -524,6 +531,10 @@ if [[ -n "${HOST_AGENT_IMAGE}" || -n "${HOST_AGENT_IMAGE_REFERENCE}" ]]; then
 fi
 if [[ ! -f "${HOST_AGENT_BINARY}" ]]; then
   echo "archive-release-input: host-agent binary not found: ${HOST_AGENT_BINARY}" >&2
+  exit 1
+fi
+if [[ -n "${CLOUDFLARED_BINARY}" && ! -f "${CLOUDFLARED_BINARY}" ]]; then
+  echo "archive-release-input: cloudflared binary not found: ${CLOUDFLARED_BINARY}" >&2
   exit 1
 fi
 if [[ ! -d "${HOST_PACKAGES_DIR}" ]]; then
@@ -964,6 +975,7 @@ CONTROL_PLANE_BASENAME="$(basename "${CONTROL_PLANE_IMAGE}")"
 UI_BASENAME="$(basename "${UI_IMAGE}")"
 HOST_AGENT_IMAGE_BASENAME=""
 HOST_AGENT_BINARY_BASENAME="$(basename "${HOST_AGENT_BINARY}")"
+CLOUDFLARED_BASENAME=""
 ARTIFACT_SERVER_BASENAME=""
 DNS_BASENAME=""
 INFERENCE_RUNTIME_BASENAME=""
@@ -1005,6 +1017,10 @@ if [[ -n "${HOST_AGENT_IMAGE}" ]]; then
   link_or_copy_file "${HOST_AGENT_IMAGE}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}"
 fi
 cp "${HOST_AGENT_BINARY}" "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}"
+if [[ -n "${CLOUDFLARED_BINARY}" ]]; then
+  CLOUDFLARED_BASENAME="$(basename "${CLOUDFLARED_BINARY}")"
+  cp "${CLOUDFLARED_BINARY}" "${RELEASE_INPUT_DIR}/${CLOUDFLARED_BASENAME}"
+fi
 cp "${METADATA_BUNDLE}" "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}"
 if [[ -n "${MESSAGE_BROKER_IMAGE}" ]]; then link_or_copy_file "${MESSAGE_BROKER_IMAGE}" "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_BASENAME}"; fi
 if [[ -n "${POSTGRES_IMAGE}" ]]; then link_or_copy_file "${POSTGRES_IMAGE}" "${RELEASE_INPUT_DIR}/${POSTGRES_BASENAME}"; fi
@@ -1248,6 +1264,12 @@ if [[ -n "${HOST_AGENT_IMAGE_BASENAME}" ]]; then
     "hostAgentImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_BASENAME}" "${HOST_AGENT_IMAGE_REFERENCE}")"
 fi
 
+OPTIONAL_CLOUDFLARED_JSON=""
+if [[ -n "${CLOUDFLARED_BASENAME}" ]]; then
+  OPTIONAL_CLOUDFLARED_JSON=',
+    "cloudflaredBinary": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${CLOUDFLARED_BASENAME}" "${CLOUDFLARED_BASENAME}")"
+fi
+
 OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=""
 if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
   OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON=',
@@ -1346,7 +1368,7 @@ cat >"${RELEASE_INPUT_DIR}/release-input.json" <<JSON
   "artifacts": {
     "controlPlaneImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_BASENAME}" "${CONTROL_PLANE_IMAGE_REFERENCE}"),
     "uiImage": $(render_file_artifact "${RELEASE_INPUT_DIR}/${UI_BASENAME}" "${UI_BASENAME}" "${UI_IMAGE_REFERENCE}"),
-    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${OPTIONAL_HOST_AGENT_IMAGE_JSON}${HOST_PACKAGES_JSON},
+    "hostAgentBinary": $(render_file_artifact "${RELEASE_INPUT_DIR}/${HOST_AGENT_BINARY_BASENAME}" "${HOST_AGENT_BINARY_BASENAME}")${OPTIONAL_HOST_AGENT_IMAGE_JSON}${OPTIONAL_CLOUDFLARED_JSON}${HOST_PACKAGES_JSON},
     "applianceChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${CHART_ARCHIVE}" "${CHART_ARCHIVE}"),
     "messageBrokerChart": $(render_file_artifact "${RELEASE_INPUT_DIR}/${MESSAGE_BROKER_CHART_ARCHIVE}" "${MESSAGE_BROKER_CHART_ARCHIVE}")${OPTIONAL_ARTIFACT_SERVER_CHART_JSON}${OPTIONAL_ARTIFACT_SERVER_IMAGE_JSON}${OPTIONAL_DNS_CHART_JSON}${OPTIONAL_DNS_IMAGE_JSON}${BLOB_STORAGE_IMAGE_JSON}${OPTIONAL_INFERENCE_ARTIFACTS_JSON},
     "metadataBundle": $(render_file_artifact "${RELEASE_INPUT_DIR}/${METADATA_BUNDLE_BASENAME}" "${METADATA_BUNDLE_BASENAME}"),
