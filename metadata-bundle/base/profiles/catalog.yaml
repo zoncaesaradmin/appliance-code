@@ -2,28 +2,28 @@ profiles:
   core:
     displayName: core
     description: "Default base appliance profile."
-    capabilities: [base, lan-discovery, files]
+    capabilities: [base, actions, lan-discovery, files]
   storage-landns:
     displayName: storage-landns
     description: "File storage, artifact registry, and LAN DNS."
-    capabilities: [base, lan-discovery, files, artifact, dns]
+    capabilities: [base, actions, lan-discovery, files, artifact, dns]
   builder-storage-landns:
     displayName: builder-storage-landns
     description: "Built-in appliance profile."
-    capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, applications]
+    capabilities: [base, actions, lan-discovery, host, files, workflows, build, artifact, dns, applications]
   builder-lanllm-storage-landns:
     displayName: builder-lanllm-storage-landns
     description: "Full union: builder, registry/storage, LAN DNS, CPU LLM inference, and optional Open WebUI chat."
-    capabilities: [base, lan-discovery, host, files, workflows, build, artifact, dns, inference, open-webui, applications]
+    capabilities: [base, actions, lan-discovery, host, files, workflows, build, artifact, dns, inference, open-webui, applications]
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
-    capabilities: [base, lan-discovery, host, files, video, guest-access, focus-content, applications, plaintext-http]
+    capabilities: [base, actions, lan-discovery, host, files, video, guest-access, focus-content, applications, plaintext-http]
   private-ai:
     displayName: private-ai
     description: "Private ai appliance providing multi user inference."
-    capabilities: [base, lan-discovery, inference]
+    capabilities: [base, actions, lan-discovery, inference]
   private-ai-webui:
     displayName: private-ai-webui
     description: "Private ai appliance providing multi user inference and optional Open WebUI chat."
-    capabilities: [base, lan-discovery, inference, open-webui]
+    capabilities: [base, actions, lan-discovery, inference, open-webui]

@@ -1,4 +1,4 @@
-package automationruntimeapi
+package actionruntimeapi
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"appliance-code/services/controlplane/internal/actionruntimeauth"
 	"appliance-code/services/controlplane/internal/audit"
-	"appliance-code/services/controlplane/internal/automationruntimeauth"
 	"appliance-code/services/controlplane/internal/httpapi"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/metadatabundle"
@@ -51,7 +51,7 @@ func (staticReady) Ready(context.Context) error { return nil }
 func requireInternalAuth(wantToken string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if wantToken == "" || !automationruntimeauth.EqualToken(r.Header.Get(automationruntimeauth.HeaderName), wantToken) {
+			if wantToken == "" || !actionruntimeauth.EqualToken(r.Header.Get(actionruntimeauth.HeaderName), wantToken) {
 				writeProblem(w, http.StatusUnauthorized, "internal authentication failed")
 				return
 			}
@@ -169,7 +169,7 @@ func readArchive(r *http.Request) (string, string, audit.Actor, func(), error) {
 		return "", "", actor, cleanup, err
 	}
 	defer file.Close()
-	tmp, err := os.CreateTemp("", "automation-runtime-upload-*.tar.zst")
+	tmp, err := os.CreateTemp("", "action-runtime-upload-*.tar.zst")
 	if err != nil {
 		return "", "", actor, cleanup, err
 	}

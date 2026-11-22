@@ -139,7 +139,7 @@ spec:
         - protocol: TCP
           port: {{ .Values.networkPolicy.hostAgentPort }}
     {{- end }}
-    {{- if .Values.automationRuntime.enabled }}
+    {{- if .Values.actionRuntime.enabled }}
     - to:
         {{- if include "appliance-control-plane.appsNamespaced" . }}
         - namespaceSelector:
@@ -147,15 +147,15 @@ spec:
               kubernetes.io/metadata.name: {{ include "appliance-control-plane.appsNamespace" . | quote }}
           podSelector:
             matchLabels:
-              {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 14 }}
+              {{- include "appliance-control-plane.actionRuntimeSelectorLabels" . | nindent 14 }}
         {{- else }}
         - podSelector:
             matchLabels:
-              {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 14 }}
+              {{- include "appliance-control-plane.actionRuntimeSelectorLabels" . | nindent 14 }}
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ .Values.networkPolicy.automationRuntimePort }}
+          port: {{ .Values.networkPolicy.actionRuntimePort }}
     {{- end }}
     # Foundation blob-storage (MinIO) runs in this same namespace.
     - to:
@@ -259,19 +259,19 @@ spec:
         - protocol: TCP
           port: 53
 {{- end }}
-{{- if .Values.automationRuntime.enabled }}
+{{- if .Values.actionRuntime.enabled }}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "appliance-control-plane.automationRuntimeName" . }}-allow
+  name: {{ include "appliance-control-plane.actionRuntimeName" . }}-allow
   namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
-    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.actionRuntimeLabels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 6 }}
+      {{- include "appliance-control-plane.actionRuntimeSelectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
     - Egress
@@ -291,7 +291,7 @@ spec:
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ .Values.automationRuntime.service.port }}
+          port: {{ .Values.actionRuntime.service.port }}
   egress:
     - to:
         - namespaceSelector:

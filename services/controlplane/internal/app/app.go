@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"appliance-code/services/controlplane/internal/actionruntimeauth"
 	"appliance-code/services/controlplane/internal/appliance"
-	"appliance-code/services/controlplane/internal/automationruntimeauth"
 	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/httpapi"
@@ -115,7 +115,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		},
 		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
 			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
-		ProxiedServices: append(httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry), httpapi.ServiceProxyRegistration{Name: "host-agent", Capability: appliance.CapabilityHost, BaseURL: "http://host-agent.ace-apps.svc.cluster.local:8080", InternalToken: automationruntimeauth.TokenFromPepper(services.Keys.APITokenPepper), Routes: []httpapi.ServiceProxyRoute{{Method: "POST", ExternalPath: "/api/v1/system-backups", UpstreamPath: "/internal/v1/system-backups", Permission: "system.operate"}, {Method: "GET", ExternalPath: "/api/v1/system-backups/{id}", UpstreamPath: "/internal/v1/system-backups/{id}", Permission: "system.read"}, {Method: "POST", ExternalPath: "/api/v1/system-backups/{id}/restore", UpstreamPath: "/internal/v1/system-backups/{id}/restore", Permission: "system.operate"}}}),
+		ProxiedServices: append(httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry), httpapi.ServiceProxyRegistration{Name: "host-agent", Capability: appliance.CapabilityHost, BaseURL: "http://host-agent.ace-apps.svc.cluster.local:8080", InternalToken: actionruntimeauth.TokenFromPepper(services.Keys.APITokenPepper), Routes: []httpapi.ServiceProxyRoute{{Method: "POST", ExternalPath: "/api/v1/system-backups", UpstreamPath: "/internal/v1/system-backups", Permission: "system.operate"}, {Method: "GET", ExternalPath: "/api/v1/system-backups/{id}", UpstreamPath: "/internal/v1/system-backups/{id}", Permission: "system.read"}, {Method: "POST", ExternalPath: "/api/v1/system-backups/{id}/restore", UpstreamPath: "/internal/v1/system-backups/{id}/restore", Permission: "system.operate"}}}),
 		Audit:           services.Audit,
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameInferenceRuntime) {

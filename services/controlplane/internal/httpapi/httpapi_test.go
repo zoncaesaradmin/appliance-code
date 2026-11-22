@@ -360,11 +360,11 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 		profile appliance.Profile
 		want    []string
 	}{
-		{appliance.ProfileCore, []string{"base", "files", "lan-discovery"}},
-		{appliance.ProfileStorageLANDNS, []string{"artifact", "base", "dns", "files", "lan-discovery"}},
-		{appliance.ProfileBuilderStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "lan-discovery", "workflows"}},
-		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"applications", "artifact", "base", "build", "dns", "files", "host", "inference", "lan-discovery", "open-webui", "workflows"}},
-		{appliance.ProfileTraining, []string{"applications", "base", "files", "focus-content", "guest-access", "host", "lan-discovery", "plaintext-http", "video"}},
+		{appliance.ProfileCore, []string{"actions", "base", "files", "lan-discovery"}},
+		{appliance.ProfileStorageLANDNS, []string{"actions", "artifact", "base", "dns", "files", "lan-discovery"}},
+		{appliance.ProfileBuilderStorageLANDNS, []string{"actions", "applications", "artifact", "base", "build", "dns", "files", "host", "lan-discovery", "workflows"}},
+		{appliance.ProfileBuilderLANLLMStorageLANDNS, []string{"actions", "applications", "artifact", "base", "build", "dns", "files", "host", "inference", "lan-discovery", "open-webui", "workflows"}},
+		{appliance.ProfileTraining, []string{"actions", "applications", "base", "files", "focus-content", "guest-access", "host", "lan-discovery", "plaintext-http", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {

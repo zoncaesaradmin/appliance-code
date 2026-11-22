@@ -1,4 +1,4 @@
-package automationruntimeclient
+package actionruntimeclient
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"appliance-code/services/controlplane/internal/actionruntimeauth"
 	"appliance-code/services/controlplane/internal/audit"
-	"appliance-code/services/controlplane/internal/automationruntimeauth"
 	"appliance-code/services/controlplane/internal/metadatabundle"
 )
 
@@ -26,10 +26,10 @@ type Client struct {
 
 func New(baseURL string, hc *http.Client, token string) (*Client, error) {
 	if strings.TrimSpace(baseURL) == "" {
-		return nil, fmt.Errorf("automationruntimeclient: base URL is required")
+		return nil, fmt.Errorf("actionruntimeclient: base URL is required")
 	}
 	if _, err := url.Parse(baseURL); err != nil {
-		return nil, fmt.Errorf("automationruntimeclient: invalid base URL: %w", err)
+		return nil, fmt.Errorf("actionruntimeclient: invalid base URL: %w", err)
 	}
 	if hc == nil {
 		hc = &http.Client{Timeout: 30 * time.Second}
@@ -185,7 +185,7 @@ func (c *Client) doJSON(ctx context.Context, method, endpoint string, in any, ou
 
 func (c *Client) setAuth(req *http.Request) {
 	if strings.TrimSpace(c.token) != "" {
-		req.Header.Set(automationruntimeauth.HeaderName, c.token)
+		req.Header.Set(actionruntimeauth.HeaderName, c.token)
 	}
 }
 
@@ -193,11 +193,11 @@ func decodeProblem(resp *http.Response) error {
 	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
 		if detail, ok := body["detail"].(string); ok && detail != "" {
-			return fmt.Errorf("automationruntimeclient: %s", detail)
+			return fmt.Errorf("actionruntimeclient: %s", detail)
 		}
 		if msg, ok := body["message"].(string); ok && msg != "" {
-			return fmt.Errorf("automationruntimeclient: %s", msg)
+			return fmt.Errorf("actionruntimeclient: %s", msg)
 		}
 	}
-	return fmt.Errorf("automationruntimeclient: request failed with status %d", resp.StatusCode)
+	return fmt.Errorf("actionruntimeclient: request failed with status %d", resp.StatusCode)
 }

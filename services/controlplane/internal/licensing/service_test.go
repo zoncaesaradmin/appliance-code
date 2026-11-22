@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/licensing"
 	"appliance-code/services/controlplane/internal/storage"
@@ -48,6 +49,25 @@ func TestAcceptBaseEntitlement(t *testing.T) {
 	}
 	if len(st.EntitledCapabilities) == 0 {
 		t.Fatal("expected base capabilities")
+	}
+}
+
+func TestLicensedBaseEntitlesAutomationForCompatibility(t *testing.T) {
+	svc, _ := openLicensing(t)
+	doc := `{
+		"version":1,
+		"issuer":"zon",
+		"capabilities":["base"],
+		"signature":"offline-dev",
+		"validFrom":"2020-01-01T00:00:00Z",
+		"validTo":"2099-01-01T00:00:00Z"
+	}`
+	if _, err := svc.ImportLicense(context.Background(), audit.SystemActor, doc); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := svc.IsCapabilityEntitled(context.Background(), string(appliance.CapabilityActions))
+	if err != nil || !ok {
+		t.Fatalf("actions entitled=%v err=%v", ok, err)
 	}
 }
 

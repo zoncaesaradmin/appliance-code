@@ -34,22 +34,22 @@ spec:
       port: {{ .Values.service.internalPort }}
       targetPort: internal
 {{- end }}
-{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.actionRuntime.enabled }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "appliance-control-plane.automationRuntimeName" . }}
+  name: {{ include "appliance-control-plane.actionRuntimeName" . }}
   namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
-    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.actionRuntimeLabels" . | nindent 4 }}
 spec:
   type: ClusterIP
   selector:
-    {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.actionRuntimeSelectorLabels" . | nindent 4 }}
   ports:
     - name: http
-      port: {{ .Values.automationRuntime.service.port }}
+      port: {{ .Values.actionRuntime.service.port }}
       targetPort: http
 {{- end }}
 {{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.ui.enabled }}

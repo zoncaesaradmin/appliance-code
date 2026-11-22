@@ -226,7 +226,7 @@ func (s *Service) entitledCapabilities(rec storage.LicensingRecord) ([]string, e
 		if err := json.Unmarshal([]byte(rec.LicenseSummaryJSON), &summary); err != nil {
 			return nil, fmt.Errorf("licensing: parse summary: %w", err)
 		}
-		return normalizeCapabilities(summary.Capabilities), nil
+		return capabilitiesWithBaseActions(summary.Capabilities), nil
 	default:
 		return nil, fmt.Errorf("licensing: unknown state %q", rec.State)
 	}
@@ -235,11 +235,24 @@ func (s *Service) entitledCapabilities(rec storage.LicensingRecord) ([]string, e
 func baseFreeCapabilities() []string {
 	return []string{
 		string(appliance.CapabilityBase),
+		string(appliance.CapabilityActions),
 		string(appliance.CapabilityLANDiscovery),
 		string(appliance.CapabilityHost),
 		string(appliance.CapabilityFiles),
 		string(appliance.CapabilityWorkflows),
 	}
+}
+
+// capabilitiesWithBaseActions keeps licenses issued before actions was
+// split from base compatible with profiles that now declare it explicitly.
+func capabilitiesWithBaseActions(capabilities []string) []string {
+	capabilities = normalizeCapabilities(capabilities)
+	for _, capability := range capabilities {
+		if capability == string(appliance.CapabilityBase) {
+			return normalizeCapabilities(append(capabilities, string(appliance.CapabilityActions)))
+		}
+	}
+	return capabilities
 }
 
 func ParseAndValidateDocument(raw string) (Document, error) {

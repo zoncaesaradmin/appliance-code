@@ -31,6 +31,7 @@ type Capability string
 
 const (
 	CapabilityBase          Capability = "base"
+	CapabilityActions       Capability = "actions"
 	CapabilityLANDiscovery  Capability = "lan-discovery"
 	CapabilityHost          Capability = "host"
 	CapabilityWorkflows     Capability = "workflows"

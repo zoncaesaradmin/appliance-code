@@ -52,32 +52,32 @@ type Config struct {
 	TrustedProxyCount  int    `json:"trustedProxyCount"`
 	// ApplicationCatalog is parsed from the bundled metadata catalog. Helm and
 	// process environment cannot supply application contracts.
-	ApplicationCatalog       applications.Catalog     `json:"-"`
-	AutomationRuntimeBaseURL string                   `json:"automationRuntimeBaseURL"`
-	ArtifactServerBaseURL    string                   `json:"artifactServerBaseURL"`
-	ArtifactServerAllowFake  bool                     `json:"artifactServerAllowFake"`
-	ServiceRegistry          serviceregistry.Registry `json:"serviceRegistry"`
-	FilesObjectPrefix        string                   `json:"filesObjectPrefix"`
-	FilesTransferTimeout     time.Duration            `json:"filesTransferTimeout"`
-	FilesMaxUploadBytes      int64                    `json:"filesMaxUploadBytes"`
-	DNSReadyURL              string                   `json:"dnsReadyURL"`
-	DNSZoneName              string                   `json:"dnsZoneName"`
-	DNSConfigMapNamespace    string                   `json:"dnsConfigMapNamespace"`
-	DNSConfigMapName         string                   `json:"dnsConfigMapName"`
-	DNSBootstrapHostname     string                   `json:"dnsBootstrapHostname"`
-	DNSBootstrapIPv4         string                   `json:"dnsBootstrapIPv4"`
-	DNSAllowFakeZoneSync     bool                     `json:"dnsAllowFakeZoneSync"`
-	InferenceGatewayBaseURL  string                   `json:"inferenceGatewayBaseURL"`
-	InferenceRuntimePackage  string                   `json:"inferenceRuntimePackage"`
-	InferenceEngine          string                   `json:"inferenceEngine"`
-	InferenceArchitecture    string                   `json:"inferenceArchitecture"`
-	WebUIEnabled             bool                     `json:"webUIEnabled"`
-	WebUIHealthURL           string                   `json:"webUIHealthURL"`
-	BlobStorageEndpoint      string                   `json:"blobStorageEndpoint"`
-	BlobStorageBucket        string                   `json:"blobStorageBucket"`
-	BlobStorageAccessKey     string                   `json:"blobStorageAccessKey"`
-	BlobStorageSecretKey     string                   `json:"blobStorageSecretKey"`
-	BlobStorageRegion        string                   `json:"blobStorageRegion"`
+	ApplicationCatalog      applications.Catalog     `json:"-"`
+	ActionRuntimeBaseURL    string                   `json:"actionRuntimeBaseURL"`
+	ArtifactServerBaseURL   string                   `json:"artifactServerBaseURL"`
+	ArtifactServerAllowFake bool                     `json:"artifactServerAllowFake"`
+	ServiceRegistry         serviceregistry.Registry `json:"serviceRegistry"`
+	FilesObjectPrefix       string                   `json:"filesObjectPrefix"`
+	FilesTransferTimeout    time.Duration            `json:"filesTransferTimeout"`
+	FilesMaxUploadBytes     int64                    `json:"filesMaxUploadBytes"`
+	DNSReadyURL             string                   `json:"dnsReadyURL"`
+	DNSZoneName             string                   `json:"dnsZoneName"`
+	DNSConfigMapNamespace   string                   `json:"dnsConfigMapNamespace"`
+	DNSConfigMapName        string                   `json:"dnsConfigMapName"`
+	DNSBootstrapHostname    string                   `json:"dnsBootstrapHostname"`
+	DNSBootstrapIPv4        string                   `json:"dnsBootstrapIPv4"`
+	DNSAllowFakeZoneSync    bool                     `json:"dnsAllowFakeZoneSync"`
+	InferenceGatewayBaseURL string                   `json:"inferenceGatewayBaseURL"`
+	InferenceRuntimePackage string                   `json:"inferenceRuntimePackage"`
+	InferenceEngine         string                   `json:"inferenceEngine"`
+	InferenceArchitecture   string                   `json:"inferenceArchitecture"`
+	WebUIEnabled            bool                     `json:"webUIEnabled"`
+	WebUIHealthURL          string                   `json:"webUIHealthURL"`
+	BlobStorageEndpoint     string                   `json:"blobStorageEndpoint"`
+	BlobStorageBucket       string                   `json:"blobStorageBucket"`
+	BlobStorageAccessKey    string                   `json:"blobStorageAccessKey"`
+	BlobStorageSecretKey    string                   `json:"blobStorageSecretKey"`
+	BlobStorageRegion       string                   `json:"blobStorageRegion"`
 	// ConfigurationArchiveTarget selects where sealed configuration archives
 	// live. "file" is the appliance default; "s3" uses the same
 	// S3-compatible contract in a dedicated prefix for cloud deployments.
@@ -144,7 +144,7 @@ func Default() Config {
 		ApplicationLogPath:         "/data/zon/logs/api-server/application.log",
 		LogLevel:                   "info",
 		TrustedProxyCount:          0,
-		AutomationRuntimeBaseURL:   "",
+		ActionRuntimeBaseURL:       "",
 		ArtifactServerAllowFake:    true,
 		FilesObjectPrefix:          "files",
 		FilesTransferTimeout:       30 * time.Minute,
@@ -268,7 +268,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("DATABASE_DSN", &cfg.Database.DSN)
 	str("APPLICATION_LOG_PATH", &cfg.ApplicationLogPath)
 	str("LOG_LEVEL", &cfg.LogLevel)
-	str("AUTOMATION_RUNTIME_BASE_URL", &cfg.AutomationRuntimeBaseURL)
+	str("ACTION_RUNTIME_BASE_URL", &cfg.ActionRuntimeBaseURL)
 	str("ARTIFACT_SERVER_BASE_URL", &cfg.ArtifactServerBaseURL)
 	str("FILES_OBJECT_PREFIX", &cfg.FilesObjectPrefix)
 	str("DNS_READY_URL", &cfg.DNSReadyURL)
@@ -519,9 +519,9 @@ func (c Config) Validate() error {
 			errs = append(errs, "artifactServerBaseURL must be an absolute http(s) URL with no path")
 		}
 	}
-	if runtimeURL := strings.TrimSpace(c.AutomationRuntimeBaseURL); runtimeURL != "" {
+	if runtimeURL := strings.TrimSpace(c.ActionRuntimeBaseURL); runtimeURL != "" {
 		if u, err := url.Parse(runtimeURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
-			errs = append(errs, "automationRuntimeBaseURL must be an absolute http(s) URL with no path")
+			errs = append(errs, "actionRuntimeBaseURL must be an absolute http(s) URL with no path")
 		}
 	}
 	if profileErr == nil && filesEnabled {

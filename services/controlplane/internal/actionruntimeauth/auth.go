@@ -1,4 +1,4 @@
-package automationruntimeauth
+package actionruntimeauth
 
 import (
 	"crypto/sha256"

@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"appliance-code/services/controlplane/internal/actionruntimeauth"
+	"appliance-code/services/controlplane/internal/actionruntimeclient"
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/applications"
 	"appliance-code/services/controlplane/internal/artifactserver"
@@ -20,8 +22,6 @@ import (
 	"appliance-code/services/controlplane/internal/auditops"
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
-	"appliance-code/services/controlplane/internal/automationruntimeauth"
-	"appliance-code/services/controlplane/internal/automationruntimeclient"
 	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/buildergit"
 	"appliance-code/services/controlplane/internal/builds"
@@ -180,11 +180,11 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		return nil, fmt.Errorf("app: initializing audit ops: %w", err)
 	}
 	var metadataSvc metadatabundle.Runtime
-	if strings.TrimSpace(cfg.AutomationRuntimeBaseURL) != "" {
-		metadataSvc, err = automationruntimeclient.New(cfg.AutomationRuntimeBaseURL, nil, automationruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper))
+	if strings.TrimSpace(cfg.ActionRuntimeBaseURL) != "" {
+		metadataSvc, err = actionruntimeclient.New(cfg.ActionRuntimeBaseURL, nil, actionruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper))
 		if err != nil {
 			db.Close()
-			return nil, fmt.Errorf("app: initializing automation runtime client: %w", err)
+			return nil, fmt.Errorf("app: initializing action runtime client: %w", err)
 		}
 	} else {
 		metadataStore := stores.MetadataStore
@@ -285,7 +285,7 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 	}
 	applicationRuntime, err := applications.NewInClusterManager(applications.NewHostAgentProjector(
 		"http://host-agent.ace-apps.svc.cluster.local:8080",
-		automationruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper),
+		actionruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper),
 	))
 	if err != nil {
 		db.Close()

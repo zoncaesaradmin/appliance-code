@@ -30,7 +30,7 @@ directory. When running elsewhere, set `APPLIANCE_DEVELOPMENT_METADATA_DIR` to
 the absolute path of that directory. This override is development-only.
 
 Edit YAML here and restart the control plane and, when running separately,
-the automation runtime. No Go rebuild or copy step is needed. Configuration
+the action runtime. No Go rebuild or copy step is needed. Configuration
 is a startup snapshot: editing files does not hot-reload API routes or partially
 rewire services. Missing files, invalid YAML, and invalid capability dependencies
 fail startup. Old development copies under the service data directory are not used.

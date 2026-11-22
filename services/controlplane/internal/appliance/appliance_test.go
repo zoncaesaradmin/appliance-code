@@ -11,11 +11,11 @@ func TestResolveProfileUsesCanonicalMetadataCatalog(t *testing.T) {
 		name string
 		want []appliance.Capability
 	}{
-		{"core", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityFiles}},
-		{"storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityFiles, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
-		{"builder-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
-		{"builder-lanllm-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS, appliance.CapabilityInference, appliance.CapabilityOpenWebUI}},
-		{"training", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityVideo, appliance.CapabilityApplications, appliance.CapabilityPlaintextHTTP}},
+		{"core", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityFiles}},
+		{"storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityFiles, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
+		{"builder-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
+		{"builder-lanllm-storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityWorkflows, appliance.CapabilityBuild, appliance.CapabilityArtifact, appliance.CapabilityDNS, appliance.CapabilityInference, appliance.CapabilityOpenWebUI}},
+		{"training", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityVideo, appliance.CapabilityApplications, appliance.CapabilityPlaintextHTTP}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -13,6 +13,16 @@ capabilities:
         - blob-storage-image
         - message-broker-image
         - message-broker-chart
+  actions:
+    displayName: Actions
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.actions
+    artifacts:
+      # Action Runtime shares the control-plane image. This capability
+      # controls its deployment and lifecycle rather than a separate archive.
+      required: []
   lan-discovery:
     displayName: LAN Discovery
     requires: [base]

@@ -1,4 +1,4 @@
-package automationruntimeconfig
+package actionruntimeconfig
 
 import (
 	"errors"
@@ -27,8 +27,8 @@ type Config struct {
 func Default() Config {
 	return Config{
 		Addr:               "127.0.0.1:8082",
-		DataDir:            "/var/lib/appliance/automation-runtime",
-		ApplicationLogPath: "/data/zon/logs/automation-runtime/application.log",
+		DataDir:            "/var/lib/appliance/action-runtime",
+		ApplicationLogPath: "/data/zon/logs/action-runtime/application.log",
 		LogLevel:           "info",
 		ReadHeaderTimeout:  5 * time.Second,
 		ReadTimeout:        30 * time.Minute,
@@ -46,7 +46,7 @@ func Load(environ []string) (Config, error) {
 	var errs []string
 
 	str := func(key string, dst *string) {
-		if v, ok := env["AUTOMATION_RUNTIME_"+key]; ok {
+		if v, ok := env["ACTION_RUNTIME_"+key]; ok {
 			*dst = v
 		}
 	}
@@ -66,7 +66,7 @@ func Load(environ []string) (Config, error) {
 		{"IDLE_TIMEOUT", &cfg.IdleTimeout},
 		{"SHUTDOWN_TIMEOUT", &cfg.ShutdownTimeout},
 	} {
-		if v, ok := env["AUTOMATION_RUNTIME_"+item.key]; ok {
+		if v, ok := env["ACTION_RUNTIME_"+item.key]; ok {
 			parsed, err := time.ParseDuration(v)
 			if err != nil {
 				errs = append(errs, fmt.Sprintf("%s: %v", item.key, err))
@@ -76,7 +76,7 @@ func Load(environ []string) (Config, error) {
 		}
 	}
 
-	if v, ok := env["AUTOMATION_RUNTIME_MAX_HEADER_BYTES"]; ok {
+	if v, ok := env["ACTION_RUNTIME_MAX_HEADER_BYTES"]; ok {
 		parsed, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("MAX_HEADER_BYTES: %v", err))
@@ -84,7 +84,7 @@ func Load(environ []string) (Config, error) {
 			cfg.MaxHeaderBytes = parsed
 		}
 	}
-	if v, ok := env["AUTOMATION_RUNTIME_AUDIT_RETENTION_DAYS"]; ok {
+	if v, ok := env["ACTION_RUNTIME_AUDIT_RETENTION_DAYS"]; ok {
 		parsed, err := strconv.Atoi(v)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("AUDIT_RETENTION_DAYS: %v", err))

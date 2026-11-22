@@ -24,7 +24,7 @@ flowchart TD
         subgraph AppsNS["ace-apps namespace"]
             UI["UI pod<br/>SPA + reverse proxy to controlplane"]
             HostAgent["Host-agent pod"]
-            AutomationRuntime["Automation-runtime pod"]
+            ActionRuntime["Action-runtime pod"]
         end
 
         subgraph ArtNS["artifacts namespace"]

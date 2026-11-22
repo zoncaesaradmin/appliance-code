@@ -3,8 +3,8 @@ set -euo pipefail
 
 LOG_ROOT="/data/zon/logs"
 SERVICE_NAME="api-server"
-if [[ "${1:-}" == "/appliance-automation-runtime" ]]; then
-  SERVICE_NAME="automation-runtime"
+if [[ "${1:-}" == "/appliance-action-runtime" ]]; then
+  SERVICE_NAME="action-runtime"
 fi
 SERVICE_LOG_DIR="${LOG_ROOT}/${SERVICE_NAME}"
 STDOUT_LOG="${SERVICE_LOG_DIR}/stdout.log"

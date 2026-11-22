@@ -1,5 +1,5 @@
 // Package applications contains the modular-monolith Application Management
-// capability. It deliberately has no dependency on Automation Runtime or
+// capability. It deliberately has no dependency on Action Runtime or
 // developer workflow execution.
 package applications
 
@@ -96,7 +96,7 @@ type Catalog struct {
 }
 
 // ResourceManager applies the stable Kubernetes contract for an application.
-// It deliberately has no dependency on Automation Runtime or workflows.
+// It deliberately has no dependency on Action Runtime or workflows.
 type ResourceManager interface {
 	Apply(ctx context.Context, definition Definition) (string, error)
 	Delete(ctx context.Context, definition Definition) error

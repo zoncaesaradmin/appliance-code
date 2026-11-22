@@ -125,8 +125,8 @@ const (
 	controlPlaneDeploymentName = "controlplane"
 	controlPlaneConfigMapName  = "controlplane-config"
 	controlPlaneServiceName    = "controlplane"
-	automationRuntimeName      = "automation-runtime"
-	automationRuntimeConfig    = "automation-runtime-config"
+	actionRuntimeName          = "action-runtime"
+	actionRuntimeConfig        = "action-runtime-config"
 	controlPlaneUIName         = "ui-server"
 	controlPlaneUIConfigName   = "ui-server-config"
 )
@@ -515,27 +515,27 @@ func TestUIResourcesRenderByDefault(t *testing.T) {
 	}
 }
 
-func TestAutomationRuntimeResourcesRenderByDefault(t *testing.T) {
+func TestActionRuntimeResourcesRenderByDefault(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
-	if findByKindAndName(docs, "Deployment", automationRuntimeName) == nil {
-		t.Fatal("expected automation runtime Deployment")
+	if findByKindAndName(docs, "Deployment", actionRuntimeName) == nil {
+		t.Fatal("expected action runtime Deployment")
 	}
-	if findByKindAndName(docs, "Service", automationRuntimeName) == nil {
-		t.Fatal("expected automation runtime Service")
+	if findByKindAndName(docs, "Service", actionRuntimeName) == nil {
+		t.Fatal("expected action runtime Service")
 	}
-	if findByKindAndName(docs, "ConfigMap", automationRuntimeConfig) == nil {
-		t.Fatal("expected automation runtime ConfigMap")
+	if findByKindAndName(docs, "ConfigMap", actionRuntimeConfig) == nil {
+		t.Fatal("expected action runtime ConfigMap")
 	}
-	if findByKindAndName(docs, "NetworkPolicy", automationRuntimeName+"-allow") == nil {
-		t.Fatal("expected automation runtime NetworkPolicy")
+	if findByKindAndName(docs, "NetworkPolicy", actionRuntimeName+"-allow") == nil {
+		t.Fatal("expected action runtime NetworkPolicy")
 	}
-	if findByKindAndName(docs, "PersistentVolumeClaim", automationRuntimeName+"-data") == nil {
-		t.Fatal("expected automation runtime PVC")
+	if findByKindAndName(docs, "PersistentVolumeClaim", actionRuntimeName+"-data") == nil {
+		t.Fatal("expected action runtime PVC")
 	}
-	dep := findByKindAndName(docs, "Deployment", automationRuntimeName)
+	dep := findByKindAndName(docs, "Deployment", actionRuntimeName)
 	sec, _ := at(dep, "spec", "template", "spec", "securityContext").(map[string]any)
 	if runAsUser, _ := sec["runAsUser"].(int); runAsUser != 10007 {
-		t.Fatalf("automation runtime runAsUser = %d, want 10007 (must not reuse inference 10006)", runAsUser)
+		t.Fatalf("action runtime runAsUser = %d, want 10007 (must not reuse inference 10006)", runAsUser)
 	}
 	volumes, _ := at(dep, "spec", "template", "spec", "volumes").([]any)
 	var sawOwnPVC bool
@@ -545,27 +545,53 @@ func TestAutomationRuntimeResourcesRenderByDefault(t *testing.T) {
 			continue
 		}
 		claim, _ := at(volume, "persistentVolumeClaim", "claimName").(string)
-		if claim == automationRuntimeName+"-data" {
+		if claim == actionRuntimeName+"-data" {
 			sawOwnPVC = true
 		}
 		if claim == controlPlaneDeploymentName+"-data" {
-			t.Fatal("automation runtime must not mount the control-plane data PVC (single-writer SQLite)")
+			t.Fatal("action runtime must not mount the control-plane data PVC (single-writer SQLite)")
 		}
 	}
 	if !sawOwnPVC {
-		t.Fatal("expected automation runtime to mount its own data PVC")
+		t.Fatal("expected action runtime to mount its own data PVC")
 	}
 }
 
-func TestControlPlaneConfigPointsToAutomationRuntimeService(t *testing.T) {
+func TestControlPlaneConfigPointsToActionRuntimeService(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	if cm == nil {
 		t.Fatal("expected control-plane ConfigMap")
 	}
 	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime.appliance.svc.cluster.local:8082" {
-		t.Fatalf("APPLIANCE_AUTOMATION_RUNTIME_BASE_URL = %q, want http://automation-runtime.appliance.svc.cluster.local:8082", got)
+	if got, _ := data["APPLIANCE_ACTION_RUNTIME_BASE_URL"].(string); got != "http://action-runtime.appliance.svc.cluster.local:8082" {
+		t.Fatalf("APPLIANCE_ACTION_RUNTIME_BASE_URL = %q, want http://action-runtime.appliance.svc.cluster.local:8082", got)
+	}
+}
+
+func TestActionRuntimeCanBeDisabledByCapabilityDerivedValues(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(), "--set", "actionRuntime.enabled=false")...)
+	for _, resource := range []struct {
+		kind string
+		name string
+	}{
+		{kind: "Deployment", name: actionRuntimeName},
+		{kind: "Service", name: actionRuntimeName},
+		{kind: "ConfigMap", name: actionRuntimeConfig},
+		{kind: "NetworkPolicy", name: actionRuntimeName + "-allow"},
+		{kind: "PersistentVolumeClaim", name: actionRuntimeName + "-data"},
+	} {
+		if findByKindAndName(docs, resource.kind, resource.name) != nil {
+			t.Fatalf("actions-disabled render contains %s/%s", resource.kind, resource.name)
+		}
+	}
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+	if cm == nil {
+		t.Fatal("expected control-plane ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_ACTION_RUNTIME_BASE_URL"].(string); got != "" {
+		t.Fatalf("APPLIANCE_ACTION_RUNTIME_BASE_URL = %q, want empty when actions are disabled", got)
 	}
 }
 
@@ -761,20 +787,20 @@ func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 }
 
 func TestDisablingOptionalFeaturesRendersCleanly(t *testing.T) {
-	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "automationRuntime.persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
+	docs := renderChart(t, "--set", "namespace.create=false", "--set", "persistence.enabled=false", "--set", "actionRuntime.persistence.enabled=false", "--set", "ingress.enabled=false", "--set", "ui.enabled=false")
 	if findByKindAndName(docs, "Namespace", "ace-system") != nil {
 		t.Error("namespace.create=false should omit the control-plane Namespace object")
 	}
 	if findByKindAndName(docs, "Namespace", "apps") != nil {
 		t.Error("application namespace must be provisioned by the installer, not rendered by Helm")
 	}
-	// Control-plane and automation-runtime PVCs honor persistence.enabled.
+	// Control-plane and action-runtime PVCs honor persistence.enabled.
 	// Foundation blob-storage always renders its own claim (hostPath-backed).
 	if findByKindAndName(docs, "PersistentVolumeClaim", controlPlaneDeploymentName+"-data") != nil {
 		t.Error("persistence.enabled=false should omit the control-plane PersistentVolumeClaim")
 	}
-	if findByKindAndName(docs, "PersistentVolumeClaim", automationRuntimeName+"-data") != nil {
-		t.Error("automationRuntime.persistence.enabled=false should omit the automation-runtime PersistentVolumeClaim")
+	if findByKindAndName(docs, "PersistentVolumeClaim", actionRuntimeName+"-data") != nil {
+		t.Error("actionRuntime.persistence.enabled=false should omit the action-runtime PersistentVolumeClaim")
 	}
 	if len(findByKind(docs, "IngressRoute")) != 0 {
 		t.Error("ingress.enabled=false should omit the IngressRoute")
@@ -1382,7 +1408,7 @@ func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
 	assertNS("Deployment", controlPlaneUIName, "ace-apps")
 	assertNS("Service", controlPlaneUIName, "ace-apps")
 	assertNS("Deployment", "host-agent", "ace-apps")
-	assertNS("Deployment", automationRuntimeName, "ace-apps")
+	assertNS("Deployment", actionRuntimeName, "ace-apps")
 
 	// IngressRoute in controlplane NS must name the UI Service in ace-apps.
 	route := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName)
@@ -1435,8 +1461,8 @@ func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
 	}
 	cpCM := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 	cpData, _ := at(cpCM, "data").(map[string]any)
-	if got, _ := cpData["APPLIANCE_AUTOMATION_RUNTIME_BASE_URL"].(string); got != "http://automation-runtime.ace-apps.svc.cluster.local:8082" {
-		t.Fatalf("automation runtime URL = %q", got)
+	if got, _ := cpData["APPLIANCE_ACTION_RUNTIME_BASE_URL"].(string); got != "http://action-runtime.ace-apps.svc.cluster.local:8082" {
+		t.Fatalf("action runtime URL = %q", got)
 	}
 }
 
@@ -1449,7 +1475,7 @@ func TestImagePullSecretsRenderedOnControlplaneAndAppsDeployments(t *testing.T) 
 		"--set", "hostAgent.image.reference=registry.local/host-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	)...)
 
-	for _, name := range []string{controlPlaneDeploymentName, controlPlaneUIName, "host-agent", automationRuntimeName} {
+	for _, name := range []string{controlPlaneDeploymentName, controlPlaneUIName, "host-agent", actionRuntimeName} {
 		doc := findByKindAndName(docs, "Deployment", name)
 		if doc == nil {
 			t.Fatalf("expected Deployment/%s", name)
@@ -1547,7 +1573,7 @@ func TestHostPathWorkloadsPinToAdvertisedPrime(t *testing.T) {
 		"--set", "hostAgent.enabled=true",
 		"--set", "hostAgent.image.reference=registry.local/host-agent@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	)...)
-	for _, name := range []string{controlPlaneDeploymentName, controlPlaneUIName, "host-agent", automationRuntimeName, "blob-storage"} {
+	for _, name := range []string{controlPlaneDeploymentName, controlPlaneUIName, "host-agent", actionRuntimeName, "blob-storage"} {
 		doc := findByKindAndName(docs, "Deployment", name)
 		if doc == nil {
 			t.Fatalf("expected Deployment/%s", name)

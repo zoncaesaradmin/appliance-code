@@ -16,22 +16,22 @@ spec:
     requests:
       storage: {{ .Values.persistence.size }}
 {{- end }}
-{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled .Values.automationRuntime.persistence.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.actionRuntime.enabled .Values.actionRuntime.persistence.enabled }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "appliance-control-plane.automationRuntimeClaimName" . }}
+  name: {{ include "appliance-control-plane.actionRuntimeClaimName" . }}
   namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
-    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.actionRuntimeLabels" . | nindent 4 }}
 spec:
   accessModes:
-    - {{ .Values.automationRuntime.persistence.accessMode }}
-  {{- if .Values.automationRuntime.persistence.storageClassName }}
-  storageClassName: {{ .Values.automationRuntime.persistence.storageClassName }}
+    - {{ .Values.actionRuntime.persistence.accessMode }}
+  {{- if .Values.actionRuntime.persistence.storageClassName }}
+  storageClassName: {{ .Values.actionRuntime.persistence.storageClassName }}
   {{- end }}
   resources:
     requests:
-      storage: {{ .Values.automationRuntime.persistence.size }}
+      storage: {{ .Values.actionRuntime.persistence.size }}
 {{- end }}

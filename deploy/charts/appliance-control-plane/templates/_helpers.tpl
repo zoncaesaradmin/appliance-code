@@ -77,7 +77,7 @@ releases, enabling only the set it is currently applying.
 
 {{/*
 Namespace for operator-facing apps co-packaged with the control-plane chart:
-ui-server, host-agent, automation-runtime. Defaults to co-locating with
+ui-server, host-agent, action-runtime. Defaults to co-locating with
 controlplane when appsNamespace.name is empty (single-namespace tests);
 production injects ace-apps via zonctl.
 */}}
@@ -152,12 +152,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
-Common labels for the automation runtime component.
+Common labels for the action runtime component.
 */}}
-{{- define "appliance-control-plane.automationRuntimeLabels" -}}
+{{- define "appliance-control-plane.actionRuntimeLabels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
-{{ include "appliance-control-plane.automationRuntimeSelectorLabels" . }}
-app.kubernetes.io/component: automation-runtime
+{{ include "appliance-control-plane.actionRuntimeSelectorLabels" . }}
+app.kubernetes.io/component: action-runtime
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -191,10 +191,10 @@ app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" .
 {{- end -}}
 
 {{/*
-Selector labels for the automation-runtime pod.
+Selector labels for the action-runtime pod.
 */}}
-{{- define "appliance-control-plane.automationRuntimeSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "appliance-control-plane.automationRuntimeName" . }}
+{{- define "appliance-control-plane.actionRuntimeSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.actionRuntimeName" . }}
 app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
 {{- end -}}
 
@@ -290,10 +290,12 @@ Default UI -> control-plane internal base URL (cluster DNS, works cross-namespac
 {{- end -}}
 
 {{/*
-controlplane -> automation-runtime base URL.
+controlplane -> action-runtime base URL.
 */}}
-{{- define "appliance-control-plane.automationRuntimeBaseURL" -}}
-{{- printf "http://%s:%d" (include "appliance-control-plane.serviceDNS" (list (include "appliance-control-plane.automationRuntimeName" .) (include "appliance-control-plane.appsNamespace" .))) (.Values.automationRuntime.service.port | int) -}}
+{{- define "appliance-control-plane.actionRuntimeBaseURL" -}}
+{{- if .Values.actionRuntime.enabled -}}
+{{- printf "http://%s:%d" (include "appliance-control-plane.serviceDNS" (list (include "appliance-control-plane.actionRuntimeName" .) (include "appliance-control-plane.appsNamespace" .))) (.Values.actionRuntime.service.port | int) -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -305,17 +307,17 @@ pods are host-agent-* rather than controlplane-host-agent-*.
 {{- end -}}
 
 {{/*
-Automation Runtime Deployment/Service name.
+Action Runtime Deployment/Service name.
 */}}
-{{- define "appliance-control-plane.automationRuntimeName" -}}
-automation-runtime
+{{- define "appliance-control-plane.actionRuntimeName" -}}
+action-runtime
 {{- end -}}
 
 {{/*
-Automation Runtime PVC name (own SQLite store; never share the control-plane PVC).
+Action Runtime PVC name (own SQLite store; never share the control-plane PVC).
 */}}
-{{- define "appliance-control-plane.automationRuntimeClaimName" -}}
-{{- printf "%s-data" (include "appliance-control-plane.automationRuntimeName" .) -}}
+{{- define "appliance-control-plane.actionRuntimeClaimName" -}}
+{{- printf "%s-data" (include "appliance-control-plane.actionRuntimeName" .) -}}
 {{- end -}}
 
 {{/*

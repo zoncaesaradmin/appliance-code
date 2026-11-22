@@ -8,20 +8,20 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"appliance-code/services/controlplane/internal/automationruntimeapp"
-	"appliance-code/services/controlplane/internal/automationruntimeconfig"
+	"appliance-code/services/controlplane/internal/actionruntimeapp"
+	"appliance-code/services/controlplane/internal/actionruntimeconfig"
 	"appliance-code/services/controlplane/internal/logging"
 )
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "appliance-automation-runtime:", err)
+		fmt.Fprintln(os.Stderr, "appliance-action-runtime:", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	cfg, err := automationruntimeconfig.Load(os.Environ())
+	cfg, err := actionruntimeconfig.Load(os.Environ())
 	if err != nil {
 		return err
 	}
@@ -38,7 +38,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	application, err := automationruntimeapp.New(cfg, appLogger, processLogger)
+	application, err := actionruntimeapp.New(cfg, appLogger, processLogger)
 	if err != nil {
 		return err
 	}

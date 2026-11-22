@@ -142,7 +142,7 @@
         }
       }
     },
-    "automationRuntime": {
+    "actionRuntime": {
       "type": "object",
       "required": [
         "enabled",

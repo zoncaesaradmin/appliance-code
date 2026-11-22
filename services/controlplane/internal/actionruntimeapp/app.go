@@ -1,4 +1,4 @@
-package automationruntimeapp
+package actionruntimeapp
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
+	"appliance-code/services/controlplane/internal/actionruntimeapi"
+	"appliance-code/services/controlplane/internal/actionruntimeauth"
+	"appliance-code/services/controlplane/internal/actionruntimeconfig"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/auditops"
-	"appliance-code/services/controlplane/internal/automationruntimeapi"
-	"appliance-code/services/controlplane/internal/automationruntimeauth"
-	"appliance-code/services/controlplane/internal/automationruntimeconfig"
 	"appliance-code/services/controlplane/internal/keys"
 	"appliance-code/services/controlplane/internal/logging"
 	"appliance-code/services/controlplane/internal/metadatabundle"
@@ -19,51 +19,51 @@ import (
 )
 
 type App struct {
-	cfg           automationruntimeconfig.Config
+	cfg           actionruntimeconfig.Config
 	logger        logging.Logger
 	processLogger logging.Logger
 	db            storage.DB
 	server        *http.Server
 }
 
-func New(cfg automationruntimeconfig.Config, logger, processLogger logging.Logger) (*App, error) {
+func New(cfg actionruntimeconfig.Config, logger, processLogger logging.Logger) (*App, error) {
 	if logger == nil {
 		return nil, errors.New("application logger is required")
 	}
 	if processLogger == nil {
 		return nil, errors.New("process logger is required")
 	}
-	db, err := sqlstore.OpenSQLite(automationruntimeconfig.SQLitePath(cfg.DataDir))
+	db, err := sqlstore.OpenSQLite(actionruntimeconfig.SQLitePath(cfg.DataDir))
 	if err != nil {
-		return nil, fmt.Errorf("automation runtime: opening storage: %w", err)
+		return nil, fmt.Errorf("action runtime: opening storage: %w", err)
 	}
 	ctx := context.Background()
 	if err := db.Migrate(ctx); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("automation runtime: migrating storage: %w", err)
+		return nil, fmt.Errorf("action runtime: migrating storage: %w", err)
 	}
 	apiTokenPepper, err := keys.LoadAPITokenPepper(cfg.DataDir + "/keys")
 	if err != nil {
 		db.Close()
-		return nil, fmt.Errorf("automation runtime: loading key material: %w", err)
+		return nil, fmt.Errorf("action runtime: loading key material: %w", err)
 	}
 	auditStore := sqlstore.NewAuditStore(db)
 	operationsStore := sqlstore.NewOperationsStore(db)
 	auditOps, err := auditops.NewService(auditStore, operationsStore, cfg.DataDir, cfg.AuditRetentionDays, logger)
 	if err != nil {
 		db.Close()
-		return nil, fmt.Errorf("automation runtime: initializing audit ops: %w", err)
+		return nil, fmt.Errorf("action runtime: initializing audit ops: %w", err)
 	}
 	recorder := audit.NewRecorder(auditStore)
 	metadataSvc, err := metadatabundle.NewService(db, sqlstore.NewMetadataBundleStore(db), recorder, auditOps, cfg.DataDir)
 	if err != nil {
 		db.Close()
-		return nil, fmt.Errorf("automation runtime: initializing metadata bundle: %w", err)
+		return nil, fmt.Errorf("action runtime: initializing metadata bundle: %w", err)
 	}
-	handler := automationruntimeapi.NewMux(automationruntimeapi.Deps{
+	handler := actionruntimeapi.NewMux(actionruntimeapi.Deps{
 		Logger:        logger,
 		Metadata:      metadataSvc,
-		InternalToken: automationruntimeauth.TokenFromPepper(apiTokenPepper),
+		InternalToken: actionruntimeauth.TokenFromPepper(apiTokenPepper),
 	})
 	server := &http.Server{
 		Addr:              cfg.Addr,
@@ -80,7 +80,7 @@ func New(cfg automationruntimeconfig.Config, logger, processLogger logging.Logge
 func (a *App) Run(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		a.processLogger.Infow("automation runtime listener starting", "addr", a.cfg.Addr)
+		a.processLogger.Infow("action runtime listener starting", "addr", a.cfg.Addr)
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 			return

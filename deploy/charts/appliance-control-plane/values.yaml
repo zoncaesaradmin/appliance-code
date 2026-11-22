@@ -76,7 +76,7 @@ infraNamespace:
   create: true
   name: ace-infra
 
-# ui-server, host-agent, and automation-runtime. Empty name co-locates with
+# ui-server, host-agent, and action-runtime. Empty name co-locates with
 # controlplane (tests). zonctl injects name: ace-apps in production so
 # only controlplane stays in the Helm release namespace (ace-system).
 appsNamespace:
@@ -85,7 +85,7 @@ appsNamespace:
 
 # Permanent namespace for user-managed application workloads. This is separate
 # from appsNamespace, which contains co-packaged UI, host-agent, and
-# automation-runtime services.
+# action-runtime services.
 applicationNamespace:
   create: true
   name: apps
@@ -313,14 +313,14 @@ ingress:
   # WebUI images. Foundation and legacy inference-only bundles leave it false.
   webUIEnabled: false
 
-automationRuntime:
+actionRuntime:
   enabled: true
   service:
     port: 8082
   config:
     logLevel: info
-    dataDir: /var/lib/appliance/automation-runtime
-    applicationLogPath: /data/zon/logs/automation-runtime/application.log
+    dataDir: /var/lib/appliance/action-runtime
+    applicationLogPath: /data/zon/logs/action-runtime/application.log
   persistence:
     enabled: true
     storageClassName: ""
@@ -459,7 +459,7 @@ networkPolicy:
   inferencePodLabels: {}
   inferencePort: 8080
   hostAgentPort: 8080
-  automationRuntimePort: 8082
+  actionRuntimePort: 8082
 
 probes:
   livenessPath: /health/live

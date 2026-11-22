@@ -1,22 +1,22 @@
-{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.automationRuntime.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.actionRuntime.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "appliance-control-plane.automationRuntimeName" . }}
+  name: {{ include "appliance-control-plane.actionRuntimeName" . }}
   namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
-    {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 4 }}
+    {{- include "appliance-control-plane.actionRuntimeLabels" . | nindent 4 }}
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      {{- include "appliance-control-plane.automationRuntimeSelectorLabels" . | nindent 6 }}
+      {{- include "appliance-control-plane.actionRuntimeSelectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "appliance-control-plane.automationRuntimeLabels" . | nindent 8 }}
+        {{- include "appliance-control-plane.actionRuntimeLabels" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
       {{- include "appliance-control-plane.podNodeName" . }}
@@ -25,23 +25,23 @@ spec:
       priorityClassName: {{ .Values.priorityClassName }}
       {{- end }}
       securityContext:
-        {{- toYaml .Values.automationRuntime.podSecurityContext | nindent 8 }}
+        {{- toYaml .Values.actionRuntime.podSecurityContext | nindent 8 }}
       containers:
-        - name: automation-runtime
+        - name: action-runtime
           image: {{ include "appliance-control-plane.image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
-            - /appliance-automation-runtime
+            - /appliance-action-runtime
           ports:
             - name: http
-              containerPort: {{ .Values.automationRuntime.service.port }}
+              containerPort: {{ .Values.actionRuntime.service.port }}
           envFrom:
             - configMapRef:
-                name: {{ include "appliance-control-plane.automationRuntimeName" . }}-config
+                name: {{ include "appliance-control-plane.actionRuntimeName" . }}-config
           securityContext:
-            {{- toYaml .Values.automationRuntime.containerSecurityContext | nindent 12 }}
+            {{- toYaml .Values.actionRuntime.containerSecurityContext | nindent 12 }}
           resources:
-            {{- toYaml .Values.automationRuntime.resources | nindent 12 }}
+            {{- toYaml .Values.actionRuntime.resources | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /health/live
@@ -65,14 +65,14 @@ spec:
               mountPath: /tmp
             - name: appliance-logs
               mountPath: /data/zon/logs
-            {{- if .Values.automationRuntime.persistence.enabled }}
+            {{- if .Values.actionRuntime.persistence.enabled }}
             - name: data
-              mountPath: {{ .Values.automationRuntime.config.dataDir }}
+              mountPath: {{ .Values.actionRuntime.config.dataDir }}
             {{- end }}
             - name: metadata-bundles
-              mountPath: {{ .Values.automationRuntime.config.dataDir }}/metadata-bundles
+              mountPath: {{ .Values.actionRuntime.config.dataDir }}/metadata-bundles
             - name: keys
-              mountPath: {{ .Values.automationRuntime.config.dataDir }}/keys
+              mountPath: {{ .Values.actionRuntime.config.dataDir }}/keys
               readOnly: true
       volumes:
         - name: tmp
@@ -81,10 +81,10 @@ spec:
           hostPath:
             path: /data/zon/logs
             type: DirectoryOrCreate
-        {{- if .Values.automationRuntime.persistence.enabled }}
+        {{- if .Values.actionRuntime.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "appliance-control-plane.automationRuntimeClaimName" . }}
+            claimName: {{ include "appliance-control-plane.actionRuntimeClaimName" . }}
         {{- end }}
         - name: metadata-bundles
           hostPath:
@@ -95,7 +95,7 @@ spec:
             secretName: {{ .Values.secrets.keysSecretName }}
             # Non-root runtime: key files must be group-readable via fsGroup.
             defaultMode: 0440
-            # automation-runtime verifies its internal caller token only. Do
+            # action-runtime verifies its internal caller token only. Do
             # not mount control-plane session, registry, or archive keys.
             items:
               - key: api_token_pepper.key

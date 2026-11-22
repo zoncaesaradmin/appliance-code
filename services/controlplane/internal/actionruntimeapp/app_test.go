@@ -1,4 +1,4 @@
-package automationruntimeapp
+package actionruntimeapp
 
 import (
 	"encoding/base64"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"appliance-code/services/controlplane/internal/automationruntimeconfig"
+	"appliance-code/services/controlplane/internal/actionruntimeconfig"
 	"appliance-code/services/controlplane/internal/logging"
 )
 
@@ -24,7 +24,7 @@ func TestNewRequiresOnlyAPITokenPepperFromReadOnlyKeysMount(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(keysDir, 0o750) })
-	cfg := automationruntimeconfig.Default()
+	cfg := actionruntimeconfig.Default()
 	cfg.DataDir = dataDir
 	cfg.ApplicationLogPath = filepath.Join(dataDir, "application.log")
 	logger, err := logging.NewWithWriter("info", os.Stdout)
