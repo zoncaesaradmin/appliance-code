@@ -361,9 +361,13 @@ channelIntegration:
     port: 8080
   ingress:
     enabled: true
+    # The installer switches this to web with tls.enabled=false when a
+    # Cloudflare Tunnel terminates the public HTTPS callback.
     entryPoints:
       - websecure
     host: ""
+    tls:
+      enabled: true
     tlsSecretName: appliance-tls
   resources:
     requests:

@@ -750,6 +750,36 @@ func TestIngressRouteRendersPlaintextHTTPWhenCapabilityEnabled(t *testing.T) {
 	}
 }
 
+func TestChannelIntegrationIngressSupportsCloudflareHTTPOrigin(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "config.enabledCapabilities[0]=base",
+		"--set", "config.enabledCapabilities[1]=channel-integrations",
+		"--set", "channelIntegration.enabled=true",
+		"--set", "channelIntegration.ingress.entryPoints[0]=web",
+		"--set", "channelIntegration.ingress.host=walocal.zonited.com",
+		"--set", "channelIntegration.ingress.tls.enabled=false",
+	)...)
+	route := findByKindAndName(docs, "IngressRoute", "channel-integration")
+	if route == nil {
+		t.Fatal("expected channel integration IngressRoute")
+	}
+	entryPoints, _ := at(route, "spec", "entryPoints").([]any)
+	if fmt.Sprint(entryPoints) != "[web]" {
+		t.Fatalf("channel integration entryPoints = %#v, want [web]", entryPoints)
+	}
+	routes, _ := at(route, "spec", "routes").([]any)
+	if len(routes) != 1 {
+		t.Fatalf("channel integration route count = %d, want 1", len(routes))
+	}
+	firstRoute, _ := routes[0].(map[string]any)
+	if got, _ := firstRoute["match"].(string); got != "Host(`walocal.zonited.com`) && PathPrefix(`/webhook`)" {
+		t.Fatalf("channel integration route match = %q", got)
+	}
+	if at(route, "spec", "tls") != nil {
+		t.Fatal("Cloudflare channel integration route must not declare TLS")
+	}
+}
+
 func TestFilesMaxUploadBytesRendersAsDecimalString(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	cms := findByKind(docs, "ConfigMap")
