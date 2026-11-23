@@ -6,7 +6,7 @@ describe("workspace routing", () => {
     expect(workspaceForPath("/app")).toBe("app");
     expect(workspaceForPath("/app/discover")).toBe("app");
     expect(isApplicationPath("/app/login")).toBe(true);
-    expect(workspaceForPath("/")).toBe("console");
+    expect(workspaceForPath("/")).toBe("app");
   });
 
   it("maps console paths to the existing shell without changing legacy URLs", () => {
@@ -25,7 +25,9 @@ describe("workspace routing", () => {
   });
 
   it("preserves a direct console or app intent through login", () => {
+    expect(loginDestination("/", "")).toBe("/app");
     expect(loginDestination("/console", "")).toBe("/home");
+    expect(loginDestination("/login", "")).toBe("/home");
     expect(loginDestination("/app", "")).toBe("/app");
     expect(loginDestination("/app/login", "")).toBe("/app");
     expect(loginDestination("/login", "?next=%2Fconsole%2Fadmin%2Fprofiles")).toBe(

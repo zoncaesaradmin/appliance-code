@@ -6,14 +6,8 @@ export function isApplicationPath(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
 }
 
-/**
- * The current release keeps the compatibility appliance shell at the root.
- * The application workspace is an explicit `/app` namespace until its
- * business services are complete and the product is ready to make it the
- * default destination.
- */
 export function workspaceForPath(pathname: string): Workspace {
-  if (isApplicationPath(pathname)) {
+  if (pathname === "/" || isApplicationPath(pathname)) {
     return "app";
   }
   return "console";
@@ -76,8 +70,8 @@ export function loginDestination(pathname: string, search: string): string {
     }
     return pathname;
   }
-  // Preserve the shipped root behavior until the application UI artifact and
-  // its API services are present in the signed bundle.
-  return "/home";
+  // The public origin is the application entry. The explicit operator login
+  // remains an appliance destination, while /app/login owns app sign-in.
+  return pathname === "/" ? "/app" : "/home";
 }
 

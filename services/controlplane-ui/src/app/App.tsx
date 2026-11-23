@@ -36,6 +36,12 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    document.title = location.pathname === "/" || isApplicationPath(location.pathname)
+      ? "Zonited App"
+      : "Zon Appliance";
+  }, [location.pathname]);
+
+  useEffect(() => {
     let ignore = false;
     async function boot() {
       setBootError("");
@@ -118,6 +124,13 @@ export function App(): React.JSX.Element {
     }
     if (!shellState.initialized && pathname !== "/setup") {
       navigate("/setup", true);
+      return;
+    }
+    if (shellState.initialized && !shellState.session && pathname === "/") {
+      // The public origin is the Zonity application entry. Keep the operator
+      // surface explicit at /login or /console instead of making the default
+      // landing page choose between the two identities.
+      navigate("/app/login", true);
       return;
     }
     if (shellState.initialized && !shellState.session && pathname !== "/login" && pathname !== "/app/login") {

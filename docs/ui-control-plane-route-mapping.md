@@ -343,14 +343,15 @@ the existing appliance routes stable:
 
 | Browser-visible route | UI behavior | Downstream control-plane call(s) |
 | --- | --- | --- |
+| `GET /` | Public Zonity application entry; unauthenticated browsers are redirected to `/app/login`, and an existing session is sent to `/app` | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
 | `GET /console` or `GET /console/*` | Redirects to the equivalent existing appliance route (`/home`, `/manage`, `/analyze`, `/admin`, or `/account`) after authentication | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
 | `GET /login?next=...` | Shows the single context-aware login surface and returns to a validated internal destination after login | `POST /api/v1/auth/login`, then `GET /api/v1/auth/session` during shell bootstrap |
-| `GET /app` or `GET /app/*` | Reserved application-workspace namespace; it selects application context at login while the signed application UI artifact and its APIs are still being delivered separately | No control-plane route is renamed by this reservation |
+| `GET /app` or `GET /app/*` | Application-workspace namespace; `/app/login` is the application login and authenticated routes render the protected PWA shell | No control-plane route is renamed by this namespace |
 
 The `next` value is accepted only for internal UI paths. Protocol-relative,
 external, API, login, and setup paths are rejected and fall back to the
-existing `/home` landing route. The application UI will take over `/` only
-after its signed bundle artifact and backend services are present.
+existing `/home` operator route. The public origin itself enters the
+application workspace; operators use `/console` or `/login` explicitly.
 
 The SPA talks to the control-plane API **directly** (not via a Go UI reverse
 proxy). Notable Admin host configuration routes:

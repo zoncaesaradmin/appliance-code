@@ -69,7 +69,7 @@ export function ApplicationLoginPage(props: {
         <div className="application-login__story-inner">
           <div className="application-login__kicker">
             <span className="application-login__kicker-mark" aria-hidden="true" />
-            Your Zonity
+            Zonited App
           </div>
           <h1 id="application-login-title">A place that works around your microzone.</h1>
           <p>
@@ -89,10 +89,10 @@ export function ApplicationLoginPage(props: {
         </div>
       </section>
 
-      <section className="application-login__panel" aria-label="Zonity sign in">
+      <section className="application-login__panel" aria-label="Zonited App sign in">
         <header className="application-login__brand">
           <BrandMark size="lg" />
-          <span>Zonity</span>
+          <span>Zonited App</span>
         </header>
         <div className="application-login__form-wrap">
           <p className="application-login__eyebrow">Member access</p>
@@ -131,7 +131,7 @@ export function ApplicationLoginPage(props: {
             </label>
             {error ? <p className="application-login__error" role="alert">{error}</p> : null}
             <button className="application-login__submit" type="submit" disabled={submitting}>
-              {submitting ? "Signing in…" : "Continue to Zonity"}
+              {submitting ? "Signing in…" : "Continue to Zonited App"}
             </button>
           </form>
           {props.guestAccess ? (
@@ -151,7 +151,7 @@ export function ApplicationLoginPage(props: {
           ) : null}
         </div>
         <footer className="application-login__footer">
-          <span>{productVersion ? `Zonity ${productVersion}` : "Zonity application"}</span>
+          <span>{productVersion ? `Zonited App ${productVersion}` : "Zonited App"}</span>
           <button type="button" onClick={() => navigate("/console", true)}>Operations console</button>
         </footer>
       </section>

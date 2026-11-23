@@ -19,7 +19,7 @@ APPLIANCE_UI_STATIC_DIR=/opt/appliance-ui/dist
 
 The Go host serves:
 
-- `/` and deep SPA routes such as `/admin/lan-services`
+- `/` (the Zonity application entry) and deep SPA routes such as `/admin/lan-services`
 - `/app` and `/app/login` for the Zonity application workspace
 - immutable files under `/assets/`
 - `/manifest.webmanifest`, `/icon.svg`, and the static-shell service worker
@@ -169,8 +169,9 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
   `/console` supplies operator context and `/app` supplies application
   context; neither page presents a role chooser. The operations console link
   remains deliberately low-emphasis on the application login.
-- Home remains the compatibility landing mode for the current control-plane
-  shell until the application UI artifact and its API services are installed.
+- The public origin `/` enters the Zonity application workspace. Operators use
+  `/console` or `/login` explicitly; existing `/home`, `/manage`, `/analyze`,
+  `/admin`, and `/account` routes remain valid compatibility routes.
 - Manage, Analyze, and Admin use the left icon rail plus a transient feature
   selector.
 - Each feature page uses simple top tabs for views within that feature.

@@ -1,6 +1,6 @@
 {
-  "name": "Zonity",
-  "short_name": "Zonity",
+  "name": "Zonited App",
+  "short_name": "Zonited App",
   "description": "A private local application workspace by Zon.",
   "start_url": "/app",
   "scope": "/",
