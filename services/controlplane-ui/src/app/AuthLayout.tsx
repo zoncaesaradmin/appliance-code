@@ -3,6 +3,7 @@ import { isAuthPersisted } from "../auth";
 import { BrandMark } from "../components";
 import { client } from "../lib/api";
 import { displayProductVersion } from "../productVersion";
+import type { Workspace } from "../lib/workspace";
 
 export function AuthLayout(props: {
   mode: "login" | "setup";
@@ -10,6 +11,7 @@ export function AuthLayout(props: {
   onSetup: (username: string, password: string, persist: boolean) => Promise<void>;
   guestAccess: boolean;
   onGuest: (name: string, persist: boolean) => Promise<void>;
+  workspace: Workspace;
 }): React.JSX.Element {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -76,16 +78,18 @@ export function AuthLayout(props: {
 
   const year = new Date().getFullYear();
   const versionLabel = productVersion ? `Version ${productVersion}` : "Version unavailable";
+  const isConsole = props.workspace === "console";
 
   return (
     <div className="auth-layout">
       <section className="auth-visual">
         <div className="auth-visual__panel">
-          <span className="eyebrow">Zon Appliance</span>
-          <h1>Sleek infrastructure operations, built for simplicity.</h1>
+          <span className="eyebrow">Zon</span>
+          <h1>{isConsole ? "Operations, clearly in one place." : "Your Zonity workspace, ready when you are."}</h1>
           <p>
-            A focused control-plane workspace for management, analysis, and administration without
-            losing the appliance-grade clarity operators expect.
+            {isConsole
+              ? "A focused operations console for the appliance and the services that run it."
+              : "A single place to discover, manage, and use the Zonity application."}
           </p>
           <div className="hero-diagram" aria-hidden="true">
             <div className="hero-diagram__frame">
@@ -108,7 +112,9 @@ export function AuthLayout(props: {
         </header>
         <div className="auth-form__center">
           <div className="auth-form__intro">
-            <p className="auth-form__welcome">Welcome to Zon Appliance</p>
+            <p className="auth-form__welcome">
+              {isConsole ? "Operations Console" : "Welcome to Zonity"}
+            </p>
             <p className="auth-form__version" aria-live="polite">
               {versionLabel}
             </p>
@@ -167,11 +173,7 @@ export function AuthLayout(props: {
             </label>
             {error ? <div className="message message--error">{error}</div> : null}
             <button className="button button--primary" disabled={submitting} type="submit">
-              {submitting
-                ? "Working..."
-                : props.mode === "setup"
-                  ? "Create administrator"
-                  : "Sign in"}
+              {submitting ? "Working..." : props.mode === "setup" ? "Create administrator" : "Continue"}
             </button>
           </form>
           {props.mode === "login" && props.guestAccess ? (

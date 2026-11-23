@@ -332,6 +332,22 @@ workspace from `pending` to `ready` or `failed`.
 
 ## Browser SPA mapping (current controlplane-ui)
 
+### Workspace entry points
+
+The browser-facing workspace migration uses one login surface while keeping
+the existing appliance routes stable:
+
+| Browser-visible route | UI behavior | Downstream control-plane call(s) |
+| --- | --- | --- |
+| `GET /console` or `GET /console/*` | Redirects to the equivalent existing appliance route (`/home`, `/manage`, `/analyze`, `/admin`, or `/account`) after authentication | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
+| `GET /login?next=...` | Shows the single context-aware login surface and returns to a validated internal destination after login | `POST /api/v1/auth/login`, then `GET /api/v1/auth/session` during shell bootstrap |
+| `GET /app` or `GET /app/*` | Reserved application-workspace namespace; it selects application context at login while the signed application UI artifact and its APIs are still being delivered separately | No control-plane route is renamed by this reservation |
+
+The `next` value is accepted only for internal UI paths. Protocol-relative,
+external, API, login, and setup paths are rejected and fall back to the
+existing `/home` landing route. The application UI will take over `/` only
+after its signed bundle artifact and backend services are present.
+
 The SPA talks to the control-plane API **directly** (not via a Go UI reverse
 proxy). Notable Admin host configuration routes:
 

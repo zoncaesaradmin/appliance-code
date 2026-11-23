@@ -153,7 +153,16 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
 
 ## Layout Rules
 
-- Home is the default landing mode and opens directly to the dashboard page.
+- `/console` is the explicit appliance operations entry point. It currently
+  aliases the existing Home, Manage, Analyze, Admin, and Account route tree so
+  existing bookmarks and API usage remain valid.
+- `/app` is the reserved application-workspace namespace. The signed Zonity
+  application UI will be delivered as a separate artifact and will use this
+  namespace before the application becomes the root destination.
+- Login is one context-aware surface. `/console` supplies operator context and
+  `/app` supplies application context; neither page presents a role chooser.
+- Home remains the compatibility landing mode for the current control-plane
+  shell until the application UI artifact and its API services are installed.
 - Manage, Analyze, and Admin use the left icon rail plus a transient feature
   selector.
 - Each feature page uses simple top tabs for views within that feature.

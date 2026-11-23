@@ -4,13 +4,17 @@ import { AuthLayout } from "./AuthLayout";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
+import { consolePath, loginDestination, workspaceForPath } from "../lib/workspace";
 import { useViewSyncGeneration } from "../lib/viewSyncHooks";
 import { Shell } from "../shell/Shell";
 import type { CapabilitiesResponse, Session } from "../types";
 import type { AppShellState } from "./AppShellState";
 
 export function App(): React.JSX.Element {
-  const [pathname, setPathname] = useState(window.location.pathname || "/");
+  const [location, setLocation] = useState({
+    pathname: window.location.pathname || "/",
+    search: window.location.search || ""
+  });
   const [shellState, setShellState] = useState<AppShellState>({
     booting: true,
     initialized: true,
@@ -23,7 +27,8 @@ export function App(): React.JSX.Element {
   const appSync = useViewSyncGeneration("app");
 
   useEffect(() => {
-    const onPopState = () => setPathname(window.location.pathname || "/");
+    const onPopState = () =>
+      setLocation({ pathname: window.location.pathname || "/", search: window.location.search || "" });
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -105,6 +110,7 @@ export function App(): React.JSX.Element {
   }, [bootstrapSync, appSync, shellState.session]);
 
   useEffect(() => {
+    const pathname = location.pathname;
     if (shellState.booting) {
       return;
     }
@@ -113,13 +119,21 @@ export function App(): React.JSX.Element {
       return;
     }
     if (shellState.initialized && !shellState.session && pathname !== "/login") {
-      navigate("/login", true);
+      const next = loginDestination(pathname, location.search);
+      navigate(next === "/home" ? "/login" : `/login?next=${encodeURIComponent(pathname)}`, true);
       return;
     }
     if (shellState.session && (pathname === "/" || pathname === "/login" || pathname === "/setup")) {
-      navigate("/home", true);
+      navigate(loginDestination(pathname, location.search), true);
+      return;
     }
-  }, [pathname, shellState.booting, shellState.initialized, shellState.session]);
+    if (shellState.session && (pathname === "/console" || pathname.startsWith("/console/"))) {
+      const legacyPath = consolePath(pathname);
+      if (legacyPath !== pathname) {
+        navigate(legacyPath, true);
+      }
+    }
+  }, [location, shellState.booting, shellState.initialized, shellState.session]);
 
   async function handleLogin(username: string, password: string, persist: boolean): Promise<void> {
     // Login omits domain in the UI; client/backend default to local.
@@ -167,13 +181,14 @@ export function App(): React.JSX.Element {
         onSetup={handleSetup}
         guestAccess={shellState.capabilities.includes("guest-access")}
         onGuest={handleGuest}
+        workspace={workspaceForPath(loginDestination(location.pathname, location.search))}
       />
     );
   }
 
   return (
     <Shell
-      pathname={pathname}
+      pathname={location.pathname}
       session={shellState.session}
       capabilities={shellState.capabilities}
       onLogout={handleLogout}

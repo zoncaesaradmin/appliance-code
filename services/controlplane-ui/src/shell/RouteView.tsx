@@ -9,6 +9,7 @@ import { FilesPage } from "../pages/FilesPage";
 import { VideosPage } from "../pages/VideosPage";
 import { ApplicationsPage } from "../pages/ApplicationsPage";
 import { AIServicePage } from "../pages/AIServicePage";
+import { ApplicationWorkspacePage } from "../pages/ApplicationWorkspacePage";
 import { CodingChatPage } from "../pages/CodingChatPage";
 import { HomePage } from "../pages/HomePage";
 import { navigate } from "../lib/navigate";
@@ -27,6 +28,9 @@ export function RouteView(props: {
   capabilities: string[];
   onSignedOut: () => void;
 }): React.JSX.Element {
+  if (props.pathname === "/app" || props.pathname.startsWith("/app/")) {
+    return <ApplicationWorkspacePage pathname={props.pathname} />;
+  }
   if (props.pathname.startsWith("/account")) {
     return (
       <AccountPage
