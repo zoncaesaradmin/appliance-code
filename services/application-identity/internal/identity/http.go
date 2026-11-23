@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-const SessionCookieName = "__Host-zonited_session"
+const SessionCookieName = "__Host-app_session"
 
 // RequestLimiter must enforce an independent limit for each action and key.
 type RequestLimiter interface {

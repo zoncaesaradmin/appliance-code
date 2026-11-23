@@ -60,6 +60,16 @@ spec:
             {{- toYaml .Values.applicationServices.identity.containerSecurityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.applicationServices.identity.resources | nindent 12 }}
+          # The service applies its small identity schema before binding the
+          # HTTP listener. Give PostgreSQL/K3s startup time to complete before
+          # liveness begins killing a process that is still initializing.
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+            timeoutSeconds: 1
           livenessProbe:
             httpGet:
               path: /health/live
