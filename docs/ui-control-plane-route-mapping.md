@@ -121,6 +121,10 @@ Useful event names:
 | Browser-visible route | UI handler | Downstream control-plane call(s) | Browser success behavior |
 | --- | --- | --- | --- |
 | `GET /health/ready` | `ready` | `GET /health/ready` on the control-plane internal listener | `200 ready` plain text |
+| `GET /app/login` | React `ApplicationLoginPage` | `GET /version` for the small product-version label; the login submit calls `POST /api/v1/auth/login` | Application-context login page; successful sign-in returns to the validated internal `next` path, normally `/app` |
+| `POST /app/login` (browser form action) | React `ApplicationLoginPage.submitLogin` | `POST /api/v1/auth/login` with username, password, and the local domain; credentials and tokens are redacted from UI-service traces | The SPA stores the returned session tokens according to the keep-signed-in choice and navigates to `/app` |
+| `POST /app/login` (guest form) | React `ApplicationLoginPage.submitGuest` | `POST /api/v1/auth/login` through the existing guest-access client path | The SPA stores the returned session tokens and navigates to `/app` |
+| `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the authenticated session loaded through `GET /api/v1/auth/session`; no application business API is called by this shell yet | Protected Zonity PWA workspace shell with application navigation |
 | `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA honors the same keep-signed-in choice as login |
 | `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |

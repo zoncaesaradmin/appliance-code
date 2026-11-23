@@ -53,19 +53,20 @@ UI route changes do not rename API contracts. Existing control-plane APIs stay
 under `/api/v1`, ordering stays under `/api/ordering/v1`, and the channel
 callback remains `/webhook`.
 
-The application PWA will be delivered as a separate signed `application-ui`
-artifact under `/app`. Its Shared/Core and Rentals API contracts must be
-delivered and routed before `/` is changed from the compatibility console to
-the application entry. The current appliance bundle contains the ordering and
-channel-integration services, but does not yet contain every PWA backend
-service from `capp`.
+The first application PWA slice is now delivered by the control-plane UI image:
+it provides an installable static shell, `/app/login`, and the protected `/app`
+entry while reusing the existing control-plane authentication contract. Its
+Shared/Core and Rentals API contracts still must be delivered and routed before
+`/` is changed from the compatibility console to the application entry. The
+current appliance bundle contains the ordering and channel-integration
+services, but does not yet contain every PWA backend service from `capp`.
 
 ## Implementation order
 
 1. Make login context-aware and preserve the requested internal path.
 2. Add `/console` aliases without changing existing routes or APIs.
-3. Add the application UI image and `/app` IngressRoute when its signed bundle
-   artifact and backend services are available.
+3. Add application business screens and their signed backend contracts inside
+   the now-live `/app` PWA shell.
 4. Add role-aware workspace switching after authentication.
 5. Change the authenticated default `/` destination to the Zonity application
    only after the application UI and API health checks pass.

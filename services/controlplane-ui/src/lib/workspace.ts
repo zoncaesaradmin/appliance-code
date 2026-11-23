@@ -2,14 +2,18 @@ export type Workspace = "app" | "console";
 
 const INTERNAL_PATH = /^(?:\/(?:app|console|home|manage|analyze|admin|account)(?:\/|$)|\/$)/;
 
+export function isApplicationPath(pathname: string): boolean {
+  return pathname === "/app" || pathname.startsWith("/app/");
+}
+
 /**
- * The current release still serves the appliance shell at the root. The
- * application workspace becomes the root destination when its signed UI
- * artifact is installed; until then /app remains an explicit, reserved
- * namespace.
+ * The current release keeps the compatibility appliance shell at the root.
+ * The application workspace is an explicit `/app` namespace until its
+ * business services are complete and the product is ready to make it the
+ * default destination.
  */
 export function workspaceForPath(pathname: string): Workspace {
-  if (pathname === "/app" || pathname.startsWith("/app/")) {
+  if (isApplicationPath(pathname)) {
     return "app";
   }
   return "console";
@@ -46,7 +50,13 @@ export function safeNextPath(raw: string | null | undefined, fallback = "/home")
   if (!value || value.length > 512 || !value.startsWith("/") || value.startsWith("//")) {
     return fallback;
   }
-  if (value.includes("\\") || value.startsWith("/api/") || value === "/login" || value === "/setup") {
+  if (
+    value.includes("\\") ||
+    value.startsWith("/api/") ||
+    value === "/login" ||
+    value === "/app/login" ||
+    value === "/setup"
+  ) {
     return fallback;
   }
   return INTERNAL_PATH.test(value) ? value : fallback;
@@ -60,7 +70,10 @@ export function loginDestination(pathname: string, search: string): string {
   if (pathname === "/console" || pathname.startsWith("/console/")) {
     return consolePath(pathname);
   }
-  if (pathname === "/app" || pathname.startsWith("/app/")) {
+  if (isApplicationPath(pathname)) {
+    if (pathname === "/app/login") {
+      return "/app";
+    }
     return pathname;
   }
   // Preserve the shipped root behavior until the application UI artifact and

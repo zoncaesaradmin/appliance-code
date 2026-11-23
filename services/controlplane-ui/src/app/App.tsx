@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { clearAuth, loadAuth, saveAuth, setAuthPersist } from "../auth";
 import { AuthLayout } from "./AuthLayout";
+import { ApplicationLoginPage } from "./ApplicationLoginPage";
+import { ApplicationShell } from "./ApplicationShell";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
-import { consolePath, loginDestination, workspaceForPath } from "../lib/workspace";
+import { consolePath, isApplicationPath, loginDestination, workspaceForPath } from "../lib/workspace";
 import { useViewSyncGeneration } from "../lib/viewSyncHooks";
 import { Shell } from "../shell/Shell";
 import type { CapabilitiesResponse, Session } from "../types";
@@ -118,12 +120,19 @@ export function App(): React.JSX.Element {
       navigate("/setup", true);
       return;
     }
-    if (shellState.initialized && !shellState.session && pathname !== "/login") {
+    if (shellState.initialized && !shellState.session && pathname !== "/login" && pathname !== "/app/login") {
       const next = loginDestination(pathname, location.search);
+      if (isApplicationPath(pathname)) {
+        navigate(`/app/login?next=${encodeURIComponent(next)}`, true);
+        return;
+      }
       navigate(next === "/home" ? "/login" : `/login?next=${encodeURIComponent(pathname)}`, true);
       return;
     }
-    if (shellState.session && (pathname === "/" || pathname === "/login" || pathname === "/setup")) {
+    if (
+      shellState.session &&
+      (pathname === "/" || pathname === "/login" || pathname === "/app/login" || pathname === "/setup")
+    ) {
       navigate(loginDestination(pathname, location.search), true);
       return;
     }
@@ -174,6 +183,15 @@ export function App(): React.JSX.Element {
 
   if (!shellState.initialized || !shellState.session) {
     const isSetup = !shellState.initialized;
+    if (!isSetup && isApplicationPath(location.pathname)) {
+      return (
+        <ApplicationLoginPage
+          onLogin={handleLogin}
+          guestAccess={shellState.capabilities.includes("guest-access")}
+          onGuest={handleGuest}
+        />
+      );
+    }
     return (
       <AuthLayout
         mode={isSetup ? "setup" : "login"}
@@ -182,6 +200,16 @@ export function App(): React.JSX.Element {
         guestAccess={shellState.capabilities.includes("guest-access")}
         onGuest={handleGuest}
         workspace={workspaceForPath(loginDestination(location.pathname, location.search))}
+      />
+    );
+  }
+
+  if (isApplicationPath(location.pathname)) {
+    return (
+      <ApplicationShell
+        pathname={location.pathname}
+        session={shellState.session}
+        onLogout={handleLogout}
       />
     );
   }

@@ -20,7 +20,11 @@ APPLIANCE_UI_STATIC_DIR=/opt/appliance-ui/dist
 The Go host serves:
 
 - `/` and deep SPA routes such as `/admin/lan-services`
+- `/app` and `/app/login` for the Zonity application workspace
 - immutable files under `/assets/`
+- `/manifest.webmanifest`, `/icon.svg`, and the static-shell service worker
+  used by the installable Zonity PWA. The worker never caches `/api/`, health,
+  version, or authentication responses.
 - `/health/live`
 - `/health/ready`
 - `/version` (proxies the control-plane product version JSON; Traefik
@@ -156,11 +160,15 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
 - `/console` is the explicit appliance operations entry point. It currently
   aliases the existing Home, Manage, Analyze, Admin, and Account route tree so
   existing bookmarks and API usage remain valid.
-- `/app` is the reserved application-workspace namespace. The signed Zonity
-  application UI will be delivered as a separate artifact and will use this
-  namespace before the application becomes the root destination.
-- Login is one context-aware surface. `/console` supplies operator context and
-  `/app` supplies application context; neither page presents a role chooser.
+- `/app` is the application-workspace namespace. It is now a protected PWA
+  shell with its own application navigation and an application-context login
+  at `/app/login`; the login reuses the existing `/api/v1/auth/login` contract
+  and token storage. Application business surfaces are added inside this shell
+  as their APIs become available.
+- Login has one context-aware operator surface and one application surface.
+  `/console` supplies operator context and `/app` supplies application
+  context; neither page presents a role chooser. The operations console link
+  remains deliberately low-emphasis on the application login.
 - Home remains the compatibility landing mode for the current control-plane
   shell until the application UI artifact and its API services are installed.
 - Manage, Analyze, and Admin use the left icon rail plus a transient feature

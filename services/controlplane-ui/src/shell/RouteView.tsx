@@ -29,7 +29,7 @@ export function RouteView(props: {
   onSignedOut: () => void;
 }): React.JSX.Element {
   if (props.pathname === "/app" || props.pathname.startsWith("/app/")) {
-    return <ApplicationWorkspacePage pathname={props.pathname} />;
+    return <ApplicationWorkspacePage pathname={props.pathname} session={props.session} />;
   }
   if (props.pathname.startsWith("/account")) {
     return (

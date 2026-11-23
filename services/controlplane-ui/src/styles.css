@@ -1779,6 +1779,464 @@ body:has(.video-player) {
   color: var(--success);
 }
 
+/* Zonity application workspace: warm, local, and deliberately quieter than
+   the operations console. These styles stay scoped so the compatibility
+   console can evolve independently. */
+.application-login {
+  --app-bg: #f4f0e7;
+  --app-brand: #17352d;
+  --app-ink: #1d2924;
+  --app-muted: #6b766e;
+  --app-border: #d9d8cc;
+  --app-accent: #f4c95d;
+  --app-error: #a33a32;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
+  background: var(--app-bg);
+  color: var(--app-ink);
+}
+
+.application-login__story {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: clamp(2rem, 6vw, 6rem);
+  overflow: hidden;
+  background: var(--app-brand);
+  color: #f7f3e9;
+  clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%);
+}
+
+.application-login__story::after {
+  position: absolute;
+  right: 8%;
+  bottom: 8%;
+  width: 11rem;
+  height: 11rem;
+  border: 1px solid rgba(244, 201, 93, 0.45);
+  border-radius: 50%;
+  content: "";
+  opacity: 0.7;
+}
+
+.application-login__story-inner {
+  width: min(39rem, 100%);
+  position: relative;
+  z-index: 1;
+}
+
+.application-login__kicker,
+.application-login__note {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--app-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.application-login__kicker-mark {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50% 50% 50% 0;
+  background: var(--app-accent);
+  transform: rotate(-45deg);
+}
+
+.application-login__story h1 {
+  max-width: 12ch;
+  margin: 1.5rem 0 1.25rem;
+  font-size: clamp(2.6rem, 5vw, 5.4rem);
+  font-weight: 760;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.application-login__story p {
+  max-width: 35rem;
+  margin: 0;
+  color: rgba(247, 243, 233, 0.78);
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  line-height: 1.65;
+}
+
+.application-login__signal {
+  position: relative;
+  width: min(25rem, 100%);
+  height: 5.5rem;
+  margin-top: 3rem;
+}
+
+.application-login__signal-line {
+  position: absolute;
+  top: 2.55rem;
+  left: 0.9rem;
+  width: calc(100% - 1.8rem);
+  border-top: 1px dashed rgba(244, 201, 93, 0.56);
+}
+
+.application-login__signal-node {
+  position: absolute;
+  top: 1.75rem;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 0.35rem solid var(--app-brand);
+  border-radius: 50%;
+  background: var(--app-accent);
+  box-shadow: 0 0 0 1px rgba(244, 201, 93, 0.7);
+}
+
+.application-login__signal-node--one { left: 0; }
+.application-login__signal-node--two { left: 47%; }
+.application-login__signal-node--three { right: 0; }
+
+.application-login__note {
+  gap: 1.2rem;
+  margin-top: 2.2rem;
+  color: rgba(247, 243, 233, 0.58);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+}
+
+.application-login__note span + span::before {
+  margin-right: 1.2rem;
+  color: var(--app-accent);
+  content: "•";
+}
+
+.application-login__panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  background: var(--app-bg);
+}
+
+.application-login__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--app-brand);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.application-login__brand .brand-mark {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 1rem;
+  background: var(--app-brand) !important;
+  box-shadow: none;
+}
+
+.application-login__form-wrap {
+  width: min(25rem, 100%);
+  margin: auto;
+}
+
+.application-login__eyebrow {
+  margin: 0 0 0.6rem;
+  color: var(--app-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.application-login__form-wrap h2 {
+  margin: 0;
+  color: var(--app-ink);
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.application-login__lede {
+  max-width: 23rem;
+  margin: 1rem 0 2rem;
+  color: var(--app-muted);
+  line-height: 1.6;
+}
+
+.application-login__form,
+.application-login__guest {
+  display: grid;
+  gap: 1rem;
+}
+
+.application-login__field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.application-login__field span {
+  color: var(--app-ink);
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.application-login__field input {
+  min-height: 3.1rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--app-ink);
+  padding: 0 0.95rem;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+.application-login__field input:focus {
+  border-color: var(--app-brand);
+  background: #fffdf8;
+  box-shadow: 0 0 0 3px rgba(23, 53, 45, 0.14);
+}
+
+.application-login__remember {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.5rem;
+  color: var(--app-muted);
+  font-size: 0.82rem;
+}
+
+.application-login__remember input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--app-brand);
+}
+
+.application-login__submit {
+  min-height: 3.25rem;
+  border: 1px solid var(--app-brand);
+  border-radius: 0.8rem;
+  background: var(--app-brand);
+  color: #fffdf8;
+  font-weight: 800;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.application-login__submit:hover:not(:disabled) {
+  background: #245344;
+  transform: translateY(-1px);
+}
+
+.application-login__submit:disabled,
+.application-login__guest button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.application-login__error {
+  margin: 0;
+  color: var(--app-error);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.application-login__guest {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--app-border);
+}
+
+.application-login__guest button {
+  min-height: 2.8rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.8rem;
+  background: transparent;
+  color: var(--app-brand);
+  font-weight: 750;
+}
+
+.application-login__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+  color: var(--app-muted);
+  font-size: 0.73rem;
+}
+
+.application-login__footer button {
+  border: 0;
+  background: transparent;
+  color: var(--app-brand);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.application-home {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.application-home__welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.application-home__welcome strong {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 1.15rem;
+}
+
+.application-home__welcome p {
+  max-width: 44rem;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.application-home__mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 1.4rem 1.4rem 1.4rem 0.35rem;
+  background: #17352d;
+  color: #f4c95d;
+  font-size: 2rem;
+  font-weight: 850;
+  transform: rotate(-8deg);
+}
+
+.application-home__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.application-shell {
+  --app-bg: #f4f0e7;
+  --app-brand: #17352d;
+  --app-ink: #1d2924;
+  min-height: 100vh;
+  background: var(--app-bg);
+  color: var(--app-ink);
+}
+
+.application-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.1rem clamp(1.25rem, 5vw, 4.5rem);
+  border-bottom: 1px solid rgba(23, 53, 45, 0.12);
+  background: rgba(244, 240, 231, 0.92);
+}
+
+.application-shell__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: 0;
+  background: transparent;
+  color: var(--app-brand);
+  cursor: pointer;
+  text-align: left;
+}
+
+.application-shell__brand .brand-mark {
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 0.9rem;
+  background: var(--app-brand) !important;
+  box-shadow: none;
+}
+
+.application-shell__brand strong,
+.application-shell__brand small {
+  display: block;
+}
+
+.application-shell__brand strong {
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.application-shell__brand small {
+  margin-top: 0.2rem;
+  color: #6b766e;
+  font-size: 0.72rem;
+}
+
+.application-shell__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.application-shell__nav-link,
+.application-shell__signout {
+  min-height: 2.5rem;
+  border: 0;
+  border-radius: 0.7rem;
+  background: transparent;
+  color: #56645b;
+  cursor: pointer;
+  padding: 0 0.85rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.application-shell__nav-link:hover,
+.application-shell__nav-link--active {
+  background: rgba(23, 53, 45, 0.09);
+  color: var(--app-brand);
+}
+
+.application-shell__signout {
+  margin-left: 0.5rem;
+  border: 1px solid rgba(23, 53, 45, 0.18);
+}
+
+.application-shell__main {
+  width: min(76rem, 100%);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 3.5rem);
+}
+
+.application-shell__main .page-frame {
+  min-height: 0;
+  background: rgba(255, 253, 248, 0.72);
+  border-color: rgba(23, 53, 45, 0.12);
+  box-shadow: 0 18px 45px rgba(23, 53, 45, 0.06);
+}
+
+.application-shell__footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(76rem, 100%);
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 4vw, 3.5rem) 1.5rem;
+  color: #7b847c;
+  font-size: 0.72rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .application-login__field input,
+  .application-login__submit {
+    transition: none;
+  }
+}
+
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 90px minmax(0, 1fr);
@@ -1817,6 +2275,24 @@ body:has(.video-player) {
   .ai-services-layout {
     grid-template-columns: 1fr;
   }
+
+  .application-login {
+    grid-template-columns: 1fr;
+  }
+
+  .application-login__story {
+    min-height: auto;
+    clip-path: none;
+    padding: 3.5rem 2rem 3rem;
+  }
+
+  .application-login__story h1 {
+    max-width: 18ch;
+  }
+
+  .application-login__panel {
+    min-height: auto;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1837,5 +2313,49 @@ body:has(.video-player) {
 
   .page-frame {
     padding: 18px;
+  }
+
+  .application-login__panel {
+    padding: 1.5rem;
+  }
+
+  .application-login__story {
+    padding: 3rem 1.5rem 2.5rem;
+  }
+
+  .application-login__story h1 {
+    font-size: clamp(2.5rem, 13vw, 4rem);
+  }
+
+  .application-login__signal {
+    margin-top: 2.2rem;
+  }
+
+  .application-login__footer,
+  .application-home__welcome {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .application-home__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .application-shell__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .application-shell__nav {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .application-shell__signout {
+    margin-left: auto;
+  }
+
+  .application-shell__footer {
+    flex-direction: column;
   }
 }
