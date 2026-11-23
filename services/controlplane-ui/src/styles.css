@@ -1997,6 +1997,32 @@ body:has(.video-player) {
   line-height: 1;
 }
 
+.application-login .field-label {
+  display: block;
+  margin: 1.25rem 0 0.45rem;
+  color: var(--app-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.application-login .text-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border);
+  border-radius: 0.7rem;
+  padding: 0.8rem 0.9rem;
+  color: var(--app-ink);
+  background: var(--app-surface);
+  font: inherit;
+}
+
+.application-login .form-error {
+  color: var(--app-error);
+  font-size: 0.85rem;
+}
+
 .application-login__lede {
   max-width: 23rem;
   margin: 1rem 0 2rem;

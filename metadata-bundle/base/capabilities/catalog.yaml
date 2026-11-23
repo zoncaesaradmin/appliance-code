@@ -39,6 +39,14 @@ capabilities:
       requiredEntitlement: zon.capabilities.commerce
     artifacts:
       required: [ordering-image]
+  application-identity:
+    displayName: Application Identity
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.application-identity
+    artifacts:
+      required: [application-identity-image]
   lan-discovery:
     displayName: LAN Discovery
     requires: [base]

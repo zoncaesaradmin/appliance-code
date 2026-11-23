@@ -121,9 +121,9 @@ Useful event names:
 | Browser-visible route | UI handler | Downstream control-plane call(s) | Browser success behavior |
 | --- | --- | --- | --- |
 | `GET /health/ready` | `ready` | `GET /health/ready` on the control-plane internal listener | `200 ready` plain text |
-| `GET /app/login` | React `ApplicationLoginPage` | `GET /version` for the small product-version label; no operator authentication request is made | Application-context login placeholder; mobile identity is not enabled yet and operator credentials are explicitly rejected |
-| `POST /app/login` | No form submission while mobile identity is unavailable | No downstream call | Disabled state; the page does not accept or send appliance username/password credentials |
-| `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the authenticated session loaded through `GET /api/v1/auth/session`; no application business API is called by this shell yet | Protected Zonited PWA workspace shell with application navigation |
+| `GET /app/login` | React `ApplicationLoginPage` | `GET /version`, then `/api/shared/v1/auth/session` | Application-context mobile sign-in; operator credentials are explicitly rejected |
+| `POST /app/login` | React mobile number/code forms | `/api/shared/v1/auth/otp/challenges` and `/api/shared/v1/auth/otp/verify` | Sets the separate HttpOnly application session cookie; local/test delivery uses the private OTP inbox |
+| `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the separate application session loaded through `GET /api/shared/v1/auth/session`; no application business API is called by this shell yet | Protected Zonited PWA workspace shell with application navigation |
 | `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA honors the same keep-signed-in choice as login |
 | `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |
@@ -342,7 +342,7 @@ the existing appliance routes stable:
 
 | Browser-visible route | UI behavior | Downstream control-plane call(s) |
 | --- | --- | --- |
-| `GET /` | Public Zonited application entry; unauthenticated browsers are redirected to `/app/login`, and an application session is sent to `/app` | Application routes do not use the operator session; the UI only reads `/version` until mobile identity is integrated |
+| `GET /` | Public Zonited application entry; unauthenticated browsers are redirected to `/app/login`, and an application session is sent to `/app` | Application routes do not use the operator session; application identity uses the separate `/api/shared/v1/auth/*` contract |
 | `GET /console` or `GET /console/*` | Redirects to the equivalent existing appliance route (`/home`, `/manage`, `/analyze`, `/admin`, or `/account`) after authentication | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
 | `GET /login?next=...` | Shows the single context-aware login surface and returns to a validated internal destination after login | `POST /api/v1/auth/login`, then `GET /api/v1/auth/session` during shell bootstrap |
 | `GET /app` or `GET /app/*` | Application-workspace namespace; only an application session (`domain=application`, `authMethod=mobile_otp`) may render the protected PWA shell | Operator sessions are not accepted for this namespace |

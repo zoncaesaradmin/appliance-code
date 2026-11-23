@@ -6,7 +6,7 @@ profiles:
   application-core:
     displayName: application-core
     description: "Application as appliance base profile."
-    capabilities: [base, commerce, channel-integrations]
+    capabilities: [base, commerce, channel-integrations, application-identity]
   storage-landns:
     displayName: storage-landns
     description: "File storage, artifact registry, and LAN DNS."

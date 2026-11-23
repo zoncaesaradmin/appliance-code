@@ -325,6 +325,25 @@ channel-integration
 {{- if and .Values.applicationServices.ordering.enabled (has "commerce" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.applicationIdentityName" -}}application-identity{{- end -}}
+{{- define "appliance-control-plane.applicationIdentityEnabled" -}}
+{{- if and .Values.applicationServices.identity.enabled (has "application-identity" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
+{{- end -}}
+{{- define "appliance-control-plane.applicationIdentityOrigin" -}}
+{{- .Values.applicationServices.identity.origin | default (.Values.config.publicOrigin | default .Values.config.canonicalOrigin) -}}
+{{- end -}}
+{{- define "appliance-control-plane.applicationIdentitySelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.applicationIdentityName" . }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
+{{- end -}}
+{{- define "appliance-control-plane.applicationIdentityLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "appliance-control-plane.applicationIdentitySelectorLabels" . }}
+app.kubernetes.io/component: application-identity
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
 {{- define "appliance-control-plane.orderingName" -}}ordering{{- end -}}
 {{- define "appliance-control-plane.orderingSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.orderingName" . }}
@@ -390,6 +409,17 @@ ForwardAuth middleware name.
   services:
     - name: {{ include "appliance-control-plane.fullname" . }}
       port: {{ .Values.service.publicPort }}
+{{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
+- match: {{ printf "%sPathPrefix(`/api/shared/`)" $hostMatch }}
+  kind: Rule
+  priority: 105
+  services:
+    - name: {{ include "appliance-control-plane.applicationIdentityName" . }}
+      {{- if include "appliance-control-plane.appsNamespaced" . }}
+      namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+      {{- end }}
+      port: {{ .Values.applicationServices.identity.service.port }}
+{{- end }}
 {{- if .Values.ingress.webUIEnabled }}
 - match: {{ printf "%sPathPrefix(`/webui`)" $hostMatch }}
   kind: Rule

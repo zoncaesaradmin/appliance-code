@@ -42,9 +42,13 @@ When adding an application page, extend the application tokens in
 
 Application identity is separate from appliance identity. Application pages
 must never submit `/api/v1/auth/login`, accept operator usernames/passwords, or
-reuse an operator session as an application session. The planned application
-session contract is `domain=application` with `authMethod=mobile_otp`; until
-that service exists, `/app/login` must remain an explicit disabled state.
+reuse an operator session as an application session. The application session
+contract is `domain=application` with `authMethod=mobile_otp`; the UI enables
+it only when the bundled application identity service is available.
+
+The application identity service now provides the local/test mobile OTP
+contract. It remains fail-closed outside local/test until a reviewed SMS or
+provider adapter is added; the installer generates its HMAC keys on the target.
 
 The bundled application brand assets are
 `services/controlplane-ui/public/zonited-logo-circle.png` for compact UI

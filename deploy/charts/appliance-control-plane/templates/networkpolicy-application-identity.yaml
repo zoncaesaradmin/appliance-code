@@ -1,0 +1,42 @@
+{{- if and .Values.networkPolicy.enabled (eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true") }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "appliance-control-plane.applicationIdentityName" . }}-allow
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.applicationIdentityLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "appliance-control-plane.applicationIdentitySelectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.traefikNamespaceLabel | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.applicationServices.identity.service.port }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.infraNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: platform-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}

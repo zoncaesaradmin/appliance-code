@@ -163,8 +163,9 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
 - `/app` is the application-workspace namespace. It is now a protected PWA
   shell with its own application navigation and an application-context login
   at `/app/login`. The application login does not call the operator
-  `/api/v1/auth/login` contract and currently remains disabled until the
-  mobile-identity service is installed. Application business surfaces are
+  `/api/v1/auth/login` contract. It uses the separate application identity
+  service's local/test mobile OTP contract when that capability is installed.
+  Application business surfaces are
   added inside this shell as their APIs become available.
 - Login has one context-aware operator surface and one application surface.
   `/console` supplies operator context and `/app` supplies application

@@ -1,0 +1,74 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.applicationIdentityName" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.applicationIdentityLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.applicationIdentitySelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.applicationIdentityLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.applicationServices.identity.podSecurityContext | nindent 8 }}
+      containers:
+        - name: application-identity
+          image: {{ .Values.applicationServices.identity.image.reference | quote }}
+          imagePullPolicy: {{ .Values.applicationServices.identity.image.pullPolicy }}
+          env:
+            - name: APPLICATION_IDENTITY_ENV
+              value: {{ .Values.applicationServices.identity.environment | quote }}
+            - name: APPLICATION_IDENTITY_LISTEN_ADDR
+              value: :{{ .Values.applicationServices.identity.service.port }}
+            - name: APPLICATION_IDENTITY_ORIGIN
+              value: {{ include "appliance-control-plane.applicationIdentityOrigin" . | quote }}
+            - name: APPLICATION_IDENTITY_OTP_SOCKET_PARENT
+              value: {{ .Values.applicationServices.identity.socketParent | quote }}
+            - name: APPLICATION_IDENTITY_TRUSTED_PROXIES
+              value: {{ .Values.applicationServices.identity.trustedProxies | quote }}
+            - name: APPLICATION_IDENTITY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.identity.database.connectionSecretName | quote }}
+                  key: {{ .Values.applicationServices.identity.database.connectionSecretKey | quote }}
+            - name: APPLICATION_IDENTITY_OTP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.identity.secretName | quote }}
+                  key: {{ .Values.applicationServices.identity.otpKey | quote }}
+            - name: APPLICATION_IDENTITY_RATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.identity.secretName | quote }}
+                  key: {{ .Values.applicationServices.identity.rateKey | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.applicationServices.identity.service.port }}
+          volumeMounts:
+            - name: otp-socket
+              mountPath: {{ .Values.applicationServices.identity.socketParent | quote }}
+          securityContext:
+            {{- toYaml .Values.applicationServices.identity.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.applicationServices.identity.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+      volumes:
+        - name: otp-socket
+          emptyDir: {}
+{{- end }}

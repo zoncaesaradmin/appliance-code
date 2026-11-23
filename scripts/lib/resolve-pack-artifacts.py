@@ -32,6 +32,7 @@ KNOWN_ARTIFACTS = (
     "message-broker-chart",
     "channel-integration-image",
     "ordering-image",
+    "application-identity-image",
     "host-agent-daemon",
     "mdns-host-packages",
     "host-agent-image",

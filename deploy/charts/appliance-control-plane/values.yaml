@@ -108,6 +108,10 @@ config:
   nodeIPv4: ""
   # Derived by zonctl as https://<applianceName>.<dnsZoneName>.
   canonicalOrigin: "https://appliance.example.internal"
+  # External HTTPS origin used by the application identity API for exact
+  # Origin validation. Installers should set this from public_origin; it is
+  # not derived from a node address.
+  publicOrigin: ""
   logLevel: info
   # file is appliance-local staging. Cloud profiles may select s3 with a
   # dedicated archive prefix and separately scoped credentials.
@@ -391,6 +395,46 @@ channelIntegration:
       drop: ["ALL"]
 
 applicationServices:
+  identity:
+    # Enabled only when the signed application-identity capability is active.
+    enabled: false
+    image:
+      reference: registry.local/application-identity@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      pullPolicy: IfNotPresent
+    service:
+      port: 8080
+    environment: local
+    origin: ""
+    database:
+      connectionSecretName: controlplane-database-connection
+      connectionSecretKey: dsn
+    secretName: application-identity-secrets
+    otpKey: otp-key
+    rateKey: rate-key
+    trustedProxies: ""
+    socketParent: /var/run/zonited-identity
+    ingress:
+      enabled: true
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 10015
+      runAsGroup: 10015
+      fsGroup: 10015
+      fsGroupChangePolicy: OnRootMismatch
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
   ordering:
     # Enabled only when the signed commerce capability is active.
     enabled: false

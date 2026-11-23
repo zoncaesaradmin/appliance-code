@@ -6,8 +6,9 @@ import { ApplicationShell } from "./ApplicationShell";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
-import { consolePath, isApplicationPath, isApplicationSession, loginDestination, workspaceForPath } from "../lib/workspace";
+import { consolePath, isApplicationPath, loginDestination, workspaceForPath } from "../lib/workspace";
 import { useViewSyncGeneration } from "../lib/viewSyncHooks";
+import { applicationAuth } from "../lib/applicationAuth";
 import { Shell } from "../shell/Shell";
 import type { CapabilitiesResponse, Session } from "../types";
 import type { AppShellState } from "./AppShellState";
@@ -24,6 +25,7 @@ export function App(): React.JSX.Element {
     session: null
   });
   const [bootError, setBootError] = useState("");
+  const [applicationAuthenticated, setApplicationAuthenticated] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const bootstrapSync = useViewSyncGeneration("shell.bootstrap");
   const appSync = useViewSyncGeneration("app");
@@ -51,7 +53,15 @@ export function App(): React.JSX.Element {
           client.getCapabilities().catch(() => ({ capabilities: [] } as CapabilitiesResponse))
         ]);
         let session: Session | null = null;
-        if (loadAuth()) {
+        const applicationRoute = isApplicationPath(window.location.pathname) || window.location.pathname === "/";
+        if (applicationRoute) {
+          try {
+            const status = await applicationAuth.session();
+            setApplicationAuthenticated(status.authenticated);
+          } catch {
+            setApplicationAuthenticated(false);
+          }
+        } else if (loadAuth()) {
           try {
             session = await client.getSession();
           } catch {
@@ -119,21 +129,28 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const pathname = location.pathname;
+    const applicationPath = pathname === "/" || isApplicationPath(pathname);
     if (shellState.booting) {
+      return;
+    }
+    if (!applicationPath && applicationAuthenticated) {
+      // Keep the operator and application identities separate when a user
+      // moves between the two URL spaces in the same browser session.
+      setApplicationAuthenticated(false);
       return;
     }
     if (!shellState.initialized && pathname !== "/setup") {
       navigate("/setup", true);
       return;
     }
-    if (shellState.initialized && !shellState.session && pathname === "/") {
+    if (shellState.initialized && !shellState.session && !applicationAuthenticated && pathname === "/") {
       // The public origin is the Zonited application entry. Keep the operator
       // surface explicit at /login or /console instead of making the default
       // landing page choose between the two identities.
       navigate("/app/login", true);
       return;
     }
-    if (shellState.initialized && !shellState.session && pathname !== "/login" && pathname !== "/app/login") {
+    if (shellState.initialized && !shellState.session && !applicationAuthenticated && pathname !== "/login" && pathname !== "/app/login") {
       const next = loginDestination(pathname, location.search);
       if (isApplicationPath(pathname)) {
         navigate(`/app/login?next=${encodeURIComponent(next)}`, true);
@@ -155,7 +172,10 @@ export function App(): React.JSX.Element {
         navigate(legacyPath, true);
       }
     }
-  }, [location, shellState.booting, shellState.initialized, shellState.session]);
+    if (applicationAuthenticated && pathname === "/") {
+      navigate("/app", true);
+    }
+  }, [location, shellState.booting, shellState.initialized, shellState.session, applicationAuthenticated]);
 
   async function handleLogin(username: string, password: string, persist: boolean): Promise<void> {
     // Login omits domain in the UI; client/backend default to local.
@@ -186,6 +206,12 @@ export function App(): React.JSX.Element {
     navigate("/login", true);
   }
 
+  async function handleApplicationLogout(): Promise<void> {
+    await applicationAuth.logout().catch(() => undefined);
+    setApplicationAuthenticated(false);
+    navigate("/app/login", true);
+  }
+
   if (shellState.booting) {
     return <BootScreen message="Loading appliance control plane UI..." />;
   }
@@ -194,11 +220,13 @@ export function App(): React.JSX.Element {
     return <BootScreen message={bootError} error />;
   }
 
-  if (shellState.initialized && isApplicationPath(location.pathname) && !isApplicationSession(shellState.session)) {
-    return <ApplicationLoginPage />;
+  const applicationPath = location.pathname === "/" || isApplicationPath(location.pathname);
+
+  if (shellState.initialized && applicationPath && !applicationAuthenticated) {
+    return <ApplicationLoginPage onAuthenticated={() => { setApplicationAuthenticated(true); navigate("/app", true); }} />;
   }
 
-  if (!shellState.initialized || !shellState.session) {
+  if (!shellState.initialized || (!shellState.session && !applicationAuthenticated)) {
     const isSetup = !shellState.initialized;
     return (
       <AuthLayout
@@ -212,12 +240,13 @@ export function App(): React.JSX.Element {
     );
   }
 
-  if (isApplicationPath(location.pathname)) {
+  if (applicationPath && applicationAuthenticated) {
+    const applicationSession: Session = { userId: "", username: "Member", displayName: "Member", domain: "application", authMethod: "mobile_otp", permissions: [] };
     return (
       <ApplicationShell
         pathname={location.pathname}
-        session={shellState.session}
-        onLogout={handleLogout}
+        session={applicationSession}
+        onLogout={handleApplicationLogout}
       />
     );
   }
@@ -225,7 +254,7 @@ export function App(): React.JSX.Element {
   return (
     <Shell
       pathname={location.pathname}
-      session={shellState.session}
+      session={shellState.session!}
       capabilities={shellState.capabilities}
       onLogout={handleLogout}
       onSignedOut={() => {
