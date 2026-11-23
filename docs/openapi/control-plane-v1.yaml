@@ -35,14 +35,15 @@ paths:
     get:
       summary: List enabled appliance capabilities
       description: >
-        Returns the resolved capability set for the running appliance instance.
-        Browser clients should gate visible navigation and pages on these
-        capabilities instead of duplicating profile-to-capability mapping.
+        Returns the resolved profile and capability set for the running
+        appliance instance. Browser clients should gate visible navigation
+        and pages on these capabilities and use the profile identifier for
+        profile-defined entry-point behavior.
       operationId: listCapabilities
       security: []
       responses:
         "200":
-          description: Enabled capabilities.
+          description: Active profile and enabled capabilities.
           content:
             application/json:
               schema:
@@ -2198,8 +2199,11 @@ components:
           type: boolean
     CapabilitiesResponse:
       type: object
-      required: [capabilities]
+      required: [profile, capabilities]
       properties:
+        profile:
+          type: string
+          description: Signed profile selected for this appliance instance.
         capabilities:
           type: array
           items:

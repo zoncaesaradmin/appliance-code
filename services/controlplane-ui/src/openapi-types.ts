@@ -33,7 +33,7 @@ export interface paths {
         };
         /**
          * List enabled appliance capabilities
-         * @description Returns the resolved capability set for the running appliance instance. Browser clients should gate visible navigation and pages on these capabilities instead of duplicating profile-to-capability mapping.
+         * @description Returns the resolved profile and capability set for the running appliance instance. Browser clients should gate visible navigation and pages on these capabilities and use the profile identifier for profile-defined entry-point behavior.
          */
         get: operations["listCapabilities"];
         put?: never;
@@ -1492,6 +1492,8 @@ export interface components {
             initialized: boolean;
         };
         CapabilitiesResponse: {
+            /** @description Signed profile selected for this appliance instance. */
+            profile: string;
             capabilities: string[];
         };
         CreateFirstAdminRequest: {
@@ -1979,7 +1981,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Enabled capabilities. */
+            /** @description Active profile and enabled capabilities. */
             200: {
                 headers: {
                     [name: string]: unknown;

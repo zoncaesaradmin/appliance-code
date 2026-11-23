@@ -114,8 +114,8 @@ The service should expose:
 - `GET /health/live`
 - `GET /health/ready`
 - `GET /`
-- `GET /login`
-- `POST /login`
+- `GET /console/login`
+- `POST /console/login`
 - `POST /logout`
 - `GET /dashboard`
 - `GET /partials/status`

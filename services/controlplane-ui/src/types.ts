@@ -18,6 +18,7 @@ export interface SetupStatus {
 }
 
 export interface CapabilitiesResponse {
+  profile: string;
   capabilities: string[];
 }
 

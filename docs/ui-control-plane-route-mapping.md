@@ -124,9 +124,9 @@ Useful event names:
 | `GET /app/login` | React `ApplicationLoginPage` | `GET /version`, then `/api/shared/v1/auth/session` | Application-context mobile sign-in; operator credentials are explicitly rejected |
 | `POST /app/login` | React mobile number/code forms | `/api/shared/v1/auth/otp/challenges` and `/api/shared/v1/auth/otp/verify` | Sets the separate HttpOnly application session cookie; local/test delivery uses the private OTP inbox |
 | `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the separate application session loaded through `GET /api/shared/v1/auth/session`; no application business API is called by this shell yet | Protected Zonited PWA workspace shell with application navigation |
-| `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
+| `POST /console/login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA honors the same keep-signed-in choice as login |
-| `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |
+| `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/console/login` |
 | `GET /home` | React `HomePage` Overview | `GET /version`, `GET /health/ready`, `GET /api/v1/appliance/identity`, `GET /api/v1/appliance/setup-state` | SPA page |
 | `GET /home/connectivity` | React `HomePage` Connectivity | Same overview fetches as `/home` | SPA page |
 | `GET /home/audit-logs` | React `HomePage` Audit Logs | Session must include `audit.read`; `GET /api/v1/audit/events?limit=10` with optional `cursor` for Next page | SPA page |
@@ -342,15 +342,17 @@ the existing appliance routes stable:
 
 | Browser-visible route | UI behavior | Downstream control-plane call(s) |
 | --- | --- | --- |
-| `GET /` | Public Zonited application entry; unauthenticated browsers are redirected to `/app/login`, and an application session is sent to `/app` | Application routes do not use the operator session; application identity uses the separate `/api/shared/v1/auth/*` contract |
+| `GET /` | Profile-selected public entry; `application-core` redirects unauthenticated browsers to `/app/login`, while other profiles redirect to `/console/login` | Application routes do not use the operator session; application identity uses the separate `/api/shared/v1/auth/*` contract |
 | `GET /console` or `GET /console/*` | Redirects to the equivalent existing appliance route (`/home`, `/manage`, `/analyze`, `/admin`, or `/account`) after authentication | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
-| `GET /login?next=...` | Shows the single context-aware login surface and returns to a validated internal destination after login | `POST /api/v1/auth/login`, then `GET /api/v1/auth/session` during shell bootstrap |
+| `GET /console/login?next=...` | Shows the operator login surface and returns to a validated internal destination after login | `POST /api/v1/auth/login`, then `GET /api/v1/auth/session` during shell bootstrap |
 | `GET /app` or `GET /app/*` | Application-workspace namespace; only an application session (`domain=application`, `authMethod=mobile_otp`) may render the protected PWA shell | Operator sessions are not accepted for this namespace |
 
 The `next` value is accepted only for internal UI paths. Protocol-relative,
 external, API, login, and setup paths are rejected and fall back to the
-existing `/home` operator route. The public origin itself enters the
-application workspace; operators use `/console` or `/login` explicitly.
+existing `/home` operator route. The public origin follows the signed profile:
+`application-core` enters the application workspace, while other profiles enter
+the operator console. Operators can always use `/console` or `/console/login`
+explicitly.
 
 The SPA talks to the control-plane API **directly** (not via a Go UI reverse
 proxy). Notable Admin host configuration routes:

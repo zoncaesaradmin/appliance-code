@@ -74,6 +74,7 @@ function uuid(): string {
 
 type MockState = {
   initialized: boolean;
+  profile: string;
   capabilities: string[];
   session: Session | null;
   tokens: APIToken[];
@@ -105,6 +106,7 @@ type MockState = {
 
 const mockState: MockState = {
   initialized: true,
+  profile: "builder-storage-landns",
 	capabilities: ["base", "files", "host", "build", "artifact", "dns", "applications", "inference", "video", "guest-access", "focus-content"],
 	session: {
     userId: "mock-admin",
@@ -335,7 +337,7 @@ export class MockControlPlaneClient {
   }
 
   async getCapabilities(): Promise<CapabilitiesResponse> {
-    return { capabilities: mockState.capabilities };
+    return { profile: mockState.profile, capabilities: mockState.capabilities };
   }
 
   async loginAsGuest(_name: string): Promise<LoginResponse> {

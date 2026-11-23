@@ -6,7 +6,14 @@ import { ApplicationShell } from "./ApplicationShell";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
-import { consolePath, isApplicationPath, loginDestination, workspaceForPath } from "../lib/workspace";
+import {
+  consolePath,
+  defaultLoginPath,
+  isApplicationEntryPath,
+  isApplicationPath,
+  loginDestination,
+  workspaceForPath
+} from "../lib/workspace";
 import { useViewSyncGeneration } from "../lib/viewSyncHooks";
 import { applicationAuth } from "../lib/applicationAuth";
 import { Shell } from "../shell/Shell";
@@ -21,6 +28,7 @@ export function App(): React.JSX.Element {
   const [shellState, setShellState] = useState<AppShellState>({
     booting: true,
     initialized: true,
+    profile: "",
     capabilities: [],
     session: null
   });
@@ -38,10 +46,10 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    document.title = location.pathname === "/" || isApplicationPath(location.pathname)
+    document.title = isApplicationPath(location.pathname) || isApplicationEntryPath(location.pathname, shellState.profile)
       ? "Zonited App"
       : "Zon Appliance";
-  }, [location.pathname]);
+  }, [location.pathname, shellState.profile]);
 
   useEffect(() => {
     let ignore = false;
@@ -50,10 +58,10 @@ export function App(): React.JSX.Element {
       try {
         const [setup, capabilities] = await Promise.all([
           client.getSetupStatus(),
-          client.getCapabilities().catch(() => ({ capabilities: [] } as CapabilitiesResponse))
+          client.getCapabilities().catch(() => ({ profile: "", capabilities: [] } as CapabilitiesResponse))
         ]);
         let session: Session | null = null;
-        const applicationRoute = isApplicationPath(window.location.pathname) || window.location.pathname === "/";
+        const applicationRoute = isApplicationPath(window.location.pathname) || isApplicationEntryPath(window.location.pathname, capabilities.profile);
         if (applicationRoute) {
           try {
             const status = await applicationAuth.session();
@@ -72,6 +80,7 @@ export function App(): React.JSX.Element {
           setShellState({
             booting: false,
             initialized: setup.initialized,
+            profile: capabilities.profile,
             capabilities: capabilities.capabilities,
             session
           });
@@ -102,7 +111,7 @@ export function App(): React.JSX.Element {
     void (async () => {
       try {
         const [capabilities, session] = await Promise.all([
-          client.getCapabilities().catch(() => ({ capabilities: [] } as CapabilitiesResponse)),
+          client.getCapabilities().catch(() => ({ profile: "", capabilities: [] } as CapabilitiesResponse)),
           client.getSession().catch(() => null)
         ]);
         if (ignore) {
@@ -115,6 +124,7 @@ export function App(): React.JSX.Element {
         }
         setShellState((current) => ({
           ...current,
+          profile: capabilities.profile || current.profile,
           capabilities: capabilities.capabilities,
           session
         }));
@@ -129,7 +139,7 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const pathname = location.pathname;
-    const applicationPath = pathname === "/" || isApplicationPath(pathname);
+    const applicationPath = isApplicationPath(pathname) || isApplicationEntryPath(pathname, shellState.profile);
     if (shellState.booting) {
       return;
     }
@@ -144,26 +154,25 @@ export function App(): React.JSX.Element {
       return;
     }
     if (shellState.initialized && !shellState.session && !applicationAuthenticated && pathname === "/") {
-      // The public origin is the Zonited application entry. Keep the operator
-      // surface explicit at /login or /console instead of making the default
-      // landing page choose between the two identities.
-      navigate("/app/login", true);
+      // The signed profile chooses the public entry. Unlisted profiles use the
+      // operator console; application-core owns the application entry.
+      navigate(defaultLoginPath(shellState.profile), true);
       return;
     }
-    if (shellState.initialized && !shellState.session && !applicationAuthenticated && pathname !== "/login" && pathname !== "/app/login") {
-      const next = loginDestination(pathname, location.search);
+    if (shellState.initialized && !shellState.session && !applicationAuthenticated && pathname !== "/console/login" && pathname !== "/app/login") {
+      const next = loginDestination(pathname, location.search, shellState.profile);
       if (isApplicationPath(pathname)) {
         navigate(`/app/login?next=${encodeURIComponent(next)}`, true);
         return;
       }
-      navigate(next === "/home" ? "/login" : `/login?next=${encodeURIComponent(pathname)}`, true);
+      navigate(next === "/home" ? "/console/login" : `/console/login?next=${encodeURIComponent(pathname)}`, true);
       return;
     }
     if (
       shellState.session &&
-      (pathname === "/" || pathname === "/login" || pathname === "/app/login" || pathname === "/setup")
+      (pathname === "/" || pathname === "/login" || pathname === "/console/login" || pathname === "/app/login" || pathname === "/setup")
     ) {
-      navigate(loginDestination(pathname, location.search), true);
+      navigate(loginDestination(pathname, location.search, shellState.profile), true);
       return;
     }
     if (shellState.session && (pathname === "/console" || pathname.startsWith("/console/"))) {
@@ -175,7 +184,7 @@ export function App(): React.JSX.Element {
     if (applicationAuthenticated && pathname === "/") {
       navigate("/app", true);
     }
-  }, [location, shellState.booting, shellState.initialized, shellState.session, applicationAuthenticated]);
+  }, [location, shellState.booting, shellState.initialized, shellState.profile, shellState.session, applicationAuthenticated]);
 
   async function handleLogin(username: string, password: string, persist: boolean): Promise<void> {
     // Login omits domain in the UI; client/backend default to local.
@@ -203,7 +212,7 @@ export function App(): React.JSX.Element {
   async function handleLogout(): Promise<void> {
     await client.logout();
     setShellState((current) => ({ ...current, session: null }));
-    navigate("/login", true);
+    navigate("/console/login", true);
   }
 
   async function handleApplicationLogout(): Promise<void> {
@@ -220,7 +229,7 @@ export function App(): React.JSX.Element {
     return <BootScreen message={bootError} error />;
   }
 
-  const applicationPath = location.pathname === "/" || isApplicationPath(location.pathname);
+  const applicationPath = isApplicationPath(location.pathname) || isApplicationEntryPath(location.pathname, shellState.profile);
 
   if (shellState.initialized && applicationPath && !applicationAuthenticated) {
     return <ApplicationLoginPage onAuthenticated={() => { setApplicationAuthenticated(true); navigate("/app", true); }} />;
@@ -235,7 +244,7 @@ export function App(): React.JSX.Element {
         onSetup={handleSetup}
         guestAccess={shellState.capabilities.includes("guest-access")}
         onGuest={handleGuest}
-        workspace={workspaceForPath(loginDestination(location.pathname, location.search))}
+        workspace={workspaceForPath(loginDestination(location.pathname, location.search, shellState.profile), shellState.profile)}
       />
     );
   }
@@ -260,7 +269,7 @@ export function App(): React.JSX.Element {
       onSignedOut={() => {
         clearAuth();
         setShellState((current) => ({ ...current, session: null }));
-        navigate("/login", true);
+        navigate("/console/login", true);
       }}
     />
   );

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   consolePath,
+  defaultAuthenticatedPath,
+  defaultLoginPath,
+  isApplicationEntryPath,
   isApplicationPath,
   isApplicationSession,
   loginDestination,
@@ -13,7 +16,8 @@ describe("workspace routing", () => {
     expect(workspaceForPath("/app")).toBe("app");
     expect(workspaceForPath("/app/discover")).toBe("app");
     expect(isApplicationPath("/app/login")).toBe(true);
-    expect(workspaceForPath("/")).toBe("app");
+    expect(workspaceForPath("/")).toBe("console");
+    expect(workspaceForPath("/", "application-core")).toBe("app");
   });
 
   it("does not treat an operator session as an application session", () => {
@@ -29,21 +33,33 @@ describe("workspace routing", () => {
     expect(consolePath("/home")).toBe("/home");
   });
 
+  it("uses a code-defined profile policy with a console fallback", () => {
+    expect(defaultLoginPath("application-core")).toBe("/app/login");
+    expect(defaultAuthenticatedPath("application-core")).toBe("/app");
+    expect(isApplicationEntryPath("/", "application-core")).toBe(true);
+    expect(defaultLoginPath("core")).toBe("/console/login");
+    expect(defaultAuthenticatedPath("unknown-profile")).toBe("/home");
+    expect(isApplicationEntryPath("/", "unknown-profile")).toBe(false);
+  });
+
   it("rejects external, API, and authentication destinations", () => {
     expect(safeNextPath("//evil.example")).toBe("/home");
     expect(safeNextPath("/api/v1/auth/session")).toBe("/home");
     expect(safeNextPath("/login")).toBe("/home");
+    expect(safeNextPath("/console/login")).toBe("/home");
     expect(safeNextPath("/app/login")).toBe("/home");
     expect(safeNextPath("/console")).toBe("/console");
   });
 
   it("preserves a direct console or app intent through login", () => {
-    expect(loginDestination("/", "")).toBe("/app");
+    expect(loginDestination("/", "")).toBe("/home");
+    expect(loginDestination("/", "", "application-core")).toBe("/app");
     expect(loginDestination("/console", "")).toBe("/home");
     expect(loginDestination("/login", "")).toBe("/home");
+    expect(loginDestination("/console/login", "")).toBe("/home");
     expect(loginDestination("/app", "")).toBe("/app");
     expect(loginDestination("/app/login", "")).toBe("/app");
-    expect(loginDestination("/login", "?next=%2Fconsole%2Fadmin%2Fprofiles")).toBe(
+    expect(loginDestination("/console/login", "?next=%2Fconsole%2Fadmin%2Fprofiles")).toBe(
       "/console/admin/profiles"
     );
   });

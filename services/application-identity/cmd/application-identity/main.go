@@ -181,7 +181,7 @@ func main() {
 		}
 		errCh <- err
 	}()
-	fmt.Fprintf(os.Stdout, "{\"level\":\"info\",\"service\":\"application-identity\",\"event\":\"service_started\",\"version\":%q,\"address\":%q,\"environment\":%q}\n", buildVersion, c.address, c.environment)
+	fmt.Fprintf(os.Stdout, "{\"level\":\"info\",\"service\":\"identity\",\"event\":\"service_started\",\"version\":%q,\"address\":%q,\"environment\":%q}\n", buildVersion, c.address, c.environment)
 	select {
 	case <-ctx.Done():
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)

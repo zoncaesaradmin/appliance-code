@@ -6,10 +6,10 @@ The appliance has one public origin and one authentication entry point, with
 two intentionally separate browser workspaces:
 
 ```text
-/                 Zonited application entry
+/                 Profile-selected public entry
 /app/...          application PWA routes
 /console/...      appliance operations console
-/login?next=...   shared login surface
+/console/login?next=...   operator login surface
 /setup            first administrator setup
 ```
 
@@ -20,7 +20,9 @@ AI, host services, and administration.
 ## Login behavior
 
 The public application entry has one primary action. It does not present an
-operator/application chooser. An operator who opens `/console` directly gets
+operator/application chooser. The signed `application-core` profile sends `/`
+to the application login; all other profiles send `/` to the operator login.
+An operator who opens `/console` directly gets
 the same login component with console context and is returned to the console
 after authentication.
 
@@ -68,13 +70,13 @@ services, but does not yet contain every PWA backend service from `capp`.
 3. Add application business screens and their signed backend contracts inside
    the now-live `/app` PWA shell.
 4. Add role-aware workspace switching after authentication.
-5. Keep `/` as the Zonited application entry; operators use `/console` or
-   `/login` explicitly while application API surfaces are added incrementally.
+5. Keep `/` as the profile-selected public entry; `application-core` uses
+   `/app/login`, while all other profiles use `/console/login`.
 
 ## Verification gates
 
 - Existing control-plane UI navigation and API calls remain unchanged.
-- `/console` redirects unauthenticated users through `/login` and returns them
+- `/console` redirects unauthenticated users through `/console/login` and returns them
   to the console after login.
 - Open redirects are rejected; `next` accepts only internal appliance paths.
 - Existing `/home`, `/manage`, `/analyze`, and `/admin` bookmarks still render.

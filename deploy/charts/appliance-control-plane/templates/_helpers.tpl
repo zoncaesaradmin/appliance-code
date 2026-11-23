@@ -325,7 +325,7 @@ channel-integration
 {{- if and .Values.applicationServices.ordering.enabled (has "commerce" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
 
-{{- define "appliance-control-plane.applicationIdentityName" -}}application-identity{{- end -}}
+{{- define "appliance-control-plane.identityName" -}}identity{{- end -}}
 {{- define "appliance-control-plane.applicationIdentityEnabled" -}}
 {{- if and .Values.applicationServices.identity.enabled (has "application-identity" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
@@ -333,13 +333,13 @@ channel-integration
 {{- .Values.applicationServices.identity.origin | default (.Values.config.publicOrigin | default .Values.config.canonicalOrigin) -}}
 {{- end -}}
 {{- define "appliance-control-plane.applicationIdentitySelectorLabels" -}}
-app.kubernetes.io/name: {{ include "appliance-control-plane.applicationIdentityName" . }}
+app.kubernetes.io/name: {{ include "appliance-control-plane.identityName" . }}
 app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
 {{- end -}}
 {{- define "appliance-control-plane.applicationIdentityLabels" -}}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{ include "appliance-control-plane.applicationIdentitySelectorLabels" . }}
-app.kubernetes.io/component: application-identity
+app.kubernetes.io/component: identity
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
@@ -414,7 +414,7 @@ ForwardAuth middleware name.
   kind: Rule
   priority: 105
   services:
-    - name: {{ include "appliance-control-plane.applicationIdentityName" . }}
+    - name: {{ include "appliance-control-plane.identityName" . }}
       {{- if include "appliance-control-plane.appsNamespaced" . }}
       namespace: {{ include "appliance-control-plane.appsNamespace" . }}
       {{- end }}

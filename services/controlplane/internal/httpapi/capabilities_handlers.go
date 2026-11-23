@@ -11,13 +11,18 @@ import (
 // gate what they show on the actual enabled capability set instead of
 // duplicating the profile-to-capability mapping themselves.
 type CapabilitiesHandlers struct {
+	Profile      appliance.Profile
 	Capabilities appliance.Set
 }
 
 type capabilitiesResponse struct {
+	Profile      string                 `json:"profile"`
 	Capabilities []appliance.Capability `json:"capabilities"`
 }
 
 func (h *CapabilitiesHandlers) Get(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, capabilitiesResponse{Capabilities: h.Capabilities.Names()})
+	writeJSON(w, http.StatusOK, capabilitiesResponse{
+		Profile:      string(h.Profile),
+		Capabilities: h.Capabilities.Names(),
+	})
 }

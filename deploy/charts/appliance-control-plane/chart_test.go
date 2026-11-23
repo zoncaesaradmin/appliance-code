@@ -204,6 +204,29 @@ func TestLocalPostgresProfileRendersPinnedStatefulSet(t *testing.T) {
 	}
 }
 
+func TestLocalPostgresAllowsApplicationIdentity(t *testing.T) {
+	digest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "appsNamespace.name=ace-apps",
+		"--set", "config.enabledCapabilities={application-identity}",
+		"--set", "applicationServices.identity.enabled=true",
+		"--set", "rollout.aceInfra.enabled=true",
+		"--set", "database.driver=postgres",
+		"--set", "database.postgres.connectionSecretName=controlplane-database-connection",
+		"--set", "database.postgres.local.enabled=true",
+		"--set", "database.postgres.local.image.digest="+digest,
+	)...)
+	policy := findByKindAndName(docs, "NetworkPolicy", "platform-postgres-allow")
+	if policy == nil {
+		t.Fatal("expected local PostgreSQL NetworkPolicy")
+	}
+	rendered, _ := yaml.Marshal(policy)
+	if !bytes.Contains(rendered, []byte("kubernetes.io/metadata.name: ace-apps")) ||
+		!bytes.Contains(rendered, []byte("app.kubernetes.io/name: identity")) {
+		t.Fatalf("PostgreSQL NetworkPolicy must allow application identity egress:\n%s", rendered)
+	}
+}
+
 func TestPodAndContainerSecurityHardening(t *testing.T) {
 	docs := renderChart(t, defaultRenderArgs()...)
 	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)

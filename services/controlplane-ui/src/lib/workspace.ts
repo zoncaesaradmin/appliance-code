@@ -2,10 +2,47 @@ import type { Session } from "../types";
 
 export type Workspace = "app" | "console";
 
+type LandingPolicy = {
+  loginPath: "/app/login" | "/console/login";
+  authenticatedPath: "/app" | "/home";
+};
+
+const defaultLandingPolicy: LandingPolicy = {
+  loginPath: "/console/login",
+  authenticatedPath: "/home"
+};
+
+// Profile-specific entry behavior belongs in code, not in install-time
+// configuration. Add a profile here when it needs a different public entry;
+// every unlisted profile safely uses the operator console default.
+const profileLandingPolicies: Record<string, LandingPolicy> = {
+  "application-core": {
+    loginPath: "/app/login",
+    authenticatedPath: "/app"
+  }
+};
+
 const INTERNAL_PATH = /^(?:\/(?:app|console|home|manage|analyze|admin|account)(?:\/|$)|\/$)/;
 
 export function isApplicationPath(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
+}
+
+export function landingPolicyForProfile(profile: string | null | undefined): LandingPolicy {
+  const normalized = (profile ?? "").trim().toLowerCase();
+  return profileLandingPolicies[normalized] ?? defaultLandingPolicy;
+}
+
+export function defaultLoginPath(profile: string | null | undefined): LandingPolicy["loginPath"] {
+  return landingPolicyForProfile(profile).loginPath;
+}
+
+export function defaultAuthenticatedPath(profile: string | null | undefined): LandingPolicy["authenticatedPath"] {
+  return landingPolicyForProfile(profile).authenticatedPath;
+}
+
+export function isApplicationEntryPath(pathname: string, profile: string | null | undefined): boolean {
+  return pathname === "/" && defaultLoginPath(profile) === "/app/login";
 }
 
 /**
@@ -17,8 +54,8 @@ export function isApplicationSession(session: Pick<Session, "domain" | "authMeth
   return session?.domain === "application" && session.authMethod === "mobile_otp";
 }
 
-export function workspaceForPath(pathname: string): Workspace {
-  if (pathname === "/" || isApplicationPath(pathname)) {
+export function workspaceForPath(pathname: string, profile?: string | null): Workspace {
+  if (isApplicationPath(pathname) || isApplicationEntryPath(pathname, profile)) {
     return "app";
   }
   return "console";
@@ -59,6 +96,7 @@ export function safeNextPath(raw: string | null | undefined, fallback = "/home")
     value.includes("\\") ||
     value.startsWith("/api/") ||
     value === "/login" ||
+    value === "/console/login" ||
     value === "/app/login" ||
     value === "/setup"
   ) {
@@ -67,10 +105,13 @@ export function safeNextPath(raw: string | null | undefined, fallback = "/home")
   return INTERNAL_PATH.test(value) ? value : fallback;
 }
 
-export function loginDestination(pathname: string, search: string): string {
+export function loginDestination(pathname: string, search: string, profile?: string | null): string {
   const requested = new URLSearchParams(search).get("next");
   if (requested) {
     return safeNextPath(requested);
+  }
+  if (pathname === "/console/login") {
+    return "/home";
   }
   if (pathname === "/console" || pathname.startsWith("/console/")) {
     return consolePath(pathname);
@@ -81,8 +122,6 @@ export function loginDestination(pathname: string, search: string): string {
     }
     return pathname;
   }
-  // The public origin is the application entry. The explicit operator login
-  // remains an appliance destination, while /app/login owns app sign-in.
-  return pathname === "/" ? "/app" : "/home";
+  return pathname === "/" ? defaultAuthenticatedPath(profile) : "/home";
 }
 

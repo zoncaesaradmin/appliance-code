@@ -78,6 +78,15 @@ spec:
           podSelector:
             matchLabels:
               {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
+    {{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.appsNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.applicationIdentitySelectorLabels" . | nindent 14 }}
+    {{- end }}
     {{- if eq (include "appliance-control-plane.commerceEnabled" .) "true" }}
     - from:
         - namespaceSelector:

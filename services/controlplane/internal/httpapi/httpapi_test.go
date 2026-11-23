@@ -186,11 +186,14 @@ func newTestServerWithCatalog(t *testing.T, profile appliance.Profile, catalog d
 		Users: services.Users, Roles: services.Roles,
 	}
 	deps := httpapi.Deps{
-		Logger:        logger,
-		Auth:          authDeps,
-		AuthH:         &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users, UserStore: services.UserStore},
-		SetupH:        &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
-		CapabilitiesH: &httpapi.CapabilitiesHandlers{Capabilities: services.ApplianceProfile.Capabilities},
+		Logger: logger,
+		Auth:   authDeps,
+		AuthH:  &httpapi.AuthHandlers{Sessions: services.Sessions, Users: services.Users, UserStore: services.UserStore},
+		SetupH: &httpapi.SetupHandlers{DB: services.DB, UserStore: services.UserStore, RoleStore: services.RoleStore, Users: services.Users},
+		CapabilitiesH: &httpapi.CapabilitiesHandlers{
+			Profile:      services.ApplianceProfile.Name,
+			Capabilities: services.ApplianceProfile.Capabilities,
+		},
 		IdentityH: &httpapi.IdentityHandlers{
 			ApplianceName:   cfg.ApplianceName,
 			DNSZone:         cfg.DNSZoneName,
@@ -375,6 +378,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 				t.Fatalf("capabilities status = %d, want 200", resp.StatusCode)
 			}
 			var body struct {
+				Profile      string   `json:"profile"`
 				Capabilities []string `json:"capabilities"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
@@ -382,6 +386,9 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 			}
 			if fmt.Sprint(body.Capabilities) != fmt.Sprint(tc.want) {
 				t.Fatalf("capabilities for profile %q = %v, want %v", tc.profile, body.Capabilities, tc.want)
+			}
+			if body.Profile != string(tc.profile) {
+				t.Fatalf("profile = %q, want %q", body.Profile, tc.profile)
 			}
 		})
 	}

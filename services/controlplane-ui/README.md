@@ -19,7 +19,8 @@ APPLIANCE_UI_STATIC_DIR=/opt/appliance-ui/dist
 
 The Go host serves:
 
-- `/` (the Zonited application entry) and deep SPA routes such as `/admin/lan-services`
+- `/` (the signed-profile-selected public entry) and deep SPA routes such as `/admin/lan-services`
+- `/console` and `/console/login` for the appliance operations console
 - `/app` and `/app/login` for the Zonited application workspace
 - immutable files under `/assets/`
 - `/manifest.webmanifest`, `/icon.svg`, and the static-shell service worker
@@ -171,8 +172,9 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
   `/console` supplies operator context and `/app` supplies application
   context; neither page presents a role chooser. The operations console link
   remains deliberately low-emphasis on the application login.
-- The public origin `/` enters the Zonited application workspace. Operators use
-  `/console` or `/login` explicitly; existing `/home`, `/manage`, `/analyze`,
+- The public origin `/` follows the resolved profile: `application-core` enters
+  the Zonited application workspace, while other profiles enter the operator
+  console. Operators use `/console` or `/console/login` explicitly; existing `/home`, `/manage`, `/analyze`,
   `/admin`, and `/account` routes remain valid compatibility routes.
 - Manage, Analyze, and Admin use the left icon rail plus a transient feature
   selector.

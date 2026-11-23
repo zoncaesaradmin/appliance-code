@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "appliance-control-plane.applicationIdentityName" . }}
+  name: {{ include "appliance-control-plane.identityName" . }}
   namespace: {{ include "appliance-control-plane.appsNamespace" . }}
   labels:
     {{- include "appliance-control-plane.applicationIdentityLabels" . | nindent 4 }}
@@ -21,7 +21,7 @@ spec:
       securityContext:
         {{- toYaml .Values.applicationServices.identity.podSecurityContext | nindent 8 }}
       containers:
-        - name: application-identity
+        - name: identity
           image: {{ .Values.applicationServices.identity.image.reference | quote }}
           imagePullPolicy: {{ .Values.applicationServices.identity.image.pullPolicy }}
           env:

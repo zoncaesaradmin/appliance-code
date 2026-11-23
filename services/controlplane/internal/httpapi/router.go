@@ -191,10 +191,9 @@ func publicRoutes() []publicRoute {
 			}
 			return http.HandlerFunc(deps.SetupH.Status), nil
 		}},
-		// Reports the whole resolved capability set (not the profile
-		// name), so a caller never needs its own copy of profileCatalog
-		// to decide what to show for this appliance instance. Always
-		// registered: CapabilityBase is present in every profile.
+		// Reports the resolved profile and capability set, so callers never
+		// need their own copy of the signed profile catalog. Always registered:
+		// CapabilityBase is present in every profile.
 		{capability: appliance.CapabilityBase, pattern: "GET /api/v1/capabilities", build: func(deps Deps, _ wrappers) (http.Handler, error) {
 			if deps.CapabilitiesH == nil {
 				return nil, fmt.Errorf("missing capabilities handlers")

@@ -25,6 +25,6 @@ For a local/test smoke test, an operator with access to the pod can retrieve a
 pending code without exposing it publicly:
 
 ```sh
-SOCKET=$(kubectl -n ace-apps exec deploy/application-identity -- sh -c 'find /var/run/zonited-identity -name inbox.sock -print -quit')
-kubectl -n ace-apps exec deploy/application-identity -- /application-identity take-code --socket "$SOCKET" --phone +919876543210
+SOCKET=$(kubectl -n ace-apps exec deploy/identity -- sh -c 'find /var/run/zonited-identity -name inbox.sock -print -quit')
+kubectl -n ace-apps exec deploy/identity -- /application-identity take-code --socket "$SOCKET" --phone +919876543210
 ```
