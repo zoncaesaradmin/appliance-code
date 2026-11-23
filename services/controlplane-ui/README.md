@@ -19,11 +19,11 @@ APPLIANCE_UI_STATIC_DIR=/opt/appliance-ui/dist
 
 The Go host serves:
 
-- `/` (the Zonity application entry) and deep SPA routes such as `/admin/lan-services`
-- `/app` and `/app/login` for the Zonity application workspace
+- `/` (the Zonited application entry) and deep SPA routes such as `/admin/lan-services`
+- `/app` and `/app/login` for the Zonited application workspace
 - immutable files under `/assets/`
 - `/manifest.webmanifest`, `/icon.svg`, and the static-shell service worker
-  used by the installable Zonity PWA. The worker never caches `/api/`, health,
+  used by the installable Zonited PWA. The worker never caches `/api/`, health,
   version, or authentication responses.
 - `/health/live`
 - `/health/ready`
@@ -162,14 +162,15 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
   existing bookmarks and API usage remain valid.
 - `/app` is the application-workspace namespace. It is now a protected PWA
   shell with its own application navigation and an application-context login
-  at `/app/login`; the login reuses the existing `/api/v1/auth/login` contract
-  and token storage. Application business surfaces are added inside this shell
-  as their APIs become available.
+  at `/app/login`. The application login does not call the operator
+  `/api/v1/auth/login` contract and currently remains disabled until the
+  mobile-identity service is installed. Application business surfaces are
+  added inside this shell as their APIs become available.
 - Login has one context-aware operator surface and one application surface.
   `/console` supplies operator context and `/app` supplies application
   context; neither page presents a role chooser. The operations console link
   remains deliberately low-emphasis on the application login.
-- The public origin `/` enters the Zonity application workspace. Operators use
+- The public origin `/` enters the Zonited application workspace. Operators use
   `/console` or `/login` explicitly; existing `/home`, `/manage`, `/analyze`,
   `/admin`, and `/account` routes remain valid compatibility routes.
 - Manage, Analyze, and Admin use the left icon rail plus a transient feature

@@ -15,11 +15,11 @@ export function ApplicationShell(props: {
         <button className="application-shell__brand" type="button" onClick={() => navigate("/app")}>
           <BrandMark size="sm" />
           <span>
-            <strong>Zonity</strong>
+            <strong>Zonited</strong>
             <small>Your local space</small>
           </span>
         </button>
-        <nav className="application-shell__nav" aria-label="Zonity navigation">
+        <nav className="application-shell__nav" aria-label="Zonited navigation">
           <button type="button" className="application-shell__nav-link application-shell__nav-link--active" onClick={() => navigate("/app")}>
             My space
           </button>

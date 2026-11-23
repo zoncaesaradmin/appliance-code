@@ -5,13 +5,13 @@
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f4f0e7",
-  "theme_color": "#17352d",
+  "background_color": "#FFF9F1",
+  "theme_color": "#7F1D3D",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/zonited-logo-square.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

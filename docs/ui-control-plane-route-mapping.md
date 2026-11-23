@@ -121,10 +121,9 @@ Useful event names:
 | Browser-visible route | UI handler | Downstream control-plane call(s) | Browser success behavior |
 | --- | --- | --- | --- |
 | `GET /health/ready` | `ready` | `GET /health/ready` on the control-plane internal listener | `200 ready` plain text |
-| `GET /app/login` | React `ApplicationLoginPage` | `GET /version` for the small product-version label; the login submit calls `POST /api/v1/auth/login` | Application-context login page; successful sign-in returns to the validated internal `next` path, normally `/app` |
-| `POST /app/login` (browser form action) | React `ApplicationLoginPage.submitLogin` | `POST /api/v1/auth/login` with username, password, and the local domain; credentials and tokens are redacted from UI-service traces | The SPA stores the returned session tokens according to the keep-signed-in choice and navigates to `/app` |
-| `POST /app/login` (guest form) | React `ApplicationLoginPage.submitGuest` | `POST /api/v1/auth/login` through the existing guest-access client path | The SPA stores the returned session tokens and navigates to `/app` |
-| `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the authenticated session loaded through `GET /api/v1/auth/session`; no application business API is called by this shell yet | Protected Zonity PWA workspace shell with application navigation |
+| `GET /app/login` | React `ApplicationLoginPage` | `GET /version` for the small product-version label; no operator authentication request is made | Application-context login placeholder; mobile identity is not enabled yet and operator credentials are explicitly rejected |
+| `POST /app/login` | No form submission while mobile identity is unavailable | No downstream call | Disabled state; the page does not accept or send appliance username/password credentials |
+| `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the authenticated session loaded through `GET /api/v1/auth/session`; no application business API is called by this shell yet | Protected Zonited PWA workspace shell with application navigation |
 | `POST /login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA honors the same keep-signed-in choice as login |
 | `POST /logout` | `logout` | `POST /api/v1/auth/logout` | `303` redirect to `/login` |
@@ -343,10 +342,10 @@ the existing appliance routes stable:
 
 | Browser-visible route | UI behavior | Downstream control-plane call(s) |
 | --- | --- | --- |
-| `GET /` | Public Zonity application entry; unauthenticated browsers are redirected to `/app/login`, and an existing session is sent to `/app` | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
+| `GET /` | Public Zonited application entry; unauthenticated browsers are redirected to `/app/login`, and an application session is sent to `/app` | Application routes do not use the operator session; the UI only reads `/version` until mobile identity is integrated |
 | `GET /console` or `GET /console/*` | Redirects to the equivalent existing appliance route (`/home`, `/manage`, `/analyze`, `/admin`, or `/account`) after authentication | The normal shell bootstrap calls `GET /api/v1/setup/status`, `GET /api/v1/capabilities`, and, when a browser session is present, `GET /api/v1/auth/session` |
 | `GET /login?next=...` | Shows the single context-aware login surface and returns to a validated internal destination after login | `POST /api/v1/auth/login`, then `GET /api/v1/auth/session` during shell bootstrap |
-| `GET /app` or `GET /app/*` | Application-workspace namespace; `/app/login` is the application login and authenticated routes render the protected PWA shell | No control-plane route is renamed by this namespace |
+| `GET /app` or `GET /app/*` | Application-workspace namespace; only an application session (`domain=application`, `authMethod=mobile_otp`) may render the protected PWA shell | Operator sessions are not accepted for this namespace |
 
 The `next` value is accepted only for internal UI paths. Protocol-relative,
 external, API, login, and setup paths are rejected and fall back to the

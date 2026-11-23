@@ -11,7 +11,7 @@ export function ApplicationWorkspacePage(props: { pathname: string; session: Ses
   const name = props.session.displayName || props.session.username;
   return (
     <PageFrame
-      title="Zonity"
+      title="Zonited App"
       eyebrow="Application"
       description="Your signed-in space for local services, orders, and microzone activity."
       pathname={props.pathname}
@@ -19,7 +19,7 @@ export function ApplicationWorkspacePage(props: { pathname: string; session: Ses
       tabs={[]}
     >
       <div className="application-home">
-        <Card title={`Good to see you, ${name}.`} subtitle="Your Zonity is ready for the next connection.">
+        <Card title={`Good to see you, ${name}.`} subtitle="Your microzone is ready for the next connection.">
           <div className="application-home__welcome">
             <div>
               <strong>One place for the things around you.</strong>

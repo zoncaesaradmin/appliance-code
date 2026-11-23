@@ -6,7 +6,7 @@ The appliance has one public origin and one authentication entry point, with
 two intentionally separate browser workspaces:
 
 ```text
-/                 Zonity application entry
+/                 Zonited application entry
 /app/...          application PWA routes
 /console/...      appliance operations console
 /login?next=...   shared login surface
@@ -55,7 +55,7 @@ callback remains `/webhook`.
 
 The first application PWA slice is now delivered by the control-plane UI image:
 it provides an installable static shell, `/app/login`, and the protected `/app`
-entry while reusing the existing control-plane authentication contract. Its
+entry without reusing the operator authentication contract. Its
 Shared/Core and Rentals API contracts still must be delivered and routed; the
 initial application shell currently contains placeholders for those surfaces.
 The current appliance bundle contains the ordering and channel-integration
@@ -68,7 +68,7 @@ services, but does not yet contain every PWA backend service from `capp`.
 3. Add application business screens and their signed backend contracts inside
    the now-live `/app` PWA shell.
 4. Add role-aware workspace switching after authentication.
-5. Keep `/` as the Zonity application entry; operators use `/console` or
+5. Keep `/` as the Zonited application entry; operators use `/console` or
    `/login` explicitly while application API surfaces are added incrementally.
 
 ## Verification gates

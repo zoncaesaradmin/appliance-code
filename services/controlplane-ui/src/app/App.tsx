@@ -6,7 +6,7 @@ import { ApplicationShell } from "./ApplicationShell";
 import { BootScreen } from "./BootScreen";
 import { client } from "../lib/api";
 import { navigate } from "../lib/navigate";
-import { consolePath, isApplicationPath, loginDestination, workspaceForPath } from "../lib/workspace";
+import { consolePath, isApplicationPath, isApplicationSession, loginDestination, workspaceForPath } from "../lib/workspace";
 import { useViewSyncGeneration } from "../lib/viewSyncHooks";
 import { Shell } from "../shell/Shell";
 import type { CapabilitiesResponse, Session } from "../types";
@@ -127,7 +127,7 @@ export function App(): React.JSX.Element {
       return;
     }
     if (shellState.initialized && !shellState.session && pathname === "/") {
-      // The public origin is the Zonity application entry. Keep the operator
+      // The public origin is the Zonited application entry. Keep the operator
       // surface explicit at /login or /console instead of making the default
       // landing page choose between the two identities.
       navigate("/app/login", true);
@@ -194,17 +194,12 @@ export function App(): React.JSX.Element {
     return <BootScreen message={bootError} error />;
   }
 
+  if (shellState.initialized && isApplicationPath(location.pathname) && !isApplicationSession(shellState.session)) {
+    return <ApplicationLoginPage />;
+  }
+
   if (!shellState.initialized || !shellState.session) {
     const isSetup = !shellState.initialized;
-    if (!isSetup && isApplicationPath(location.pathname)) {
-      return (
-        <ApplicationLoginPage
-          onLogin={handleLogin}
-          guestAccess={shellState.capabilities.includes("guest-access")}
-          onGuest={handleGuest}
-        />
-      );
-    }
     return (
       <AuthLayout
         mode={isSetup ? "setup" : "login"}

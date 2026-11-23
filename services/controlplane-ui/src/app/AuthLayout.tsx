@@ -85,11 +85,11 @@ export function AuthLayout(props: {
       <section className="auth-visual">
         <div className="auth-visual__panel">
           <span className="eyebrow">Zon</span>
-          <h1>{isConsole ? "Operations, clearly in one place." : "Your Zonity workspace, ready when you are."}</h1>
+          <h1>{isConsole ? "Operations, clearly in one place." : "Your Zonited workspace, ready when you are."}</h1>
           <p>
             {isConsole
               ? "A focused operations console for the appliance and the services that run it."
-              : "A single place to discover, manage, and use the Zonity application."}
+              : "A single place to discover, manage, and use the Zonited application."}
           </p>
           <div className="hero-diagram" aria-hidden="true">
             <div className="hero-diagram__frame">
@@ -113,7 +113,7 @@ export function AuthLayout(props: {
         <div className="auth-form__center">
           <div className="auth-form__intro">
             <p className="auth-form__welcome">
-              {isConsole ? "Operations Console" : "Welcome to Zonity"}
+              {isConsole ? "Operations Console" : "Welcome to Zonited"}
             </p>
             <p className="auth-form__version" aria-live="polite">
               {versionLabel}

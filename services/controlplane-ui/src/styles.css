@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
 :root {
+  /* Zonited brand tokens. Keep application surfaces on this palette; the
+     operator console tokens below remain independently scoped for now. */
+  --brand-primary: #7f1d3d;
+  --brand-secondary: #83ad8b;
+  --brand-background: #fff9f1;
+  --text-primary: #3b2c2c;
+  --surface-default: #ffffff;
+  --surface-warm: #ead9c6;
+  --surface-sage: #e7f0e5;
+  --action-deep-sage: #496d50;
+  --accent-amber: #e6ac49;
+  --state-success: #496d50;
+  --state-warning: #805300;
+  --state-error: #b42318;
+  --state-info: #285ea8;
   --bg: #f3f5f7;
   --panel: #ffffff;
   --panel-strong: #f7f9fb;
@@ -1779,17 +1794,25 @@ body:has(.video-player) {
   color: var(--success);
 }
 
-/* Zonity application workspace: warm, local, and deliberately quieter than
+/* Zonited application workspace: warm, local, and deliberately quieter than
    the operations console. These styles stay scoped so the compatibility
    console can evolve independently. */
 .application-login {
-  --app-bg: #f4f0e7;
-  --app-brand: #17352d;
-  --app-ink: #1d2924;
-  --app-muted: #6b766e;
-  --app-border: #d9d8cc;
-  --app-accent: #f4c95d;
-  --app-error: #a33a32;
+  --app-bg: var(--brand-background);
+  --app-brand: var(--brand-primary);
+  --app-secondary: var(--brand-secondary);
+  --app-ink: var(--text-primary);
+  --app-muted: var(--action-deep-sage);
+  --app-border: var(--surface-warm);
+  --app-surface: var(--surface-default);
+  --app-accent: var(--accent-amber);
+  --app-error: var(--state-error);
+  --text: var(--text-primary);
+  --muted: var(--action-deep-sage);
+  --border: var(--surface-warm);
+  --panel: var(--surface-default);
+  --panel-strong: var(--surface-sage);
+  --shadow: 0 18px 45px rgba(127, 29, 61, 0.07);
   min-height: 100vh;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
@@ -1805,7 +1828,7 @@ body:has(.video-player) {
   padding: clamp(2rem, 6vw, 6rem);
   overflow: hidden;
   background: var(--app-brand);
-  color: #f7f3e9;
+  color: var(--brand-background);
   clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%);
 }
 
@@ -1815,7 +1838,7 @@ body:has(.video-player) {
   bottom: 8%;
   width: 11rem;
   height: 11rem;
-  border: 1px solid rgba(244, 201, 93, 0.45);
+  border: 1px solid rgba(131, 173, 139, 0.55);
   border-radius: 50%;
   content: "";
   opacity: 0.7;
@@ -1859,7 +1882,7 @@ body:has(.video-player) {
 .application-login__story p {
   max-width: 35rem;
   margin: 0;
-  color: rgba(247, 243, 233, 0.78);
+  color: rgba(255, 249, 241, 0.8);
   font-size: clamp(1rem, 1.5vw, 1.2rem);
   line-height: 1.65;
 }
@@ -1876,7 +1899,7 @@ body:has(.video-player) {
   top: 2.55rem;
   left: 0.9rem;
   width: calc(100% - 1.8rem);
-  border-top: 1px dashed rgba(244, 201, 93, 0.56);
+  border-top: 1px dashed rgba(230, 172, 73, 0.7);
 }
 
 .application-login__signal-node {
@@ -1886,8 +1909,8 @@ body:has(.video-player) {
   height: 1.7rem;
   border: 0.35rem solid var(--app-brand);
   border-radius: 50%;
-  background: var(--app-accent);
-  box-shadow: 0 0 0 1px rgba(244, 201, 93, 0.7);
+  background: var(--app-secondary);
+  box-shadow: 0 0 0 1px rgba(131, 173, 139, 0.8);
 }
 
 .application-login__signal-node--one { left: 0; }
@@ -1897,7 +1920,7 @@ body:has(.video-player) {
 .application-login__note {
   gap: 1.2rem;
   margin-top: 2.2rem;
-  color: rgba(247, 243, 233, 0.58);
+  color: rgba(255, 249, 241, 0.68);
   font-size: 0.7rem;
   letter-spacing: 0.1em;
 }
@@ -1924,6 +1947,24 @@ body:has(.video-player) {
   font-size: 1.2rem;
   font-weight: 800;
   letter-spacing: -0.02em;
+}
+
+.application-login__brand-logo {
+  display: inline-grid;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 3rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: var(--app-bg);
+}
+
+.application-login__brand-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .application-login__brand .brand-mark {
@@ -1963,6 +2004,17 @@ body:has(.video-player) {
   line-height: 1.6;
 }
 
+.application-login__notice {
+  margin: 1.25rem 0 1.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--surface-warm);
+  border-left: 0.3rem solid var(--brand-secondary);
+  background: var(--surface-sage);
+  color: var(--app-ink);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
 .application-login__form,
 .application-login__guest {
   display: grid;
@@ -1984,7 +2036,7 @@ body:has(.video-player) {
   min-height: 3.1rem;
   border: 1px solid var(--app-border);
   border-radius: 0.8rem;
-  background: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.72);
   color: var(--app-ink);
   padding: 0 0.95rem;
   outline: none;
@@ -1993,8 +2045,8 @@ body:has(.video-player) {
 
 .application-login__field input:focus {
   border-color: var(--app-brand);
-  background: #fffdf8;
-  box-shadow: 0 0 0 3px rgba(23, 53, 45, 0.14);
+  background: var(--app-surface);
+  box-shadow: 0 0 0 3px rgba(127, 29, 61, 0.18);
 }
 
 .application-login__remember {
@@ -2017,13 +2069,13 @@ body:has(.video-player) {
   border: 1px solid var(--app-brand);
   border-radius: 0.8rem;
   background: var(--app-brand);
-  color: #fffdf8;
+  color: var(--app-surface);
   font-weight: 800;
   transition: background 140ms ease, transform 140ms ease;
 }
 
 .application-login__submit:hover:not(:disabled) {
-  background: #245344;
+  background: #63172f;
   transform: translateY(-1px);
 }
 
@@ -2108,8 +2160,8 @@ body:has(.video-player) {
   width: 4.5rem;
   height: 4.5rem;
   border-radius: 1.4rem 1.4rem 1.4rem 0.35rem;
-  background: #17352d;
-  color: #f4c95d;
+  background: var(--brand-primary);
+  color: var(--brand-secondary);
   font-size: 2rem;
   font-weight: 850;
   transform: rotate(-8deg);
@@ -2122,9 +2174,15 @@ body:has(.video-player) {
 }
 
 .application-shell {
-  --app-bg: #f4f0e7;
-  --app-brand: #17352d;
-  --app-ink: #1d2924;
+  --app-bg: var(--brand-background);
+  --app-brand: var(--brand-primary);
+  --app-ink: var(--text-primary);
+  --text: var(--text-primary);
+  --muted: var(--action-deep-sage);
+  --border: var(--surface-warm);
+  --panel: var(--surface-default);
+  --panel-strong: var(--surface-sage);
+  --shadow: 0 18px 45px rgba(127, 29, 61, 0.07);
   min-height: 100vh;
   background: var(--app-bg);
   color: var(--app-ink);
@@ -2136,8 +2194,8 @@ body:has(.video-player) {
   justify-content: space-between;
   gap: 1.5rem;
   padding: 1.1rem clamp(1.25rem, 5vw, 4.5rem);
-  border-bottom: 1px solid rgba(23, 53, 45, 0.12);
-  background: rgba(244, 240, 231, 0.92);
+  border-bottom: 1px solid rgba(127, 29, 61, 0.16);
+  background: rgba(255, 249, 241, 0.94);
 }
 
 .application-shell__brand {
@@ -2171,7 +2229,7 @@ body:has(.video-player) {
 
 .application-shell__brand small {
   margin-top: 0.2rem;
-  color: #6b766e;
+  color: var(--action-deep-sage);
   font-size: 0.72rem;
 }
 
@@ -2187,7 +2245,7 @@ body:has(.video-player) {
   border: 0;
   border-radius: 0.7rem;
   background: transparent;
-  color: #56645b;
+  color: var(--action-deep-sage);
   cursor: pointer;
   padding: 0 0.85rem;
   font: inherit;
@@ -2197,13 +2255,13 @@ body:has(.video-player) {
 
 .application-shell__nav-link:hover,
 .application-shell__nav-link--active {
-  background: rgba(23, 53, 45, 0.09);
+  background: var(--surface-sage);
   color: var(--app-brand);
 }
 
 .application-shell__signout {
   margin-left: 0.5rem;
-  border: 1px solid rgba(23, 53, 45, 0.18);
+  border: 1px solid rgba(127, 29, 61, 0.2);
 }
 
 .application-shell__main {
@@ -2214,9 +2272,9 @@ body:has(.video-player) {
 
 .application-shell__main .page-frame {
   min-height: 0;
-  background: rgba(255, 253, 248, 0.72);
-  border-color: rgba(23, 53, 45, 0.12);
-  box-shadow: 0 18px 45px rgba(23, 53, 45, 0.06);
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(127, 29, 61, 0.14);
+  box-shadow: 0 18px 45px rgba(127, 29, 61, 0.07);
 }
 
 .application-shell__footer {

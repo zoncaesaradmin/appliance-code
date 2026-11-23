@@ -1,9 +1,20 @@
+import type { Session } from "../types";
+
 export type Workspace = "app" | "console";
 
 const INTERNAL_PATH = /^(?:\/(?:app|console|home|manage|analyze|admin|account)(?:\/|$)|\/$)/;
 
 export function isApplicationPath(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
+}
+
+/**
+ * Application sessions are intentionally a separate identity contract from
+ * the appliance's local operator sessions. The application OTP service will
+ * issue this domain/method pair when it is integrated.
+ */
+export function isApplicationSession(session: Pick<Session, "domain" | "authMethod"> | null): boolean {
+  return session?.domain === "application" && session.authMethod === "mobile_otp";
 }
 
 export function workspaceForPath(pathname: string): Workspace {

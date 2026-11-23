@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { consolePath, isApplicationPath, loginDestination, safeNextPath, workspaceForPath } from "./workspace";
+import {
+  consolePath,
+  isApplicationPath,
+  isApplicationSession,
+  loginDestination,
+  safeNextPath,
+  workspaceForPath
+} from "./workspace";
 
 describe("workspace routing", () => {
   it("treats the explicit app namespace as application context", () => {
@@ -7,6 +14,12 @@ describe("workspace routing", () => {
     expect(workspaceForPath("/app/discover")).toBe("app");
     expect(isApplicationPath("/app/login")).toBe(true);
     expect(workspaceForPath("/")).toBe("app");
+  });
+
+  it("does not treat an operator session as an application session", () => {
+    expect(isApplicationSession({ domain: "local", authMethod: "password" })).toBe(false);
+    expect(isApplicationSession({ domain: "local", authMethod: "session" })).toBe(false);
+    expect(isApplicationSession({ domain: "application", authMethod: "mobile_otp" })).toBe(true);
   });
 
   it("maps console paths to the existing shell without changing legacy URLs", () => {
