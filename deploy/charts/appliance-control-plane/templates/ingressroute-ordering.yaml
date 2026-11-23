@@ -1,0 +1,25 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationServicesEnabled" .) "true") .Values.applicationServices.ordering.ingress.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "appliance-control-plane.orderingName" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.orderingLabels" . | nindent 4 }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.applicationServices.ordering.ingress.entryPoints | nindent 4 }}
+  routes:
+    - match: {{- if .Values.applicationServices.ordering.ingress.host }} Host(`{{ .Values.applicationServices.ordering.ingress.host }}`) &&{{ end }} PathPrefix(`/api/ordering/`)
+      kind: Rule
+      middlewares:
+        - name: {{ include "appliance-control-plane.forwardAuthMiddlewareName" . }}
+          namespace: {{ include "appliance-control-plane.namespace" . }}
+      services:
+        - name: {{ include "appliance-control-plane.orderingName" . }}
+          port: {{ .Values.applicationServices.ordering.service.port }}
+  {{- if .Values.applicationServices.ordering.ingress.tls.enabled }}
+  tls:
+    secretName: {{ .Values.applicationServices.ordering.ingress.tlsSecretName }}
+  {{- end }}
+{{- end }}

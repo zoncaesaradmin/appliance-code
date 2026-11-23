@@ -390,6 +390,48 @@ channelIntegration:
     capabilities:
       drop: ["ALL"]
 
+applicationServices:
+  ordering:
+    # Enabled only when the signed application-services capability is active.
+    enabled: false
+    image:
+      reference: registry.local/ordering@sha256:0000000000000000000000000000000000000000000000000000000000000000
+      pullPolicy: IfNotPresent
+    service:
+      port: 8080
+    database:
+      connectionSecretName: controlplane-database-connection
+      connectionSecretKey: dsn
+    channelID: ordering-web
+    ingress:
+      enabled: true
+      entryPoints:
+        - websecure
+      host: ""
+      tls:
+        enabled: true
+      tlsSecretName: appliance-tls
+    resources:
+      requests:
+        cpu: 25m
+        memory: 32Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 10014
+      runAsGroup: 10014
+      fsGroup: 10014
+      fsGroupChangePolicy: OnRootMismatch
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+
 ingress:
   enabled: true
   # Traefik IngressRoute (CRD). The CRD itself is provided by the K3s-bundled

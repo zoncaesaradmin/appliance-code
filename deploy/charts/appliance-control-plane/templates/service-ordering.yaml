@@ -1,0 +1,16 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationServicesEnabled" .) "true") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-control-plane.orderingName" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.orderingLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "appliance-control-plane.orderingSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.applicationServices.ordering.service.port }}
+      targetPort: http
+{{- end }}

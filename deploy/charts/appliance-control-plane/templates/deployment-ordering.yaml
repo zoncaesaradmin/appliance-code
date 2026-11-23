@@ -1,0 +1,56 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationServicesEnabled" .) "true") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.orderingName" . }}
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.orderingLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.orderingSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.orderingLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.applicationServices.ordering.podSecurityContext | nindent 8 }}
+      containers:
+        - name: ordering
+          image: {{ .Values.applicationServices.ordering.image.reference | quote }}
+          imagePullPolicy: {{ .Values.applicationServices.ordering.image.pullPolicy }}
+          env:
+            - name: ORDERING_LISTEN_ADDR
+              value: :{{ .Values.applicationServices.ordering.service.port }}
+            - name: ORDERING_CHANNEL_ID
+              value: {{ .Values.applicationServices.ordering.channelID | quote }}
+            - name: ORDERING_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.ordering.database.connectionSecretName | quote }}
+                  key: {{ .Values.applicationServices.ordering.database.connectionSecretKey | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.applicationServices.ordering.service.port }}
+          securityContext:
+            {{- toYaml .Values.applicationServices.ordering.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.applicationServices.ordering.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+{{- end }}

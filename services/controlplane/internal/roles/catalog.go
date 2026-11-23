@@ -120,6 +120,8 @@ const (
 	PermNotificationsAcknowledge = "notifications.acknowledge"
 	PermApplicationsRead         = "applications.read"
 	PermApplicationsManage       = "applications.manage"
+	PermOrdersRead               = "orders.read"
+	PermOrdersWrite              = "orders.write"
 )
 
 // AllPermissions is the complete published v1 permission catalog.
@@ -208,6 +210,8 @@ var AllPermissions = []storage.Permission{
 	{Name: PermApplicationsManage, Description: "Manage application definitions and instances"},
 	{Name: PermNotificationsRead, Description: "Read system notifications"},
 	{Name: PermNotificationsAcknowledge, Description: "Acknowledge system notifications"},
+	{Name: PermOrdersRead, Description: "Read ordering offerings and submitted orders"},
+	{Name: PermOrdersWrite, Description: "Submit orders"},
 }
 
 func allPermissionNames() []string {
@@ -248,6 +252,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermVideoLibraryRead, PermVideoLibraryWrite, PermVideoPlay,
 			PermFocusContentManage,
 			PermMCPInvoke,
+			PermOrdersRead, PermOrdersWrite,
 		},
 	},
 	{
@@ -263,6 +268,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermVideoLibraryRead, PermVideoPlay,
 			PermNotificationsRead,
 			PermLicensingRead,
+			PermOrdersRead,
 		},
 	},
 	{
@@ -283,6 +289,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermDNSPublish,
 			PermInferenceUse, PermInferenceModelsRead,
 			PermVideoLibraryRead, PermVideoLibraryWrite, PermVideoPlay,
+			PermOrdersRead, PermOrdersWrite,
 		},
 	},
 }

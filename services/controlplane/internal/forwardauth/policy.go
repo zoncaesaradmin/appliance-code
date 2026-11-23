@@ -53,6 +53,26 @@ func RequiredPermission(host, method, rawURI string) Decision {
 		default:
 			return Decision{Allowed: false, ReasonCode: "unsupported_method"}
 		}
+	case path == "/api/ordering/v1/offerings":
+		if normalizedMethod == http.MethodGet || normalizedMethod == http.MethodHead {
+			return Decision{Allowed: true, Capability: appliance.CapabilityApplicationServices, Permission: roles.PermOrdersRead}
+		}
+		return Decision{Allowed: false, ReasonCode: "unsupported_method"}
+	case path == "/api/ordering/v1/release":
+		if normalizedMethod == http.MethodGet || normalizedMethod == http.MethodHead {
+			return Decision{Allowed: true, Capability: appliance.CapabilityApplicationServices, Permission: roles.PermOrdersRead}
+		}
+		return Decision{Allowed: false, ReasonCode: "unsupported_method"}
+	case path == "/api/ordering/v1/orders" || strings.HasPrefix(path, "/api/ordering/v1/orders/"):
+		switch normalizedMethod {
+		case http.MethodGet, http.MethodHead:
+			return Decision{Allowed: true, Capability: appliance.CapabilityApplicationServices, Permission: roles.PermOrdersRead}
+		case http.MethodPost:
+			if path == "/api/ordering/v1/orders" {
+				return Decision{Allowed: true, Capability: appliance.CapabilityApplicationServices, Permission: roles.PermOrdersWrite}
+			}
+		}
+		return Decision{Allowed: false, ReasonCode: "unsupported_method"}
 	default:
 		return Decision{Allowed: false, ReasonCode: "no_matching_policy"}
 	}

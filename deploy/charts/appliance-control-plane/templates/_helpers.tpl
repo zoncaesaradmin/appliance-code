@@ -321,6 +321,23 @@ channel-integration
 {{- if and .Values.channelIntegration.enabled (has "channel-integrations" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.applicationServicesEnabled" -}}
+{{- if and .Values.applicationServices.ordering.enabled (has "application-services" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.orderingName" -}}ordering{{- end -}}
+{{- define "appliance-control-plane.orderingSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.orderingName" . }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
+{{- end -}}
+{{- define "appliance-control-plane.orderingLabels" -}}
+helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{ include "appliance-control-plane.orderingSelectorLabels" . }}
+app.kubernetes.io/component: application-service
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end -}}
+
 {{- define "appliance-control-plane.channelIntegrationSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "appliance-control-plane.channelIntegrationName" . }}
 app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}

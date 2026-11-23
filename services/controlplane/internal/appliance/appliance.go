@@ -33,6 +33,7 @@ const (
 	CapabilityBase                Capability = "base"
 	CapabilityActions             Capability = "actions"
 	CapabilityChannelIntegrations Capability = "channel-integrations"
+	CapabilityApplicationServices Capability = "application-services"
 	CapabilityLANDiscovery        Capability = "lan-discovery"
 	CapabilityHost                Capability = "host"
 	CapabilityWorkflows           Capability = "workflows"
