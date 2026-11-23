@@ -1,4 +1,4 @@
-{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationServicesEnabled" .) "true") .Values.applicationServices.ordering.ingress.enabled }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.commerceEnabled" .) "true") .Values.applicationServices.ordering.ingress.enabled }}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:

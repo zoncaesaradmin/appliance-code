@@ -31,12 +31,12 @@ capabilities:
       requiredEntitlement: zon.capabilities.channel-integrations
     artifacts:
       required: [channel-integration-image]
-  application-services:
-    displayName: Application Services
+  commerce:
+    displayName: Commerce
     requires: [base]
     conflicts: []
     license:
-      requiredEntitlement: zon.capabilities.application-services
+      requiredEntitlement: zon.capabilities.commerce
     artifacts:
       required: [ordering-image]
   lan-discovery:

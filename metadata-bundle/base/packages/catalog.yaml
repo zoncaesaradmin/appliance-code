@@ -6,7 +6,7 @@ packages:
   app-stack:
     displayName: App Stack
     description: Channel integrations and application-facing services such as ordering.
-    capabilities: [channel-integrations, application-services]
+    capabilities: [channel-integrations, commerce]
   dev-platform:
     displayName: Development Platform Services
     description: Artifact registry, appliance-owned LAN DNS, workflow execution, and build workspace provisioning.

@@ -78,7 +78,7 @@ spec:
           podSelector:
             matchLabels:
               {{- include "appliance-control-plane.selectorLabels" . | nindent 14 }}
-    {{- if eq (include "appliance-control-plane.applicationServicesEnabled" .) "true" }}
+    {{- if eq (include "appliance-control-plane.commerceEnabled" .) "true" }}
     - from:
         - namespaceSelector:
             matchLabels:

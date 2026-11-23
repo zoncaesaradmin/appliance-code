@@ -392,7 +392,7 @@ channelIntegration:
 
 applicationServices:
   ordering:
-    # Enabled only when the signed application-services capability is active.
+    # Enabled only when the signed commerce capability is active.
     enabled: false
     image:
       reference: registry.local/ordering@sha256:0000000000000000000000000000000000000000000000000000000000000000

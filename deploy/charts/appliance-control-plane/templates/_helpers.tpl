@@ -321,8 +321,8 @@ channel-integration
 {{- if and .Values.channelIntegration.enabled (has "channel-integrations" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
 
-{{- define "appliance-control-plane.applicationServicesEnabled" -}}
-{{- if and .Values.applicationServices.ordering.enabled (has "application-services" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
+{{- define "appliance-control-plane.commerceEnabled" -}}
+{{- if and .Values.applicationServices.ordering.enabled (has "commerce" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
 
 {{- define "appliance-control-plane.orderingName" -}}ordering{{- end -}}

@@ -1,4 +1,4 @@
-{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationServicesEnabled" .) "true") }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.commerceEnabled" .) "true") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
