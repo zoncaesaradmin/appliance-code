@@ -55,3 +55,5 @@
 - 2026-11-23: Removed the operator credential fallback from application login; mobile identity is the only application-login contract.
 - 2026-11-24: Reworked the signed-in application shell into a service index, removed operator-console escape links, and switched the shell mark to the supplied Zonited logo.
 - 2026-11-24: Refined mobile OTP entry with a country selector, digit-only local-number input, and separated action buttons.
+- 2026-11-24: Simplified the application login visual system by removing the decorative circle, using the square Zonited mark, compacting country-code selection, removing redundant phone guidance, and centering the primary action.
+- 2026-11-24: Replaced the login story footer slogans with a single Zonited Solutions attribution.

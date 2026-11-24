@@ -66,8 +66,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
             <span className="application-login__signal-node application-login__signal-node--three" />
           </div>
           <div className="application-login__note">
-            <span>Private by design</span>
-            <span>Delivered by Zon</span>
+            <span>Powered by Zonited Solutions</span>
           </div>
         </div>
       </section>
@@ -75,7 +74,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
       <section className="application-login__panel" aria-label="Zonited App sign in">
         <header className="application-login__brand">
           <span className="application-login__brand-logo" aria-hidden="true">
-            <img src="/zonited-logo-circle.png" alt="" />
+            <img src="/zonited-logo-square.png" alt="" />
           </span>
           <span>Zonited</span>
         </header>
@@ -98,21 +97,20 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
                 <label className="field-label" htmlFor="application-phone">Mobile number</label>
                 <div className="application-login__phone-input">
                   <label className="application-login__country" htmlFor="application-country">
-                    <select id="application-country" aria-label="Country" value={phoneCountry.code} onChange={(event) => {
+                    <select id="application-country" aria-label={`Country code (${phoneCountry.name})`} title={phoneCountry.name} value={phoneCountry.code} onChange={(event) => {
                       const nextCountry = PHONE_COUNTRIES.find(({ code: countryCode }) => countryCode === event.target.value) ?? DEFAULT_PHONE_COUNTRY;
                       setPhoneCountryCode(nextCountry.code);
                       setPhoneNumber((current) => current.replace(/\D/g, "").slice(0, nextCountry.maxDigits));
                       setError("");
                     }}>
-                      {PHONE_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.name} ({country.dialCode})</option>)}
+                      {PHONE_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.dialCode}</option>)}
                     </select>
                   </label>
                   <input id="application-phone" className="text-input" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder={phoneCountry.code === "IN" ? "98765 43210" : "Mobile number"} value={phoneNumber} onChange={(event) => {
                     setPhoneNumber(event.target.value.replace(/\D/g, "").slice(0, phoneCountry.maxDigits));
                     setError("");
-                  }} minLength={phoneCountry.minDigits} maxLength={phoneCountry.maxDigits} pattern={`[0-9]{${phoneCountry.minDigits},${phoneCountry.maxDigits}}`} aria-describedby="application-phone-help" required />
+                  }} minLength={phoneCountry.minDigits} maxLength={phoneCountry.maxDigits} pattern={`[0-9]{${phoneCountry.minDigits},${phoneCountry.maxDigits}}`} required />
                 </div>
-                <span id="application-phone-help" className="application-login__phone-help">{phoneCountry.name} · {phoneCountry.minDigits === phoneCountry.maxDigits ? `${phoneCountry.minDigits} digits` : `${phoneCountry.minDigits}–${phoneCountry.maxDigits} digits`}</span>
               </div>
               {error ? <p className="form-error" role="alert">{error}</p> : null}
               <button className="application-login__submit" type="submit" disabled={busy}><span>{busy ? "Sending code…" : "Send verification code"}</span><svg aria-hidden="true" viewBox="0 0 20 20" focusable="false"><path d="M4 10h10M10 5l5 5-5 5" /></svg></button>
