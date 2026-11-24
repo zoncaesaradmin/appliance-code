@@ -140,6 +140,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const pathname = location.pathname;
     const applicationPath = isApplicationPath(pathname) || isApplicationEntryPath(pathname, shellState.profile);
+    const discoveryPath = pathname === "/app/discover" && new URLSearchParams(location.search).get("token") !== null;
     if (shellState.booting) {
       return;
     }
@@ -159,7 +160,7 @@ export function App(): React.JSX.Element {
       navigate(defaultLoginPath(shellState.profile), true);
       return;
     }
-    if (shellState.initialized && !shellState.session && !applicationAuthenticated && pathname !== "/console/login" && pathname !== "/app/login") {
+    if (shellState.initialized && !shellState.session && !applicationAuthenticated && !discoveryPath && pathname !== "/console/login" && pathname !== "/app/login") {
       const next = loginDestination(pathname, location.search, shellState.profile);
       if (isApplicationPath(pathname)) {
         navigate(`/app/login?next=${encodeURIComponent(next)}`, true);
@@ -230,9 +231,14 @@ export function App(): React.JSX.Element {
   }
 
   const applicationPath = isApplicationPath(location.pathname) || isApplicationEntryPath(location.pathname, shellState.profile);
+  const discoveryPath = location.pathname === "/app/discover" && new URLSearchParams(location.search).get("token") !== null;
 
-  if (shellState.initialized && applicationPath && !applicationAuthenticated) {
-    return <ApplicationLoginPage onAuthenticated={() => { setApplicationAuthenticated(true); navigate("/app", true); }} />;
+  if (shellState.initialized && applicationPath && !applicationAuthenticated && !discoveryPath) {
+    return <ApplicationLoginPage onAuthenticated={() => {
+      setApplicationAuthenticated(true);
+      const next = new URLSearchParams(location.search).get("next");
+      navigate(next && next.startsWith("/app/") ? next : "/app", true);
+    }} />;
   }
 
   if (!shellState.initialized || (!shellState.session && !applicationAuthenticated)) {
@@ -249,7 +255,7 @@ export function App(): React.JSX.Element {
     );
   }
 
-  if (applicationPath && applicationAuthenticated) {
+  if (applicationPath && (applicationAuthenticated || discoveryPath)) {
     const applicationSession: Session = { userId: "", username: "Member", displayName: "Member", domain: "application", authMethod: "mobile_otp", permissions: [] };
     return (
       <ApplicationShell

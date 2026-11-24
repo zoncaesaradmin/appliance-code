@@ -411,6 +411,7 @@ applicationServices:
     secretName: application-identity-secrets
     otpKey: otp-key
     rateKey: rate-key
+    internalKey: internal-key
     trustedProxies: ""
     socketParent: /var/run/zonited-identity
     ingress:

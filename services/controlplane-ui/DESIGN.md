@@ -4,7 +4,7 @@
 
 - Artifact type: onboarding/auth flow and installable local PWA shell
 - Positioning: trusted, local, quietly distinctive
-- Audience: Zonited application users | Primary action: sign in and enter their microzone workspace
+- Audience: Zonited application users | Primary action: sign in and enter the application workspace; zone selection is optional and follows later onboarding
 - Adjectives: local, calm, human, precise
 - Aesthetic essence: neighbourhood signal, warm paper, quiet confidence
 - Mode: light | Density: balanced
@@ -35,11 +35,19 @@
 
 - Manifest starts at `/app` and service worker caches only the static shell.
 - `/api/`, `/version`, and health endpoints are never cached.
-- Application login never calls the operator `/api/v1/auth/login` contract. Until the mobile-identity service is
-  integrated, `/app/login` is an explicit disabled state rather than a username/password fallback.
+- Application login never calls the operator `/api/v1/auth/login` contract. It
+  uses the separate application identity service's local/test mobile OTP
+  contract; it must never fall back to appliance operator credentials.
+- `/app` is currently the customer-oriented application entrypoint. Future
+  customer, vendor, and zone-administration entrypoints select an application
+  audience/channel, but a route is not a permission grant. Their APIs must
+  enforce the resolved user, tenant, role, service, and zone scope server-side.
+- The current PWA knows only application-session validity. It must not present
+  a placeholder identity as proof of customer, vendor, or administrator
+  authority until the generic application-principal contract is implemented.
 
 ## Changelog
 
 - 2026-11-23: Added the application-context login, protected PWA shell, and offline static-shell metadata.
 - 2026-11-23: Applied the Zonited brand palette and supplied logo assets to the application login and PWA shell.
-- 2026-11-23: Removed the operator credential fallback from application login; mobile identity is now the required future contract.
+- 2026-11-23: Removed the operator credential fallback from application login; mobile identity is the only application-login contract.

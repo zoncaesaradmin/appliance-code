@@ -11,15 +11,27 @@ import (
 	"strings"
 	"testing"
 
+	"appliance-code/services/channel-integration/internal/identityclient"
 	"appliance-code/services/channel-integration/internal/meta"
 )
 
 type senderStub struct {
 	response *meta.SendMessageResponse
 	err      error
+	body     string
 }
 
-func (s *senderStub) SendText(_ context.Context, _, _ string) (*meta.SendMessageResponse, error) {
+type resolverStub struct {
+	principal identityclient.Principal
+	err       error
+}
+
+func (s resolverStub) Resolve(context.Context, string, string) (identityclient.Principal, error) {
+	return s.principal, s.err
+}
+
+func (s *senderStub) SendText(_ context.Context, _, body string) (*meta.SendMessageResponse, error) {
+	s.body = body
 	return s.response, s.err
 }
 
@@ -111,6 +123,37 @@ func TestHandleEventLogsReferenceLifecycle(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint(logger.entries), "919999999999") || strings.Contains(fmt.Sprint(logger.entries), "private message") {
 		t.Fatal("personal data appeared in logs")
+	}
+}
+
+func TestHandleEventResolvesGenericPrincipalWithoutLoggingSender(t *testing.T) {
+	logger := &captureLogger{}
+	handler := NewHandler("expected-token", "app-secret", &senderStub{response: &meta.SendMessageResponse{}}, logger)
+	handler.SetPrincipalResolver(resolverStub{principal: identityclient.Principal{ChannelID: "customer-whatsapp", Audience: "customer", AuthMethod: "channel_proof"}})
+	body := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"from":"919999999999","type":"text","text":{"body":"private message"}}]}}]}]}`)
+	request := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
+	request.Header.Set("X-Hub-Signature-256", signature("app-secret", body))
+	recorder := httptest.NewRecorder()
+
+	handler.handleEvent(recorder, request)
+
+	if recorder.Code != http.StatusOK || !logger.hasEvent("webhook_principal_resolved") || strings.Contains(fmt.Sprint(logger.entries), "919999999999") {
+		t.Fatalf("principal resolution lifecycle failed: status=%d logs=%#v", recorder.Code, logger.entries)
+	}
+}
+
+func TestHandleEventSendsDiscoveryLinkForResolvedCustomer(t *testing.T) {
+	logger := &captureLogger{}
+	sender := &senderStub{response: &meta.SendMessageResponse{}}
+	handler := NewHandler("expected-token", "app-secret", sender, logger)
+	handler.SetPrincipalResolver(resolverStub{principal: identityclient.Principal{ChannelID: "customer-whatsapp", Audience: "customer", AuthMethod: "channel_proof", DiscoveryURL: "https://example.test/app/discover?token=opaque"}})
+	body := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"from":"919999999999","type":"text","text":{"body":"hello"}}]}}]}]}`)
+	request := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
+	request.Header.Set("X-Hub-Signature-256", signature("app-secret", body))
+	recorder := httptest.NewRecorder()
+	handler.handleEvent(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(sender.body, "/app/discover?token=opaque") {
+		t.Fatalf("discovery link was not sent: status=%d body=%q", recorder.Code, sender.body)
 	}
 }
 

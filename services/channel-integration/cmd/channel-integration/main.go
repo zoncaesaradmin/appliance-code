@@ -2,6 +2,7 @@ package main
 
 import (
 	"appliance-code/services/channel-integration/internal/config"
+	"appliance-code/services/channel-integration/internal/identityclient"
 	"appliance-code/services/channel-integration/internal/meta"
 	"appliance-code/services/channel-integration/internal/webhook"
 	"context"
@@ -31,7 +32,16 @@ func main() {
 		os.Exit(1)
 	}
 	mux := http.NewServeMux()
-	webhook.NewHandler(c.VerifyToken, c.AppSecret, meta.NewClient(c.GraphAccessToken, c.PhoneNumberID, c.GraphAPIVersion), logger).Register(mux)
+	handler := webhook.NewHandler(c.VerifyToken, c.AppSecret, meta.NewClient(c.GraphAccessToken, c.PhoneNumberID, c.GraphAPIVersion), logger)
+	if c.IdentityURL != "" {
+		resolver, err := identityclient.New(c.IdentityURL, c.IdentityKey, c.IdentityTenantID, c.IdentityChannelID)
+		if err != nil {
+			logger.Error("cannot initialize application identity resolver")
+			os.Exit(1)
+		}
+		handler.SetPrincipalResolver(resolver)
+	}
+	handler.Register(mux)
 	server := &http.Server{Addr: c.ListenAddress, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	listener, err := net.Listen("tcp", c.ListenAddress)
 	if err != nil {

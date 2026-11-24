@@ -37,8 +37,13 @@ type Challenge struct {
 
 // Session stores a hash of the browser token, never the token itself.
 type Session struct {
-	TokenHash [32]byte
-	ExpiresAt time.Time
+	TokenHash  [32]byte
+	SessionID  string
+	ExpiresAt  time.Time
+	TenantID   string
+	ChannelID  string
+	Audience   string
+	AuthMethod string
 }
 
 // Store must enforce issuance limits and atomically count verification
@@ -58,12 +63,14 @@ type Sender interface {
 }
 
 type Service struct {
-	store        Store
-	sender       Sender
-	key          []byte
-	challengeTTL time.Duration
-	sessionTTL   time.Duration
-	now          func() time.Time
+	store             Store
+	sender            Sender
+	key               []byte
+	challengeTTL      time.Duration
+	sessionTTL        time.Duration
+	channelSessionTTL time.Duration
+	origin            string
+	now               func() time.Time
 }
 
 // New requires explicit durations and a secret used only for OTP digests.
@@ -71,7 +78,7 @@ func New(store Store, sender Sender, key []byte, challengeTTL, sessionTTL time.D
 	if store == nil || sender == nil || len(key) < 32 || challengeTTL <= 0 || challengeTTL > 10*time.Minute || sessionTTL <= 0 {
 		return nil, errors.New("invalid authentication configuration")
 	}
-	return &Service{store: store, sender: sender, key: append([]byte(nil), key...), challengeTTL: challengeTTL, sessionTTL: sessionTTL, now: time.Now}, nil
+	return &Service{store: store, sender: sender, key: append([]byte(nil), key...), challengeTTL: challengeTTL, sessionTTL: sessionTTL, channelSessionTTL: 10 * time.Minute, now: time.Now}, nil
 }
 
 // Begin creates a bounded, one-use challenge and delivers its code. rateKey
@@ -120,7 +127,11 @@ func (s *Service) Verify(ctx context.Context, id, code string) (string, time.Tim
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 	now := s.now()
-	session := Session{TokenHash: sha256.Sum256([]byte(token)), ExpiresAt: now.Add(s.sessionTTL)}
+	sessionIDBytes := make([]byte, 16)
+	if _, err := rand.Read(sessionIDBytes); err != nil {
+		return "", time.Time{}, fmt.Errorf("generate session id: %w", err)
+	}
+	session := Session{TokenHash: sha256.Sum256([]byte(token)), SessionID: hex.EncodeToString(sessionIDBytes), ExpiresAt: now.Add(s.sessionTTL), TenantID: DefaultTenantID, ChannelID: CustomerWebChannelID, Audience: CustomerAudience, AuthMethod: "mobile_otp"}
 	if err := s.store.VerifyAndCreateSession(ctx, id, s.digest(id, code), now, session); err != nil {
 		return "", time.Time{}, fmt.Errorf("verify challenge: %w", err)
 	}

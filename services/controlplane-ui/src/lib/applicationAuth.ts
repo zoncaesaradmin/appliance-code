@@ -2,6 +2,12 @@ export interface ApplicationSessionStatus {
   authenticated: boolean;
 }
 
+export interface NearbyZone {
+  id: string;
+  name: string;
+  distance_km: number;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
@@ -44,5 +50,26 @@ export const applicationAuth = {
       headers: { Origin: window.location.origin },
       body: "{}"
     }).then(() => undefined);
+  },
+  nearby(latitude: number, longitude: number, discoveryToken = ""): Promise<{ zones: NearbyZone[] }> {
+    return request<{ zones: NearbyZone[] }>("/api/shared/v1/onboarding/nearby", {
+      method: "POST",
+      headers: { Origin: window.location.origin },
+      body: JSON.stringify({ latitude, longitude, radius_km: 10, ...(discoveryToken ? { discovery_token: discoveryToken } : {}) })
+    });
+  },
+  join(zoneID: string, discoveryToken = ""): Promise<{ zone_id: string; status: string }> {
+    return request<{ zone_id: string; status: string }>("/api/shared/v1/onboarding/join", {
+      method: "POST",
+      headers: { Origin: window.location.origin },
+      body: JSON.stringify({ zone_id: zoneID, ...(discoveryToken ? { discovery_token: discoveryToken } : {}) })
+    });
+  },
+  requestZone(name: string): Promise<{ name: string; status: string }> {
+    return request<{ name: string; status: string }>("/api/shared/v1/onboarding/zone-requests", {
+      method: "POST",
+      headers: { Origin: window.location.origin },
+      body: JSON.stringify({ name })
+    });
   }
 };

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,12 +18,16 @@ const maxConfigBytes = 64 << 10
 var graphVersionPattern = regexp.MustCompile(`^v[0-9]+(?:\.[0-9]+)?$`)
 
 type Config struct {
-	ListenAddress    string
-	VerifyToken      string
-	AppSecret        string
-	GraphAccessToken string
-	PhoneNumberID    string
-	GraphAPIVersion  string
+	ListenAddress     string
+	VerifyToken       string
+	AppSecret         string
+	GraphAccessToken  string
+	PhoneNumberID     string
+	GraphAPIVersion   string
+	IdentityURL       string
+	IdentityKey       string
+	IdentityTenantID  string
+	IdentityChannelID string
 }
 
 func Load(get func(string) string) (Config, error) {
@@ -39,6 +44,15 @@ func Load(get func(string) string) (Config, error) {
 	}
 	c.VerifyToken, c.AppSecret, c.GraphAccessToken = strings.TrimSpace(runtime.VerifyToken), strings.TrimSpace(runtime.AppSecret), strings.TrimSpace(runtime.GraphAccessToken)
 	c.PhoneNumberID, c.GraphAPIVersion = strings.TrimSpace(runtime.PhoneNumberID), strings.TrimSpace(runtime.GraphAPIVersion)
+	c.IdentityURL = strings.TrimSpace(get("CAPP_APPLICATION_IDENTITY_URL"))
+	c.IdentityKey = strings.TrimSpace(get("CAPP_APPLICATION_IDENTITY_KEY"))
+	c.IdentityTenantID, c.IdentityChannelID = strings.TrimSpace(runtime.TenantID), strings.TrimSpace(runtime.ChannelID)
+	if c.IdentityTenantID == "" {
+		c.IdentityTenantID = "zonited-solutions"
+	}
+	if c.IdentityChannelID == "" {
+		c.IdentityChannelID = "customer-whatsapp"
+	}
 	for _, required := range []struct{ name, value string }{{"verify_token", c.VerifyToken}, {"app_secret", c.AppSecret}, {"graph_access_token", c.GraphAccessToken}, {"phone_number_id", c.PhoneNumberID}, {"graph_api_version", c.GraphAPIVersion}} {
 		if required.value == "" {
 			return Config{}, fmt.Errorf("%s is required", required.name)
@@ -46,6 +60,15 @@ func Load(get func(string) string) (Config, error) {
 	}
 	if !graphVersionPattern.MatchString(c.GraphAPIVersion) {
 		return Config{}, errors.New("graph_api_version must look like v21.0")
+	}
+	if c.IdentityURL != "" {
+		if c.IdentityKey == "" {
+			return Config{}, errors.New("CAPP_APPLICATION_IDENTITY_KEY is required when identity resolution is enabled")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(c.IdentityKey)
+		if err != nil || len(decoded) < 32 {
+			return Config{}, errors.New("CAPP_APPLICATION_IDENTITY_KEY must be base64-encoded and at least 32 bytes")
+		}
 	}
 	for _, char := range c.PhoneNumberID {
 		if char < '0' || char > '9' {
@@ -61,6 +84,8 @@ type runtimeConfig struct {
 	GraphAccessToken string `json:"graph_access_token"`
 	PhoneNumberID    string `json:"phone_number_id"`
 	GraphAPIVersion  string `json:"graph_api_version"`
+	TenantID         string `json:"tenant_id"`
+	ChannelID        string `json:"channel_id"`
 }
 
 func loadRuntimeConfig(path string) (runtimeConfig, error) {

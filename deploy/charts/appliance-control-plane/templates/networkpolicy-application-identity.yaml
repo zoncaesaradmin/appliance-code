@@ -19,6 +19,17 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.applicationServices.identity.service.port }}
+    {{- if eq (include "appliance-control-plane.channelIntegrationsEnabled" .) "true" }}
+    # The channel adapter may resolve a provider-validated sender through the
+    # generic internal principal contract. It is not exposed through ingress.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.channelIntegrationSelectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.applicationServices.identity.service.port }}
+    {{- end }}
   egress:
     - to:
         - namespaceSelector:

@@ -22,7 +22,7 @@ func TestLoadValidRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.PhoneNumberID != "123" || got.ListenAddress != ":8080" {
+	if got.PhoneNumberID != "123" || got.ListenAddress != ":8080" || got.IdentityTenantID != "zonited-solutions" || got.IdentityChannelID != "customer-whatsapp" {
 		t.Fatalf("unexpected config: %+v", got)
 	}
 }

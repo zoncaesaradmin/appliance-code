@@ -130,7 +130,20 @@ func (s *PostgresStore) VerifyAndCreateSession(ctx context.Context, id string, d
 	if err := tx.QueryRowContext(ctx, `INSERT INTO identity_users (id, phone, created_at) VALUES ($1, $2, $3) ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone RETURNING id`, hex.EncodeToString(userIDBytes), phone, now).Scan(&userID); err != nil {
 		return fmt.Errorf("find or create user: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO identity_sessions (token_hash, user_id, expires_at, created_at) VALUES ($1, $2, $3, $4)`, session.TokenHash[:], userID, session.ExpiresAt, now); err != nil {
+	tenantID, channelID, audience, authMethod := session.TenantID, session.ChannelID, session.Audience, session.AuthMethod
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+	if channelID == "" {
+		channelID = CustomerWebChannelID
+	}
+	if audience == "" {
+		audience = CustomerAudience
+	}
+	if authMethod == "" {
+		authMethod = "mobile_otp"
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO identity_sessions (token_hash, session_id, user_id, tenant_id, channel_id, audience, auth_method, expires_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, session.TokenHash[:], session.SessionID, userID, tenantID, channelID, audience, authMethod, session.ExpiresAt, now); err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE identity_otp_challenges SET consumed_at = $2 WHERE id = $1`, id, now); err != nil {

@@ -14,12 +14,18 @@ type Value struct {
 	Messages []Message `json:"messages"`
 }
 type Message struct {
-	From string `json:"from"`
-	Type string `json:"type"`
-	Text *Text  `json:"text,omitempty"`
+	From     string    `json:"from"`
+	Type     string    `json:"type"`
+	Text     *Text     `json:"text,omitempty"`
+	Location *Location `json:"location,omitempty"`
 }
 type Text struct {
 	Body string `json:"body"`
+}
+type Location struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      string  `json:"name,omitempty"`
 }
 type SendTextRequest struct {
 	MessagingProduct string   `json:"messaging_product"`

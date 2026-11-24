@@ -2,6 +2,7 @@
 CREATE TABLE identity_users (
     id text PRIMARY KEY CHECK (id ~ '^[0-9a-f]{32}$'),
     phone text NOT NULL UNIQUE CHECK (phone ~ '^\+[1-9][0-9]{7,14}$'),
+    onboarding_state text NOT NULL DEFAULT 'identified' CHECK (onboarding_state IN ('identified', 'join_pending', 'onboarded', 'suspended')),
     created_at timestamptz NOT NULL
 );
 

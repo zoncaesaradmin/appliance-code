@@ -417,6 +417,16 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    {{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
+    # Resolve provider-validated subjects through the generic identity API.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.applicationIdentitySelectorLabels" . | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.applicationServices.identity.service.port }}
+    {{- end }}
     # The adapter is intentionally the only appliance workload with an
     # external egress exception. It is required only while Meta delivery is
     # configured; the base profile remains public-egress denied.

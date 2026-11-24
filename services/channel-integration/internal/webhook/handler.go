@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"appliance-code/services/channel-integration/internal/identityclient"
 	"appliance-code/services/channel-integration/internal/meta"
 	"context"
 	"crypto/subtle"
@@ -26,7 +27,12 @@ type Handler struct {
 	verifyToken, appSecret string
 	sender                 MessageSender
 	logger                 Logger
+	principalResolver      identityclient.Resolver
 	now                    func() time.Time
+}
+
+func (h *Handler) SetPrincipalResolver(resolver identityclient.Resolver) {
+	h.principalResolver = resolver
 }
 
 func NewHandler(verifyToken, appSecret string, sender MessageSender, logger Logger) *Handler {
@@ -95,7 +101,7 @@ func (h *Handler) handleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	h.logger.Infow("webhook received", "event", "webhook_received", "kind", classify(payload))
 	summary := h.replyToTextMessages(r.Context(), payload)
-	h.logger.Infow("webhook processed", "event", "webhook_processed", "kind", classify(payload), "text_messages", summary.textMessages, "other_messages", summary.otherMessages, "reply_attempts", summary.replyAttempts, "replies_sent", summary.repliesSent, "replies_failed", summary.repliesFailed, "replies_skipped", summary.repliesSkipped)
+	h.logger.Infow("webhook processed", "event", "webhook_processed", "kind", classify(payload), "text_messages", summary.textMessages, "location_messages", summary.locationMessages, "other_messages", summary.otherMessages, "reply_attempts", summary.replyAttempts, "replies_sent", summary.repliesSent, "replies_failed", summary.repliesFailed, "replies_skipped", summary.repliesSkipped)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -114,12 +120,13 @@ func readBoundedBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 }
 
 type replySummary struct {
-	textMessages   int
-	otherMessages  int
-	replyAttempts  int
-	repliesSent    int
-	repliesFailed  int
-	repliesSkipped int
+	textMessages     int
+	locationMessages int
+	otherMessages    int
+	replyAttempts    int
+	repliesSent      int
+	repliesFailed    int
+	repliesSkipped   int
 }
 
 func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookPayload) replySummary {
@@ -127,17 +134,40 @@ func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookP
 	for _, entry := range payload.Entry {
 		for _, change := range entry.Changes {
 			for _, message := range change.Value.Messages {
-				if message.Type != "text" || message.Text == nil || message.From == "" {
+				var principal identityclient.Principal
+				resolved := false
+				if h.principalResolver != nil && message.From != "" {
+					phone := normalizePhone(message.From)
+					if phone == "" {
+						h.logger.Warnw("webhook principal resolution skipped", "event", "webhook_principal_resolution_skipped", "reason", "invalid_sender")
+					} else if resolvedPrincipal, err := h.principalResolver.Resolve(ctx, message.From, phone); err != nil {
+						h.logger.Warnw("webhook principal resolution failed", "event", "webhook_principal_resolution_failed", "error_kind", "identity_unavailable")
+					} else {
+						principal = resolvedPrincipal
+						resolved = true
+						h.logger.Infow("webhook principal resolved", "event", "webhook_principal_resolved", "audience", principal.Audience, "channel_id", principal.ChannelID, "auth_method", principal.AuthMethod)
+					}
+				}
+				isText := message.Type == "text" && message.Text != nil
+				isLocation := message.Type == "location" && message.Location != nil
+				if !isText && !isLocation || message.From == "" {
 					summary.otherMessages++
 					continue
 				}
-				summary.textMessages++
+				if isText {
+					summary.textMessages++
+				} else {
+					summary.locationMessages++
+				}
 				if h.sender == nil {
 					summary.repliesSkipped++
 					continue
 				}
 				summary.replyAttempts++
 				reply := "Thanks for your message. Current server time is " + h.now().UTC().Format(time.RFC3339) + "."
+				if resolved && principal.DiscoveryURL != "" {
+					reply = "Thanks. To find nearby Zonities and request access, open this link: " + principal.DiscoveryURL
+				}
 				response, err := h.sender.SendText(ctx, message.From, reply)
 				if err != nil {
 					summary.repliesFailed++
@@ -158,6 +188,33 @@ func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookP
 		h.logger.Warnw("webhook reply skipped", "event", "webhook_reply_skipped", "reason", "sender_unavailable", "replies_skipped", summary.repliesSkipped)
 	}
 	return summary
+}
+
+func normalizePhone(sender string) string {
+	sender = strings.TrimSpace(sender)
+	if sender == "" {
+		return ""
+	}
+	if strings.HasPrefix(sender, "+") {
+		for _, char := range sender[1:] {
+			if char < '0' || char > '9' {
+				return ""
+			}
+		}
+		if len(sender) >= 9 && len(sender) <= 16 {
+			return sender
+		}
+		return ""
+	}
+	for _, char := range sender {
+		if char < '0' || char > '9' {
+			return ""
+		}
+	}
+	if len(sender) < 8 || len(sender) > 15 || sender[0] == '0' {
+		return ""
+	}
+	return "+" + sender
 }
 
 func classify(payload meta.WebhookPayload) string {

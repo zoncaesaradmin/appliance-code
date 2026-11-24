@@ -168,6 +168,12 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
   service's local/test mobile OTP contract when that capability is installed.
   Application business surfaces are
   added inside this shell as their APIs become available.
+- The current `/app` shell verifies only the application session. Customer,
+  vendor, zone-administrator, tenant, channel, and zone-scope decisions remain
+  backend work; routes and UI labels never grant those permissions. Future
+  application entrypoints may select different audiences, but they will share
+  the same generic application-principal contract rather than reusing operator
+  console credentials.
 - Login has one context-aware operator surface and one application surface.
   `/console` supplies operator context and `/app` supplies application
   context; neither page presents a role chooser. The operations console link

@@ -50,6 +50,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.applicationServices.identity.secretName | quote }}
                   key: {{ .Values.applicationServices.identity.rateKey | quote }}
+            - name: APPLICATION_IDENTITY_INTERNAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.identity.secretName | quote }}
+                  key: {{ .Values.applicationServices.identity.internalKey | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.applicationServices.identity.service.port }}
