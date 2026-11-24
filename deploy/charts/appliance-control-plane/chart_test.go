@@ -813,7 +813,7 @@ func TestChannelIntegrationIngressSupportsCloudflareHTTPOrigin(t *testing.T) {
 		"--set", "config.enabledCapabilities[1]=channel-integrations",
 		"--set", "channelIntegration.enabled=true",
 		"--set", "channelIntegration.ingress.entryPoints[0]=web",
-		"--set", "channelIntegration.ingress.host=walocal.zonited.com",
+		"--set", "channelIntegration.ingress.host=channels-local.zonited.com",
 		"--set", "channelIntegration.ingress.tls.enabled=false",
 	)...)
 	route := findByKindAndName(docs, "IngressRoute", "channel-integration")
@@ -829,7 +829,7 @@ func TestChannelIntegrationIngressSupportsCloudflareHTTPOrigin(t *testing.T) {
 		t.Fatalf("channel integration route count = %d, want 1", len(routes))
 	}
 	firstRoute, _ := routes[0].(map[string]any)
-	if got, _ := firstRoute["match"].(string); got != "Host(`walocal.zonited.com`) && PathPrefix(`/webhook`)" {
+	if got, _ := firstRoute["match"].(string); got != "Host(`channels-local.zonited.com`) && PathPrefix(`/webhook`)" {
 		t.Fatalf("channel integration route match = %q", got)
 	}
 	if at(route, "spec", "tls") != nil {
