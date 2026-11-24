@@ -76,17 +76,56 @@ func (s *PostgresStore) NearbyZones(ctx context.Context, tenantID string, latitu
 	return zones, nil
 }
 
-func (s *PostgresStore) CreateZoneJoinRequest(ctx context.Context, userID, tenantID, zoneID string, now time.Time) (JoinRequest, error) {
-	var request JoinRequest
-	err := s.db.QueryRowContext(ctx, `INSERT INTO identity_zone_join_requests (user_id, tenant_id, zone_id, status, requested_at) SELECT $1, $2, id, 'pending', $3 FROM identity_zones WHERE id = $4 AND tenant_id = $2 AND status = 'active' ON CONFLICT (user_id, zone_id) DO UPDATE SET requested_at = identity_zone_join_requests.requested_at RETURNING zone_id, status`, userID, tenantID, now, zoneID).Scan(&request.ZoneID, &request.Status)
+func (s *PostgresStore) CreateZoneJoinRequest(ctx context.Context, userID, tenantID, zoneID string, latitude, longitude float64, now time.Time) (JoinRequest, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return JoinRequest{}, fmt.Errorf("begin zone join request: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var zoneLat, zoneLon float64
+	var joinRadiusM int
+	err = tx.QueryRowContext(ctx, `SELECT latitude, longitude, join_radius_m FROM identity_zones WHERE id = $1 AND tenant_id = $2 AND status = 'active' FOR SHARE`, zoneID, tenantID).Scan(&zoneLat, &zoneLon, &joinRadiusM)
 	if errors.Is(err, sql.ErrNoRows) {
 		return JoinRequest{}, ErrInvalidZone
 	}
 	if err != nil {
+		return JoinRequest{}, fmt.Errorf("load join zone: %w", err)
+	}
+	distance := haversineKM(latitude, longitude, zoneLat, zoneLon)
+	if distance > float64(joinRadiusM)/1000 {
+		return JoinRequest{}, ErrJoinTooFar
+	}
+	var hasAdmin bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM identity_zone_admins WHERE zone_id = $1 AND tenant_id = $2 AND status = 'active')`, zoneID, tenantID).Scan(&hasAdmin); err != nil {
+		return JoinRequest{}, fmt.Errorf("check Zonity admins: %w", err)
+	}
+	status := "pending"
+	approvalMode := "admin_review"
+	if !hasAdmin {
+		status = "approved"
+		approvalMode = "auto_no_admin"
+	}
+	var request JoinRequest
+	autoApproved := status == "approved"
+	var storedApprovedAt sql.NullTime
+	err = tx.QueryRowContext(ctx, `INSERT INTO identity_zone_join_requests (user_id, tenant_id, zone_id, status, approval_mode, approved_at, requested_at) VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 THEN $7 ELSE NULL END, $7) ON CONFLICT (user_id, zone_id) DO UPDATE SET requested_at = identity_zone_join_requests.requested_at RETURNING zone_id, status, approval_mode, approved_at`, userID, tenantID, zoneID, status, approvalMode, autoApproved, now).Scan(&request.ZoneID, &request.Status, &request.ApprovalMode, &storedApprovedAt)
+	if err != nil {
 		return JoinRequest{}, fmt.Errorf("create zone join request: %w", err)
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE identity_users SET onboarding_state = CASE WHEN onboarding_state = 'identified' THEN 'join_pending' ELSE onboarding_state END WHERE id = $1`, userID); err != nil {
+	request.ApprovalMode = approvalMode
+	request.DistanceKM = distance
+	if request.Status == "approved" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO identity_zone_memberships (user_id, tenant_id, zone_id, status, joined_at) VALUES ($1, $2, $3, 'active', $4) ON CONFLICT (user_id, zone_id) DO UPDATE SET status = 'active'`, userID, tenantID, zoneID, now); err != nil {
+			return JoinRequest{}, fmt.Errorf("create zone membership: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE identity_users SET onboarding_state = 'onboarded' WHERE id = $1`, userID); err != nil {
+			return JoinRequest{}, fmt.Errorf("update onboarded state: %w", err)
+		}
+	} else if _, err := tx.ExecContext(ctx, `UPDATE identity_users SET onboarding_state = CASE WHEN onboarding_state = 'identified' THEN 'join_pending' ELSE onboarding_state END WHERE id = $1`, userID); err != nil {
 		return JoinRequest{}, fmt.Errorf("update onboarding state: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return JoinRequest{}, fmt.Errorf("commit zone join request: %w", err)
 	}
 	return request, nil
 }

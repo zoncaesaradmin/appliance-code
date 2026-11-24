@@ -40,10 +40,11 @@ adapter, and the response contains no phone number or provider identifier.
 The onboarding slice creates an identified user, returns up to five active
 public zones within a server-capped 10 km radius, and records a pending join
 request. Joining and requesting a new Zonity require the application session;
-the channel discovery link alone is read-only. It does not yet grant zone
-membership, vendor approval, role grants, or application permissions. There is
-no end-user zone creation API; creation is reserved for authorized
-tenant/platform staff. The web OTP adapter remains
+the channel discovery link alone is read-only. Join requests are accepted only
+within each zone's join radius (1 km by default), and are auto-approved only
+when that zone has no active Zonity admin; otherwise they remain pending for
+Zonity admin review. There is no end-user zone creation API; creation is reserved
+for authorized tenant/platform staff. The web OTP adapter remains
 bound to the `customer-web` channel and keeps the existing public API contract.
 The channel integration can use the same contract when its identity resolver
 is configured; it passes only an opaque channel subject and normalized identity

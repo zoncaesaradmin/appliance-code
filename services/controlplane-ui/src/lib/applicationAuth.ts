@@ -58,11 +58,11 @@ export const applicationAuth = {
       body: JSON.stringify({ latitude, longitude, radius_km: 10, ...(discoveryToken ? { discovery_token: discoveryToken } : {}) })
     });
   },
-  join(zoneID: string, discoveryToken = ""): Promise<{ zone_id: string; status: string }> {
-    return request<{ zone_id: string; status: string }>("/api/shared/v1/onboarding/join", {
+  join(zoneID: string, latitude: number, longitude: number): Promise<{ zone_id: string; status: string; approval_mode: string }> {
+    return request<{ zone_id: string; status: string; approval_mode: string }>("/api/shared/v1/onboarding/join", {
       method: "POST",
       headers: { Origin: window.location.origin },
-      body: JSON.stringify({ zone_id: zoneID, ...(discoveryToken ? { discovery_token: discoveryToken } : {}) })
+      body: JSON.stringify({ zone_id: zoneID, latitude, longitude })
     });
   },
   requestZone(name: string): Promise<{ name: string; status: string }> {

@@ -302,8 +302,10 @@ func (h HTTPHandler) joinZone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		DiscoveryToken string `json:"discovery_token"`
-		ZoneID         string `json:"zone_id"`
+		DiscoveryToken string  `json:"discovery_token"`
+		ZoneID         string  `json:"zone_id"`
+		Latitude       float64 `json:"latitude"`
+		Longitude      float64 `json:"longitude"`
 	}
 	if !readAuthJSON(w, r, &input) {
 		return
@@ -311,9 +313,13 @@ func (h HTTPHandler) joinZone(w http.ResponseWriter, r *http.Request) {
 	// A discovery link is enough to inspect nearby public zones, but joining
 	// requires an application login session. This keeps channel identity and
 	// authenticated membership requests separate.
-	request, _, err := h.Service.RequestJoin(r.Context(), h.sessionCookie(r), "", input.ZoneID)
+	request, _, err := h.Service.RequestJoin(r.Context(), h.sessionCookie(r), input.ZoneID, input.Latitude, input.Longitude)
 	if errors.Is(err, ErrInvalidZone) {
-		authError(w, http.StatusBadRequest, "Choose a valid zone.")
+		authError(w, http.StatusBadRequest, "Choose a valid zone and share your location.")
+		return
+	}
+	if errors.Is(err, ErrJoinTooFar) {
+		authError(w, http.StatusForbidden, "You are outside this Zonity's join radius.")
 		return
 	}
 	if errors.Is(err, ErrUnauthenticated) {

@@ -4,7 +4,7 @@
 
 - Artifact type: onboarding/auth flow and installable local PWA shell
 - Positioning: trusted, local, quietly distinctive
-- Audience: Zonited application users | Primary action: sign in and enter the application workspace; zone selection is optional and follows later onboarding
+- Audience: Zonited application users | Primary action: sign in and choose a service or explore nearby Zonities
 - Adjectives: local, calm, human, precise
 - Aesthetic essence: neighbourhood signal, warm paper, quiet confidence
 - Mode: light | Density: balanced
@@ -12,9 +12,9 @@
 
 ## Aesthetic
 
-- Direction: editorial utility rather than an operator dashboard
-- Defining trait: a strong left-side “microzone signal” anchors the login decision
-- Signature move: three connected signal nodes that turn the Zonited mark into a local-place motif
+- Direction: editorial service index rather than an appliance dashboard
+- Defining trait: a quiet service index with a single strong “explore nearby” action
+- Signature move: numbered service cards that turn the landing page into a simple local directory
 
 ## Typography and color
 
@@ -26,8 +26,8 @@
 
 ## Layout and components
 
-- Desktop split layout with a story rail and a focused form panel; stacked on narrow screens.
-- Primary action is filled and full-width; console access is a low-emphasis footer action.
+- Login keeps the split story/form layout; the signed-in app uses a spacious service index with three service tabs.
+- The application shell has no operator-console, account, or administration links. Application and operator URL spaces remain separate.
 - Inputs retain visible labels, focus rings, keyboard operation, and inline errors.
 - Motion is limited to opacity/transform and respects reduced-motion preferences.
 
@@ -38,7 +38,7 @@
 - Application login never calls the operator `/api/v1/auth/login` contract. It
   uses the separate application identity service's local/test mobile OTP
   contract; it must never fall back to appliance operator credentials.
-- `/app` is currently the customer-oriented application entrypoint. Future
+- `/app` is the customer-oriented application entrypoint. Future
   customer, vendor, and zone-administration entrypoints select an application
   audience/channel, but a route is not a permission grant. Their APIs must
   enforce the resolved user, tenant, role, service, and zone scope server-side.
@@ -51,3 +51,4 @@
 - 2026-11-23: Added the application-context login, protected PWA shell, and offline static-shell metadata.
 - 2026-11-23: Applied the Zonited brand palette and supplied logo assets to the application login and PWA shell.
 - 2026-11-23: Removed the operator credential fallback from application login; mobile identity is the only application-login contract.
+- 2026-11-24: Reworked the signed-in application shell into a service index, removed operator-console escape links, and switched the shell mark to the supplied Zonited logo.

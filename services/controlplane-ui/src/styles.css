@@ -2275,6 +2275,15 @@ body:has(.video-player) {
   box-shadow: none;
 }
 
+.application-shell__logo {
+  width: 2.85rem;
+  height: 2.85rem;
+  flex: 0 0 2.85rem;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 6px 16px rgba(127, 29, 61, 0.18);
+}
+
 .application-shell__brand strong,
 .application-shell__brand small {
   display: block;
@@ -2344,6 +2353,199 @@ body:has(.video-player) {
   padding: 0 clamp(1.25rem, 4vw, 3.5rem) 1.5rem;
   color: #7b847c;
   font-size: 0.72rem;
+}
+
+.application-landing {
+  display: grid;
+  gap: clamp(2rem, 5vw, 4rem);
+  padding: clamp(1rem, 3vw, 2.5rem) 0 4rem;
+}
+
+.application-landing__intro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2rem;
+  padding: 1rem 0 2.25rem;
+  border-bottom: 1px solid rgba(127, 29, 61, 0.18);
+}
+
+.application-landing__eyebrow {
+  margin: 0 0 0.75rem;
+  color: var(--brand-primary);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.application-landing h1 {
+  max-width: 12ch;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(3rem, 7vw, 6.2rem);
+  font-weight: 760;
+  letter-spacing: -0.07em;
+  line-height: 0.92;
+}
+
+.application-landing__lede {
+  max-width: 38rem;
+  margin: 1.2rem 0 0;
+  color: var(--action-deep-sage);
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.application-landing__location {
+  min-height: 3.1rem;
+  border: 1px solid var(--brand-primary);
+  border-radius: 999px;
+  padding: 0 1.35rem;
+  background: var(--brand-primary);
+  color: var(--brand-background);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+}
+
+.application-landing__location:hover,
+.application-landing__location:focus-visible {
+  background: #63172f;
+}
+
+.application-landing__tabs {
+  display: flex;
+  gap: 1.7rem;
+  border-bottom: 1px solid rgba(127, 29, 61, 0.18);
+}
+
+.application-landing__tab {
+  position: relative;
+  min-height: 2.8rem;
+  border: 0;
+  background: transparent;
+  color: var(--action-deep-sage);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.application-landing__tab::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  content: "";
+}
+
+.application-landing__tab--active {
+  color: var(--brand-primary);
+}
+
+.application-landing__tab--active::after {
+  background: var(--brand-primary);
+}
+
+.application-service-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr;
+  gap: 1rem;
+}
+
+.application-service-card {
+  display: flex;
+  min-height: 17rem;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.65rem;
+  border: 1px solid rgba(127, 29, 61, 0.16);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.application-service-card--primary {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: var(--brand-background);
+}
+
+.application-service-card__number {
+  color: var(--brand-secondary);
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.application-service-card h2 {
+  margin: auto 0 0.75rem;
+  color: var(--text-primary);
+  font-size: 1.45rem;
+  letter-spacing: -0.04em;
+}
+
+.application-service-card--primary h2 {
+  color: var(--brand-background);
+}
+
+.application-service-card p {
+  max-width: 25rem;
+  margin: 0;
+  color: var(--action-deep-sage);
+  line-height: 1.6;
+}
+
+.application-service-card--primary p {
+  color: rgba(255, 249, 241, 0.78);
+}
+
+.application-service-card__action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 1.5rem;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 249, 241, 0.45);
+  padding: 0.7rem 0;
+  background: transparent;
+  color: var(--brand-background);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+}
+
+.application-service-card__status {
+  margin-top: 1.5rem;
+  color: var(--brand-primary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.application-tab-empty {
+  max-width: 42rem;
+  padding: 2rem 0 4rem;
+}
+
+.application-tab-empty h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(2rem, 4vw, 3.3rem);
+  letter-spacing: -0.06em;
+}
+
+.application-tab-empty p:last-child {
+  max-width: 32rem;
+  color: var(--action-deep-sage);
+  font-size: 1.05rem;
+  line-height: 1.65;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2455,6 +2657,20 @@ body:has(.video-player) {
 
   .application-home__grid {
     grid-template-columns: 1fr;
+  }
+
+  .application-landing__intro {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .application-service-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .application-landing__tabs {
+    gap: 1rem;
+    overflow-x: auto;
   }
 
   .application-shell__header {

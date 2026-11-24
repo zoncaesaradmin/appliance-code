@@ -4,6 +4,7 @@ CREATE TABLE identity_zones (
     name text NOT NULL,
     latitude double precision NOT NULL CHECK (latitude >= -90 AND latitude <= 90),
     longitude double precision NOT NULL CHECK (longitude >= -180 AND longitude <= 180),
+    join_radius_m integer NOT NULL DEFAULT 1000 CHECK (join_radius_m BETWEEN 1 AND 10000),
     status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     created_at timestamptz NOT NULL
 );
@@ -26,10 +27,33 @@ CREATE TABLE identity_zone_join_requests (
     tenant_id text NOT NULL REFERENCES identity_tenants (id),
     zone_id text NOT NULL REFERENCES identity_zones (id),
     status text NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+    approval_mode text NOT NULL CHECK (approval_mode IN ('admin_review', 'auto_no_admin')),
+    approved_at timestamptz,
+    approved_by_user_id text REFERENCES identity_users (id),
     requested_at timestamptz NOT NULL,
     PRIMARY KEY (user_id, zone_id)
 );
 CREATE INDEX identity_zone_join_requests_tenant_status_idx ON identity_zone_join_requests (tenant_id, status);
+
+CREATE TABLE identity_zone_admins (
+    user_id text NOT NULL REFERENCES identity_users (id),
+    tenant_id text NOT NULL REFERENCES identity_tenants (id),
+    zone_id text NOT NULL REFERENCES identity_zones (id),
+    status text NOT NULL CHECK (status IN ('active', 'revoked')),
+    assigned_at timestamptz NOT NULL,
+    PRIMARY KEY (user_id, zone_id)
+);
+CREATE INDEX identity_zone_admins_zone_status_idx ON identity_zone_admins (zone_id, status);
+
+CREATE TABLE identity_zone_memberships (
+    user_id text NOT NULL REFERENCES identity_users (id),
+    tenant_id text NOT NULL REFERENCES identity_tenants (id),
+    zone_id text NOT NULL REFERENCES identity_zones (id),
+    status text NOT NULL CHECK (status IN ('active', 'revoked')),
+    joined_at timestamptz NOT NULL,
+    PRIMARY KEY (user_id, zone_id)
+);
+CREATE INDEX identity_zone_memberships_zone_status_idx ON identity_zone_memberships (zone_id, status);
 
 CREATE TABLE identity_zone_creation_requests (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

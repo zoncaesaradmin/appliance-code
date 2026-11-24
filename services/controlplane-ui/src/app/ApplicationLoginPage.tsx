@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { client } from "../lib/api";
-import { navigate } from "../lib/navigate";
 import { displayProductVersion } from "../productVersion";
 import { applicationAuth } from "../lib/applicationAuth";
 
@@ -89,7 +88,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
         </div>
         <footer className="application-login__footer">
           <span>{productVersion ? `Zonited App ${productVersion}` : "Zonited App"}</span>
-          <button type="button" onClick={() => navigate("/console", true)}>Operations console</button>
+          <span>Secure mobile access</span>
         </footer>
       </section>
     </main>

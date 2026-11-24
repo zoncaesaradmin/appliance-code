@@ -1,5 +1,4 @@
 import React from "react";
-import { BrandMark } from "../components";
 import { navigate } from "../lib/navigate";
 import { ApplicationWorkspacePage } from "../pages/ApplicationWorkspacePage";
 import type { Session } from "../types";
@@ -13,22 +12,13 @@ export function ApplicationShell(props: {
     <div className="application-shell">
       <header className="application-shell__header">
         <button className="application-shell__brand" type="button" onClick={() => navigate("/app")}>
-          <BrandMark size="sm" />
+          <img className="application-shell__logo" src="/zonited-logo-circle.png" alt="Zonited" />
           <span>
             <strong>Zonited</strong>
-            <small>Your local space</small>
+            <small>Services around you</small>
           </span>
         </button>
-        <nav className="application-shell__nav" aria-label="Zonited navigation">
-          <button type="button" className="application-shell__nav-link application-shell__nav-link--active" onClick={() => navigate("/app")}>
-            My space
-          </button>
-          <button type="button" className="application-shell__nav-link" onClick={() => navigate("/account/profile")}>
-            Account
-          </button>
-          <button type="button" className="application-shell__nav-link" onClick={() => navigate("/console", true)}>
-            Operations console
-          </button>
+        <nav className="application-shell__nav" aria-label="Application actions">
           <button type="button" className="application-shell__signout" onClick={() => void props.onLogout()}>
             Sign out
           </button>
@@ -38,8 +28,8 @@ export function ApplicationShell(props: {
         <ApplicationWorkspacePage pathname={props.pathname} session={props.session} />
       </main>
       <footer className="application-shell__footer">
+        <span>Zonited App</span>
         <span>Private by design</span>
-        <span>{props.session.displayName || props.session.username}</span>
       </footer>
     </div>
   );
