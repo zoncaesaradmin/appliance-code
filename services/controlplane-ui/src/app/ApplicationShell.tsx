@@ -11,7 +11,7 @@ export function ApplicationShell(props: {
   return (
     <div className="application-shell">
       <header className="application-shell__header">
-        <button className="application-shell__brand" type="button" onClick={() => navigate("/app")}>
+        <button className="application-shell__brand" type="button" aria-label="Zonited App home" onClick={() => navigate("/app")}>
           <img className="application-shell__logo" src="/zonited-logo-circle.png" alt="Zonited" />
           <span>
             <strong>Zonited</strong>

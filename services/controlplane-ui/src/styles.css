@@ -2007,6 +2007,16 @@ body:has(.video-player) {
   text-transform: uppercase;
 }
 
+.application-login form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.6rem;
+}
+
+.application-login form .field-label {
+  margin: 0;
+}
+
 .application-login .text-input {
   width: 100%;
   box-sizing: border-box;
@@ -2016,6 +2026,46 @@ body:has(.video-player) {
   color: var(--app-ink);
   background: var(--app-surface);
   font: inherit;
+}
+
+.application-login__phone-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.application-login__phone-input {
+  display: grid;
+  grid-template-columns: minmax(9.8rem, 0.9fr) minmax(0, 1.4fr);
+  gap: 0.65rem;
+}
+
+.application-login__country {
+  position: relative;
+}
+
+.application-login__country select {
+  width: 100%;
+  min-height: 3.1rem;
+  box-sizing: border-box;
+  border: 1px solid var(--app-border);
+  border-radius: 0.8rem;
+  padding: 0 0.8rem;
+  color: var(--app-ink);
+  background: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  cursor: pointer;
+}
+
+.application-login__country select:focus,
+.application-login .text-input:focus {
+  border-color: var(--app-brand);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(127, 29, 61, 0.18);
+}
+
+.application-login__phone-help {
+  color: var(--app-muted);
+  font-size: 0.78rem;
 }
 
 .application-login .form-error {
@@ -2133,6 +2183,29 @@ body:has(.video-player) {
 .application-login__guest button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.application-login__secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.1rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.8rem;
+  padding: 0 1rem;
+  background: transparent;
+  color: var(--app-brand);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.application-login__secondary:hover {
+  border-color: var(--app-brand);
+  background: rgba(127, 29, 61, 0.06);
+  transform: translateY(-1px);
 }
 
 .application-login__error {
@@ -2304,7 +2377,7 @@ body:has(.video-player) {
   height: 2.85rem;
   flex: 0 0 2.85rem;
   border-radius: 50%;
-  object-fit: cover;
+  object-fit: contain;
   box-shadow: 0 6px 16px rgba(127, 29, 61, 0.18);
 }
 
@@ -2574,7 +2647,8 @@ body:has(.video-player) {
 
 @media (prefers-reduced-motion: reduce) {
   .application-login__field input,
-  .application-login__submit {
+  .application-login__submit,
+  .application-login__secondary {
     transition: none;
   }
 }
@@ -2667,6 +2741,10 @@ body:has(.video-player) {
 
   .application-login__story h1 {
     font-size: clamp(2.5rem, 13vw, 4rem);
+  }
+
+  .application-login__phone-input {
+    grid-template-columns: 1fr;
   }
 
   .application-login__signal {

@@ -29,6 +29,8 @@
 - Login keeps the split story/form layout; the signed-in app uses a spacious service index with three service tabs.
 - The application shell has no operator-console, account, or administration links. Application and operator URL spaces remain separate.
 - Inputs retain visible labels, focus rings, keyboard operation, and inline errors.
+- Mobile OTP entry separates country selection from the local number; India (+91) is the default and the local number is digit-only with country-specific length validation.
+- Authentication actions use full-width, vertically separated primary and secondary buttons so the code step has a clear next action and a calm recovery path.
 - Motion is limited to opacity/transform and respects reduced-motion preferences.
 
 ## PWA and security
@@ -52,3 +54,4 @@
 - 2026-11-23: Applied the Zonited brand palette and supplied logo assets to the application login and PWA shell.
 - 2026-11-23: Removed the operator credential fallback from application login; mobile identity is the only application-login contract.
 - 2026-11-24: Reworked the signed-in application shell into a service index, removed operator-console escape links, and switched the shell mark to the supplied Zonited logo.
+- 2026-11-24: Refined mobile OTP entry with a country selector, digit-only local-number input, and separated action buttons.
