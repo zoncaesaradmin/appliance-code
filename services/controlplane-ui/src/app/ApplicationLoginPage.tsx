@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { client } from "../lib/api";
 import { displayProductVersion } from "../productVersion";
 import { applicationAuth } from "../lib/applicationAuth";
+import { navigate } from "../lib/navigate";
 
 export function ApplicationLoginPage(props: { onAuthenticated: () => void }): React.JSX.Element {
   const [productVersion, setProductVersion] = useState("");
@@ -66,29 +67,26 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
         <div className="application-login__form-wrap">
           <p className="application-login__eyebrow">Mobile member access</p>
           <h2>{challengeID ? "Enter your verification code." : "Sign in with your mobile."}</h2>
-          <p className="application-login__lede">
-            Zonited accounts use a verified mobile number. Appliance operator usernames and passwords are not accepted here.
-          </p>
           {!challengeID ? (
             <form onSubmit={(event) => { event.preventDefault(); setError(""); setBusy(true); void applicationAuth.challenge(phone.trim()).then((result) => setChallengeID(result.challenge_id)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not send a code.")).finally(() => setBusy(false)); }}>
               <label className="field-label" htmlFor="application-phone">Mobile number</label>
               <input id="application-phone" className="text-input" type="tel" inputMode="tel" autoComplete="tel" placeholder="+91 98765 43210" value={phone} onChange={(event) => setPhone(event.target.value)} required />
               {error ? <p className="form-error" role="alert">{error}</p> : null}
-              <button className="application-login__submit" type="submit" disabled={busy}>{busy ? "Sending code…" : "Send verification code"}</button>
+              <button className="application-login__submit" type="submit" disabled={busy}><span>{busy ? "Sending code…" : "Send verification code"}</span><svg aria-hidden="true" viewBox="0 0 20 20" focusable="false"><path d="M4 10h10M10 5l5 5-5 5" /></svg></button>
             </form>
           ) : (
             <form onSubmit={(event) => { event.preventDefault(); setError(""); setBusy(true); void applicationAuth.verify(challengeID, code.trim()).then(props.onAuthenticated).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not verify the code.")).finally(() => setBusy(false)); }}>
               <label className="field-label" htmlFor="application-code">Six-digit code</label>
               <input id="application-code" className="text-input" type="text" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} required />
               {error ? <p className="form-error" role="alert">{error}</p> : null}
-              <button className="application-login__submit" type="submit" disabled={busy}>{busy ? "Verifying…" : "Continue"}</button>
+              <button className="application-login__submit" type="submit" disabled={busy}><span>{busy ? "Verifying…" : "Continue"}</span><svg aria-hidden="true" viewBox="0 0 20 20" focusable="false"><path d="M4 10h10M10 5l5 5-5 5" /></svg></button>
               <button className="button button--ghost" type="button" onClick={() => { setChallengeID(""); setCode(""); setError(""); }}>Use a different number</button>
             </form>
           )}
         </div>
         <footer className="application-login__footer">
           <span>{productVersion ? `Zonited App ${productVersion}` : "Zonited App"}</span>
-          <span>Secure mobile access</span>
+          <button type="button" onClick={() => navigate("/console/login", true)}>Operator console</button>
         </footer>
       </section>
     </main>
