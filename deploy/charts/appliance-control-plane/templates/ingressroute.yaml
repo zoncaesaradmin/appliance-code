@@ -13,7 +13,7 @@ spec:
     {{- include "appliance-control-plane.ingressRouteRules" . | nindent 4 }}
   tls:
     secretName: {{ .Values.ingress.tlsSecretName }}
-{{- if eq (include "appliance-control-plane.plaintextHTTPEnabled" .) "true" }}
+{{- if or (eq (include "appliance-control-plane.plaintextHTTPEnabled" .) "true") (eq (include "appliance-control-plane.cloudflareHTTPOriginEnabled" .) "true") }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

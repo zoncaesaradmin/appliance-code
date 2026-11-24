@@ -773,6 +773,40 @@ func TestIngressRouteRendersPlaintextHTTPWhenCapabilityEnabled(t *testing.T) {
 	}
 }
 
+func TestIngressRouteRendersCloudflareHTTPOriginWithoutDisablingSecureCookies(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(), "--set", "ingress.tlsTermination=cloudflare")...)
+	tlsRoute := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName)
+	if tlsRoute == nil {
+		t.Fatal("expected TLS IngressRoute")
+	}
+	httpRoute := findByKindAndName(docs, "IngressRoute", controlPlaneDeploymentName+"-http")
+	if httpRoute == nil {
+		t.Fatal("expected HTTP origin IngressRoute when tlsTermination=cloudflare")
+	}
+	entryPoints, _ := at(httpRoute, "spec", "entryPoints").([]any)
+	if fmt.Sprint(entryPoints) != "[web]" {
+		t.Fatalf("Cloudflare HTTP origin IngressRoute entryPoints = %#v, want [web]", entryPoints)
+	}
+	if at(httpRoute, "spec", "tls") != nil {
+		t.Fatal("Cloudflare HTTP origin IngressRoute must not declare tls")
+	}
+	tlsEntryPoints, _ := at(tlsRoute, "spec", "entryPoints").([]any)
+	if fmt.Sprint(tlsEntryPoints) != "[websecure]" {
+		t.Fatalf("TLS IngressRoute entryPoints = %#v, want [websecure]", tlsEntryPoints)
+	}
+	if at(tlsRoute, "spec", "tls", "secretName") == nil {
+		t.Fatal("TLS IngressRoute must keep tls.secretName")
+	}
+	cm := findByKindAndName(docs, "ConfigMap", controlPlaneUIConfigName)
+	if cm == nil {
+		t.Fatal("expected UI ConfigMap")
+	}
+	data, _ := at(cm, "data").(map[string]any)
+	if got, _ := data["APPLIANCE_UI_COOKIE_SECURE"].(string); got != "true" {
+		t.Fatalf("APPLIANCE_UI_COOKIE_SECURE = %q, want true for Cloudflare TLS termination", got)
+	}
+}
+
 func TestChannelIntegrationIngressSupportsCloudflareHTTPOrigin(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.enabledCapabilities[0]=base",

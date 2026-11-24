@@ -481,11 +481,15 @@ ingress:
   # Traefik IngressRoute (CRD). The CRD itself is provided by the K3s-bundled
   # Traefik, not this chart; rendering does not require it to be installed.
   # TLS stays on websecure. When plaintext-http is in config.enabledCapabilities,
-  # the chart adds a second IngressRoute on web with no TLS.
+  # or tlsTermination is cloudflare, the chart adds a second IngressRoute on
+  # web with no TLS. Cloudflare terminates public HTTPS before its tunnel
+  # reaches this HTTP origin; the publicOrigin and application cookies remain
+  # HTTPS/secure in that mode.
   entryPoints:
     - websecure
   host: ""
   tlsSecretName: "appliance-tls"
+  tlsTermination: traefik
   forwardAuth:
     enabled: true
     responseHeaders:

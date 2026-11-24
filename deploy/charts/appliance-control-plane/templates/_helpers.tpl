@@ -63,6 +63,10 @@ releases, enabling only the set it is currently applying.
 {{- if has "plaintext-http" (.Values.config.enabledCapabilities | default (list)) -}}true{{- end -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.cloudflareHTTPOriginEnabled" -}}
+{{- if eq (.Values.ingress.tlsTermination | default "traefik") "cloudflare" -}}true{{- end -}}
+{{- end -}}
+
 {{- define "appliance-control-plane.uiCookieSecure" -}}
 {{- if eq (include "appliance-control-plane.plaintextHTTPEnabled" .) "true" -}}false{{- else -}}{{ .Values.ui.config.cookieSecure }}{{- end -}}
 {{- end -}}

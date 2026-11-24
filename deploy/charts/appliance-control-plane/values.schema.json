@@ -504,6 +504,14 @@
         },
         "tlsSecretName": {
           "type": "string"
+        },
+        "tlsTermination": {
+          "type": "string",
+          "enum": [
+            "traefik",
+            "cloudflare"
+          ],
+          "default": "traefik"
         }
       }
     },
