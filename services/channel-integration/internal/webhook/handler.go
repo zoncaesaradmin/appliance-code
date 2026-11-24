@@ -28,6 +28,7 @@ type Handler struct {
 	sender                 MessageSender
 	logger                 Logger
 	principalResolver      identityclient.Resolver
+	deduplicator           *messageDeduplicator
 	now                    func() time.Time
 }
 
@@ -39,7 +40,7 @@ func NewHandler(verifyToken, appSecret string, sender MessageSender, logger Logg
 	if logger == nil {
 		panic("channel integration logger is required")
 	}
-	return &Handler{verifyToken: verifyToken, appSecret: appSecret, sender: sender, logger: logger, now: time.Now}
+	return &Handler{verifyToken: verifyToken, appSecret: appSecret, sender: sender, logger: logger, now: time.Now, deduplicator: newMessageDeduplicator(time.Now)}
 }
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /webhook", h.handleVerify)
@@ -101,7 +102,7 @@ func (h *Handler) handleEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	h.logger.Infow("webhook received", "event", "webhook_received", "kind", classify(payload))
 	summary := h.replyToTextMessages(r.Context(), payload)
-	h.logger.Infow("webhook processed", "event", "webhook_processed", "kind", classify(payload), "text_messages", summary.textMessages, "location_messages", summary.locationMessages, "other_messages", summary.otherMessages, "reply_attempts", summary.replyAttempts, "replies_sent", summary.repliesSent, "replies_failed", summary.repliesFailed, "replies_skipped", summary.repliesSkipped)
+	h.logger.Infow("webhook processed", "event", "webhook_processed", "kind", classify(payload), "text_messages", summary.textMessages, "location_messages", summary.locationMessages, "other_messages", summary.otherMessages, "duplicate_messages", summary.duplicateMessages, "reply_attempts", summary.replyAttempts, "replies_sent", summary.repliesSent, "replies_failed", summary.repliesFailed, "replies_skipped", summary.repliesSkipped)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -120,13 +121,14 @@ func readBoundedBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
 }
 
 type replySummary struct {
-	textMessages     int
-	locationMessages int
-	otherMessages    int
-	replyAttempts    int
-	repliesSent      int
-	repliesFailed    int
-	repliesSkipped   int
+	textMessages      int
+	locationMessages  int
+	otherMessages     int
+	replyAttempts     int
+	repliesSent       int
+	repliesFailed     int
+	repliesSkipped    int
+	duplicateMessages int
 }
 
 func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookPayload) replySummary {
@@ -134,6 +136,23 @@ func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookP
 	for _, entry := range payload.Entry {
 		for _, change := range entry.Changes {
 			for _, message := range change.Value.Messages {
+				isText := message.Type == "text" && message.Text != nil
+				isLocation := message.Type == "location" && message.Location != nil
+				if !isText && !isLocation || message.From == "" {
+					summary.otherMessages++
+					continue
+				}
+				if isText {
+					summary.textMessages++
+				} else {
+					summary.locationMessages++
+				}
+				if message.ID != "" && !h.deduplicator.reserve(message.ID) {
+					summary.duplicateMessages++
+					h.logger.Infow("duplicate webhook message skipped", "event", "webhook_duplicate_message_skipped", "message_id_present", true)
+					continue
+				}
+				reserved := message.ID != ""
 				var principal identityclient.Principal
 				resolved := false
 				if h.principalResolver != nil && message.From != "" {
@@ -148,18 +167,10 @@ func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookP
 						h.logger.Infow("webhook principal resolved", "event", "webhook_principal_resolved", "audience", principal.Audience, "channel_id", principal.ChannelID, "auth_method", principal.AuthMethod)
 					}
 				}
-				isText := message.Type == "text" && message.Text != nil
-				isLocation := message.Type == "location" && message.Location != nil
-				if !isText && !isLocation || message.From == "" {
-					summary.otherMessages++
-					continue
-				}
-				if isText {
-					summary.textMessages++
-				} else {
-					summary.locationMessages++
-				}
 				if h.sender == nil {
+					if reserved {
+						h.deduplicator.release(message.ID)
+					}
 					summary.repliesSkipped++
 					continue
 				}
@@ -170,6 +181,9 @@ func (h *Handler) replyToTextMessages(ctx context.Context, payload meta.WebhookP
 				}
 				response, err := h.sender.SendText(ctx, message.From, reply)
 				if err != nil {
+					if reserved {
+						h.deduplicator.release(message.ID)
+					}
 					summary.repliesFailed++
 					errorKind, statusCode := safeDeliveryError(err)
 					h.logger.Errorw("webhook reply failed", "event", "webhook_reply_failed", "provider", "meta", "error_kind", errorKind, "http_status", statusCode)
@@ -222,6 +236,9 @@ func classify(payload meta.WebhookPayload) string {
 		for _, change := range entry.Changes {
 			if len(change.Value.Messages) > 0 {
 				return "user_message"
+			}
+			if len(change.Value.Statuses) > 0 {
+				return "status_update"
 			}
 		}
 	}

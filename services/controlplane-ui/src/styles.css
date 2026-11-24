@@ -1929,23 +1929,19 @@ body:has(.video-player) {
 
 .application-login__brand {
   display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  color: var(--app-brand);
-  font-size: 1.2rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  justify-content: center;
+  margin-bottom: clamp(1.35rem, 4vh, 2.25rem);
 }
 
 .application-login__brand-logo {
   display: inline-grid;
-  width: 3.35rem;
-  height: 3.35rem;
-  flex: 0 0 3.35rem;
+  width: clamp(6rem, 18vw, 8rem);
+  height: clamp(6rem, 18vw, 8rem);
   place-items: center;
   overflow: hidden;
-  border-radius: 0.9rem;
+  border-radius: 1.15rem;
   background: var(--app-brand);
+  box-shadow: 0 0.9rem 2rem rgba(44, 29, 32, 0.12);
 }
 
 .application-login__brand-logo img {

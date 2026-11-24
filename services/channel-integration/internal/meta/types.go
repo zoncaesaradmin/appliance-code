@@ -12,12 +12,21 @@ type Change struct {
 }
 type Value struct {
 	Messages []Message `json:"messages"`
+	Statuses []Status  `json:"statuses"`
 }
 type Message struct {
+	ID       string    `json:"id,omitempty"`
 	From     string    `json:"from"`
 	Type     string    `json:"type"`
 	Text     *Text     `json:"text,omitempty"`
 	Location *Location `json:"location,omitempty"`
+}
+
+// Status is a provider acknowledgement/update. Statuses are separate from
+// inbound messages so they cannot trigger a customer reply.
+type Status struct {
+	ID     string `json:"id,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 type Text struct {
 	Body string `json:"body"`

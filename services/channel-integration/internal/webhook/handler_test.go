@@ -19,6 +19,7 @@ type senderStub struct {
 	response *meta.SendMessageResponse
 	err      error
 	body     string
+	calls    int
 }
 
 type resolverStub struct {
@@ -31,6 +32,7 @@ func (s resolverStub) Resolve(context.Context, string, string) (identityclient.P
 }
 
 func (s *senderStub) SendText(_ context.Context, _, body string) (*meta.SendMessageResponse, error) {
+	s.calls++
 	s.body = body
 	return s.response, s.err
 }
@@ -103,7 +105,7 @@ func TestHandleVerifyLogsSafeRejectionDetails(t *testing.T) {
 func TestHandleEventLogsReferenceLifecycle(t *testing.T) {
 	logger := &captureLogger{}
 	handler := NewHandler("expected-token", "app-secret", &senderStub{response: &meta.SendMessageResponse{}}, logger)
-	body := []byte(`{"object":"whatsapp_business_account","entry":[{"changes":[{"value":{"messages":[{"from":"919999999999","type":"text","text":{"body":"private message"}}]}}]}]}`)
+	body := []byte(`{"object":"whatsapp_business_account","entry":[{"changes":[{"value":{"messages":[{"id":"wamid.lifecycle","from":"919999999999","type":"text","text":{"body":"private message"}}]}}]}]}`)
 	request := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
 	request.Header.Set("X-Hub-Signature-256", signature("app-secret", body))
 	recorder := httptest.NewRecorder()
@@ -118,7 +120,7 @@ func TestHandleEventLogsReferenceLifecycle(t *testing.T) {
 			t.Fatalf("missing %s log: %#v", event, logger.entries)
 		}
 	}
-	if !logger.hasField("kind", "user_message") || !logger.hasField("text_messages", 1) || !logger.hasField("replies_sent", 1) || !logger.hasField("replies_failed", 0) {
+	if !logger.hasField("kind", "user_message") || !logger.hasField("text_messages", 1) || !logger.hasField("replies_sent", 1) || !logger.hasField("replies_failed", 0) || !logger.hasField("duplicate_messages", 0) {
 		t.Fatalf("missing lifecycle counts: %#v", logger.entries)
 	}
 	if strings.Contains(fmt.Sprint(logger.entries), "919999999999") || strings.Contains(fmt.Sprint(logger.entries), "private message") {
@@ -154,6 +156,45 @@ func TestHandleEventSendsDiscoveryLinkForResolvedCustomer(t *testing.T) {
 	handler.handleEvent(recorder, request)
 	if recorder.Code != http.StatusOK || !strings.Contains(sender.body, "/app/discover?token=opaque") {
 		t.Fatalf("discovery link was not sent: status=%d body=%q", recorder.Code, sender.body)
+	}
+}
+
+func TestHandleEventSkipsDuplicateMessageDelivery(t *testing.T) {
+	logger := &captureLogger{}
+	sender := &senderStub{response: &meta.SendMessageResponse{}}
+	handler := NewHandler("expected-token", "app-secret", sender, logger)
+	body := []byte(`{"entry":[{"changes":[{"value":{"messages":[{"id":"wamid.duplicate","from":"919999999999","type":"text","text":{"body":"hello"}}]}}]}]}`)
+	for attempt := 0; attempt < 2; attempt++ {
+		request := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
+		request.Header.Set("X-Hub-Signature-256", signature("app-secret", body))
+		recorder := httptest.NewRecorder()
+		handler.handleEvent(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("attempt %d status = %d, want %d", attempt+1, recorder.Code, http.StatusOK)
+		}
+	}
+	if sender.calls != 1 {
+		t.Fatalf("sender calls = %d, want 1", sender.calls)
+	}
+	if !logger.hasEvent("webhook_duplicate_message_skipped") || !logger.hasField("duplicate_messages", 1) {
+		t.Fatalf("missing duplicate delivery evidence: %#v", logger.entries)
+	}
+}
+
+func TestHandleEventDoesNotReplyToProviderStatusAcknowledgement(t *testing.T) {
+	logger := &captureLogger{}
+	sender := &senderStub{response: &meta.SendMessageResponse{}}
+	handler := NewHandler("expected-token", "app-secret", sender, logger)
+	body := []byte(`{"object":"whatsapp_business_account","entry":[{"changes":[{"value":{"statuses":[{"id":"wamid.outbound","status":"delivered"}]}}]}]}`)
+	request := httptest.NewRequest(http.MethodPost, "/webhook", strings.NewReader(string(body)))
+	request.Header.Set("X-Hub-Signature-256", signature("app-secret", body))
+	recorder := httptest.NewRecorder()
+	handler.handleEvent(recorder, request)
+	if recorder.Code != http.StatusOK || sender.calls != 0 {
+		t.Fatalf("status acknowledgement was replied to: status=%d calls=%d", recorder.Code, sender.calls)
+	}
+	if !logger.hasField("kind", "status_update") {
+		t.Fatalf("status update was not classified: %#v", logger.entries)
 	}
 }
 
