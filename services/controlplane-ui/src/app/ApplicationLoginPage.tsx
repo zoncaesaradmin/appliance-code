@@ -74,13 +74,13 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
       <section className="application-login__panel" aria-label="Zonited App sign in">
         <header className="application-login__brand">
           <span className="application-login__brand-logo" aria-hidden="true">
-            <img src="/zonited-logo-square.png" alt="" />
+            <img src="/zonited-logo-circle.png" alt="" />
           </span>
           <span>Zonited</span>
         </header>
         <div className="application-login__form-wrap">
           <p className="application-login__eyebrow">Mobile member access</p>
-          <h2>{challengeID ? "Enter your verification code." : "Sign in with your mobile."}</h2>
+          <h2>{challengeID ? "Enter your verification code." : "Sign in"}</h2>
           {!challengeID ? (
             <form onSubmit={(event) => {
               event.preventDefault();
