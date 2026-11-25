@@ -76,6 +76,31 @@ func (s *PostgresStore) NearbyZones(ctx context.Context, tenantID string, latitu
 	return zones, nil
 }
 
+func (s *PostgresStore) ListActiveMemberships(ctx context.Context, userID, tenantID string) ([]ActiveMembership, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.tenant_id, m.zone_id, z.name
+		FROM identity_zone_memberships m
+		JOIN identity_zones z ON z.id = m.zone_id AND z.tenant_id = m.tenant_id
+		WHERE m.user_id = $1 AND m.tenant_id = $2 AND m.status = 'active' AND z.status = 'active'
+		ORDER BY m.joined_at ASC, m.zone_id ASC`, userID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("list active memberships: %w", err)
+	}
+	defer rows.Close()
+	memberships := make([]ActiveMembership, 0)
+	for rows.Next() {
+		var membership ActiveMembership
+		if err := rows.Scan(&membership.TenantID, &membership.ZoneID, &membership.Name); err != nil {
+			return nil, fmt.Errorf("scan active membership: %w", err)
+		}
+		memberships = append(memberships, membership)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list active memberships: %w", err)
+	}
+	return memberships, nil
+}
+
 func (s *PostgresStore) CreateZoneJoinRequest(ctx context.Context, userID, tenantID, zoneID string, latitude, longitude float64, now time.Time) (JoinRequest, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

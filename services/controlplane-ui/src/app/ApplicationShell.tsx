@@ -15,7 +15,6 @@ export function ApplicationShell(props: {
           <img className="application-shell__logo" src="/zonited-logo-circle.png" alt="Zonited" />
           <span>
             <strong>Zonited</strong>
-            <small>Services around you</small>
           </span>
         </button>
         <nav className="application-shell__nav" aria-label="Application actions">

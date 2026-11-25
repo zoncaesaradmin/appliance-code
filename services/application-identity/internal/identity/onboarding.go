@@ -31,6 +31,12 @@ type Zone struct {
 	Distance float64 `json:"distance_km"`
 }
 
+type ActiveMembership struct {
+	TenantID string `json:"tenant_id"`
+	ZoneID   string `json:"zone_id"`
+	Name     string `json:"name"`
+}
+
 type JoinRequest struct {
 	ZoneID       string  `json:"zone_id"`
 	Status       string  `json:"status"`
@@ -47,8 +53,22 @@ type OnboardingStore interface {
 	CreateDiscoveryLink(context.Context, [32]byte, Principal, time.Time) error
 	LookupDiscoveryPrincipal(context.Context, [32]byte, time.Time) (Principal, error)
 	NearbyZones(context.Context, string, float64, float64, float64, int) ([]Zone, error)
+	ListActiveMemberships(context.Context, string, string) ([]ActiveMembership, error)
 	CreateZoneJoinRequest(context.Context, string, string, string, float64, float64, time.Time) (JoinRequest, error)
 	CreateZoneCreationRequest(context.Context, string, string, string, time.Time) (ZoneCreationRequest, error)
+}
+
+func (s *Service) ActiveMemberships(ctx context.Context, sessionToken string) ([]ActiveMembership, Principal, error) {
+	principal, err := s.Principal(ctx, sessionToken)
+	if err != nil {
+		return nil, Principal{}, err
+	}
+	store, ok := s.store.(OnboardingStore)
+	if !ok {
+		return nil, Principal{}, errors.New("onboarding is unavailable")
+	}
+	memberships, err := store.ListActiveMemberships(ctx, principal.ApplicationUserID, principal.TenantID)
+	return memberships, principal, err
 }
 
 func (s *Service) SetOrigin(origin string) {

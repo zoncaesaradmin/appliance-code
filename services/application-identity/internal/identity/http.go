@@ -40,6 +40,10 @@ func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.nearbyZones(w, r)
 		return
 	}
+	if r.URL.Path == "/api/shared/v1/onboarding/memberships" {
+		h.activeMemberships(w, r)
+		return
+	}
 	if r.URL.Path == "/api/shared/v1/onboarding/join" {
 		h.joinZone(w, r)
 		return
@@ -295,6 +299,30 @@ func (h HTTPHandler) nearbyZones(w http.ResponseWriter, r *http.Request) {
 		ApplicationUser string `json:"application_user_id"`
 		Audience        string `json:"audience"`
 	}{Zones: zones, ApplicationUser: principal.ApplicationUserID, Audience: principal.Audience})
+}
+
+func (h HTTPHandler) activeMemberships(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		authError(w, http.StatusMethodNotAllowed, "Method not allowed.")
+		return
+	}
+	if h.Service == nil {
+		authError(w, http.StatusServiceUnavailable, "Memberships are unavailable.")
+		return
+	}
+	memberships, _, err := h.Service.ActiveMemberships(r.Context(), h.sessionCookie(r))
+	if errors.Is(err, ErrUnauthenticated) {
+		authError(w, http.StatusUnauthorized, "Sign in first.")
+		return
+	}
+	if err != nil {
+		authError(w, http.StatusServiceUnavailable, "Memberships are unavailable.")
+		return
+	}
+	writeAuthJSON(w, http.StatusOK, struct {
+		Memberships []ActiveMembership `json:"memberships"`
+	}{Memberships: memberships})
 }
 
 func (h HTTPHandler) joinZone(w http.ResponseWriter, r *http.Request) {

@@ -59,3 +59,4 @@
 - 2026-11-24: Replaced the login story footer slogans with a single Zonited Solutions attribution.
 - 2026-11-25: Included public brand assets in the production image and refined the login logo scale and vertical alignment.
 - 2026-11-25: Added the application logo to the offline shell so the sign-in identity remains visible in the PWA cache.
+- 2026-11-25: Made the application home membership-aware, showing compact active Zonity access and a location-based join dialog before service tabs become available.

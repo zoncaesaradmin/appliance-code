@@ -9,6 +9,8 @@ The public API is:
 - `POST /api/shared/v1/auth/otp/verify` with `{"challenge_id":"...","code":"123456"}`
 - `GET /api/shared/v1/auth/session`
 - `POST /api/shared/v1/auth/logout`
+- `GET /api/shared/v1/onboarding/memberships` for the signed-in user's active
+  Zonity memberships
 - `POST /api/shared/v1/onboarding/nearby` with a signed-in session or a
   short-lived channel discovery token and `{\"latitude\":…,\"longitude\":…}`
 - `POST /api/shared/v1/onboarding/join` with an authenticated session and a

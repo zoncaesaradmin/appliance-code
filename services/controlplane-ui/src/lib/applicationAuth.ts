@@ -8,6 +8,11 @@ export interface NearbyZone {
   distance_km: number;
 }
 
+export interface ActiveMembership {
+	zone_id: string;
+	name: string;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
@@ -29,6 +34,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const applicationAuth = {
   session(): Promise<ApplicationSessionStatus> {
     return request<ApplicationSessionStatus>("/api/shared/v1/auth/session");
+  },
+  memberships(): Promise<{ memberships: ActiveMembership[] }> {
+    return request<{ memberships: ActiveMembership[] }>("/api/shared/v1/onboarding/memberships");
   },
   challenge(phone: string): Promise<{ challenge_id: string }> {
     return request<{ challenge_id: string }>("/api/shared/v1/auth/otp/challenges", {
