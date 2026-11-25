@@ -2,7 +2,10 @@ module appliance-code/services/application-identity
 
 go 1.26.0
 
-require github.com/jackc/pgx/v5 v5.13.0
+require (
+	appliance-code/sdk/golang/servicehealth v0.0.0-00010101000000-000000000000
+	github.com/jackc/pgx/v5 v5.13.0
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -11,3 +14,5 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
+
+replace appliance-code/sdk/golang/servicehealth => ../../sdk/golang/servicehealth

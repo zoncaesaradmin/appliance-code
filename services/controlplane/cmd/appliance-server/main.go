@@ -6,11 +6,15 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"appliance-code/services/controlplane/internal/app"
 	"appliance-code/services/controlplane/internal/config"
@@ -54,15 +58,69 @@ func run() error {
 	}
 	processLogger.Infow("control plane logger initialized", "applicationLogPath", cfg.ApplicationLogPath)
 
-	application, err := app.New(cfg, appLogger, processLogger)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	bootstrap, err := startBootstrapServer(cfg.InternalAddr)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = bootstrap.Close() }()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	type appResult struct {
+		application *app.App
+		err         error
+	}
+	resultCh := make(chan appResult, 1)
+	go func() {
+		application, err := app.New(cfg, appLogger, processLogger)
+		resultCh <- appResult{application: application, err: err}
+	}()
 
-	return application.Run(ctx)
+	select {
+	case <-ctx.Done():
+		return nil
+	case result := <-resultCh:
+		if result.err != nil {
+			return result.err
+		}
+		if err := bootstrap.Shutdown(context.Background()); err != nil {
+			return fmt.Errorf("stopping bootstrap health server: %w", err)
+		}
+		return result.application.Run(ctx)
+	}
+}
+
+func startBootstrapServer(address string) (*http.Server, error) {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("bind bootstrap health listener: %w", err)
+	}
+	server := &http.Server{
+		Addr:              address,
+		Handler:           bootstrapHealthHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			fmt.Fprintf(os.Stderr, "bootstrap health server stopped: %v\n", err)
+		}
+	}()
+	return server, nil
+}
+
+func bootstrapHealthHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health/live":
+			w.WriteHeader(http.StatusOK)
+		case "/health/startup":
+			http.Error(w, "starting", http.StatusServiceUnavailable)
+		case "/health/ready":
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+		default:
+			http.Error(w, "service initializing", http.StatusServiceUnavailable)
+		}
+	})
 }
 
 func openApplicationLog(path string) (*os.File, error) {

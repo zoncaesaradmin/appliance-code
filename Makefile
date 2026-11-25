@@ -3,6 +3,7 @@ UI_DIR      := services/controlplane-ui
 HOST_AGENT_SERVICE_DIR := services/hostagent
 SDK_DIR     := sdk/golang/applianceclient
 MESSAGING_SDK_DIR := sdk/golang/messaging
+SERVICEHEALTH_SDK_DIR := sdk/golang/servicehealth
 CHART_DIR   := deploy/charts/appliance-control-plane
 REGISTRY_CHART_DIR := deploy/charts/appliance-registry
 DNS_CHART_DIR := deploy/charts/appliance-dns
@@ -31,7 +32,7 @@ INFERENCE_GOARCH := $(if $(strip $(TARGET_ARCH)),$(TARGET_ARCH),$(_host_arch_det
 CHANNEL_INTEGRATION_DIR := services/channel-integration
 ORDERING_DIR := services/ordering
 APPLICATION_IDENTITY_DIR := services/application-identity
-GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(CHANNEL_INTEGRATION_DIR) $(ORDERING_DIR) $(APPLICATION_IDENTITY_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR) services/open-webui-gateway
+GO_MODULE_DIRS := $(BACKEND_DIR) $(UI_DIR) $(HOST_AGENT_SERVICE_DIR) $(INFERENCE_MANAGER_DIR) $(CHANNEL_INTEGRATION_DIR) $(ORDERING_DIR) $(APPLICATION_IDENTITY_DIR) $(SDK_DIR) $(MESSAGING_SDK_DIR) $(SERVICEHEALTH_SDK_DIR) $(CHART_DIR) $(REGISTRY_CHART_DIR) $(DNS_CHART_DIR) $(INFERENCE_CHART_DIR) $(E2E_DIR) services/open-webui-gateway
 # Product/release version for packaged images and /version. Prefer an explicit
 # CODE_VERSION/PRODUCT_VERSION/IMAGE_TAG from the release flow; otherwise use a
 # reachable git tag, not a bare commit SHA from `git describe --always`.

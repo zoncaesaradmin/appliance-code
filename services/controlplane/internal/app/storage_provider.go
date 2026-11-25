@@ -3,8 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
+	"appliance-code/sdk/golang/servicehealth"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/storage"
 	"appliance-code/services/controlplane/internal/storage/sqlstore"
@@ -108,7 +111,7 @@ func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 	if err != nil {
 		return StorageSet{}, fmt.Errorf("opening PostgreSQL storage: %w", err)
 	}
-	if err := db.Migrate(ctx); err != nil {
+	if err := waitForPostgres(ctx, "controlplane", db.Migrate); err != nil {
 		_ = db.Close()
 		return StorageSet{}, fmt.Errorf("migrating PostgreSQL storage: %w", err)
 	}
@@ -136,4 +139,14 @@ func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 		BuilderCatalogStore: sqlstore.NewBuilderCatalogStore(db),
 		ConfigurationStore:  sqlstore.NewConfigurationRevisionStore(db),
 	}, nil
+}
+
+func waitForPostgres(ctx context.Context, service string, operation func(context.Context) error) error {
+	return (servicehealth.RetryPolicy{
+		InitialDelay:   time.Second,
+		MaxDelay:       30 * time.Second,
+		AttemptTimeout: 5 * time.Second,
+	}).Wait(ctx, operation, func(err error, retryIn time.Duration) {
+		fmt.Fprintf(os.Stderr, "{\"level\":\"warn\",\"service\":%q,\"event\":\"database_unavailable\",\"retry_in\":%q,\"error\":%q}\n", service, retryIn.String(), err.Error())
+	})
 }

@@ -598,8 +598,11 @@ probes:
   livenessPath: /health/live
   readinessPath: /health/ready
   startupPath: /health/startup
-  startupFailureThreshold: 30
-  startupPeriodSeconds: 2
+  # PostgreSQL-backed control-plane initialization retries indefinitely. Keep
+  # the startup gate active while it waits so liveness cannot turn a
+  # dependency outage into a restart loop.
+  startupFailureThreshold: 2147483647
+  startupPeriodSeconds: 5
 
 priorityClassName: ""
 

@@ -18,9 +18,11 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
+	"appliance-code/sdk/golang/servicehealth"
 	"appliance-code/services/application-identity/internal/identity"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -165,12 +167,44 @@ func main() {
 	db.SetConnMaxIdleTime(5 * time.Minute)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	check, cancel := context.WithTimeout(ctx, 90*time.Second)
-	err = waitForSchema(check, db)
-	cancel()
+	var initialized atomic.Bool
+	router := newInitializingHandler()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		if !initialized.Load() {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		checkCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := db.PingContext(checkCtx); err != nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.Handle("/", router)
+	listener, err := net.Listen("tcp", c.address)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "identity schema: ", err)
+		fmt.Fprintln(os.Stderr, "cannot bind HTTP listener")
 		os.Exit(1)
+	}
+	server := &http.Server{Addr: c.address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	errCh := make(chan error, 1)
+	go func() {
+		err := server.Serve(listener)
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		errCh <- err
+	}()
+	fmt.Fprintf(os.Stdout, "{\"level\":\"info\",\"service\":\"identity\",\"event\":\"service_started\",\"version\":%q,\"address\":%q,\"environment\":%q}\n", buildVersion, c.address, c.environment)
+	if err := waitForSchema(ctx, db); err != nil {
+		_ = server.Shutdown(context.Background())
+		return
 	}
 	inbox, err := identity.NewDevelopmentInbox(c.environment, 5*time.Minute, 1000)
 	if err != nil {
@@ -206,23 +240,9 @@ func main() {
 		os.Exit(1)
 	}
 	auth := identity.HTTPHandler{Service: service, Limiter: limiter, ClientKey: clientKey, AllowedOrigin: c.origin, InternalKey: c.internalKey}
-	mux := http.NewServeMux()
-	mux.Handle("/", withHealth(auth, db))
-	listener, err := net.Listen("tcp", c.address)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "cannot bind HTTP listener")
-		os.Exit(1)
-	}
-	server := &http.Server{Addr: c.address, Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
-	errCh := make(chan error, 1)
-	go func() {
-		err := server.Serve(listener)
-		if errors.Is(err, http.ErrServerClosed) {
-			err = nil
-		}
-		errCh <- err
-	}()
-	fmt.Fprintf(os.Stdout, "{\"level\":\"info\",\"service\":\"identity\",\"event\":\"service_started\",\"version\":%q,\"address\":%q,\"environment\":%q}\n", buildVersion, c.address, c.environment)
+	router.Set(auth)
+	initialized.Store(true)
+	fmt.Fprintln(os.Stdout, "{\"level\":\"info\",\"service\":\"identity\",\"event\":\"database_ready\",\"message\":\"identity database ready\"}")
 	select {
 	case <-ctx.Done():
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -236,49 +256,37 @@ func main() {
 	}
 }
 
-func withHealth(auth http.Handler, db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/health/live":
-			w.WriteHeader(http.StatusOK)
-			return
-		case "/health/ready":
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-			defer cancel()
-			if err := db.PingContext(ctx); err != nil {
-				http.Error(w, "not ready", http.StatusServiceUnavailable)
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-			return
-		default:
-			auth.ServeHTTP(w, r)
-		}
-	})
-}
-
 func ensureSchema(ctx context.Context, db *sql.DB) error {
 	_, err := db.ExecContext(ctx, schemaSQL)
 	return err
 }
 
 func waitForSchema(ctx context.Context, db *sql.DB) error {
-	var last error
-	for {
-		if err := ensureSchema(ctx, db); err == nil {
-			return nil
-		} else {
-			last = err
-		}
-		timer := time.NewTimer(2 * time.Second)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			if last != nil {
-				return last
-			}
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
+	return (servicehealth.RetryPolicy{
+		InitialDelay:   time.Second,
+		MaxDelay:       30 * time.Second,
+		AttemptTimeout: 5 * time.Second,
+	}).Wait(ctx, func(ctx context.Context) error {
+		return ensureSchema(ctx, db)
+	}, func(err error, retryIn time.Duration) {
+		fmt.Fprintf(os.Stderr, "{\"level\":\"warn\",\"service\":\"identity\",\"event\":\"database_unavailable\",\"retry_in\":%q,\"error\":%q}\n", retryIn.String(), err.Error())
+	})
+}
+
+type initializingHandler struct{ current atomic.Value }
+
+func newInitializingHandler() *initializingHandler {
+	h := &initializingHandler{}
+	h.current.Store(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	return h
+}
+
+func (h *initializingHandler) Set(next http.Handler) {
+	h.current.Store(http.HandlerFunc(next.ServeHTTP))
+}
+
+func (h *initializingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.current.Load().(http.HandlerFunc).ServeHTTP(w, r)
 }

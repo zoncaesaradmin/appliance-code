@@ -1,3 +1,6 @@
+# appliance-code/sdk/golang/servicehealth v0.0.0-00010101000000-000000000000 => ../../sdk/golang/servicehealth
+## explicit; go 1.26.0
+appliance-code/sdk/golang/servicehealth
 # github.com/jackc/pgpassfile v1.0.0
 ## explicit; go 1.12
 github.com/jackc/pgpassfile
@@ -41,3 +44,4 @@ golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 golang.org/x/text/width
+# appliance-code/sdk/golang/servicehealth => ../../sdk/golang/servicehealth

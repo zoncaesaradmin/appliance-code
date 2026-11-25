@@ -3,6 +3,7 @@ module appliance-code/services/controlplane
 go 1.26.4
 
 require (
+	appliance-code/sdk/golang/servicehealth v0.0.0-00010101000000-000000000000
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/klauspost/compress v1.18.0
@@ -11,6 +12,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.50.1
 )
+
+replace appliance-code/sdk/golang/servicehealth => ../../sdk/golang/servicehealth
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

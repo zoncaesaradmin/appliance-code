@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"appliance-code/sdk/golang/servicehealth"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
@@ -42,7 +43,13 @@ func OpenPostgres(ctx context.Context, dsn string, maxOpenConns, maxIdleConns in
 	sqlDB.SetMaxOpenConns(maxOpenConns)
 	sqlDB.SetMaxIdleConns(maxIdleConns)
 	sqlDB.SetConnMaxLifetime(maxLifetime)
-	if err := sqlDB.PingContext(ctx); err != nil {
+	if err := (servicehealth.RetryPolicy{
+		InitialDelay:   time.Second,
+		MaxDelay:       30 * time.Second,
+		AttemptTimeout: 5 * time.Second,
+	}).Wait(ctx, sqlDB.PingContext, func(err error, retryIn time.Duration) {
+		fmt.Fprintf(os.Stderr, "{\"level\":\"warn\",\"service\":\"controlplane\",\"event\":\"database_unavailable\",\"retry_in\":%q,\"error\":%q}\n", retryIn.String(), err.Error())
+	}); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("postgres: pinging database: %w", err)
 	}

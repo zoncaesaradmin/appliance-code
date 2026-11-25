@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"appliance-code/sdk/golang/servicehealth"
 	"appliance-code/services/ordering/internal/httpapi"
 	"appliance-code/services/ordering/internal/order"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -107,65 +108,22 @@ func main() {
 }
 
 func waitForDatabase(ctx context.Context, db *sql.DB) error {
-	return retryUntilReady(
+	return (servicehealth.RetryPolicy{
+		InitialDelay:   databaseRetryInitialDelay,
+		MaxDelay:       databaseRetryMaxDelay,
+		AttemptTimeout: databaseAttemptTimeout,
+	}).Wait(
 		ctx,
 		func(ctx context.Context) error {
-			attemptCtx, cancel := context.WithTimeout(ctx, databaseAttemptTimeout)
-			defer cancel()
-			if err := db.PingContext(attemptCtx); err != nil {
+			if err := db.PingContext(ctx); err != nil {
 				return err
 			}
-			return order.EnsureSchema(attemptCtx, db)
+			return order.EnsureSchema(ctx, db)
 		},
-		sleepWithContext,
 		func(err error, retryIn time.Duration) {
 			fmt.Fprintf(os.Stderr, "{\"level\":\"warn\",\"service\":\"ordering\",\"event\":\"database_unavailable\",\"retry_in\":%q,\"error\":%q}\n", retryIn.String(), err.Error())
 		},
 	)
-}
-
-func retryUntilReady(
-	ctx context.Context,
-	attempt func(context.Context) error,
-	sleep func(context.Context, time.Duration) error,
-	onRetry func(error, time.Duration),
-) error {
-	delay := databaseRetryInitialDelay
-	for {
-		err := attempt(ctx)
-		if err == nil {
-			return nil
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if onRetry != nil {
-			onRetry(err, delay)
-		}
-		if err := sleep(ctx, delay); err != nil {
-			return err
-		}
-		delay = nextRetryDelay(delay)
-	}
-}
-
-func nextRetryDelay(current time.Duration) time.Duration {
-	next := current * 2
-	if next > databaseRetryMaxDelay {
-		return databaseRetryMaxDelay
-	}
-	return next
-}
-
-func sleepWithContext(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }
 
 func getenv(name, fallback string) string {
