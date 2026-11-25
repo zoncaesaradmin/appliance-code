@@ -18,8 +18,8 @@ interface LocationMapProps {
   label?: string;
 }
 
-const TILE_SIZE = 256;
 const ZOOM = 12;
+const TILE_SIZE = 256;
 
 function project(location: MapLocation): { x: number; y: number } {
   const scale = TILE_SIZE * 2 ** ZOOM;
@@ -38,25 +38,8 @@ function unproject(point: { x: number; y: number }): MapLocation {
   return { latitude: latitudeRadians * 180 / Math.PI, longitude };
 }
 
-function tileURL(x: number, y: number): string {
-  const tiles = 2 ** ZOOM;
-  const wrappedX = ((x % tiles) + tiles) % tiles;
-  return `https://tile.openstreetmap.org/${ZOOM}/${wrappedX}/${y}.png`;
-}
-
 export function LocationMap(props: LocationMapProps): React.JSX.Element {
   const center = project(props.location);
-  const centerTileX = Math.floor(center.x / TILE_SIZE);
-  const centerTileY = Math.floor(center.y / TILE_SIZE);
-  const tiles = [];
-  for (let offsetY = -2; offsetY <= 2; offsetY += 1) {
-    for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
-      const tileX = centerTileX + offsetX;
-      const tileY = centerTileY + offsetY;
-      if (tileY < 0 || tileY >= 2 ** ZOOM) continue;
-      tiles.push(<img key={`${tileX}:${tileY}`} className="application-location-map__tile" src={tileURL(tileX, tileY)} alt="" aria-hidden="true" style={{ left: `calc(50% + ${tileX * TILE_SIZE - center.x}px)`, top: `calc(50% + ${tileY * TILE_SIZE - center.y}px)` }} />);
-    }
-  }
 
   function selectLocation(event: React.MouseEvent<HTMLDivElement>): void {
     if (!props.interactive || !props.onSelect) return;
@@ -65,7 +48,8 @@ export function LocationMap(props: LocationMapProps): React.JSX.Element {
   }
 
   return <div className={`application-location-map${props.interactive ? " application-location-map--interactive" : ""}`} role={props.interactive ? "application" : undefined} aria-label={props.label ?? "Location map"} onClick={selectLocation}>
-    {tiles}
+    <div className="application-location-map__surface" aria-hidden="true" />
+    <span className="application-location-map__search-radius" aria-hidden="true" title="Nearby search area" />
     <div className="application-location-map__veil" aria-hidden="true" />
     {props.zones?.map((zone) => {
       const point = project(zone);
@@ -73,6 +57,6 @@ export function LocationMap(props: LocationMapProps): React.JSX.Element {
     })}
     <span className="application-location-map__user" aria-label="Selected location" />
     {props.interactive ? <span className="application-location-map__hint">Tap the map to choose another point</span> : null}
-    <a className="application-location-map__attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap</a>
+    <span className="application-location-map__label">Location preview</span>
   </div>;
 }

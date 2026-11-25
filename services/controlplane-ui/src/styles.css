@@ -2703,12 +2703,30 @@ body:has(.video-player) {
   outline-offset: 2px;
 }
 
-.application-location-map__tile {
+.application-location-map__surface {
   position: absolute;
-  width: 256px;
-  height: 256px;
-  max-width: none;
-  user-select: none;
+  inset: 0;
+  z-index: 0;
+  background-color: #dbe5da;
+  background-image:
+    linear-gradient(28deg, transparent 0 31%, rgba(255, 249, 241, 0.68) 31.3% 32.2%, transparent 32.5% 100%),
+    linear-gradient(-42deg, transparent 0 61%, rgba(255, 249, 241, 0.62) 61.3% 62.2%, transparent 62.5% 100%),
+    linear-gradient(90deg, rgba(73, 109, 80, 0.12) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(73, 109, 80, 0.12) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 3rem 3rem, 3rem 3rem;
+}
+
+.application-location-map__search-radius {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  width: min(70%, 15rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgba(127, 29, 61, 0.42);
+  border-radius: 50%;
+  background: rgba(127, 29, 61, 0.06);
 }
 
 .application-location-map__veil {
@@ -2747,7 +2765,7 @@ body:has(.video-player) {
 }
 
 .application-location-map__hint,
-.application-location-map__attribution {
+.application-location-map__label {
   position: absolute;
   z-index: 3;
   padding: 0.25rem 0.45rem;
@@ -2763,11 +2781,10 @@ body:has(.video-player) {
   left: 0.55rem;
 }
 
-.application-location-map__attribution {
+.application-location-map__label {
   right: 0.45rem;
   bottom: 0.45rem;
   color: var(--action-deep-sage);
-  text-decoration: none;
 }
 
 .application-location-panel__details,
