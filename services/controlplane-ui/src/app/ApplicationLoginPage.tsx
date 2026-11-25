@@ -5,12 +5,12 @@ import { applicationAuth } from "../lib/applicationAuth";
 import { navigate } from "../lib/navigate";
 
 const PHONE_COUNTRIES = [
-  { code: "IN", name: "India", dialCode: "+91", minDigits: 10, maxDigits: 10 },
-  { code: "US", name: "United States", dialCode: "+1", minDigits: 10, maxDigits: 10 },
-  { code: "GB", name: "United Kingdom", dialCode: "+44", minDigits: 10, maxDigits: 10 },
-  { code: "AE", name: "United Arab Emirates", dialCode: "+971", minDigits: 9, maxDigits: 9 },
-  { code: "SG", name: "Singapore", dialCode: "+65", minDigits: 8, maxDigits: 8 },
-  { code: "AU", name: "Australia", dialCode: "+61", minDigits: 9, maxDigits: 9 }
+  { code: "IN", name: "India", flag: "🇮🇳", dialCode: "+91", minDigits: 10, maxDigits: 10 },
+  { code: "US", name: "United States", flag: "🇺🇸", dialCode: "+1", minDigits: 10, maxDigits: 10 },
+  { code: "GB", name: "United Kingdom", flag: "🇬🇧", dialCode: "+44", minDigits: 10, maxDigits: 10 },
+  { code: "AE", name: "United Arab Emirates", flag: "🇦🇪", dialCode: "+971", minDigits: 9, maxDigits: 9 },
+  { code: "SG", name: "Singapore", flag: "🇸🇬", dialCode: "+65", minDigits: 8, maxDigits: 8 },
+  { code: "AU", name: "Australia", flag: "🇦🇺", dialCode: "+61", minDigits: 9, maxDigits: 9 }
 ] as const;
 
 type PhoneCountry = (typeof PHONE_COUNTRIES)[number];
@@ -102,7 +102,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
                       setPhoneNumber((current) => current.replace(/\D/g, "").slice(0, nextCountry.maxDigits));
                       setError("");
                     }}>
-                      {PHONE_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.dialCode}</option>)}
+                      {PHONE_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.dialCode}</option>)}
                     </select>
                   </label>
                   <input id="application-phone" className="text-input" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder={phoneCountry.code === "IN" ? "98765 43210" : "Mobile number"} value={phoneNumber} onChange={(event) => {
