@@ -1,3 +1,3 @@
 module appliance-code/sdk/golang/applianceclient
 
-go 1.26.4
+go 1.26.0

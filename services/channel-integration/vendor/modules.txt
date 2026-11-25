@@ -1,8 +1,8 @@
 # appliance-code/sdk/golang/gen/messaging v0.0.0-00010101000000-000000000000 => ../../sdk/golang/gen/messaging
-## explicit; go 1.26.4
+## explicit; go 1.26.0
 appliance-code/sdk/golang/gen/messaging
 # appliance-code/sdk/golang/messaging v0.0.0-00010101000000-000000000000 => ../../sdk/golang/messaging
-## explicit; go 1.26.4
+## explicit; go 1.26.0
 appliance-code/sdk/golang/messaging
 # appliance-code/sdk/golang/servicehealth v0.0.0-00010101000000-000000000000 => ../../sdk/golang/servicehealth
 ## explicit; go 1.26.0

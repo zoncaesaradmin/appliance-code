@@ -1,6 +1,6 @@
 module appliance-code/services/channel-integration
 
-go 1.26.4
+go 1.26.0
 
 require github.com/zoncaesaradmin/platformkit v0.1.0
 
