@@ -123,6 +123,9 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-src 'self' blob:") {
 			t.Fatalf("Content-Security-Policy = %q, want frame-src blob for document preview", got)
 		}
+		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "img-src 'self' https://tile.openstreetmap.org") {
+			t.Fatalf("Content-Security-Policy = %q, want OpenStreetMap tiles", got)
+		}
 	})
 }
 

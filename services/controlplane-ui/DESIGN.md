@@ -8,7 +8,7 @@
 - Adjectives: local, calm, human, precise
 - Aesthetic essence: neighbourhood signal, warm paper, quiet confidence
 - Mode: light | Density: balanced
-- Constraints: React/Vite, air-gapped runtime, keep operator authentication separate from application identity
+- Constraints: React/Vite, keep operator authentication separate from application identity; discovery map tiles are an onboarding-only online enhancement and the signed-in shell remains usable without them
 
 ## Aesthetic
 
@@ -32,6 +32,7 @@
 - Mobile OTP entry separates country selection from the local number; India (+91) is the default and the local number is digit-only with country-specific length validation.
 - Authentication actions use full-width, vertically separated primary and secondary buttons so the code step has a clear next action and a calm recovery path.
 - Motion is limited to opacity/transform and respects reduced-motion preferences.
+- Nearby discovery shows the searched point and returned Zonity points on an OpenStreetMap tile view. Users can choose another point on the map before searching again; map failure never blocks the platform-managed Zonity request path.
 
 ## PWA and security
 
@@ -60,3 +61,4 @@
 - 2026-11-25: Included public brand assets in the production image and refined the login logo scale and vertical alignment.
 - 2026-11-25: Added the application logo to the offline shell so the sign-in identity remains visible in the PWA cache.
 - 2026-11-25: Made the application home membership-aware, showing compact active Zonity access and a location-based join dialog before service tabs become available.
+- 2026-11-25: Added coordinate-aware nearby results, an onboarding map with OpenStreetMap attribution, searched-location confirmation, and a choose-another-location flow.

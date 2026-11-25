@@ -51,6 +51,8 @@ func (s *PostgresStore) NearbyZones(ctx context.Context, tenantID string, latitu
 		if err := rows.Scan(&c.zone.ID, &c.zone.Name, &c.lat, &c.lon); err != nil {
 			return nil, fmt.Errorf("scan nearby zone: %w", err)
 		}
+		c.zone.Latitude = c.lat
+		c.zone.Longitude = c.lon
 		c.zone.Distance = haversineKM(latitude, longitude, c.lat, c.lon)
 		if c.zone.Distance <= radiusKM {
 			candidates = append(candidates, c)

@@ -11,6 +11,8 @@ The public API is:
 - `POST /api/shared/v1/auth/logout`
 - `GET /api/shared/v1/onboarding/memberships` for the signed-in user's active
   Zonity memberships
+- Nearby-zone responses include each active zone's latitude, longitude, and
+  calculated distance so onboarding clients can show a map confirmation.
 - `POST /api/shared/v1/onboarding/nearby` with a signed-in session or a
   short-lived channel discovery token and `{\"latitude\":…,\"longitude\":…}`
 - `POST /api/shared/v1/onboarding/join` with an authenticated session and a

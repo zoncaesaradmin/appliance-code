@@ -5,6 +5,7 @@ export { Button } from "./Button";
 export { IconButton } from "./IconButton";
 export { Card } from "./Card";
 export { PageFrame } from "./PageFrame";
+export { LocationMap, type MapLocation } from "./LocationMap";
 export { StatCard } from "./StatCard";
 export { EmptyState } from "./EmptyState";
 export { RowActionsMenu, type RowAction } from "./RowActionsMenu";

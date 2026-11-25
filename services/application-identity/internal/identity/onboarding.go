@@ -26,9 +26,11 @@ var (
 )
 
 type Zone struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Distance float64 `json:"distance_km"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Distance  float64 `json:"distance_km"`
 }
 
 type ActiveMembership struct {

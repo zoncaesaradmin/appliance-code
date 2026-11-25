@@ -5,6 +5,8 @@ export interface ApplicationSessionStatus {
 export interface NearbyZone {
   id: string;
   name: string;
+  latitude: number;
+  longitude: number;
   distance_km: number;
 }
 
