@@ -36,6 +36,9 @@ COPY package.json package-lock.json ./
 COPY tsconfig.json index.html ./
 COPY scripts ./scripts
 COPY src ./src
+# Vite copies public/ into the static bundle. Keep the offline brand assets,
+# manifest, and service worker in the production image as well as local builds.
+COPY public ./public
 COPY --from=deps-online /deps/node_modules /prebaked-online/node_modules
 COPY --from=deps-offline /deps/node_modules /prebaked-offline/node_modules
 RUN set -eux; \

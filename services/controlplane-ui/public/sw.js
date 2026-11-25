@@ -1,5 +1,12 @@
 const CACHE_NAME = "zonity-shell-v1";
-const SHELL_URLS = ["/", "/app", "/app/login", "/manifest.webmanifest", "/icon.svg"];
+const SHELL_URLS = [
+  "/",
+  "/app",
+  "/app/login",
+  "/manifest.webmanifest",
+  "/icon.svg",
+  "/zonited-logo-square.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS)));
