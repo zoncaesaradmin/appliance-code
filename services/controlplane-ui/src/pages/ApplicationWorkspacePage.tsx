@@ -103,6 +103,7 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
     setLocation(nextLocation);
     setSelected("");
     setError("");
+    setChoosingAnother(false);
     setLocationNeedsSearch(false);
     setStatus("loading");
     try {
@@ -170,6 +171,9 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
     setSelected("");
   }
 
+  const showCurrentLocation = choosingAnother || (!choosingAnother && ((status === "ready" && zones.length === 0 && !locationNeedsSearch) || Boolean(error)));
+  const showAnotherLocation = !choosingAnother && status === "ready" && zones.length === 0 && !locationNeedsSearch;
+
   return <div className="application-modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) props.onClose(); }}>
     <section className="application-modal" role="dialog" aria-modal="true" aria-labelledby="application-nearby-title">
       <header className="application-modal__header">
@@ -189,9 +193,8 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
       {status === "joined" ? <p className="application-modal__empty">{joinMode === "auto_no_admin" ? "You joined this Zonity." : "Your request was sent to the Zonity admin."}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <footer className="application-modal__footer">
-        {status === "ready" && zones.length === 0 && !locationNeedsSearch || error ? <button className="button button--ghost" type="button" onClick={() => void locate()}>Use current location</button> : null}
-        {status === "ready" && zones.length === 0 && !locationNeedsSearch ? <button className="button button--ghost" type="button" onClick={chooseAnother}>Use another location</button> : null}
-        {choosingAnother ? <button className="button button--ghost" type="button" onClick={() => void locate()}>Use current location</button> : null}
+        {showCurrentLocation ? <button className="button button--ghost" type="button" onClick={() => void locate()}>Use current location</button> : null}
+        {showAnotherLocation ? <button className="button button--ghost" type="button" onClick={chooseAnother}>Use another location</button> : null}
         <button className="button button--ghost" type="button" onClick={props.onClose}>{status === "joined" ? "Done" : "Not now"}</button>
       </footer>
     </section>
