@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { client } from "../lib/api";
 import { displayProductVersion } from "../productVersion";
 import { applicationAuth, presentedAuthError } from "../lib/applicationAuth";
-import { navigate } from "../lib/navigate";
 import {
   DEFAULT_PHONE_COUNTRY,
   PHONE_COUNTRIES,
@@ -19,6 +18,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const year = new Date().getFullYear();
   const phoneCountry: PhoneCountry = PHONE_COUNTRIES.find(({ code: countryCode }) => countryCode === phoneCountryCode) ?? DEFAULT_PHONE_COUNTRY;
   const phoneDigits = nationalDigits(phoneNumber, phoneCountry.maxDigits);
   const codeDigits = nationalDigits(code, VERIFICATION_CODE_LENGTH);
@@ -93,7 +93,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
                 setChallengeID(result.challenge_id);
               }).catch((reason: unknown) => setError(presentedAuthError(reason, "Could not send a code. Try again."))).finally(() => setBusy(false));
             }}>
-              <div className="application-login__controls application-login__controls--phone" style={{ "--national-length": phoneCountry.maxDigits } as React.CSSProperties}>
+              <div className="application-login__controls application-login__controls--phone" style={{ "--national-length": phoneCountry.maxDigits, "--dial-length": phoneCountry.dialCode.length } as React.CSSProperties}>
                 <div className="application-login__phone-input">
                   <label className="application-login__country" htmlFor="application-country">
                     <select id="application-country" aria-label={`Country code (${phoneCountry.name})`} title={phoneCountry.name} value={phoneCountry.code} onChange={(event) => {
@@ -127,7 +127,7 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
         </div>
         <footer className="application-login__footer">
           <span>{productVersion ? `Zonited ${productVersion}` : "Zonited"}</span>
-          <button type="button" onClick={() => navigate("/console/login", true)}>Operator console</button>
+          <span>© {year} Zonited. All rights reserved.</span>
         </footer>
       </section>
     </main>

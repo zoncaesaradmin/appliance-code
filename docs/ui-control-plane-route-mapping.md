@@ -351,8 +351,8 @@ The `next` value is accepted only for internal UI paths. Protocol-relative,
 external, API, login, and setup paths are rejected and fall back to the
 existing `/home` operator route. The public origin follows the signed profile:
 `application-core` enters the application workspace, while other profiles enter
-the operator console. Operators can always use `/console` or `/console/login`
-explicitly.
+the operator console. Operators open `/console` or `/console/login` directly.
+The application login page does not link there.
 
 The SPA talks to the control-plane API **directly** (not via a Go UI reverse
 proxy). Notable Admin host configuration routes:

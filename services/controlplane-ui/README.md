@@ -176,8 +176,9 @@ The release-input helper forwards the same values from `UI_NODE_IMAGE`,
   console credentials.
 - Login has one context-aware operator surface and one application surface.
   `/console` supplies operator context and `/app` supplies application
-  context; neither page presents a role chooser. The operations console link
-  remains deliberately low-emphasis on the application login.
+  context; neither page presents a role chooser. The application login does
+  not link to the operator console. Operators open `/console` or
+  `/console/login` directly.
 - The public origin `/` follows the resolved profile: `application-core` enters
   the Zonited application workspace, while other profiles enter the operator
   console. Operators use `/console` or `/console/login` explicitly; existing `/home`, `/manage`, `/analyze`,

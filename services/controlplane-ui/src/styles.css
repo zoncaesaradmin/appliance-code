@@ -2004,7 +2004,8 @@ body:has(.video-player) {
 }
 
 .application-login__controls--phone {
-  --row-width: calc(6.4rem + 0.65rem + var(--field-track));
+  --country-track: calc((var(--dial-length) * 1ch) + 4.1rem + 2px);
+  --row-width: calc(var(--country-track) + 0.65rem + var(--field-track));
 }
 
 .application-login__controls--code {
@@ -2033,7 +2034,7 @@ body:has(.video-player) {
 
 .application-login__phone-input {
   display: grid;
-  grid-template-columns: 6.4rem minmax(0, var(--field-track));
+  grid-template-columns: var(--country-track) minmax(0, var(--field-track));
   gap: 0.65rem;
   width: min(100%, var(--row-width));
 }
@@ -2057,7 +2058,7 @@ body:has(.video-player) {
   box-sizing: border-box;
   border: 1px solid var(--app-border);
   border-radius: 0.8rem;
-  padding: 0 0.55rem;
+  padding: 0 1.65rem 0 0.55rem;
   color: var(--app-ink);
   background: rgba(255, 255, 255, 0.72);
   font: inherit;
@@ -2243,23 +2244,14 @@ body:has(.video-player) {
 
 .application-login__footer {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: center;
+  gap: 0.35rem;
   margin-top: 2rem;
   color: var(--app-muted);
   font-size: 0.73rem;
-}
-
-.application-login__footer button {
-  border: 0;
-  background: transparent;
-  color: var(--app-brand);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 750;
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
+  text-align: center;
 }
 
 .application-zone-list {
@@ -3043,14 +3035,13 @@ body:has(.video-player) {
   }
 
   .application-login__phone-input {
-    grid-template-columns: 6.4rem minmax(0, var(--field-track));
+    grid-template-columns: var(--country-track) minmax(0, var(--field-track));
   }
 
   .application-login__signal {
     margin-top: 2.2rem;
   }
 
-  .application-login__footer,
   .application-home__welcome {
     align-items: flex-start;
     flex-direction: column;
