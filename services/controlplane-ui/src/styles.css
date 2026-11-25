@@ -2463,23 +2463,6 @@ body:has(.video-player) {
   line-height: 0.92;
 }
 
-.application-landing__location {
-  min-height: 3.1rem;
-  border: 1px solid var(--brand-primary);
-  border-radius: 999px;
-  padding: 0 1.35rem;
-  background: var(--brand-primary);
-  color: var(--brand-background);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 800;
-}
-
-.application-landing__location:hover,
-.application-landing__location:focus-visible {
-  background: #63172f;
-}
-
 .application-membership-loading {
   margin: 0;
   color: var(--action-deep-sage);

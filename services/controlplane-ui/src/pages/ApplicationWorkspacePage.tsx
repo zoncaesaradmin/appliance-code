@@ -53,7 +53,6 @@ function ApplicationLandingPage(): React.JSX.Element {
         <p className="application-landing__eyebrow">YOUR ZONITED HOME</p>
         <h1 id="application-landing-title">Discover local services.</h1>
       </div>
-      <button className="application-landing__location" type="button" onClick={() => setJoinDialogOpen(true)}>{hasMembership ? "Explore nearby" : "Explore and join"}</button>
     </section>
     {membershipLoading ? <p className="application-membership-loading">Loading your Zonity access…</p> : hasMembership ? <>
       <ActiveMembershipSummary memberships={memberships} />
