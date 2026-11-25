@@ -1825,11 +1825,12 @@ body:has(.video-player) {
   display: grid;
   place-items: center;
   min-height: 100vh;
-  padding: clamp(2rem, 6vw, 6rem);
+  padding: clamp(2rem, 6vw, 5rem);
   overflow: hidden;
-  background: var(--app-brand);
+  background:
+    radial-gradient(ellipse at 18% 88%, rgba(131, 173, 139, 0.28), transparent 46%),
+    var(--app-brand);
   color: var(--brand-background);
-  clip-path: polygon(0 0, 92% 0, 100% 50%, 92% 100%, 0 100%);
 }
 
 .application-login__story-inner {
@@ -1838,85 +1839,40 @@ body:has(.video-player) {
   z-index: 1;
 }
 
-.application-login__kicker,
-.application-login__note {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  color: var(--app-accent);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-
-.application-login__kicker-mark {
-  width: 0.7rem;
-  height: 0.7rem;
-  border-radius: 50% 50% 50% 0;
-  background: var(--app-accent);
-  transform: rotate(-45deg);
+.application-login__kicker {
+  margin: 0;
+  color: rgba(255, 249, 241, 0.72);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .application-login__story h1 {
-  max-width: 12ch;
-  margin: 1.5rem 0 1.25rem;
-  font-size: clamp(2.6rem, 5vw, 5.4rem);
-  font-weight: 760;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
+  max-width: 11em;
+  margin: 0.7rem 0 0.85rem;
+  font-size: clamp(2.15rem, 3.5vw, 3.25rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
 }
 
-.application-login__story p {
-  max-width: 35rem;
+.application-login__story-inner > p:not(.application-login__kicker) {
+  max-width: 28rem;
   margin: 0;
-  color: rgba(255, 249, 241, 0.8);
-  font-size: clamp(1rem, 1.5vw, 1.2rem);
-  line-height: 1.65;
+  color: rgba(255, 249, 241, 0.78);
+  font-size: 1.05rem;
+  line-height: 1.55;
 }
 
-.application-login__signal {
-  position: relative;
-  width: min(25rem, 100%);
-  height: 5.5rem;
-  margin-top: 3rem;
+.application-login__zone {
+  width: min(32rem, 100%);
+  margin: 2rem 0 0;
 }
 
-.application-login__signal-line {
-  position: absolute;
-  top: 2.55rem;
-  left: 0.9rem;
-  width: calc(100% - 1.8rem);
-  border-top: 1px dashed rgba(230, 172, 73, 0.7);
-}
-
-.application-login__signal-node {
-  position: absolute;
-  top: 1.75rem;
-  width: 1.7rem;
-  height: 1.7rem;
-  border: 0.35rem solid var(--app-brand);
-  border-radius: 50%;
-  background: var(--app-secondary);
-  box-shadow: 0 0 0 1px rgba(131, 173, 139, 0.8);
-}
-
-.application-login__signal-node--one { left: 0; }
-.application-login__signal-node--two { left: 47%; }
-.application-login__signal-node--three { right: 0; }
-
-.application-login__note {
-  gap: 1.2rem;
-  margin-top: 2.2rem;
-  color: rgba(255, 249, 241, 0.68);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-}
-
-.application-login__note span + span::before {
-  margin-right: 1.2rem;
-  color: var(--app-accent);
-  content: "•";
+.application-login__zone svg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 .application-login__panel {
@@ -2989,12 +2945,11 @@ body:has(.video-player) {
 
   .application-login__story {
     min-height: auto;
-    clip-path: none;
-    padding: 3.5rem 2rem 3rem;
+    padding: 2.75rem 2rem 2.25rem;
   }
 
   .application-login__story h1 {
-    max-width: 18ch;
+    max-width: 14em;
   }
 
   .application-login__panel {
@@ -3031,15 +2986,15 @@ body:has(.video-player) {
   }
 
   .application-login__story h1 {
-    font-size: clamp(2.5rem, 13vw, 4rem);
+    font-size: clamp(1.9rem, 8vw, 2.35rem);
   }
 
   .application-login__phone-input {
     grid-template-columns: var(--country-track) minmax(0, var(--field-track));
   }
 
-  .application-login__signal {
-    margin-top: 2.2rem;
+  .application-login__zone {
+    margin-top: 1.15rem;
   }
 
   .application-home__welcome {
