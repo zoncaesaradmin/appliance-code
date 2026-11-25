@@ -242,6 +242,55 @@ func (WorkflowCommand_Operation) EnumDescriptor() ([]byte, []int) {
 	return file_messaging_proto_rawDescGZIP(), []int{6, 0}
 }
 
+type IdentityEvent_Type int32
+
+const (
+	IdentityEvent_TYPE_UNSPECIFIED    IdentityEvent_Type = 0
+	IdentityEvent_OTP_REQUESTED       IdentityEvent_Type = 1
+	IdentityEvent_OTP_DELIVERY_STATUS IdentityEvent_Type = 2
+)
+
+// Enum value maps for IdentityEvent_Type.
+var (
+	IdentityEvent_Type_name = map[int32]string{
+		0: "TYPE_UNSPECIFIED",
+		1: "OTP_REQUESTED",
+		2: "OTP_DELIVERY_STATUS",
+	}
+	IdentityEvent_Type_value = map[string]int32{
+		"TYPE_UNSPECIFIED":    0,
+		"OTP_REQUESTED":       1,
+		"OTP_DELIVERY_STATUS": 2,
+	}
+)
+
+func (x IdentityEvent_Type) Enum() *IdentityEvent_Type {
+	p := new(IdentityEvent_Type)
+	*p = x
+	return p
+}
+
+func (x IdentityEvent_Type) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (IdentityEvent_Type) Descriptor() protoreflect.EnumDescriptor {
+	return file_messaging_proto_enumTypes[4].Descriptor()
+}
+
+func (IdentityEvent_Type) Type() protoreflect.EnumType {
+	return &file_messaging_proto_enumTypes[4]
+}
+
+func (x IdentityEvent_Type) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use IdentityEvent_Type.Descriptor instead.
+func (IdentityEvent_Type) EnumDescriptor() ([]byte, []int) {
+	return file_messaging_proto_rawDescGZIP(), []int{9, 0}
+}
+
 // Message is the only wire type carried by the appliance broker. The oneof
 // makes the payload family explicit and prevents an untyped byte bag from
 // becoming a hidden second protocol.
@@ -257,6 +306,7 @@ type Message struct {
 	//	*Message_WorkflowCommand
 	//	*Message_ServiceCommand
 	//	*Message_Reply
+	//	*Message_IdentityEvent
 	Body          isMessage_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -369,6 +419,15 @@ func (x *Message) GetReply() *Reply {
 	return nil
 }
 
+func (x *Message) GetIdentityEvent() *IdentityEvent {
+	if x != nil {
+		if x, ok := x.Body.(*Message_IdentityEvent); ok {
+			return x.IdentityEvent
+		}
+	}
+	return nil
+}
+
 type isMessage_Body interface {
 	isMessage_Body()
 }
@@ -401,6 +460,10 @@ type Message_Reply struct {
 	Reply *Reply `protobuf:"bytes,16,opt,name=reply,proto3,oneof"`
 }
 
+type Message_IdentityEvent struct {
+	IdentityEvent *IdentityEvent `protobuf:"bytes,17,opt,name=identity_event,json=identityEvent,proto3,oneof"`
+}
+
 func (*Message_OperationalEvent) isMessage_Body() {}
 
 func (*Message_WorkflowEvent) isMessage_Body() {}
@@ -414,6 +477,8 @@ func (*Message_WorkflowCommand) isMessage_Body() {}
 func (*Message_ServiceCommand) isMessage_Body() {}
 
 func (*Message_Reply) isMessage_Body() {}
+
+func (*Message_IdentityEvent) isMessage_Body() {}
 
 type Header struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -999,11 +1064,169 @@ func (x *Reply) GetRequestId() string {
 	return ""
 }
 
+// IdentityEvent carries provider-neutral authentication delivery work. The
+// OTP remains encrypted so the broker never stores the plaintext code.
+type IdentityEvent struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Type              IdentityEvent_Type     `protobuf:"varint,1,opt,name=type,proto3,enum=appliance.messaging.v1.IdentityEvent_Type" json:"type,omitempty"`
+	ChallengeId       string                 `protobuf:"bytes,2,opt,name=challenge_id,json=challengeId,proto3" json:"challenge_id,omitempty"`
+	Phone             string                 `protobuf:"bytes,3,opt,name=phone,proto3" json:"phone,omitempty"`
+	Factor            string                 `protobuf:"bytes,4,opt,name=factor,proto3" json:"factor,omitempty"`
+	DeliveryChannels  []string               `protobuf:"bytes,5,rep,name=delivery_channels,json=deliveryChannels,proto3" json:"delivery_channels,omitempty"`
+	Purpose           string                 `protobuf:"bytes,6,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	OriginChannel     string                 `protobuf:"bytes,7,opt,name=origin_channel,json=originChannel,proto3" json:"origin_channel,omitempty"`
+	Audience          string                 `protobuf:"bytes,8,opt,name=audience,proto3" json:"audience,omitempty"`
+	TenantId          string                 `protobuf:"bytes,9,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	EncryptedCode     []byte                 `protobuf:"bytes,10,opt,name=encrypted_code,json=encryptedCode,proto3" json:"encrypted_code,omitempty"`
+	DeliveryChannel   string                 `protobuf:"bytes,11,opt,name=delivery_channel,json=deliveryChannel,proto3" json:"delivery_channel,omitempty"`
+	DeliveryStatus    string                 `protobuf:"bytes,12,opt,name=delivery_status,json=deliveryStatus,proto3" json:"delivery_status,omitempty"`
+	ProviderMessageId string                 `protobuf:"bytes,13,opt,name=provider_message_id,json=providerMessageId,proto3" json:"provider_message_id,omitempty"`
+	ErrorKind         string                 `protobuf:"bytes,14,opt,name=error_kind,json=errorKind,proto3" json:"error_kind,omitempty"`
+	ExpiresAt         *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *IdentityEvent) Reset() {
+	*x = IdentityEvent{}
+	mi := &file_messaging_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityEvent) ProtoMessage() {}
+
+func (x *IdentityEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_messaging_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityEvent.ProtoReflect.Descriptor instead.
+func (*IdentityEvent) Descriptor() ([]byte, []int) {
+	return file_messaging_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *IdentityEvent) GetType() IdentityEvent_Type {
+	if x != nil {
+		return x.Type
+	}
+	return IdentityEvent_TYPE_UNSPECIFIED
+}
+
+func (x *IdentityEvent) GetChallengeId() string {
+	if x != nil {
+		return x.ChallengeId
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetPhone() string {
+	if x != nil {
+		return x.Phone
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetFactor() string {
+	if x != nil {
+		return x.Factor
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetDeliveryChannels() []string {
+	if x != nil {
+		return x.DeliveryChannels
+	}
+	return nil
+}
+
+func (x *IdentityEvent) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetOriginChannel() string {
+	if x != nil {
+		return x.OriginChannel
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetAudience() string {
+	if x != nil {
+		return x.Audience
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetTenantId() string {
+	if x != nil {
+		return x.TenantId
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetEncryptedCode() []byte {
+	if x != nil {
+		return x.EncryptedCode
+	}
+	return nil
+}
+
+func (x *IdentityEvent) GetDeliveryChannel() string {
+	if x != nil {
+		return x.DeliveryChannel
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetDeliveryStatus() string {
+	if x != nil {
+		return x.DeliveryStatus
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetProviderMessageId() string {
+	if x != nil {
+		return x.ProviderMessageId
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetErrorKind() string {
+	if x != nil {
+		return x.ErrorKind
+	}
+	return ""
+}
+
+func (x *IdentityEvent) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
 var File_messaging_proto protoreflect.FileDescriptor
 
 const file_messaging_proto_rawDesc = "" +
 	"\n" +
-	"\x0fmessaging.proto\x12\x16appliance.messaging.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe3\x04\n" +
+	"\x0fmessaging.proto\x12\x16appliance.messaging.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb3\x05\n" +
 	"\aMessage\x126\n" +
 	"\x06header\x18\x01 \x01(\v2\x1e.appliance.messaging.v1.HeaderR\x06header\x12W\n" +
 	"\x11operational_event\x18\n" +
@@ -1014,7 +1237,8 @@ const file_messaging_proto_rawDesc = "" +
 	"\fsystem_event\x18\r \x01(\v2#.appliance.messaging.v1.SystemEventH\x00R\vsystemEvent\x12T\n" +
 	"\x10workflow_command\x18\x0e \x01(\v2'.appliance.messaging.v1.WorkflowCommandH\x00R\x0fworkflowCommand\x12Q\n" +
 	"\x0fservice_command\x18\x0f \x01(\v2&.appliance.messaging.v1.ServiceCommandH\x00R\x0eserviceCommand\x125\n" +
-	"\x05reply\x18\x10 \x01(\v2\x1d.appliance.messaging.v1.ReplyH\x00R\x05replyB\x06\n" +
+	"\x05reply\x18\x10 \x01(\v2\x1d.appliance.messaging.v1.ReplyH\x00R\x05reply\x12N\n" +
+	"\x0eidentity_event\x18\x11 \x01(\v2%.appliance.messaging.v1.IdentityEventH\x00R\ridentityEventB\x06\n" +
 	"\x04body\"\xb0\x01\n" +
 	"\x06Header\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
@@ -1094,7 +1318,30 @@ const file_messaging_proto_rawDesc = "" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestIdB6Z4appliance-code/sdk/golang/gen/messaging;messaginggenb\x06proto3"
+	"request_id\x18\x04 \x01(\tR\trequestId\"\x96\x05\n" +
+	"\rIdentityEvent\x12>\n" +
+	"\x04type\x18\x01 \x01(\x0e2*.appliance.messaging.v1.IdentityEvent.TypeR\x04type\x12!\n" +
+	"\fchallenge_id\x18\x02 \x01(\tR\vchallengeId\x12\x14\n" +
+	"\x05phone\x18\x03 \x01(\tR\x05phone\x12\x16\n" +
+	"\x06factor\x18\x04 \x01(\tR\x06factor\x12+\n" +
+	"\x11delivery_channels\x18\x05 \x03(\tR\x10deliveryChannels\x12\x18\n" +
+	"\apurpose\x18\x06 \x01(\tR\apurpose\x12%\n" +
+	"\x0eorigin_channel\x18\a \x01(\tR\roriginChannel\x12\x1a\n" +
+	"\baudience\x18\b \x01(\tR\baudience\x12\x1b\n" +
+	"\ttenant_id\x18\t \x01(\tR\btenantId\x12%\n" +
+	"\x0eencrypted_code\x18\n" +
+	" \x01(\fR\rencryptedCode\x12)\n" +
+	"\x10delivery_channel\x18\v \x01(\tR\x0fdeliveryChannel\x12'\n" +
+	"\x0fdelivery_status\x18\f \x01(\tR\x0edeliveryStatus\x12.\n" +
+	"\x13provider_message_id\x18\r \x01(\tR\x11providerMessageId\x12\x1d\n" +
+	"\n" +
+	"error_kind\x18\x0e \x01(\tR\terrorKind\x129\n" +
+	"\n" +
+	"expires_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"H\n" +
+	"\x04Type\x12\x14\n" +
+	"\x10TYPE_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rOTP_REQUESTED\x10\x01\x12\x17\n" +
+	"\x13OTP_DELIVERY_STATUS\x10\x02B6Z4appliance-code/sdk/golang/gen/messaging;messaginggenb\x06proto3"
 
 var (
 	file_messaging_proto_rawDescOnce sync.Once
@@ -1108,43 +1355,48 @@ func file_messaging_proto_rawDescGZIP() []byte {
 	return file_messaging_proto_rawDescData
 }
 
-var file_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_messaging_proto_goTypes = []any{
 	(OperationalEvent_Type)(0),     // 0: appliance.messaging.v1.OperationalEvent.Type
 	(WorkflowEvent_State)(0),       // 1: appliance.messaging.v1.WorkflowEvent.State
 	(SystemEvent_State)(0),         // 2: appliance.messaging.v1.SystemEvent.State
 	(WorkflowCommand_Operation)(0), // 3: appliance.messaging.v1.WorkflowCommand.Operation
-	(*Message)(nil),                // 4: appliance.messaging.v1.Message
-	(*Header)(nil),                 // 5: appliance.messaging.v1.Header
-	(*OperationalEvent)(nil),       // 6: appliance.messaging.v1.OperationalEvent
-	(*WorkflowEvent)(nil),          // 7: appliance.messaging.v1.WorkflowEvent
-	(*AuditEvent)(nil),             // 8: appliance.messaging.v1.AuditEvent
-	(*SystemEvent)(nil),            // 9: appliance.messaging.v1.SystemEvent
-	(*WorkflowCommand)(nil),        // 10: appliance.messaging.v1.WorkflowCommand
-	(*ServiceCommand)(nil),         // 11: appliance.messaging.v1.ServiceCommand
-	(*Reply)(nil),                  // 12: appliance.messaging.v1.Reply
-	(*timestamppb.Timestamp)(nil),  // 13: google.protobuf.Timestamp
+	(IdentityEvent_Type)(0),        // 4: appliance.messaging.v1.IdentityEvent.Type
+	(*Message)(nil),                // 5: appliance.messaging.v1.Message
+	(*Header)(nil),                 // 6: appliance.messaging.v1.Header
+	(*OperationalEvent)(nil),       // 7: appliance.messaging.v1.OperationalEvent
+	(*WorkflowEvent)(nil),          // 8: appliance.messaging.v1.WorkflowEvent
+	(*AuditEvent)(nil),             // 9: appliance.messaging.v1.AuditEvent
+	(*SystemEvent)(nil),            // 10: appliance.messaging.v1.SystemEvent
+	(*WorkflowCommand)(nil),        // 11: appliance.messaging.v1.WorkflowCommand
+	(*ServiceCommand)(nil),         // 12: appliance.messaging.v1.ServiceCommand
+	(*Reply)(nil),                  // 13: appliance.messaging.v1.Reply
+	(*IdentityEvent)(nil),          // 14: appliance.messaging.v1.IdentityEvent
+	(*timestamppb.Timestamp)(nil),  // 15: google.protobuf.Timestamp
 }
 var file_messaging_proto_depIdxs = []int32{
-	5,  // 0: appliance.messaging.v1.Message.header:type_name -> appliance.messaging.v1.Header
-	6,  // 1: appliance.messaging.v1.Message.operational_event:type_name -> appliance.messaging.v1.OperationalEvent
-	7,  // 2: appliance.messaging.v1.Message.workflow_event:type_name -> appliance.messaging.v1.WorkflowEvent
-	8,  // 3: appliance.messaging.v1.Message.audit_event:type_name -> appliance.messaging.v1.AuditEvent
-	9,  // 4: appliance.messaging.v1.Message.system_event:type_name -> appliance.messaging.v1.SystemEvent
-	10, // 5: appliance.messaging.v1.Message.workflow_command:type_name -> appliance.messaging.v1.WorkflowCommand
-	11, // 6: appliance.messaging.v1.Message.service_command:type_name -> appliance.messaging.v1.ServiceCommand
-	12, // 7: appliance.messaging.v1.Message.reply:type_name -> appliance.messaging.v1.Reply
-	13, // 8: appliance.messaging.v1.Header.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 9: appliance.messaging.v1.OperationalEvent.type:type_name -> appliance.messaging.v1.OperationalEvent.Type
-	1,  // 10: appliance.messaging.v1.WorkflowEvent.state:type_name -> appliance.messaging.v1.WorkflowEvent.State
-	2,  // 11: appliance.messaging.v1.SystemEvent.state:type_name -> appliance.messaging.v1.SystemEvent.State
-	3,  // 12: appliance.messaging.v1.WorkflowCommand.operation:type_name -> appliance.messaging.v1.WorkflowCommand.Operation
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	6,  // 0: appliance.messaging.v1.Message.header:type_name -> appliance.messaging.v1.Header
+	7,  // 1: appliance.messaging.v1.Message.operational_event:type_name -> appliance.messaging.v1.OperationalEvent
+	8,  // 2: appliance.messaging.v1.Message.workflow_event:type_name -> appliance.messaging.v1.WorkflowEvent
+	9,  // 3: appliance.messaging.v1.Message.audit_event:type_name -> appliance.messaging.v1.AuditEvent
+	10, // 4: appliance.messaging.v1.Message.system_event:type_name -> appliance.messaging.v1.SystemEvent
+	11, // 5: appliance.messaging.v1.Message.workflow_command:type_name -> appliance.messaging.v1.WorkflowCommand
+	12, // 6: appliance.messaging.v1.Message.service_command:type_name -> appliance.messaging.v1.ServiceCommand
+	13, // 7: appliance.messaging.v1.Message.reply:type_name -> appliance.messaging.v1.Reply
+	14, // 8: appliance.messaging.v1.Message.identity_event:type_name -> appliance.messaging.v1.IdentityEvent
+	15, // 9: appliance.messaging.v1.Header.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 10: appliance.messaging.v1.OperationalEvent.type:type_name -> appliance.messaging.v1.OperationalEvent.Type
+	1,  // 11: appliance.messaging.v1.WorkflowEvent.state:type_name -> appliance.messaging.v1.WorkflowEvent.State
+	2,  // 12: appliance.messaging.v1.SystemEvent.state:type_name -> appliance.messaging.v1.SystemEvent.State
+	3,  // 13: appliance.messaging.v1.WorkflowCommand.operation:type_name -> appliance.messaging.v1.WorkflowCommand.Operation
+	4,  // 14: appliance.messaging.v1.IdentityEvent.type:type_name -> appliance.messaging.v1.IdentityEvent.Type
+	15, // 15: appliance.messaging.v1.IdentityEvent.expires_at:type_name -> google.protobuf.Timestamp
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_messaging_proto_init() }
@@ -1160,14 +1412,15 @@ func file_messaging_proto_init() {
 		(*Message_WorkflowCommand)(nil),
 		(*Message_ServiceCommand)(nil),
 		(*Message_Reply)(nil),
+		(*Message_IdentityEvent)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_messaging_proto_rawDesc), len(file_messaging_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   9,
+			NumEnums:      5,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

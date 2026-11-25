@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Card, LocationMap, PageFrame, type MapLocation } from "../components";
 import { navigate } from "../lib/navigate";
-import { applicationAuth, type ActiveMembership, type NearbyZone } from "../lib/applicationAuth";
+import { applicationAuth, presentedAuthError, requiresSignIn, type ActiveMembership, type NearbyZone } from "../lib/applicationAuth";
 import type { Session } from "../types";
 
 type GeoLocation = MapLocation & { accuracy?: number };
@@ -36,7 +36,7 @@ function ApplicationLandingPage(): React.JSX.Element {
       const result = await applicationAuth.memberships();
       setMemberships(result.memberships);
     } catch (reason: unknown) {
-      setMembershipError(reason instanceof Error ? reason.message : "Could not load your Zonity memberships.");
+      setMembershipError(presentedAuthError(reason, "Could not load your Zonity memberships."));
     } finally {
       setMembershipLoading(false);
     }
@@ -110,7 +110,7 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
       setZones(result.zones);
       setStatus("ready");
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Could not find nearby Zonities.");
+      setError(presentedAuthError(reason, "Could not find nearby Zonities."));
       setStatus("ready");
     }
   }
@@ -146,7 +146,7 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
       setStatus("joined");
       props.onJoined();
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Could not submit the join request.");
+      setError(presentedAuthError(reason, "Could not submit the join request."));
     }
   }
 
@@ -232,7 +232,7 @@ function NearbyDiscoveryPage(): React.JSX.Element {
       setZones(result.zones);
       setStatus("ready");
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Could not find nearby zones.");
+      setError(presentedAuthError(reason, "Could not find nearby Zonities."));
       setStatus("idle");
     }
   }
@@ -284,11 +284,11 @@ function NearbyDiscoveryPage(): React.JSX.Element {
       setJoinMode(result.approval_mode);
       setStatus("joined");
     } catch (reason: unknown) {
-      if (reason instanceof Error && reason.message.toLowerCase().includes("sign in")) {
+      if (requiresSignIn(reason)) {
         navigate(`/app/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return;
       }
-      setError(reason instanceof Error ? reason.message : "Could not submit the request.");
+      setError(presentedAuthError(reason, "Could not submit the join request."));
     }
   }
 
@@ -299,11 +299,11 @@ function NearbyDiscoveryPage(): React.JSX.Element {
       await applicationAuth.requestZone(zoneName.trim());
       setZoneRequestSent(true);
     } catch (reason: unknown) {
-      if (reason instanceof Error && reason.message.toLowerCase().includes("sign in")) {
+      if (requiresSignIn(reason)) {
         navigate(`/app/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         return;
       }
-      setError(reason instanceof Error ? reason.message : "Could not submit the Zonity request.");
+      setError(presentedAuthError(reason, "Could not submit the Zonity request."));
     }
   }
 

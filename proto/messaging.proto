@@ -19,6 +19,7 @@ message Message {
     WorkflowCommand workflow_command = 14;
     ServiceCommand service_command = 15;
     Reply reply = 16;
+    IdentityEvent identity_event = 17;
   }
 }
 
@@ -85,4 +86,29 @@ message Reply {
   string code = 2;
   string message = 3;
   string request_id = 4;
+}
+
+// IdentityEvent carries provider-neutral authentication delivery work. The
+// OTP remains encrypted so the broker never stores the plaintext code.
+message IdentityEvent {
+  enum Type {
+    TYPE_UNSPECIFIED = 0;
+    OTP_REQUESTED = 1;
+    OTP_DELIVERY_STATUS = 2;
+  }
+  Type type = 1;
+  string challenge_id = 2;
+  string phone = 3;
+  string factor = 4;
+  repeated string delivery_channels = 5;
+  string purpose = 6;
+  string origin_channel = 7;
+  string audience = 8;
+  string tenant_id = 9;
+  bytes encrypted_code = 10;
+  string delivery_channel = 11;
+  string delivery_status = 12;
+  string provider_message_id = 13;
+  string error_kind = 14;
+  google.protobuf.Timestamp expires_at = 15;
 }

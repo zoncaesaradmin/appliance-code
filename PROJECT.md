@@ -50,7 +50,7 @@ The application identity service now provides the local/test mobile OTP
 contract. It remains fail-closed outside local/test until a reviewed SMS or
 provider adapter is added; the installer generates its HMAC keys on the target.
 
-The bundled application brand assets are
+The bundled application brand assets are the symbol marks, without the wordmark:
 `services/controlplane-ui/public/zonited-logo-circle.png` for compact UI
 identity and `services/controlplane-ui/public/zonited-logo-square.png` for
 PWA/icon contexts. Do not substitute the operator mark on application pages.

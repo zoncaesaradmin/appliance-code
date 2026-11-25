@@ -47,7 +47,7 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     document.title = isApplicationPath(location.pathname) || isApplicationEntryPath(location.pathname, shellState.profile)
-      ? "Zonited App"
+      ? "Zonited"
       : "Zon Appliance";
   }, [location.pathname, shellState.profile]);
 

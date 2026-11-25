@@ -11,7 +11,7 @@ export function ApplicationShell(props: {
   return (
     <div className="application-shell">
       <header className="application-shell__header">
-        <button className="application-shell__brand" type="button" aria-label="Zonited App home" onClick={() => navigate("/app")}>
+        <button className="application-shell__brand" type="button" aria-label="Zonited home" onClick={() => navigate("/app")}>
           <img className="application-shell__logo" src="/zonited-logo-circle.png" alt="Zonited" />
           <span>
             <strong>Zonited</strong>
@@ -27,7 +27,7 @@ export function ApplicationShell(props: {
         <ApplicationWorkspacePage pathname={props.pathname} session={props.session} />
       </main>
       <footer className="application-shell__footer">
-        <span>Zonited App</span>
+        <span>Zonited</span>
         <span>Private by design</span>
       </footer>
     </div>

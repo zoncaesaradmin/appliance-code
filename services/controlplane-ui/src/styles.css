@@ -1966,21 +1966,14 @@ body:has(.video-player) {
   margin: auto;
 }
 
-.application-login__eyebrow {
-  margin: 0 0 0.6rem;
-  color: var(--app-muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-
 .application-login__form-wrap h2 {
   margin: 0;
   color: var(--app-ink);
-  font-size: clamp(2rem, 4vw, 3.2rem);
-  letter-spacing: -0.055em;
-  line-height: 1;
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .application-login .field-label {
@@ -1990,13 +1983,32 @@ body:has(.video-player) {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+  text-align: center;
   text-transform: uppercase;
 }
 
 .application-login form {
   display: grid;
+  justify-items: center;
+  margin-top: 1.15rem;
+}
+
+.application-login__controls {
+  --digit-gap: 0.22em;
+  --field-track: calc((var(--national-length) * 1ch) + (var(--national-length) * var(--digit-gap)) + 2rem);
+  --row-width: var(--field-track);
+  display: grid;
   gap: 1rem;
-  margin-top: 1.6rem;
+  width: min(100%, max-content);
+  justify-items: center;
+}
+
+.application-login__controls--phone {
+  --row-width: calc(6.4rem + 0.65rem + var(--field-track));
+}
+
+.application-login__controls--code {
+  --row-width: var(--field-track);
 }
 
 .application-login form .field-label {
@@ -2021,8 +2033,18 @@ body:has(.video-player) {
 
 .application-login__phone-input {
   display: grid;
-  grid-template-columns: 5.9rem minmax(0, 1fr);
+  grid-template-columns: 6.4rem minmax(0, var(--field-track));
   gap: 0.65rem;
+  width: min(100%, var(--row-width));
+}
+
+.application-login__controls .text-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--digit-gap);
+}
+
+.application-login__controls--code .text-input {
+  width: min(100%, var(--field-track));
 }
 
 .application-login__country {
@@ -2053,6 +2075,7 @@ body:has(.video-player) {
 .application-login .form-error {
   color: var(--app-error);
   font-size: 0.85rem;
+  text-align: center;
 }
 
 .application-login__lede {
@@ -2128,11 +2151,12 @@ body:has(.video-player) {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 100%;
+  width: min(100%, var(--row-width));
+  min-width: min(100%, max-content);
   min-height: 3.25rem;
   border: 1px solid var(--app-brand);
   border-radius: 0.8rem;
-  padding: 0 3rem 0 1rem;
+  padding: 0 2.15rem 0 0.85rem;
   background: var(--app-brand);
   color: var(--app-surface);
   white-space: nowrap;
@@ -2142,7 +2166,7 @@ body:has(.video-player) {
 
 .application-login__submit svg {
   position: absolute;
-  right: 1.1rem;
+  right: 0.7rem;
   width: 1.15rem;
   height: 1.15rem;
   flex: 0 0 1.15rem;
@@ -2177,12 +2201,15 @@ body:has(.video-player) {
   min-height: 3.1rem;
   border: 1px solid var(--app-border);
   border-radius: 0.8rem;
-  padding: 0 1rem;
+  padding: 0.55rem 1rem;
   background: transparent;
   color: var(--app-brand);
   cursor: pointer;
   font: inherit;
   font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
+  white-space: normal;
   transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
 }
 
@@ -3016,7 +3043,7 @@ body:has(.video-player) {
   }
 
   .application-login__phone-input {
-    grid-template-columns: 1fr;
+    grid-template-columns: 6.4rem minmax(0, var(--field-track));
   }
 
   .application-login__signal {

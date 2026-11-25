@@ -20,12 +20,15 @@ The public API is:
 - `POST /api/shared/v1/onboarding/zone-requests` with an authenticated session
   and a requested Zonity name
 
-The current delivery adapter is only the CAPP-compatible `local`/`test`
-development inbox. Codes are held in memory and can be retrieved only through
-the owner-only Unix socket created under `APPLICATION_IDENTITY_OTP_SOCKET_PARENT`.
-The socket is never exposed through a Kubernetes Service or ingress. The
-service refuses any other environment until a production SMS/provider adapter,
-abuse controls, and delivery observability are reviewed and implemented.
+Local/test deployments use the CAPP-compatible development inbox. Codes are
+held in memory and can be retrieved only through the owner-only Unix socket
+created under `APPLICATION_IDENTITY_OTP_SOCKET_PARENT`; the socket is never
+exposed through a Kubernetes Service or ingress. Integrated deployments use
+the provider-neutral event mode: the service publishes an encrypted
+`event.identity.otp.requested` event to the appliance JetStream broker and a
+configured channel adapter performs provider delivery. The identity service
+does not import Meta or any other provider. Event mode is required when the
+service runs with `APPLICATION_IDENTITY_ENV=production`.
 
 The service creates the identity tables if they do not exist. OTP and request
 rate-limit keys are supplied by the installer through a target-generated

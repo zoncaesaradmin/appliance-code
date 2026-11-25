@@ -35,6 +35,19 @@ spec:
               value: {{ .Values.applicationServices.identity.socketParent | quote }}
             - name: APPLICATION_IDENTITY_TRUSTED_PROXIES
               value: {{ .Values.applicationServices.identity.trustedProxies | quote }}
+            - name: APPLICATION_IDENTITY_OTP_DELIVERY_MODE
+              value: {{ .Values.applicationServices.identity.deliveryMode | quote }}
+            - name: APPLICATION_IDENTITY_DELIVERY_CHANNELS
+              value: {{ join "," .Values.applicationServices.identity.deliveryChannels | quote }}
+            {{- if eq .Values.applicationServices.identity.deliveryMode "event" }}
+            - name: APPLICATION_IDENTITY_MESSAGING_URL
+              value: {{ include "appliance-control-plane.messagingURL" . | quote }}
+            - name: APPLICATION_IDENTITY_DELIVERY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.identity.secretName | quote }}
+                  key: {{ .Values.applicationServices.identity.deliveryKey | quote }}
+            {{- end }}
             - name: APPLICATION_IDENTITY_DATABASE_URL
               valueFrom:
                 secretKeyRef:

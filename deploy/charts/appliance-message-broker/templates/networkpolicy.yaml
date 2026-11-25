@@ -12,9 +12,11 @@ spec:
   policyTypes: [Ingress]
   ingress:
     - from:
+        {{- range .Values.networkPolicy.allowedNamespaces }}
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ace-system
+              kubernetes.io/metadata.name: {{ . | quote }}
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.service.port }}

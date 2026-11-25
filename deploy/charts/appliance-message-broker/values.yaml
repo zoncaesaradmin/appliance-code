@@ -34,3 +34,8 @@ podSecurityContext:
   fsGroupChangePolicy: OnRootMismatch
   seccompProfile:
     type: RuntimeDefault
+
+networkPolicy:
+  allowedNamespaces:
+    - ace-system
+    - ace-apps

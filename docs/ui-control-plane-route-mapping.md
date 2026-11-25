@@ -122,7 +122,7 @@ Useful event names:
 | --- | --- | --- | --- |
 | `GET /health/ready` | `ready` | `GET /health/ready` on the control-plane internal listener | `200 ready` plain text |
 | `GET /app/login` | React `ApplicationLoginPage` | `GET /version`, then `/api/shared/v1/auth/session` | Application-context mobile sign-in; operator credentials are explicitly rejected |
-| `POST /app/login` | React mobile number/code forms | `/api/shared/v1/auth/otp/challenges` and `/api/shared/v1/auth/otp/verify` | Sets the separate HttpOnly application session cookie; local/test delivery uses the private OTP inbox |
+| `POST /app/login` | React mobile number/code forms | `/api/shared/v1/auth/otp/challenges` and `/api/shared/v1/auth/otp/verify` | Sets the separate HttpOnly application session cookie; local/test delivery uses the private OTP inbox. A wrong code or rate limit shows the identity service sentence. A missing service, network failure, or other transport error shows “Could not send a code. Try again.” or “Could not verify the code. Try again.” and does not show the HTTP status text |
 | `GET /app` | React `ApplicationShell` → `ApplicationWorkspacePage` | Uses the separate application session loaded through `GET /api/shared/v1/auth/session`; no application business API is called by this shell yet | Protected Zonited PWA workspace shell with application navigation |
 | `POST /console/login` | `login` | `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA stores tokens in `sessionStorage`, or `localStorage` when “Keep me signed in on this device” is checked |
 | `POST /setup` | `setup` | `POST /api/v1/setup/first-admin`, then `POST /api/v1/auth/login` | `303` redirect to `/dashboard`. React SPA honors the same keep-signed-in choice as login |

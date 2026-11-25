@@ -47,6 +47,28 @@ type SendText struct {
 	PreviewURL bool   `json:"preview_url"`
 	Body       string `json:"body"`
 }
+type SendTemplateRequest struct {
+	MessagingProduct string      `json:"messaging_product"`
+	To               string      `json:"to"`
+	Type             string      `json:"type"`
+	Template         OTPTemplate `json:"template"`
+}
+type OTPTemplate struct {
+	Name       string              `json:"name"`
+	Language   TemplateLanguage    `json:"language"`
+	Components []TemplateComponent `json:"components,omitempty"`
+}
+type TemplateLanguage struct {
+	Code string `json:"code"`
+}
+type TemplateComponent struct {
+	Type       string              `json:"type"`
+	Parameters []TemplateParameter `json:"parameters,omitempty"`
+}
+type TemplateParameter struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
 type SendMessageResponse struct {
 	Messages []struct {
 		ID string `json:"id"`

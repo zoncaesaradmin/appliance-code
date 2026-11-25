@@ -35,6 +35,10 @@ Namespace for controlplane Deployment/Service/PVC/keys (Helm release namespace).
 {{- .Values.infraNamespace.name | default "ace-infra" -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.messagingURL" -}}
+{{- .Values.messaging.url | default (printf "nats://message-broker.%s.svc.cluster.local:4222" (include "appliance-control-plane.infraNamespace" .)) -}}
+{{- end -}}
+
 {{/*
 Rollout slice gates. zonctl reuses the same chart artifact for multiple
 releases, enabling only the set it is currently applying.

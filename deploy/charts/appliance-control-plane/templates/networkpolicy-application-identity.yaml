@@ -50,4 +50,16 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    {{- if eq .Values.applicationServices.identity.deliveryMode "event" }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.infraNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: message-broker
+      ports:
+        - protocol: TCP
+          port: 4222
+    {{- end }}
 {{- end }}

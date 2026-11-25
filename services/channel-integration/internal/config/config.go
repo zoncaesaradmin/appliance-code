@@ -18,16 +18,20 @@ const maxConfigBytes = 64 << 10
 var graphVersionPattern = regexp.MustCompile(`^v[0-9]+(?:\.[0-9]+)?$`)
 
 type Config struct {
-	ListenAddress     string
-	VerifyToken       string
-	AppSecret         string
-	GraphAccessToken  string
-	PhoneNumberID     string
-	GraphAPIVersion   string
-	IdentityURL       string
-	IdentityKey       string
-	IdentityTenantID  string
-	IdentityChannelID string
+	ListenAddress       string
+	VerifyToken         string
+	AppSecret           string
+	GraphAccessToken    string
+	PhoneNumberID       string
+	GraphAPIVersion     string
+	IdentityURL         string
+	IdentityKey         string
+	IdentityTenantID    string
+	IdentityChannelID   string
+	MessagingURL        string
+	OTPDeliveryKey      []byte
+	OTPTemplateName     string
+	OTPTemplateLanguage string
 }
 
 func Load(get func(string) string) (Config, error) {
@@ -46,6 +50,20 @@ func Load(get func(string) string) (Config, error) {
 	c.PhoneNumberID, c.GraphAPIVersion = strings.TrimSpace(runtime.PhoneNumberID), strings.TrimSpace(runtime.GraphAPIVersion)
 	c.IdentityURL = strings.TrimSpace(get("CAPP_APPLICATION_IDENTITY_URL"))
 	c.IdentityKey = strings.TrimSpace(get("CAPP_APPLICATION_IDENTITY_KEY"))
+	c.MessagingURL = strings.TrimSpace(get("CAPP_MESSAGING_URL"))
+	if c.MessagingURL != "" {
+		encodedKey := strings.TrimSpace(get("CAPP_OTP_DELIVERY_KEY"))
+		decodedKey, decodeErr := base64.StdEncoding.DecodeString(encodedKey)
+		if decodeErr != nil || len(decodedKey) != 32 {
+			return Config{}, errors.New("CAPP_OTP_DELIVERY_KEY must be base64-encoded and 32 bytes")
+		}
+		c.OTPDeliveryKey = decodedKey
+		c.OTPTemplateName = strings.TrimSpace(runtime.OTPTemplateName)
+		c.OTPTemplateLanguage = strings.TrimSpace(runtime.OTPTemplateLanguage)
+		if c.OTPTemplateName == "" || c.OTPTemplateLanguage == "" {
+			return Config{}, errors.New("WhatsApp OTP template name and language are required when messaging is enabled")
+		}
+	}
 	c.IdentityTenantID, c.IdentityChannelID = strings.TrimSpace(runtime.TenantID), strings.TrimSpace(runtime.ChannelID)
 	if c.IdentityTenantID == "" {
 		c.IdentityTenantID = "zonited-solutions"
@@ -79,13 +97,15 @@ func Load(get func(string) string) (Config, error) {
 }
 
 type runtimeConfig struct {
-	VerifyToken      string `json:"verify_token"`
-	AppSecret        string `json:"app_secret"`
-	GraphAccessToken string `json:"graph_access_token"`
-	PhoneNumberID    string `json:"phone_number_id"`
-	GraphAPIVersion  string `json:"graph_api_version"`
-	TenantID         string `json:"tenant_id"`
-	ChannelID        string `json:"channel_id"`
+	VerifyToken         string `json:"verify_token"`
+	AppSecret           string `json:"app_secret"`
+	GraphAccessToken    string `json:"graph_access_token"`
+	PhoneNumberID       string `json:"phone_number_id"`
+	GraphAPIVersion     string `json:"graph_api_version"`
+	TenantID            string `json:"tenant_id"`
+	ChannelID           string `json:"channel_id"`
+	OTPTemplateName     string `json:"otp_template_name"`
+	OTPTemplateLanguage string `json:"otp_template_language"`
 }
 
 func loadRuntimeConfig(path string) (runtimeConfig, error) {

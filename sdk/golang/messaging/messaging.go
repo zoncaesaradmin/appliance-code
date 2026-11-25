@@ -19,6 +19,7 @@ var DefaultStreams = []StreamSpec{
 	{Name: "workflow", Subjects: []string{"event.workflow.>", "command.workflow.>"}},
 	{Name: "audit", Subjects: []string{"event.audit.>"}},
 	{Name: "system", Subjects: []string{"event.system.>", "system.>"}},
+	{Name: "identity", Subjects: []string{"event.identity.>"}},
 }
 
 type StreamSpec struct {
@@ -80,11 +81,45 @@ func (c *Client) EnsureStream(ctx context.Context, spec StreamSpec) error {
 	if spec.MaxAge == 0 {
 		spec.MaxAge = 7 * 24 * time.Hour
 	}
+	if info, err := c.js.StreamInfo(spec.Name, nats.Context(ctx)); err == nil {
+		if !hasSubjects(info.Config.Subjects, spec.Subjects) {
+			return fmt.Errorf("messaging: stream %s exists without required subjects", spec.Name)
+		}
+		return nil
+	} else if !errors.Is(err, nats.ErrStreamNotFound) {
+		return fmt.Errorf("messaging: inspect stream %s: %w", spec.Name, err)
+	}
 	_, err := c.js.AddStream(&nats.StreamConfig{Name: spec.Name, Subjects: spec.Subjects, Storage: nats.FileStorage, MaxAge: spec.MaxAge, Retention: nats.LimitsPolicy}, nats.Context(ctx))
-	if err != nil && !errors.Is(err, nats.ErrStreamNameAlreadyInUse) {
+	if errors.Is(err, nats.ErrStreamNameAlreadyInUse) {
+		info, inspectErr := c.js.StreamInfo(spec.Name, nats.Context(ctx))
+		if inspectErr != nil {
+			return fmt.Errorf("messaging: inspect concurrently-created stream %s: %w", spec.Name, inspectErr)
+		}
+		if !hasSubjects(info.Config.Subjects, spec.Subjects) {
+			return fmt.Errorf("messaging: stream %s exists without required subjects", spec.Name)
+		}
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("messaging: ensure stream %s: %w", spec.Name, err)
 	}
 	return nil
+}
+
+func hasSubjects(existing, required []string) bool {
+	for _, want := range required {
+		found := false
+		for _, have := range existing {
+			if have == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // Publish accepts only one of the generated protobuf payload messages. The
@@ -138,7 +173,10 @@ func (c *Client) Subscribe(ctx context.Context, subject, durable string, handler
 			continue
 		}
 		if err := handler(ctx, Message{Wire: wire, Ack: func() error { return msg.Ack() }}); err != nil {
-			_ = msg.Nak()
+			// Avoid a hot redelivery loop when an external provider is
+			// temporarily unavailable. The durable consumer retains the event
+			// and will retry after the short backoff.
+			_ = msg.NakWithDelay(5 * time.Second)
 			return err
 		}
 		if err := msg.Ack(); err != nil {
@@ -190,6 +228,8 @@ func marshal(subject, producer string, body proto.Message) ([]byte, error) {
 		message.Body = &gen.Message_ServiceCommand{ServiceCommand: value}
 	case *gen.Reply:
 		message.Body = &gen.Message_Reply{Reply: value}
+	case *gen.IdentityEvent:
+		message.Body = &gen.Message_IdentityEvent{IdentityEvent: value}
 	default:
 		return nil, fmt.Errorf("messaging: unsupported protobuf body %T", body)
 	}

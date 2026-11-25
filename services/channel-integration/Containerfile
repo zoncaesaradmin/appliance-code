@@ -8,7 +8,6 @@ ARG BUILD_VERSION=development
 ARG TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
 COPY . ./
 RUN test -n "${TARGETARCH}" && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor -trimpath -ldflags="-s -w -X main.buildVersion=${BUILD_VERSION}" -o /out/channel-integration ./cmd/channel-integration
 

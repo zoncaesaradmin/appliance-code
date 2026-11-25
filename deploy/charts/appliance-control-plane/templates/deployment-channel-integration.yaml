@@ -27,6 +27,15 @@ spec:
           env:
             - name: CAPP_WHATSAPP_CONFIG_FILE
               value: /var/run/channel-integration/runtime.json
+            {{- if and (eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true") (eq .Values.applicationServices.identity.deliveryMode "event") }}
+            - name: CAPP_MESSAGING_URL
+              value: {{ include "appliance-control-plane.messagingURL" . | quote }}
+            - name: CAPP_OTP_DELIVERY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.identity.secretName | quote }}
+                  key: {{ .Values.applicationServices.identity.deliveryKey | quote }}
+            {{- end }}
             {{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
             - name: CAPP_APPLICATION_IDENTITY_URL
               value: {{ printf "http://%s:%d" (include "appliance-control-plane.serviceDNS" (list (include "appliance-control-plane.identityName" .) (include "appliance-control-plane.appsNamespace" .))) (.Values.applicationServices.identity.service.port | int) | quote }}

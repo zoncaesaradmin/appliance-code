@@ -1,7 +1,6 @@
 // application-identity exposes the application user's mobile OTP session API.
-// The only delivery adapter currently supported is the explicitly local/test
-// development inbox. A production SMS adapter must be added before enabling a
-// non-test environment.
+// OTP delivery is local in development and provider-neutral event delivery in
+// integrated deployments; channel adapters own provider-specific delivery.
 package main
 
 import (
@@ -17,11 +16,13 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"appliance-code/sdk/golang/messaging"
 	"appliance-code/sdk/golang/servicehealth"
 	"appliance-code/services/application-identity/internal/identity"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -82,23 +83,48 @@ CREATE INDEX IF NOT EXISTS identity_request_attempts_time_idx ON identity_reques
 
 type config struct {
 	environment, address, databaseURL, origin, socketParent string
-	otpKey, rateKey, internalKey                            []byte
+	deliveryMode, messagingURL                              string
+	deliveryChannels                                        []string
+	otpKey, rateKey, internalKey, deliveryKey               []byte
 	proxies                                                 []netip.Prefix
 }
 
 func loadConfig(get func(string) string) (config, error) {
-	c := config{environment: get("APPLICATION_IDENTITY_ENV"), address: get("APPLICATION_IDENTITY_LISTEN_ADDR"), databaseURL: get("APPLICATION_IDENTITY_DATABASE_URL"), origin: get("APPLICATION_IDENTITY_ORIGIN"), socketParent: get("APPLICATION_IDENTITY_OTP_SOCKET_PARENT")}
+	c := config{environment: get("APPLICATION_IDENTITY_ENV"), address: get("APPLICATION_IDENTITY_LISTEN_ADDR"), databaseURL: get("APPLICATION_IDENTITY_DATABASE_URL"), origin: get("APPLICATION_IDENTITY_ORIGIN"), socketParent: get("APPLICATION_IDENTITY_OTP_SOCKET_PARENT"), deliveryMode: strings.TrimSpace(get("APPLICATION_IDENTITY_OTP_DELIVERY_MODE")), messagingURL: strings.TrimSpace(get("APPLICATION_IDENTITY_MESSAGING_URL"))}
 	if c.environment == "" {
 		c.environment = "local"
 	}
-	if c.environment != "local" && c.environment != "test" {
-		return config{}, errors.New("APPLICATION_IDENTITY_ENV must be local or test; production delivery is not available")
+	if c.environment != "local" && c.environment != "test" && c.environment != "production" {
+		return config{}, errors.New("APPLICATION_IDENTITY_ENV must be local, test, or production")
 	}
 	if c.address == "" {
 		c.address = ":8080"
 	}
 	if c.socketParent == "" {
 		c.socketParent = "/tmp"
+	}
+	if c.deliveryMode == "" {
+		c.deliveryMode = "local"
+	}
+	if c.deliveryMode != "local" && c.deliveryMode != "event" {
+		return config{}, errors.New("APPLICATION_IDENTITY_OTP_DELIVERY_MODE must be local or event")
+	}
+	if c.deliveryMode == "local" && c.environment == "production" {
+		return config{}, errors.New("production identity requires event OTP delivery")
+	}
+	channels := strings.Split(strings.TrimSpace(get("APPLICATION_IDENTITY_DELIVERY_CHANNELS")), ",")
+	for _, channel := range channels {
+		channel = strings.TrimSpace(channel)
+		if channel == "" {
+			continue
+		}
+		if !regexp.MustCompile(`^[a-z][a-z0-9.-]{1,62}$`).MatchString(channel) {
+			return config{}, errors.New("APPLICATION_IDENTITY_DELIVERY_CHANNELS contains an invalid channel")
+		}
+		c.deliveryChannels = append(c.deliveryChannels, channel)
+	}
+	if len(c.deliveryChannels) == 0 {
+		c.deliveryChannels = []string{"whatsapp"}
 	}
 	if c.databaseURL == "" {
 		return config{}, errors.New("APPLICATION_IDENTITY_DATABASE_URL is required")
@@ -107,10 +133,20 @@ func loadConfig(get func(string) string) (config, error) {
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
 		return config{}, errors.New("APPLICATION_IDENTITY_ORIGIN must be an HTTPS origin without a path")
 	}
-	for _, entry := range []struct {
+	entries := []struct {
 		name string
 		dst  *[]byte
-	}{{"APPLICATION_IDENTITY_OTP_KEY", &c.otpKey}, {"APPLICATION_IDENTITY_RATE_KEY", &c.rateKey}, {"APPLICATION_IDENTITY_INTERNAL_KEY", &c.internalKey}} {
+	}{{"APPLICATION_IDENTITY_OTP_KEY", &c.otpKey}, {"APPLICATION_IDENTITY_RATE_KEY", &c.rateKey}, {"APPLICATION_IDENTITY_INTERNAL_KEY", &c.internalKey}}
+	if c.deliveryMode == "event" {
+		entries = append(entries, struct {
+			name string
+			dst  *[]byte
+		}{"APPLICATION_IDENTITY_DELIVERY_KEY", &c.deliveryKey})
+		if c.messagingURL == "" {
+			return config{}, errors.New("APPLICATION_IDENTITY_MESSAGING_URL is required for event delivery")
+		}
+	}
+	for _, entry := range entries {
 		decoded, err := base64.StdEncoding.DecodeString(get(entry.name))
 		if err != nil || len(decoded) < 32 {
 			return config{}, fmt.Errorf("%s must be base64-encoded and at least 32 bytes", entry.name)
@@ -122,6 +158,9 @@ func loadConfig(get func(string) string) (config, error) {
 	}
 	if subtle.ConstantTimeCompare(c.otpKey, c.internalKey) == 1 || subtle.ConstantTimeCompare(c.rateKey, c.internalKey) == 1 {
 		return config{}, errors.New("identity internal key must be distinct from OTP and rate keys")
+	}
+	if c.deliveryMode == "event" && (subtle.ConstantTimeCompare(c.deliveryKey, c.otpKey) == 1 || subtle.ConstantTimeCompare(c.deliveryKey, c.rateKey) == 1 || subtle.ConstantTimeCompare(c.deliveryKey, c.internalKey) == 1) {
+		return config{}, errors.New("identity delivery key must be distinct from other identity keys")
 	}
 	for _, raw := range strings.Split(get("APPLICATION_IDENTITY_TRUSTED_PROXIES"), ",") {
 		if strings.TrimSpace(raw) == "" {
@@ -206,24 +245,38 @@ func main() {
 		_ = server.Shutdown(context.Background())
 		return
 	}
-	inbox, err := identity.NewDevelopmentInbox(c.environment, 5*time.Minute, 1000)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	var sender identity.Sender
+	var messagingClient *messaging.Client
+	if c.deliveryMode == "event" {
+		messagingClient, err = connectMessaging(ctx, c.messagingURL, "application-identity")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "identity messaging: ", err)
+			_ = server.Shutdown(context.Background())
+			return
+		}
+		defer messagingClient.Close()
+		sender = &otpEventSender{client: messagingClient, key: c.deliveryKey, channels: c.deliveryChannels}
+	} else {
+		inbox, inboxErr := identity.NewDevelopmentInbox(c.environment, 5*time.Minute, 1000)
+		if inboxErr != nil {
+			fmt.Fprintln(os.Stderr, inboxErr)
+			os.Exit(1)
+		}
+		socket, socketErr := identity.NewDevelopmentSocket(c.environment, inbox, c.socketParent)
+		if socketErr != nil {
+			fmt.Fprintln(os.Stderr, "identity OTP socket: ", socketErr)
+			os.Exit(1)
+		}
+		defer socket.Close()
+		go func() { _ = socket.Serve() }()
+		sender = inbox
 	}
-	socket, err := identity.NewDevelopmentSocket(c.environment, inbox, c.socketParent)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "identity OTP socket: ", err)
-		os.Exit(1)
-	}
-	defer socket.Close()
-	go func() { _ = socket.Serve() }()
 	store, err := identity.NewPostgresStore(db, c.rateKey, identity.PostgresLimits{Window: 10 * time.Minute, PerPhone: 5, PerClient: 20, MaxAttempts: 5})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	service, err := identity.New(store, inbox, c.otpKey, 5*time.Minute, 30*24*time.Hour)
+	service, err := identity.New(store, sender, c.otpKey, 5*time.Minute, 30*24*time.Hour)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

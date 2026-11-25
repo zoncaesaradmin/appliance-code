@@ -114,12 +114,17 @@ func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.URL.Path == "/api/shared/v1/auth/otp/challenges" {
 		var input struct {
-			Phone string `json:"phone"`
+			Phone            string   `json:"phone"`
+			DeliveryChannels []string `json:"delivery_channels,omitempty"`
 		}
 		if !readAuthJSON(w, r, &input) {
 			return
 		}
-		id, err := h.Service.Begin(r.Context(), input.Phone, key)
+		delivery := OTPDeliveryRequest{Factor: "otp", DeliveryChannels: input.DeliveryChannels, Purpose: "login", OriginChannel: "web", Audience: CustomerAudience, TenantID: DefaultTenantID}
+		if len(delivery.DeliveryChannels) == 0 {
+			delivery.DeliveryChannels = []string{"whatsapp"}
+		}
+		id, err := h.Service.BeginWithDelivery(r.Context(), input.Phone, key, delivery)
 		if errors.Is(err, ErrInvalidPhone) {
 			authError(w, http.StatusBadRequest, "Enter a valid mobile number with country code.")
 			return

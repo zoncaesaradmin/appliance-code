@@ -66,6 +66,9 @@ ui:
 nameOverride: ""
 fullnameOverride: ""
 
+messaging:
+  url: ""
+
 namespace:
   # The installer may pre-create the namespace with its own Pod Security
   # Admission labels instead; set this to false in that case.
@@ -412,6 +415,10 @@ applicationServices:
     otpKey: otp-key
     rateKey: rate-key
     internalKey: internal-key
+    deliveryKey: delivery-key
+    deliveryMode: local
+    deliveryChannels:
+      - whatsapp
     trustedProxies: ""
     socketParent: /var/run/zonited-identity
     ingress:

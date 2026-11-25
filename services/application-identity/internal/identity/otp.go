@@ -62,6 +62,26 @@ type Sender interface {
 	Send(context.Context, string, string) error
 }
 
+// OTPDeliveryRequest is the provider-neutral delivery contract. The sender
+// may be a local development inbox or an event publisher consumed by channel
+// adapters; identity never selects a provider.
+type OTPDeliveryRequest struct {
+	ChallengeID      string
+	Phone            string
+	Code             string
+	Factor           string
+	DeliveryChannels []string
+	Purpose          string
+	OriginChannel    string
+	Audience         string
+	TenantID         string
+	ExpiresAt        time.Time
+}
+
+type OTPDeliverySender interface {
+	SendOTP(context.Context, OTPDeliveryRequest) error
+}
+
 type Service struct {
 	store             Store
 	sender            Sender
@@ -84,6 +104,20 @@ func New(store Store, sender Sender, key []byte, challengeTTL, sessionTTL time.D
 // Begin creates a bounded, one-use challenge and delivers its code. rateKey
 // is derived by trusted server code for issuance limits, not a browser header.
 func (s *Service) Begin(ctx context.Context, phone, rateKey string) (string, error) {
+	return s.BeginWithDelivery(ctx, phone, rateKey, OTPDeliveryRequest{
+		Factor:           "otp",
+		DeliveryChannels: []string{"whatsapp"},
+		Purpose:          "login",
+		OriginChannel:    "web",
+		Audience:         CustomerAudience,
+		TenantID:         DefaultTenantID,
+	})
+}
+
+// BeginWithDelivery creates a challenge and publishes it to the requested
+// delivery channels. The list is intentionally passed through as-is so a
+// future caller may request delivery through more than one enabled channel.
+func (s *Service) BeginWithDelivery(ctx context.Context, phone, rateKey string, delivery OTPDeliveryRequest) (string, error) {
 	if !phonePattern.MatchString(phone) {
 		return "", ErrInvalidPhone
 	}
@@ -104,7 +138,29 @@ func (s *Service) Begin(ctx context.Context, phone, rateKey string) (string, err
 	if err := s.store.CreateChallenge(ctx, challenge, rateKey); err != nil {
 		return "", fmt.Errorf("create challenge: %w", err)
 	}
-	if err := s.sender.Send(ctx, phone, code); err != nil {
+	delivery.ChallengeID = id
+	delivery.Phone = phone
+	delivery.Code = code
+	delivery.ExpiresAt = challenge.ExpiresAt
+	if delivery.Factor == "" {
+		delivery.Factor = "otp"
+	}
+	if delivery.Purpose == "" {
+		delivery.Purpose = "login"
+	}
+	if delivery.Audience == "" {
+		delivery.Audience = CustomerAudience
+	}
+	if delivery.TenantID == "" {
+		delivery.TenantID = DefaultTenantID
+	}
+	var deliveryErr error
+	if sender, ok := s.sender.(OTPDeliverySender); ok {
+		deliveryErr = sender.SendOTP(ctx, delivery)
+	} else {
+		deliveryErr = s.sender.Send(ctx, phone, code)
+	}
+	if deliveryErr != nil {
 		// Delivery errors may contain the phone or code; never propagate them.
 		// The challenge expires even if cleanup fails; it is never returned.
 		if cleanupErr := s.store.RevokeChallenge(ctx, id); cleanupErr != nil {
