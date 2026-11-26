@@ -47,6 +47,17 @@ capabilities:
       requiredEntitlement: zon.capabilities.application-identity
     artifacts:
       required: [application-identity-image]
+  application-auth:
+    displayName: Application Authentication
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.application-auth
+    # The authentication service implementation and image are added in the
+    # follow-up auth-service change. Keep the capability metadata explicit now
+    # without making the current signed bundle claim a missing artifact.
+    artifacts:
+      required: []
   lan-discovery:
     displayName: LAN Discovery
     requires: [base]

@@ -2,7 +2,7 @@ packages:
   foundation:
     displayName: Foundation
     description: Core appliance services, baseline product functionality, and local mDNS discovery.
-    capabilities: [base, actions, lan-discovery, files, video, guest-access, focus-content, plaintext-http]
+    capabilities: [base, actions, lan-discovery, files, video, guest-access, focus-content, plaintext-http, application-auth]
   app-stack:
     displayName: App Stack
     description: Channel integrations and application-facing services such as ordering.
