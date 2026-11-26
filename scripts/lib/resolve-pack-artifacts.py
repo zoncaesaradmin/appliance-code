@@ -33,6 +33,7 @@ KNOWN_ARTIFACTS = (
     "channel-integration-image",
     "ordering-image",
     "application-identity-image",
+    "auth-service-image",
     "host-agent-daemon",
     "mdns-host-packages",
     "host-agent-image",

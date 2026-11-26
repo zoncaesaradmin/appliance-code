@@ -1,0 +1,16 @@
+{{- if eq (include "appliance-control-plane.applicationAuthEnabled" .) "true" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "appliance-control-plane.authServiceName" . }}
+  namespace: {{ include "appliance-control-plane.appCoreNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.authServiceLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "appliance-control-plane.authServiceSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.applicationServices.auth.service.port }}
+      targetPort: http
+{{- end }}

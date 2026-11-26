@@ -354,6 +354,23 @@ channel-integration
 {{- define "appliance-control-plane.applicationIdentityEnabled" -}}
 {{- if and .Values.applicationServices.identity.enabled (has "application-identity" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
 {{- end -}}
+
+{{- define "appliance-control-plane.applicationAuthEnabled" -}}
+{{- if and (eq (include "appliance-control-plane.aceAppCoreEnabled" .) "true") .Values.applicationServices.auth.enabled (has "application-auth" (.Values.config.enabledCapabilities | default (list))) -}}true{{- end -}}
+{{- end -}}
+
+{{- define "appliance-control-plane.authServiceName" -}}auth-service{{- end -}}
+
+{{- define "appliance-control-plane.authServiceSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "appliance-control-plane.authServiceName" . }}
+app.kubernetes.io/instance: {{ include "appliance-control-plane.instanceLabel" . }}
+{{- end -}}
+
+{{- define "appliance-control-plane.authServiceLabels" -}}
+{{ include "appliance-control-plane.authServiceSelectorLabels" . }}
+app.kubernetes.io/component: application-auth
+app.kubernetes.io/part-of: appliance
+{{- end -}}
 {{- define "appliance-control-plane.applicationIdentityOrigin" -}}
 {{- .Values.applicationServices.identity.origin | default (.Values.config.publicOrigin | default .Values.config.canonicalOrigin) -}}
 {{- end -}}

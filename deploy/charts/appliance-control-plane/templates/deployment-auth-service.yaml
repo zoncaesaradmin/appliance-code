@@ -1,0 +1,49 @@
+{{- if eq (include "appliance-control-plane.applicationAuthEnabled" .) "true" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "appliance-control-plane.authServiceName" . }}
+  namespace: {{ include "appliance-control-plane.appCoreNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.authServiceLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "appliance-control-plane.authServiceSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "appliance-control-plane.authServiceLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.applicationServices.auth.podSecurityContext | nindent 8 }}
+      containers:
+        - name: auth-service
+          image: {{ .Values.applicationServices.auth.image.reference | quote }}
+          imagePullPolicy: {{ .Values.applicationServices.auth.image.pullPolicy }}
+          env:
+            - name: AUTH_SERVICE_LISTEN_ADDR
+              value: :{{ .Values.applicationServices.auth.service.port }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.applicationServices.auth.service.port }}
+          securityContext:
+            {{- toYaml .Values.applicationServices.auth.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.applicationServices.auth.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+{{- end }}
