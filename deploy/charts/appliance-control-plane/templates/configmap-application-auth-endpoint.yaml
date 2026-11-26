@@ -1,4 +1,4 @@
-{{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

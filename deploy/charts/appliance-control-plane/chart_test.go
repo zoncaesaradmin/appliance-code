@@ -1000,6 +1000,43 @@ func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
 	}
 }
 
+func TestApplicationIdentityEndpointBelongsToAceAppsRollout(t *testing.T) {
+	base := []string{
+		"--set", "applicationServices.identity.enabled=true",
+		"--set", "config.enabledCapabilities={application-identity,application-auth}",
+		"--set", "appsNamespace.name=ace-apps",
+		"--set", "appCoreNamespace.name=ace-app-core",
+		"--set", "rollout.aceInfra.enabled=false",
+		"--set", "rollout.aceSystem.enabled=false",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.aceAppCore.enabled=true",
+		"--set", "rollout.applicationSupport.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+	}
+	appCoreDocs := renderChart(t, append(defaultRenderArgs(), base...)...)
+	if findByKindAndName(appCoreDocs, "ConfigMap", "application-auth-endpoint") != nil {
+		t.Fatal("application-auth-endpoint must not render in the ace-app-core rollout")
+	}
+	if findByKindAndName(appCoreDocs, "NetworkPolicy", "identity-allow") != nil {
+		t.Fatal("identity NetworkPolicy must not render in the ace-app-core rollout")
+	}
+	appsArgs := append([]string{}, base...)
+	appsArgs[13] = "rollout.aceApps.enabled=true"
+	appsArgs[15] = "rollout.aceAppCore.enabled=false"
+	appsDocs := renderChart(t, append(defaultRenderArgs(), appsArgs...)...)
+	endpoint := findByKindAndName(appsDocs, "ConfigMap", "application-auth-endpoint")
+	if endpoint == nil {
+		t.Fatal("application-auth-endpoint must render in the ace-apps rollout")
+	}
+	if got, _ := at(endpoint, "metadata", "namespace").(string); got != "ace-apps" {
+		t.Fatalf("application-auth-endpoint namespace = %q, want ace-apps", got)
+	}
+	if findByKindAndName(appsDocs, "NetworkPolicy", "identity-allow") == nil {
+		t.Fatal("identity NetworkPolicy must render in the ace-apps rollout")
+	}
+}
+
 func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",

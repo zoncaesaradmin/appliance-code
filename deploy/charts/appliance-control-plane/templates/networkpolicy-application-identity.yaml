@@ -1,4 +1,4 @@
-{{- if and .Values.networkPolicy.enabled (eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true") }}
+{{- if and .Values.networkPolicy.enabled (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") (eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true") }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
