@@ -96,6 +96,15 @@ spec:
             matchLabels:
               {{- include "appliance-control-plane.orderingSelectorLabels" . | nindent 14 }}
     {{- end }}
+    {{- if eq (include "appliance-control-plane.applicationAuthEnabled" .) "true" }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "appliance-control-plane.appCoreNamespace" . | quote }}
+          podSelector:
+            matchLabels:
+              {{- include "appliance-control-plane.authServiceSelectorLabels" . | nindent 14 }}
+    {{- end }}
       ports: [{protocol: TCP, port: 5432}]
   egress:
     - to:
