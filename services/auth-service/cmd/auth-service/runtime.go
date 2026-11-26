@@ -111,14 +111,18 @@ func connectMessaging(ctx context.Context, url string) (*messaging.Client, error
 		}
 		client = candidate
 		return nil
-	}, func(_ error, _ time.Duration) {})
+	}, func(err error, retryIn time.Duration) {
+		fmt.Fprintf(os.Stderr, "{\"level\":\"warn\",\"service\":\"auth-service\",\"event\":\"messaging_unavailable\",\"retry_in\":%q,\"error\":%q}\n", retryIn.String(), err.Error())
+	})
 	return client, err
 }
 func waitAuthSchema(ctx context.Context, db *sql.DB) error {
 	return servicehealth.RetryPolicy{InitialDelay: time.Second, MaxDelay: 30 * time.Second, AttemptTimeout: 5 * time.Second}.Wait(ctx, func(ctx context.Context) error {
 		_, err := db.ExecContext(ctx, authSchemaSQL)
 		return err
-	}, func(_ error, _ time.Duration) {})
+	}, func(err error, retryIn time.Duration) {
+		fmt.Fprintf(os.Stderr, "{\"level\":\"warn\",\"service\":\"auth-service\",\"event\":\"database_unavailable\",\"retry_in\":%q,\"error\":%q}\n", retryIn.String(), err.Error())
+	})
 }
 
 // initializingHandler keeps the health endpoint available while the service
