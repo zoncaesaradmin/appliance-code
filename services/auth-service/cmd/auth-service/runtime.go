@@ -121,6 +121,34 @@ func waitAuthSchema(ctx context.Context, db *sql.DB) error {
 	}, func(_ error, _ time.Duration) {})
 }
 
+// initializingHandler keeps the health endpoint available while the service
+// waits for its database and messaging dependencies. Kubernetes can then keep
+// the pod alive and use readiness, rather than restart loops, to gate traffic.
+type initializingHandler struct{ current atomic.Value }
+
+func newInitializingHandler() *initializingHandler {
+	h := &initializingHandler{}
+	h.current.Store(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health/live":
+			w.WriteHeader(http.StatusOK)
+		case "/health/ready":
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+		default:
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+		}
+	}))
+	return h
+}
+
+func (h *initializingHandler) Set(next http.Handler) {
+	h.current.Store(http.HandlerFunc(next.ServeHTTP))
+}
+
+func (h *initializingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.current.Load().(http.Handler).ServeHTTP(w, r)
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "take-code" {
 		if len(os.Args) != 6 || os.Args[2] != "--socket" || os.Args[4] != "--phone" {
@@ -148,9 +176,26 @@ func main() {
 	defer db.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := waitAuthSchema(ctx, db); err != nil {
-		fmt.Fprintln(os.Stderr, "auth schema: ", err)
+	ready := &atomic.Bool{}
+	router := newInitializingHandler()
+	listener, err := net.Listen("tcp", c.address)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot bind HTTP listener")
 		os.Exit(1)
+	}
+	server := &http.Server{Addr: c.address, Handler: router, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	errCh := make(chan error, 1)
+	go func() {
+		e := server.Serve(listener)
+		if errors.Is(e, http.ErrServerClosed) {
+			e = nil
+		}
+		errCh <- e
+	}()
+	fmt.Fprintf(os.Stdout, "{\"level\":\"info\",\"service\":\"auth-service\",\"event\":\"service_started\",\"version\":%q,\"address\":%q}\n", buildVersion, c.address)
+	if err := waitAuthSchema(ctx, db); err != nil {
+		_ = server.Shutdown(context.Background())
+		return
 	}
 	var out sender
 	inbox := newLocalInbox()
@@ -179,24 +224,10 @@ func main() {
 	}
 	key, _ := base64.StdEncoding.DecodeString(c.otpKey)
 	rateKey, _ := base64.StdEncoding.DecodeString(c.rateKey)
-	ready := &atomic.Bool{}
 	h := authHandler{store: newAuthStore(db, rateKey), sender: out, otpKey: key, origin: c.origin, ready: ready, inbox: inbox, deliveryChannels: append([]string(nil), c.deliveryChannels...)}
-	listener, err := net.Listen("tcp", c.address)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "cannot bind HTTP listener")
-		os.Exit(1)
-	}
-	server := &http.Server{Addr: c.address, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
-	errCh := make(chan error, 1)
-	go func() {
-		e := server.Serve(listener)
-		if errors.Is(e, http.ErrServerClosed) {
-			e = nil
-		}
-		errCh <- e
-	}()
+	router.Set(h)
 	ready.Store(true)
-	fmt.Fprintf(os.Stdout, "{\"level\":\"info\",\"service\":\"auth-service\",\"event\":\"service_started\",\"version\":%q,\"address\":%q}\n", buildVersion, c.address)
+	fmt.Fprintln(os.Stdout, "{\"level\":\"info\",\"service\":\"auth-service\",\"event\":\"dependencies_ready\",\"message\":\"auth dependencies ready\"}")
 	select {
 	case <-ctx.Done():
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)

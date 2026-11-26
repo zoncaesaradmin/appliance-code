@@ -71,6 +71,16 @@ spec:
           volumeMounts:
             - name: otp-socket
               mountPath: {{ .Values.applicationServices.auth.socketParent | quote }}
+          # Auth initialization waits for PostgreSQL and JetStream before it
+          # binds the HTTP listener. Give those dependencies time to become
+          # available before liveness starts restarting the pod.
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+            timeoutSeconds: 1
           livenessProbe:
             httpGet:
               path: /health/live
