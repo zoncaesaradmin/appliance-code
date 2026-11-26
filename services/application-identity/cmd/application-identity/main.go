@@ -1,6 +1,5 @@
-// application-identity exposes the application user's mobile OTP session API.
-// OTP delivery is local in development and provider-neutral event delivery in
-// integrated deployments; channel adapters own provider-specific delivery.
+// application-identity exposes application onboarding and domain APIs. Its
+// authentication routes are a thin proxy to the configured Auth Service.
 package main
 
 import (
@@ -16,13 +15,11 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"regexp"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"appliance-code/sdk/golang/messaging"
 	"appliance-code/sdk/golang/servicehealth"
 	"appliance-code/services/application-identity/internal/identity"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -31,33 +28,8 @@ import (
 var buildVersion = "development"
 
 const schemaSQL = `
-CREATE TABLE IF NOT EXISTS identity_users (id text PRIMARY KEY CHECK (id ~ '^[0-9a-f]{32}$'), phone text NOT NULL UNIQUE CHECK (phone ~ '^\+[1-9][0-9]{7,14}$'), onboarding_state text NOT NULL DEFAULT 'identified' CHECK (onboarding_state IN ('identified', 'join_pending', 'onboarded', 'suspended')), created_at timestamptz NOT NULL);
-ALTER TABLE identity_users ADD COLUMN IF NOT EXISTS onboarding_state text NOT NULL DEFAULT 'identified';
-DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'identity_users_onboarding_state_check') THEN ALTER TABLE identity_users ADD CONSTRAINT identity_users_onboarding_state_check CHECK (onboarding_state IN ('identified', 'join_pending', 'onboarded', 'suspended')); END IF; END $$;
-CREATE TABLE IF NOT EXISTS identity_otp_challenges (id text PRIMARY KEY CHECK (id ~ '^[0-9a-f]{32}$'), phone text NOT NULL CHECK (phone ~ '^\+[1-9][0-9]{7,14}$'), digest bytea NOT NULL CHECK (octet_length(digest) = 32), expires_at timestamptz NOT NULL, attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0), consumed_at timestamptz);
-CREATE INDEX IF NOT EXISTS identity_otp_challenges_expiry_idx ON identity_otp_challenges (expires_at);
-CREATE TABLE IF NOT EXISTS identity_otp_issuances (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, phone_key bytea NOT NULL CHECK (octet_length(phone_key) = 32), client_key bytea NOT NULL CHECK (octet_length(client_key) = 32), created_at timestamptz NOT NULL);
-CREATE INDEX IF NOT EXISTS identity_otp_issuances_phone_time_idx ON identity_otp_issuances (phone_key, created_at);
-CREATE INDEX IF NOT EXISTS identity_otp_issuances_client_time_idx ON identity_otp_issuances (client_key, created_at);
-CREATE TABLE IF NOT EXISTS identity_sessions (token_hash bytea PRIMARY KEY CHECK (octet_length(token_hash) = 32), user_id text NOT NULL REFERENCES identity_users (id), created_at timestamptz NOT NULL, expires_at timestamptz NOT NULL, revoked_at timestamptz, CHECK (expires_at > created_at));
-CREATE INDEX IF NOT EXISTS identity_sessions_user_idx ON identity_sessions (user_id);
-CREATE INDEX IF NOT EXISTS identity_sessions_expiry_idx ON identity_sessions (expires_at);
-CREATE TABLE IF NOT EXISTS identity_tenants (id text PRIMARY KEY CHECK (id ~ '^[a-z][a-z0-9.-]{1,62}$'), display_name text NOT NULL, status text NOT NULL CHECK (status IN ('active', 'suspended')), created_at timestamptz NOT NULL);
-INSERT INTO identity_tenants (id, display_name, status, created_at) VALUES ('zonited-solutions', 'Zonited Solutions', 'active', CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING;
-CREATE TABLE IF NOT EXISTS identity_channels (id text PRIMARY KEY CHECK (id ~ '^[a-z][a-z0-9.-]{1,62}$'), tenant_id text NOT NULL REFERENCES identity_tenants (id), audience text NOT NULL CHECK (audience IN ('customer', 'vendor', 'zone-admin', 'tenant-admin')), auto_register boolean NOT NULL DEFAULT false, enabled boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL);
-CREATE INDEX IF NOT EXISTS identity_channels_tenant_idx ON identity_channels (tenant_id);
 CREATE TABLE IF NOT EXISTS identity_channel_subjects (id text PRIMARY KEY CHECK (id ~ '^[0-9a-f]{32}$'), channel_id text NOT NULL REFERENCES identity_channels (id), external_subject_key bytea NOT NULL CHECK (octet_length(external_subject_key) = 32), user_id text REFERENCES identity_users (id), status text NOT NULL CHECK (status IN ('pending', 'linked', 'blocked')), created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL, UNIQUE (channel_id, external_subject_key));
 CREATE INDEX IF NOT EXISTS identity_channel_subjects_user_idx ON identity_channel_subjects (user_id);
-ALTER TABLE identity_sessions ADD COLUMN IF NOT EXISTS session_id text;
-ALTER TABLE identity_sessions ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'zonited-solutions' REFERENCES identity_tenants (id);
-ALTER TABLE identity_sessions ADD COLUMN IF NOT EXISTS channel_id text NOT NULL DEFAULT 'customer-web' REFERENCES identity_channels (id);
-ALTER TABLE identity_sessions ADD COLUMN IF NOT EXISTS subject_id text REFERENCES identity_channel_subjects (id);
-ALTER TABLE identity_sessions ADD COLUMN IF NOT EXISTS audience text NOT NULL DEFAULT 'customer';
-ALTER TABLE identity_sessions ADD COLUMN IF NOT EXISTS auth_method text NOT NULL DEFAULT 'mobile_otp';
-INSERT INTO identity_channels (id, tenant_id, audience, auto_register, enabled, created_at, updated_at) VALUES ('customer-web', 'zonited-solutions', 'customer', true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING;
-INSERT INTO identity_channels (id, tenant_id, audience, auto_register, enabled, created_at, updated_at) VALUES ('customer-whatsapp', 'zonited-solutions', 'customer', true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (id) DO NOTHING;
-CREATE UNIQUE INDEX IF NOT EXISTS identity_sessions_session_id_idx ON identity_sessions (session_id) WHERE session_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS identity_sessions_subject_idx ON identity_sessions (subject_id);
 CREATE TABLE IF NOT EXISTS identity_zones (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES identity_tenants (id), name text NOT NULL, latitude double precision NOT NULL CHECK (latitude >= -90 AND latitude <= 90), longitude double precision NOT NULL CHECK (longitude >= -180 AND longitude <= 180), join_radius_m integer NOT NULL DEFAULT 1000 CHECK (join_radius_m BETWEEN 1 AND 10000), status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')), created_at timestamptz NOT NULL);
 ALTER TABLE identity_zones ADD COLUMN IF NOT EXISTS join_radius_m integer NOT NULL DEFAULT 1000;
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'identity_zones_join_radius_m_check') THEN ALTER TABLE identity_zones ADD CONSTRAINT identity_zones_join_radius_m_check CHECK (join_radius_m BETWEEN 1 AND 10000); END IF; END $$;
@@ -82,15 +54,13 @@ CREATE INDEX IF NOT EXISTS identity_request_attempts_bucket_time_idx ON identity
 CREATE INDEX IF NOT EXISTS identity_request_attempts_time_idx ON identity_request_attempts (created_at);`
 
 type config struct {
-	environment, address, databaseURL, origin, socketParent string
-	deliveryMode, messagingURL                              string
-	deliveryChannels                                        []string
-	otpKey, rateKey, internalKey, deliveryKey               []byte
-	proxies                                                 []netip.Prefix
+	environment, address, databaseURL, origin, authServiceURL string
+	rateKey, internalKey                                      []byte
+	proxies                                                   []netip.Prefix
 }
 
 func loadConfig(get func(string) string) (config, error) {
-	c := config{environment: get("APPLICATION_IDENTITY_ENV"), address: get("APPLICATION_IDENTITY_LISTEN_ADDR"), databaseURL: get("APPLICATION_IDENTITY_DATABASE_URL"), origin: get("APPLICATION_IDENTITY_ORIGIN"), socketParent: get("APPLICATION_IDENTITY_OTP_SOCKET_PARENT"), deliveryMode: strings.TrimSpace(get("APPLICATION_IDENTITY_OTP_DELIVERY_MODE")), messagingURL: strings.TrimSpace(get("APPLICATION_IDENTITY_MESSAGING_URL"))}
+	c := config{environment: get("APPLICATION_IDENTITY_ENV"), address: get("APPLICATION_IDENTITY_LISTEN_ADDR"), databaseURL: get("APPLICATION_IDENTITY_DATABASE_URL"), origin: get("APPLICATION_IDENTITY_ORIGIN"), authServiceURL: strings.TrimSpace(get("APPLICATION_IDENTITY_AUTH_SERVICE_URL"))}
 	if c.environment == "" {
 		c.environment = "local"
 	}
@@ -100,31 +70,12 @@ func loadConfig(get func(string) string) (config, error) {
 	if c.address == "" {
 		c.address = ":8080"
 	}
-	if c.socketParent == "" {
-		c.socketParent = "/tmp"
+	if c.authServiceURL == "" {
+		return config{}, errors.New("APPLICATION_IDENTITY_AUTH_SERVICE_URL is required")
 	}
-	if c.deliveryMode == "" {
-		c.deliveryMode = "local"
-	}
-	if c.deliveryMode != "local" && c.deliveryMode != "event" {
-		return config{}, errors.New("APPLICATION_IDENTITY_OTP_DELIVERY_MODE must be local or event")
-	}
-	if c.deliveryMode == "local" && c.environment == "production" {
-		return config{}, errors.New("production identity requires event OTP delivery")
-	}
-	channels := strings.Split(strings.TrimSpace(get("APPLICATION_IDENTITY_DELIVERY_CHANNELS")), ",")
-	for _, channel := range channels {
-		channel = strings.TrimSpace(channel)
-		if channel == "" {
-			continue
-		}
-		if !regexp.MustCompile(`^[a-z][a-z0-9.-]{1,62}$`).MatchString(channel) {
-			return config{}, errors.New("APPLICATION_IDENTITY_DELIVERY_CHANNELS contains an invalid channel")
-		}
-		c.deliveryChannels = append(c.deliveryChannels, channel)
-	}
-	if len(c.deliveryChannels) == 0 {
-		c.deliveryChannels = []string{"whatsapp"}
+	authURL, err := url.Parse(c.authServiceURL)
+	if err != nil || (authURL.Scheme != "http" && authURL.Scheme != "https") || authURL.Host == "" || authURL.User != nil || authURL.Path != "" || authURL.RawQuery != "" || authURL.Fragment != "" {
+		return config{}, errors.New("APPLICATION_IDENTITY_AUTH_SERVICE_URL must be an HTTP(S) origin without a path")
 	}
 	if c.databaseURL == "" {
 		return config{}, errors.New("APPLICATION_IDENTITY_DATABASE_URL is required")
@@ -136,16 +87,7 @@ func loadConfig(get func(string) string) (config, error) {
 	entries := []struct {
 		name string
 		dst  *[]byte
-	}{{"APPLICATION_IDENTITY_OTP_KEY", &c.otpKey}, {"APPLICATION_IDENTITY_RATE_KEY", &c.rateKey}, {"APPLICATION_IDENTITY_INTERNAL_KEY", &c.internalKey}}
-	if c.deliveryMode == "event" {
-		entries = append(entries, struct {
-			name string
-			dst  *[]byte
-		}{"APPLICATION_IDENTITY_DELIVERY_KEY", &c.deliveryKey})
-		if c.messagingURL == "" {
-			return config{}, errors.New("APPLICATION_IDENTITY_MESSAGING_URL is required for event delivery")
-		}
-	}
+	}{{"APPLICATION_IDENTITY_RATE_KEY", &c.rateKey}, {"APPLICATION_IDENTITY_INTERNAL_KEY", &c.internalKey}}
 	for _, entry := range entries {
 		decoded, err := base64.StdEncoding.DecodeString(get(entry.name))
 		if err != nil || len(decoded) < 32 {
@@ -153,14 +95,8 @@ func loadConfig(get func(string) string) (config, error) {
 		}
 		*entry.dst = decoded
 	}
-	if subtle.ConstantTimeCompare(c.otpKey, c.rateKey) == 1 {
-		return config{}, errors.New("OTP and rate keys must be distinct")
-	}
-	if subtle.ConstantTimeCompare(c.otpKey, c.internalKey) == 1 || subtle.ConstantTimeCompare(c.rateKey, c.internalKey) == 1 {
-		return config{}, errors.New("identity internal key must be distinct from OTP and rate keys")
-	}
-	if c.deliveryMode == "event" && (subtle.ConstantTimeCompare(c.deliveryKey, c.otpKey) == 1 || subtle.ConstantTimeCompare(c.deliveryKey, c.rateKey) == 1 || subtle.ConstantTimeCompare(c.deliveryKey, c.internalKey) == 1) {
-		return config{}, errors.New("identity delivery key must be distinct from other identity keys")
+	if subtle.ConstantTimeCompare(c.rateKey, c.internalKey) == 1 {
+		return config{}, errors.New("identity internal key must be distinct from the rate key")
 	}
 	for _, raw := range strings.Split(get("APPLICATION_IDENTITY_TRUSTED_PROXIES"), ",") {
 		if strings.TrimSpace(raw) == "" {
@@ -176,19 +112,6 @@ func loadConfig(get func(string) string) (config, error) {
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "take-code" {
-		if len(os.Args) != 6 || os.Args[2] != "--socket" || os.Args[4] != "--phone" {
-			fmt.Fprintln(os.Stderr, "usage: application-identity take-code --socket PATH --phone +...")
-			os.Exit(2)
-		}
-		code, err := identity.TakeDevelopmentCode(context.Background(), os.Args[3], os.Args[5])
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		fmt.Println(code)
-		return
-	}
 	c, err := loadConfig(os.Getenv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -245,43 +168,13 @@ func main() {
 		_ = server.Shutdown(context.Background())
 		return
 	}
-	var sender identity.Sender
-	var messagingClient *messaging.Client
-	if c.deliveryMode == "event" {
-		messagingClient, err = connectMessaging(ctx, c.messagingURL, "application-identity")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "identity messaging: ", err)
-			_ = server.Shutdown(context.Background())
-			return
-		}
-		defer messagingClient.Close()
-		sender = &otpEventSender{client: messagingClient, key: c.deliveryKey, channels: c.deliveryChannels}
-	} else {
-		inbox, inboxErr := identity.NewDevelopmentInbox(c.environment, 5*time.Minute, 1000)
-		if inboxErr != nil {
-			fmt.Fprintln(os.Stderr, inboxErr)
-			os.Exit(1)
-		}
-		socket, socketErr := identity.NewDevelopmentSocket(c.environment, inbox, c.socketParent)
-		if socketErr != nil {
-			fmt.Fprintln(os.Stderr, "identity OTP socket: ", socketErr)
-			os.Exit(1)
-		}
-		defer socket.Close()
-		go func() { _ = socket.Serve() }()
-		sender = inbox
-	}
-	store, err := identity.NewPostgresStore(db, c.rateKey, identity.PostgresLimits{Window: 10 * time.Minute, PerPhone: 5, PerClient: 20, MaxAttempts: 5})
+	store, err := identity.NewPostgresStore(db, c.rateKey)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	service, err := identity.New(store, sender, c.otpKey, 5*time.Minute, 30*24*time.Hour)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	service.SetOrigin(c.origin)
+	authClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("auth service redirect rejected") }}
+	service := identity.NewOnboardingService(store, c.origin, identity.HTTPPrincipalResolver{URL: c.authServiceURL, Client: authClient})
 	limiter, err := identity.NewPostgresRequestLimiter(db, c.rateKey, 10*time.Minute, map[string]int{"/api/shared/v1/auth/otp/challenges": 20, "/api/shared/v1/auth/otp/verify": 50, "/api/shared/v1/onboarding/nearby": 60, "/api/shared/v1/onboarding/join": 20, "/api/shared/v1/onboarding/zone-requests": 10})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -292,7 +185,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	auth := identity.HTTPHandler{Service: service, Limiter: limiter, ClientKey: clientKey, AllowedOrigin: c.origin, InternalKey: c.internalKey}
+	auth := identity.HTTPHandler{Service: service, Limiter: limiter, ClientKey: clientKey, AllowedOrigin: c.origin, InternalKey: c.internalKey, AuthServiceURL: c.authServiceURL, AuthClient: authClient}
 	router.Set(auth)
 	initialized.Store(true)
 	fmt.Fprintln(os.Stdout, "{\"level\":\"info\",\"service\":\"identity\",\"event\":\"database_ready\",\"message\":\"identity database ready\"}")

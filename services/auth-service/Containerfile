@@ -9,7 +9,7 @@ ARG TARGETARCH
 WORKDIR /src
 COPY go.mod ./
 COPY . ./
-RUN test -n "${TARGETARCH}" && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -ldflags="-s -w -X main.buildVersion=${BUILD_VERSION}" -o /out/auth-service ./cmd/auth-service
+RUN test -n "${TARGETARCH}" && CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor -trimpath -ldflags="-s -w -X main.buildVersion=${BUILD_VERSION}" -o /out/auth-service ./cmd/auth-service
 
 FROM ${RUNTIME_IMAGE}
 ARG RUNTIME_PREBAKED

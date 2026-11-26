@@ -10,37 +10,34 @@ import (
 	"time"
 )
 
-type principalTestStore struct {
-	*memoryStore
-	principal Principal
-}
+type principalTestStore struct{ principal Principal }
 
-func (s *principalTestStore) LookupPrincipal(_ context.Context, _ [32]byte, _ time.Time) (Principal, error) {
+func (s *principalTestStore) CreateDiscoveryLink(context.Context, [32]byte, Principal, time.Time) error {
+	return nil
+}
+func (s *principalTestStore) LookupDiscoveryPrincipal(context.Context, [32]byte, time.Time) (Principal, error) {
 	return s.principal, nil
 }
-
+func (s *principalTestStore) NearbyZones(context.Context, string, float64, float64, float64, int) ([]Zone, error) {
+	return nil, nil
+}
+func (s *principalTestStore) ListActiveMemberships(context.Context, string, string) ([]ActiveMembership, error) {
+	return nil, nil
+}
+func (s *principalTestStore) CreateZoneJoinRequest(context.Context, string, string, string, float64, float64, time.Time) (JoinRequest, error) {
+	return JoinRequest{}, nil
+}
+func (s *principalTestStore) CreateZoneCreationRequest(context.Context, string, string, string, time.Time) (ZoneCreationRequest, error) {
+	return ZoneCreationRequest{}, nil
+}
 func (s *principalTestStore) ResolveChannelSession(_ context.Context, req ChannelSessionRequest, _ [32]byte, sessionID string, _, expires time.Time) (Principal, error) {
-	s.principal = Principal{
-		ApplicationUserID: "user-1",
-		TenantID:          req.TenantID,
-		ChannelID:         req.ChannelID,
-		Audience:          CustomerAudience,
-		SubjectID:         "subject-1",
-		SessionID:         sessionID,
-		AuthMethod:        "channel_proof",
-		ExpiresAt:         expires,
-		Permissions:       []string{},
-	}
+	s.principal = Principal{ApplicationUserID: "user-1", TenantID: req.TenantID, ChannelID: req.ChannelID, Audience: CustomerAudience, SubjectID: "subject-1", SessionID: sessionID, AuthMethod: "channel_proof", ExpiresAt: expires, Permissions: []string{}}
 	return s.principal, nil
 }
 
 func TestInternalPrincipalResolutionRequiresTargetKey(t *testing.T) {
-	store := &principalTestStore{memoryStore: newMemoryStore()}
-	store.principal = Principal{ApplicationUserID: "user-1"}
-	service, err := New(store, &testSender{}, []byte(strings.Repeat("k", 32)), time.Minute, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
+	store := &principalTestStore{principal: Principal{ApplicationUserID: "user-1"}}
+	service := NewOnboardingService(store, "https://app.example", nil)
 	key := []byte(strings.Repeat("i", 32))
 	h := HTTPHandler{Service: service, InternalKey: key}
 	request := func(header string) *httptest.ResponseRecorder {
@@ -65,22 +62,10 @@ func TestInternalPrincipalResolutionRequiresTargetKey(t *testing.T) {
 	}
 }
 
-func TestPrincipalRejectsInvalidTenantAndInvalidSession(t *testing.T) {
-	store := &principalTestStore{memoryStore: newMemoryStore()}
-	store.principal = Principal{ApplicationUserID: "user-1"}
-	service, err := New(store, &testSender{}, []byte(strings.Repeat("k", 32)), time.Minute, time.Hour)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := service.ResolveChannelSession(context.Background(), ChannelSessionRequest{TenantID: "not valid", ChannelID: CustomerWebChannelID, SubjectID: "subject"}); err == nil {
-		t.Fatal("invalid tenant accepted")
-	}
-	if _, err := service.Principal(context.Background(), "not-a-token"); err != ErrUnauthenticated {
-		t.Fatalf("invalid session error = %v", err)
-	}
-	if _, err := service.Principal(context.Background(), base64.RawURLEncoding.EncodeToString(make([]byte, 32))); err != nil {
-		// The test store intentionally returns a principal for any valid hash;
-		// this assertion makes sure the token shape is accepted before lookup.
-		t.Fatalf("valid-shaped session was not looked up: %v", err)
+func TestChannelPrincipalRequiresAuthResolverForWebSessions(t *testing.T) {
+	store := &principalTestStore{}
+	service := NewOnboardingService(store, "https://app.example", nil)
+	if _, err := service.Principal(context.Background(), base64.RawURLEncoding.EncodeToString(make([]byte, 32))); err == nil {
+		t.Fatal("web session resolved without auth service")
 	}
 }

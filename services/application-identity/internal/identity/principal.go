@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -58,32 +60,62 @@ type ChannelSessionRequest struct {
 	Phone     string `json:"phone,omitempty"`
 }
 
-// PrincipalStore is implemented by the durable identity store. It is kept
-// separate from Store so the existing web OTP tests and adapter contract stay
-// source-compatible while the generic principal contract is introduced.
+// PrincipalStore is implemented by the durable identity store for channel
+// subject linking. Browser session validation is delegated to Auth Service.
 type PrincipalStore interface {
-	LookupPrincipal(context.Context, [32]byte, time.Time) (Principal, error)
 	ResolveChannelSession(context.Context, ChannelSessionRequest, [32]byte, string, time.Time, time.Time) (Principal, error)
 }
 
-// Principal resolves a valid application session without exposing its token.
-func (s *Service) Principal(ctx context.Context, token string) (Principal, error) {
-	decoded, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil || len(decoded) != 32 {
+// PrincipalResolver is the small auth boundary used by onboarding. Keeping
+// it separate from the domain store lets Auth Service live in another
+// namespace, cluster, or EC2 instance; the current schema still requires the
+// Auth and domain stores to use the same durable PostgreSQL data source.
+type PrincipalResolver interface {
+	ResolvePrincipal(context.Context, string) (Principal, error)
+}
+
+type HTTPPrincipalResolver struct {
+	URL    string
+	Client *http.Client
+}
+
+func (c HTTPPrincipalResolver) ResolvePrincipal(ctx context.Context, token string) (Principal, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.URL, "/")+"/api/shared/v1/auth/principal", nil)
+	if err != nil {
+		return Principal{}, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	client := c.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return Principal{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusUnauthorized {
 		return Principal{}, ErrUnauthenticated
 	}
-	store, ok := s.store.(PrincipalStore)
-	if !ok {
-		return Principal{}, errors.New("principal lookup is unavailable")
+	if response.StatusCode/100 != 2 {
+		return Principal{}, fmt.Errorf("auth principal lookup returned status %d", response.StatusCode)
 	}
-	principal, err := store.LookupPrincipal(ctx, sha256.Sum256([]byte(token)), s.now())
-	if err != nil {
+	var principal Principal
+	if err := json.NewDecoder(response.Body).Decode(&principal); err != nil {
 		return Principal{}, err
 	}
 	if principal.ApplicationUserID == "" {
 		return Principal{}, ErrUnauthenticated
 	}
 	return principal, nil
+}
+
+// Principal resolves a valid application session without exposing its token.
+func (s *Service) Principal(ctx context.Context, token string) (Principal, error) {
+	if s.principalResolver == nil {
+		return Principal{}, errors.New("auth service principal resolver is unavailable")
+	}
+	return s.principalResolver.ResolvePrincipal(ctx, token)
 }
 
 // ResolveChannelSession links a validated channel subject to an application
@@ -103,10 +135,7 @@ func (s *Service) ResolveChannelSession(ctx context.Context, request ChannelSess
 	if request.Phone != "" && !phonePattern.MatchString(request.Phone) {
 		return "", Principal{}, ErrInvalidPhone
 	}
-	store, ok := s.store.(PrincipalStore)
-	if !ok {
-		return "", Principal{}, errors.New("principal resolution is unavailable")
-	}
+	store := s.store
 	rawToken := make([]byte, 32)
 	if _, err := rand.Read(rawToken); err != nil {
 		return "", Principal{}, fmt.Errorf("generate channel session token: %w", err)

@@ -73,10 +73,6 @@ func (s *Service) ActiveMemberships(ctx context.Context, sessionToken string) ([
 	return memberships, principal, err
 }
 
-func (s *Service) SetOrigin(origin string) {
-	s.origin = strings.TrimRight(strings.TrimSpace(origin), "/")
-}
-
 func (s *Service) ResolveChannelDiscovery(ctx context.Context, request ChannelSessionRequest) (string, Principal, string, error) {
 	token, principal, err := s.ResolveChannelSession(ctx, request)
 	if err != nil {

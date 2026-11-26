@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 )
 
 const SessionCookieName = "__Host-app_session"
@@ -28,6 +29,12 @@ type HTTPHandler struct {
 	ClientKey     ClientKey
 	AllowedOrigin string
 	InternalKey   []byte
+	// AuthServiceURL is the configured authentication boundary. Authentication
+	// routes are forwarded without reimplementing OTP or session behavior in
+	// this service. It may be an in-cluster URL or a deployment-time external
+	// URL.
+	AuthServiceURL string
+	AuthClient     *http.Client
 }
 
 func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -52,121 +59,56 @@ func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.requestZoneCreation(w, r)
 		return
 	}
-	if r.URL.Path != "/api/shared/v1/auth/otp/challenges" && r.URL.Path != "/api/shared/v1/auth/otp/verify" && r.URL.Path != "/api/shared/v1/auth/logout" && r.URL.Path != "/api/shared/v1/auth/session" {
+	if !isAuthProxyPath(r.URL.Path) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.URL.Path == "/api/shared/v1/auth/session" {
-		h.sessionStatus(w, r)
+	if h.AuthServiceURL == "" {
+		authError(w, http.StatusServiceUnavailable, "Authentication service is unavailable.")
 		return
 	}
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		authError(w, http.StatusMethodNotAllowed, "Method not allowed.")
-		return
+	h.proxyAuth(w, r)
+}
+
+func isAuthProxyPath(path string) bool {
+	switch path {
+	case "/api/v1/auth/capabilities", "/api/shared/v1/auth/otp/challenges", "/api/shared/v1/auth/otp/verify", "/api/shared/v1/auth/logout", "/api/shared/v1/auth/session", "/api/shared/v1/auth/principal":
+		return true
+	default:
+		return false
 	}
-	if h.Service == nil || h.Limiter == nil || h.ClientKey == nil || h.AllowedOrigin == "" {
-		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable.")
-		return
+}
+
+func (h HTTPHandler) proxyAuth(w http.ResponseWriter, r *http.Request) {
+	base := strings.TrimRight(h.AuthServiceURL, "/")
+	requestURL := base + r.URL.Path
+	if r.URL.RawQuery != "" {
+		requestURL += "?" + r.URL.RawQuery
 	}
-	if r.Header.Get("Origin") != h.AllowedOrigin {
-		authError(w, http.StatusForbidden, "Request origin is not allowed.")
-		return
-	}
-	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || contentType != "application/json" {
-		authError(w, http.StatusUnsupportedMediaType, "Send JSON content.")
-		return
-	}
-	if r.URL.Path == "/api/shared/v1/auth/logout" {
-		var input struct{}
-		if !readAuthJSON(w, r, &input) {
-			return
-		}
-		cookie, err := r.Cookie(SessionCookieName)
-		if err != nil && !errors.Is(err, http.ErrNoCookie) {
-			authError(w, http.StatusBadRequest, "Invalid session cookie.")
-			return
-		}
-		if cookie != nil {
-			if err := h.Service.SignOut(r.Context(), cookie.Value); err != nil {
-				authError(w, http.StatusServiceUnavailable, "Could not sign out. Try again.")
-				return
-			}
-		}
-		http.SetCookie(w, &http.Cookie{Name: SessionCookieName, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
-		writeAuthJSON(w, http.StatusOK, struct{}{})
-		return
-	}
-	key, err := h.ClientKey(r)
-	if err != nil || key == "" {
-		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable.")
-		return
-	}
-	allowed, err := h.Limiter.Allow(r.Context(), key, r.URL.Path)
+	request, err := http.NewRequestWithContext(r.Context(), r.Method, requestURL, r.Body)
 	if err != nil {
 		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable.")
 		return
 	}
-	if !allowed {
-		authError(w, http.StatusTooManyRequests, "Too many attempts. Try again later.")
-		return
+	request.Header = r.Header.Clone()
+	request.Host = ""
+	client := h.AuthClient
+	if client == nil {
+		client = http.DefaultClient
 	}
-	if r.URL.Path == "/api/shared/v1/auth/otp/challenges" {
-		var input struct {
-			Phone            string   `json:"phone"`
-			DeliveryChannels []string `json:"delivery_channels,omitempty"`
-		}
-		if !readAuthJSON(w, r, &input) {
-			return
-		}
-		delivery := OTPDeliveryRequest{Factor: "otp", DeliveryChannels: input.DeliveryChannels, Purpose: "login", OriginChannel: "web", Audience: CustomerAudience, TenantID: DefaultTenantID}
-		if len(delivery.DeliveryChannels) == 0 {
-			delivery.DeliveryChannels = []string{"whatsapp"}
-		}
-		id, err := h.Service.BeginWithDelivery(r.Context(), input.Phone, key, delivery)
-		if errors.Is(err, ErrInvalidPhone) {
-			authError(w, http.StatusBadRequest, "Enter a valid mobile number with country code.")
-			return
-		}
-		if errors.Is(err, ErrRateLimited) {
-			authError(w, http.StatusTooManyRequests, "Too many attempts. Try again later.")
-			return
-		}
-		if err != nil {
-			authError(w, http.StatusServiceUnavailable, "Could not send a code. Try again.")
-			return
-		}
-		writeAuthJSON(w, http.StatusCreated, struct {
-			ChallengeID string `json:"challenge_id"`
-		}{ChallengeID: id})
-		return
-	}
-	var input struct {
-		ChallengeID string `json:"challenge_id"`
-		Code        string `json:"code"`
-	}
-	if !readAuthJSON(w, r, &input) {
-		return
-	}
-	token, expires, err := h.Service.Verify(r.Context(), input.ChallengeID, input.Code)
-	if errors.Is(err, ErrInvalidChallenge) {
-		authError(w, http.StatusUnauthorized, "The code is invalid or expired.")
-		return
-	}
-	if errors.Is(err, ErrRateLimited) {
-		authError(w, http.StatusTooManyRequests, "Too many attempts. Try again later.")
-		return
-	}
+	response, err := client.Do(request)
 	if err != nil {
-		authError(w, http.StatusServiceUnavailable, "Could not verify the code. Try again.")
+		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable.")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: SessionCookieName, Value: token, Path: "/", Secure: true, HttpOnly: true,
-		SameSite: http.SameSiteLaxMode, Expires: expires,
-	})
-	writeAuthJSON(w, http.StatusOK, struct{}{})
+	defer response.Body.Close()
+	for key, values := range response.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	w.WriteHeader(response.StatusCode)
+	_, _ = io.Copy(w, response.Body)
 }
 
 // resolveChannelPrincipal is deliberately outside the public /api/shared
@@ -407,45 +349,6 @@ func (h HTTPHandler) sessionCookie(r *http.Request) string {
 func validInternalKey(encoded string, expected []byte) bool {
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	return err == nil && subtle.ConstantTimeCompare(decoded, expected) == 1
-}
-
-// sessionStatus exposes only whether this cookie is currently valid. It does
-// not return a phone number, token, user ID, staff grants, or session lifetime.
-func (h HTTPHandler) sessionStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", "GET")
-		authError(w, http.StatusMethodNotAllowed, "Method not allowed.")
-		return
-	}
-	if r.URL.RawQuery != "" {
-		authError(w, http.StatusBadRequest, "Invalid request.")
-		return
-	}
-	if h.Service == nil {
-		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable.")
-		return
-	}
-	cookie, err := r.Cookie(SessionCookieName)
-	if errors.Is(err, http.ErrNoCookie) {
-		authError(w, http.StatusUnauthorized, "Sign in first.")
-		return
-	}
-	if err != nil {
-		authError(w, http.StatusBadRequest, "Invalid session cookie.")
-		return
-	}
-	_, err = h.Service.UserID(r.Context(), cookie.Value)
-	if errors.Is(err, ErrUnauthenticated) {
-		authError(w, http.StatusUnauthorized, "Sign in first.")
-		return
-	}
-	if err != nil {
-		authError(w, http.StatusServiceUnavailable, "Sign-in is unavailable.")
-		return
-	}
-	writeAuthJSON(w, http.StatusOK, struct {
-		Authenticated bool `json:"authenticated"`
-	}{true})
 }
 
 func readAuthJSON(w http.ResponseWriter, r *http.Request, target any) bool {

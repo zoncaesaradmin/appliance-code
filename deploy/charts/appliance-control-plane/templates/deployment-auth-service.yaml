@@ -25,8 +25,42 @@ spec:
           image: {{ .Values.applicationServices.auth.image.reference | quote }}
           imagePullPolicy: {{ .Values.applicationServices.auth.image.pullPolicy }}
           env:
+            - name: AUTH_SERVICE_ENV
+              value: {{ .Values.applicationServices.auth.environment | quote }}
             - name: AUTH_SERVICE_LISTEN_ADDR
               value: :{{ .Values.applicationServices.auth.service.port }}
+            - name: AUTH_SERVICE_ORIGIN
+              value: {{ include "appliance-control-plane.applicationIdentityOrigin" . | quote }}
+            - name: AUTH_SERVICE_OTP_SOCKET_PARENT
+              value: {{ .Values.applicationServices.auth.socketParent | quote }}
+            - name: AUTH_SERVICE_OTP_DELIVERY_MODE
+              value: {{ .Values.applicationServices.auth.deliveryMode | quote }}
+            - name: AUTH_SERVICE_DELIVERY_CHANNELS
+              value: {{ join "," .Values.applicationServices.auth.deliveryChannels | quote }}
+            {{- if eq .Values.applicationServices.auth.deliveryMode "event" }}
+            - name: AUTH_SERVICE_MESSAGING_URL
+              value: {{ include "appliance-control-plane.messagingURL" . | quote }}
+            {{- end }}
+            - name: AUTH_SERVICE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.auth.database.connectionSecretName | quote }}
+                  key: {{ .Values.applicationServices.auth.database.connectionSecretKey | quote }}
+            - name: AUTH_SERVICE_OTP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.auth.secretName | quote }}
+                  key: {{ .Values.applicationServices.auth.otpKey | quote }}
+            - name: AUTH_SERVICE_RATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.auth.secretName | quote }}
+                  key: {{ .Values.applicationServices.auth.rateKey | quote }}
+            - name: AUTH_SERVICE_DELIVERY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.applicationServices.auth.secretName | quote }}
+                  key: {{ .Values.applicationServices.auth.deliveryKey | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.applicationServices.auth.service.port }}
@@ -34,6 +68,9 @@ spec:
             {{- toYaml .Values.applicationServices.auth.containerSecurityContext | nindent 12 }}
           resources:
             {{- toYaml .Values.applicationServices.auth.resources | nindent 12 }}
+          volumeMounts:
+            - name: otp-socket
+              mountPath: {{ .Values.applicationServices.auth.socketParent | quote }}
           livenessProbe:
             httpGet:
               path: /health/live
@@ -46,4 +83,7 @@ spec:
               port: http
             periodSeconds: 10
             failureThreshold: 3
+      volumes:
+        - name: otp-socket
+          emptyDir: {}
 {{- end }}

@@ -1,10 +1,14 @@
 # Application identity
 
-This service owns the Zonited application mobile sign-in contract. It is
-separate from the appliance operator authentication API.
+This service owns the Zonited application onboarding and identity-domain
+contract. Mobile OTP challenge issuance, verification, and browser session
+creation are owned by the `auth-service` capability. It is separate from the
+appliance operator authentication API.
 
 The public API is:
 
+- `GET /api/v1/auth/capabilities` for the Auth Service's enabled authentication
+  methods and delivery channels
 - `POST /api/shared/v1/auth/otp/challenges` with `{"phone":"+..."}`
 - `POST /api/shared/v1/auth/otp/verify` with `{"challenge_id":"...","code":"123456"}`
 - `GET /api/shared/v1/auth/session`
@@ -20,19 +24,18 @@ The public API is:
 - `POST /api/shared/v1/onboarding/zone-requests` with an authenticated session
   and a requested Zonity name
 
-Local/test deployments use the CAPP-compatible development inbox. Codes are
-held in memory and can be retrieved only through the owner-only Unix socket
-created under `APPLICATION_IDENTITY_OTP_SOCKET_PARENT`; the socket is never
-exposed through a Kubernetes Service or ingress. Integrated deployments use
-the provider-neutral event mode: the service publishes an encrypted
-`event.identity.otp.requested` event to the appliance JetStream broker and a
-configured channel adapter performs provider delivery. The identity service
-does not import Meta or any other provider. Event mode is required when the
-service runs with `APPLICATION_IDENTITY_ENV=production`.
+The public auth paths remain available through this service as a routing
+boundary, but are always forwarded to the deployment-configured Auth Service
+endpoint. The identity service also asks that endpoint to resolve an
+authenticated principal for onboarding; it does not implement OTP, session,
+or browser-authentication storage itself. The Auth Service owns the local
+development inbox and publishes the encrypted `event.identity.otp.requested`
+event in integrated deployments.
 
-The service creates the identity tables if they do not exist. OTP and request
-rate-limit keys are supplied by the installer through a target-generated
-Kubernetes Secret; the plaintext keys are never logged or included in a bundle.
+Auth Service initializes the shared authentication tables. This service
+initializes only onboarding/domain tables. Request rate-limit and internal
+boundary keys are supplied by the installer through target-generated
+Kubernetes Secrets; the plaintext keys are never logged or included in a bundle.
 
 The identity schema now has the first generic application-principal slice:
 the explicit `zonited-solutions` tenant (display name `Zonited Solutions`), server-side channel policies, keyed channel
@@ -51,7 +54,7 @@ the channel discovery link alone is read-only. Join requests are accepted only
 within each zone's join radius (1 km by default), and are auto-approved only
 when that zone has no active Zonity admin; otherwise they remain pending for
 Zonity admin review. There is no end-user zone creation API; creation is reserved
-for authorized tenant/platform staff. The web OTP adapter remains
+for authorized tenant/platform staff. The Auth Service's web OTP flow remains
 bound to the `customer-web` channel and keeps the existing public API contract.
 The channel integration can use the same contract when its identity resolver
 is configured; it passes only an opaque channel subject and normalized identity
@@ -63,6 +66,6 @@ For a local/test smoke test, an operator with access to the pod can retrieve a
 pending code without exposing it publicly:
 
 ```sh
-SOCKET=$(kubectl -n ace-apps exec deploy/identity -- sh -c 'find /var/run/zonited-identity -name inbox.sock -print -quit')
-kubectl -n ace-apps exec deploy/identity -- /application-identity take-code --socket "$SOCKET" --phone +919876543210
+SOCKET=$(kubectl -n ace-app-core exec deploy/auth-service -- sh -c 'find /var/run/zon-auth -name inbox.sock -print -quit')
+kubectl -n ace-app-core exec deploy/auth-service -- /auth-service take-code --socket "$SOCKET" --phone +919876543210
 ```

@@ -1,0 +1,11 @@
+{{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-auth-endpoint
+  namespace: {{ include "appliance-control-plane.appsNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.applicationIdentityLabels" . | nindent 4 }}
+data:
+  url: {{ .Values.applicationServices.identity.authServiceURL | quote }}
+{{- end }}

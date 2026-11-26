@@ -3,8 +3,15 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 )
+
+func handler() http.Handler {
+	ready := &atomic.Bool{}
+	ready.Store(true)
+	return authHandler{ready: ready}
+}
 
 func TestHandlerHealthAndCapabilities(t *testing.T) {
 	tests := []struct {
@@ -29,7 +36,23 @@ func TestHandlerHealthAndCapabilities(t *testing.T) {
 }
 
 func TestLoadConfigDefaultsAddress(t *testing.T) {
-	if got := loadConfig(func(string) string { return "" }).address; got != ":8080" {
+	get := func(name string) string {
+		switch name {
+		case "AUTH_SERVICE_DATABASE_URL":
+			return "postgres://example"
+		case "AUTH_SERVICE_ORIGIN":
+			return "https://app.example.com"
+		case "AUTH_SERVICE_OTP_KEY", "AUTH_SERVICE_RATE_KEY":
+			return "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2t="
+		default:
+			return ""
+		}
+	}
+	config, err := loadConfig(get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := config.address; got != ":8080" {
 		t.Fatalf("address = %q, want :8080", got)
 	}
 }

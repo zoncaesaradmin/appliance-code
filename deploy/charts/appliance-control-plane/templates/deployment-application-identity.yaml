@@ -31,33 +31,18 @@ spec:
               value: :{{ .Values.applicationServices.identity.service.port }}
             - name: APPLICATION_IDENTITY_ORIGIN
               value: {{ include "appliance-control-plane.applicationIdentityOrigin" . | quote }}
-            - name: APPLICATION_IDENTITY_OTP_SOCKET_PARENT
-              value: {{ .Values.applicationServices.identity.socketParent | quote }}
+            - name: APPLICATION_IDENTITY_AUTH_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: application-auth-endpoint
+                  key: url
             - name: APPLICATION_IDENTITY_TRUSTED_PROXIES
               value: {{ .Values.applicationServices.identity.trustedProxies | quote }}
-            - name: APPLICATION_IDENTITY_OTP_DELIVERY_MODE
-              value: {{ .Values.applicationServices.identity.deliveryMode | quote }}
-            - name: APPLICATION_IDENTITY_DELIVERY_CHANNELS
-              value: {{ join "," .Values.applicationServices.identity.deliveryChannels | quote }}
-            {{- if eq .Values.applicationServices.identity.deliveryMode "event" }}
-            - name: APPLICATION_IDENTITY_MESSAGING_URL
-              value: {{ include "appliance-control-plane.messagingURL" . | quote }}
-            - name: APPLICATION_IDENTITY_DELIVERY_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.applicationServices.identity.secretName | quote }}
-                  key: {{ .Values.applicationServices.identity.deliveryKey | quote }}
-            {{- end }}
             - name: APPLICATION_IDENTITY_DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.applicationServices.identity.database.connectionSecretName | quote }}
                   key: {{ .Values.applicationServices.identity.database.connectionSecretKey | quote }}
-            - name: APPLICATION_IDENTITY_OTP_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.applicationServices.identity.secretName | quote }}
-                  key: {{ .Values.applicationServices.identity.otpKey | quote }}
             - name: APPLICATION_IDENTITY_RATE_KEY
               valueFrom:
                 secretKeyRef:
@@ -71,9 +56,6 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.applicationServices.identity.service.port }}
-          volumeMounts:
-            - name: otp-socket
-              mountPath: {{ .Values.applicationServices.identity.socketParent | quote }}
           securityContext:
             {{- toYaml .Values.applicationServices.identity.containerSecurityContext | nindent 12 }}
           resources:
@@ -96,7 +78,4 @@ spec:
             httpGet:
               path: /health/ready
               port: http
-      volumes:
-        - name: otp-socket
-          emptyDir: {}
 {{- end }}

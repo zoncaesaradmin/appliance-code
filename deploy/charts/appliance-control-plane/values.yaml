@@ -418,6 +418,19 @@ applicationServices:
       pullPolicy: IfNotPresent
     service:
       port: 8080
+    environment: local
+    origin: ""
+    database:
+      connectionSecretName: controlplane-database-connection
+      connectionSecretKey: dsn
+    secretName: auth-service-secrets
+    otpKey: otp-key
+    rateKey: rate-key
+    deliveryKey: delivery-key
+    deliveryMode: local
+    deliveryChannels:
+      - whatsapp
+    socketParent: /var/run/zon-auth
     resources:
       requests:
         cpu: 10m
@@ -448,11 +461,20 @@ applicationServices:
       port: 8080
     environment: local
     origin: ""
+    # The identity proxy uses this deployment-time endpoint. The default is
+    # the co-packaged Auth Service; a remote HTTPS endpoint is also valid.
+    # Remote Auth and Identity deployments currently share the durable
+    # PostgreSQL auth/domain schema until a replicated user-store contract is
+    # introduced.
+    authServiceURL: http://auth-service.ace-app-core.svc.cluster.local:8080
+    # Optional private CIDRs for an external Auth Service deployment. Keep
+    # empty for the in-cluster endpoint; operators must explicitly allow the
+    # private network used by a remote Auth Service.
+    authServiceEgressCIDRs: []
     database:
       connectionSecretName: controlplane-database-connection
       connectionSecretKey: dsn
     secretName: application-identity-secrets
-    otpKey: otp-key
     rateKey: rate-key
     internalKey: internal-key
     deliveryKey: delivery-key
@@ -460,7 +482,6 @@ applicationServices:
     deliveryChannels:
       - whatsapp
     trustedProxies: ""
-    socketParent: /var/run/zonited-identity
     ingress:
       enabled: true
     resources:

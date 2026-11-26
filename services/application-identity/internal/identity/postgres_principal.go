@@ -176,37 +176,6 @@ func haversineKM(lat1, lon1, lat2, lon2 float64) float64 {
 	return earthRadiusKM * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
-func (s *PostgresStore) LookupPrincipal(ctx context.Context, token [32]byte, now time.Time) (Principal, error) {
-	var principal Principal
-	var subjectID, sessionID sql.NullString
-	err := s.db.QueryRowContext(ctx, `
-		SELECT s.user_id, s.tenant_id, s.channel_id, s.audience, s.auth_method,
-		       s.session_id, cs.id, s.expires_at
-		FROM identity_sessions s
-		LEFT JOIN identity_channel_subjects cs ON cs.id = s.subject_id AND cs.status = 'linked'
-		WHERE s.token_hash = $1 AND s.expires_at > $2 AND s.revoked_at IS NULL
-		ORDER BY cs.created_at ASC NULLS LAST
-		LIMIT 1`, token[:], now).Scan(
-		&principal.ApplicationUserID, &principal.TenantID, &principal.ChannelID,
-		&principal.Audience, &principal.AuthMethod, &sessionID, &subjectID, &principal.ExpiresAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Principal{}, ErrUnauthenticated
-	}
-	if err != nil {
-		return Principal{}, fmt.Errorf("lookup principal: %w", err)
-	}
-	if sessionID.Valid {
-		principal.SessionID = sessionID.String
-	}
-	if subjectID.Valid {
-		principal.SubjectID = subjectID.String
-	}
-	principal.Roles = []string{}
-	principal.Permissions = []string{}
-	principal.ZoneScopes = []string{}
-	return principal, nil
-}
-
 func (s *PostgresStore) ResolveChannelSession(ctx context.Context, request ChannelSessionRequest, tokenHash [32]byte, sessionID string, now, expires time.Time) (Principal, error) {
 	if request.TenantID == "" || request.ChannelID == "" || request.SubjectID == "" || sessionID == "" || !expires.After(now) {
 		return Principal{}, ErrSubjectNotLinked

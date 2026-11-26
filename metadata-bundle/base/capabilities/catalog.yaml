@@ -41,7 +41,7 @@ capabilities:
       required: [ordering-image]
   application-identity:
     displayName: Application Identity
-    requires: [base]
+    requires: [base, application-auth]
     conflicts: []
     license:
       requiredEntitlement: zon.capabilities.application-identity
