@@ -26,7 +26,13 @@
 
 ## Layout and components
 
-- Login keeps the split story/form layout; the signed-in app uses a spacious service index with three service tabs.
+- Login uses a Neighborhood Canvas: a bundled local-life illustration fills the
+  viewport, a compact story plate carries the public benefit line, and the
+  authentication controls remain in a focused warm-cream panel. On narrow
+  screens the artwork becomes a short header above the form.
+- Login artwork is a release asset, not a network dependency. It must remain
+  available from the offline static-shell cache and must not load from
+  `zonited.com` or another public origin.
 - The application shell has no operator-console, account, or administration links. Application and operator URL spaces remain separate.
 - Inputs retain visible labels, focus rings, keyboard operation, and inline errors.
 - Mobile OTP entry separates country selection from the local number; India (+91) is the default and the local number is digit-only with country-specific length validation.
@@ -62,3 +68,6 @@
 - 2026-11-25: Added the application logo to the offline shell so the sign-in identity remains visible in the PWA cache.
 - 2026-11-25: Made the application home membership-aware, showing compact active Zonity access and a location-based join dialog before service tabs become available.
 - 2026-11-25: Added coordinate-aware nearby results, an onboarding map with OpenStreetMap attribution, searched-location confirmation, and a choose-another-location flow.
+- 2026-11-26: Replaced the full-height split login with the Neighborhood Canvas,
+  using a login-specific bundled illustration, floating authentication panel,
+  and responsive artwork header while preserving the OTP controls.

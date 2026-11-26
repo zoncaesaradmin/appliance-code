@@ -1,10 +1,11 @@
-const CACHE_NAME = "zonity-shell-v2";
+const CACHE_NAME = "zonity-shell-v3";
 const SHELL_URLS = [
   "/",
   "/app",
   "/app/login",
   "/manifest.webmanifest",
   "/icon.svg",
+  "/zonited-login-neighborhood.jpg",
   "/zonited-logo-square.png"
 ];
 

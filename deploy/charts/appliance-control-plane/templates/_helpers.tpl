@@ -55,6 +55,10 @@ releases, enabling only the set it is currently applying.
 {{- if and .Values.rollout .Values.rollout.aceApps .Values.rollout.aceApps.enabled -}}true{{- end -}}
 {{- end -}}
 
+{{- define "appliance-control-plane.aceAppCoreEnabled" -}}
+{{- if and .Values.rollout .Values.rollout.aceAppCore .Values.rollout.aceAppCore.enabled -}}true{{- end -}}
+{{- end -}}
+
 {{- define "appliance-control-plane.applicationSupportEnabled" -}}
 {{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled (eq (include "appliance-control-plane.applicationsEnabled" .) "true") -}}true{{- end -}}
 {{- end -}}
@@ -107,6 +111,19 @@ Whether apps are isolated in a namespace other than the controlplane.
 {{- define "appliance-control-plane.appsNamespaced" -}}
 {{- if ne (include "appliance-control-plane.appsNamespace" .) (include "appliance-control-plane.namespace" .) -}}
 true
+{{- end -}}
+{{- end -}}
+
+{{/*
+Namespace for shared application prerequisites such as authentication. The
+installer uses ace-app-core in production; the chart default keeps rendering
+and isolated chart tests self-contained.
+*/}}
+{{- define "appliance-control-plane.appCoreNamespace" -}}
+{{- if .Values.appCoreNamespace -}}
+{{- .Values.appCoreNamespace.name | default "ace-app-core" -}}
+{{- else -}}
+ace-app-core
 {{- end -}}
 {{- end -}}
 

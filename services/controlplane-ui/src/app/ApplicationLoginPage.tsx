@@ -44,6 +44,9 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
 
   return (
     <main className="application-login">
+      <div className="application-login__canvas" aria-hidden="true">
+        <img src="/zonited-login-neighborhood.jpg" alt="" />
+      </div>
       <section className="application-login__story" aria-labelledby="application-login-title">
         <div className="application-login__story-inner">
           <p className="application-login__kicker">Zonited</p>
@@ -51,22 +54,6 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
           <p>
             Simplify neighborhood life — local services and shared workflows, in one community.
           </p>
-          <figure className="application-login__zone" aria-hidden="true">
-            <svg viewBox="0 0 480 228" focusable="false">
-              <circle cx="240" cy="118" r="86" fill="none" stroke="rgba(255,249,241,0.34)" strokeWidth="1.25" />
-              <circle cx="240" cy="118" r="58" fill="rgba(255,249,241,0.07)" stroke="rgba(255,249,241,0.72)" strokeWidth="1.5" />
-              <line x1="240" y1="64" x2="240" y2="44" stroke="rgba(255,249,241,0.72)" strokeWidth="1.5" />
-              <line x1="186" y1="118" x2="150" y2="118" stroke="rgba(255,249,241,0.72)" strokeWidth="1.5" />
-              <line x1="294" y1="118" x2="330" y2="118" stroke="rgba(255,249,241,0.72)" strokeWidth="1.5" />
-              <circle cx="240" cy="34" r="9" fill="#83AD8B" stroke="#FFF9F1" strokeWidth="2.25" />
-              <circle cx="140" cy="118" r="9" fill="#83AD8B" stroke="#FFF9F1" strokeWidth="2.25" />
-              <circle cx="340" cy="118" r="9" fill="#83AD8B" stroke="#FFF9F1" strokeWidth="2.25" />
-              <text x="240" y="123" textAnchor="middle" fill="#FFF9F1" fontSize="15" fontFamily="Segoe UI, Helvetica Neue, sans-serif">Your Zonity</text>
-              <text x="240" y="18" textAnchor="middle" fill="rgba(255,249,241,0.88)" fontSize="15" fontFamily="Segoe UI, Helvetica Neue, sans-serif">Nearby</text>
-              <text x="122" y="123" textAnchor="end" fill="rgba(255,249,241,0.88)" fontSize="15" fontFamily="Segoe UI, Helvetica Neue, sans-serif">Neighbors</text>
-              <text x="358" y="123" textAnchor="start" fill="rgba(255,249,241,0.88)" fontSize="15" fontFamily="Segoe UI, Helvetica Neue, sans-serif">Services</text>
-            </svg>
-          </figure>
         </div>
       </section>
 

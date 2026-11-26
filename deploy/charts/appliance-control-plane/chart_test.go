@@ -970,6 +970,36 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 	}
 }
 
+func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
+	docs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "rollout.aceInfra.enabled=false",
+		"--set", "rollout.aceSystem.enabled=false",
+		"--set", "rollout.aceAppCore.enabled=true",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.applicationSupport.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+		"--set", "rollout.workflowsSupport.enabled=false",
+		"--set", "appCoreNamespace.name=ace-app-core",
+	)...)
+	ns := findByKindAndName(docs, "Namespace", "ace-app-core")
+	if ns == nil {
+		t.Fatal("ace-app-core rollout must render the dedicated namespace")
+	}
+	marker := findByKindAndName(docs, "ConfigMap", "appliance-application-core")
+	if marker == nil {
+		t.Fatal("ace-app-core rollout must render its ownership marker")
+	}
+	if got, _ := at(marker, "metadata", "namespace").(string); got != "ace-app-core" {
+		t.Fatalf("application-core marker namespace = %q, want ace-app-core", got)
+	}
+	if findByKindAndName(docs, "Deployment", controlPlaneDeploymentName) != nil {
+		t.Fatal("ace-app-core rollout must not render the control-plane Deployment")
+	}
+	if findByKindAndName(docs, "Deployment", "blob-storage") != nil {
+		t.Fatal("ace-app-core rollout must not render infrastructure workloads")
+	}
+}
+
 func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "config.applianceProfile=builder",

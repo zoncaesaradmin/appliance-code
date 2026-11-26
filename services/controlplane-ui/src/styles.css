@@ -1813,74 +1813,97 @@ body:has(.video-player) {
   --panel: var(--surface-default);
   --panel-strong: var(--surface-sage);
   --shadow: 0 18px 45px rgba(127, 29, 61, 0.07);
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
+  min-height: 100svh;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(390px, 0.92fr);
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 27rem);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  overflow: hidden;
+  padding: clamp(1.5rem, 3vw, 2.75rem);
   background: var(--app-bg);
   color: var(--app-ink);
 }
 
-.application-login__story {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: clamp(2rem, 6vw, 5rem);
+.application-login__canvas {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 18% 88%, rgba(131, 173, 139, 0.28), transparent 46%),
-    var(--app-brand);
+  background: #e8d7ba;
+}
+
+.application-login__canvas::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(43, 31, 28, 0.12), transparent 58%, rgba(255, 249, 241, 0.12));
+  content: "";
+}
+
+.application-login__canvas img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.application-login__story {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  padding: clamp(0.25rem, 1vw, 0.75rem);
   color: var(--brand-background);
 }
 
 .application-login__story-inner {
-  width: min(39rem, 100%);
-  position: relative;
-  z-index: 1;
+  width: min(33rem, 100%);
+  border: 1px solid rgba(255, 249, 241, 0.2);
+  border-radius: 1.1rem;
+  padding: clamp(1.35rem, 3vw, 2.25rem);
+  background: rgba(91, 20, 45, 0.92);
+  box-shadow: 0 1.4rem 3.5rem rgba(59, 44, 44, 0.2);
 }
 
 .application-login__kicker {
   margin: 0;
-  color: rgba(255, 249, 241, 0.72);
-  font-size: 0.92rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  color: var(--app-secondary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .application-login__story h1 {
-  max-width: 11em;
-  margin: 0.7rem 0 0.85rem;
-  font-size: clamp(2.15rem, 3.5vw, 3.25rem);
+  max-width: 12em;
+  margin: 0.65rem 0 0.75rem;
+  font-size: clamp(2rem, 3.4vw, 3.15rem);
   font-weight: 600;
   letter-spacing: -0.03em;
-  line-height: 1.08;
+  line-height: 1.04;
+  text-wrap: balance;
 }
 
 .application-login__story-inner > p:not(.application-login__kicker) {
-  max-width: 28rem;
+  max-width: 30rem;
   margin: 0;
-  color: rgba(255, 249, 241, 0.78);
-  font-size: 1.05rem;
-  line-height: 1.55;
-}
-
-.application-login__zone {
-  width: min(32rem, 100%);
-  margin: 2rem 0 0;
-}
-
-.application-login__zone svg {
-  display: block;
-  width: 100%;
-  height: auto;
+  color: rgba(255, 249, 241, 0.82);
+  font-size: clamp(0.98rem, 1.4vw, 1.1rem);
+  line-height: 1.5;
+  text-wrap: pretty;
 }
 
 .application-login__panel {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  padding: clamp(1.5rem, 5vw, 3.5rem);
-  background: var(--app-bg);
+  min-height: calc(100vh - clamp(3rem, 6vw, 5.5rem));
+  min-height: calc(100svh - clamp(3rem, 6vw, 5.5rem));
+  border: 1px solid rgba(234, 217, 198, 0.92);
+  border-radius: 1.3rem;
+  padding: clamp(1.5rem, 4vw, 2.75rem);
+  background: rgba(255, 249, 241, 0.96);
+  box-shadow: 0 1.75rem 4rem rgba(59, 44, 44, 0.24);
 }
 
 .application-login__brand {
@@ -2941,11 +2964,25 @@ body:has(.video-player) {
 
   .application-login {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(22rem, 44vh) auto;
+    gap: 0;
+    overflow: visible;
+    padding: 0;
+    background: var(--app-bg);
+  }
+
+  .application-login__canvas {
+    position: relative;
+    z-index: 0;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .application-login__story {
-    min-height: auto;
-    padding: 2.75rem 2rem 2.25rem;
+    z-index: 1;
+    grid-column: 1;
+    grid-row: 1;
+    padding: 1.5rem;
   }
 
   .application-login__story h1 {
@@ -2953,7 +2990,13 @@ body:has(.video-player) {
   }
 
   .application-login__panel {
-    min-height: auto;
+    z-index: 1;
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 36rem;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
@@ -2981,20 +3024,25 @@ body:has(.video-player) {
     padding: 1.5rem;
   }
 
+  .application-login {
+    grid-template-rows: minmax(20rem, 42vh) auto;
+  }
+
   .application-login__story {
-    padding: 3rem 1.5rem 2.5rem;
+    padding: 1rem;
+  }
+
+  .application-login__story-inner {
+    border-radius: 0.9rem;
+    padding: 1.2rem;
   }
 
   .application-login__story h1 {
-    font-size: clamp(1.9rem, 8vw, 2.35rem);
+    font-size: clamp(1.75rem, 8vw, 2.2rem);
   }
 
   .application-login__phone-input {
     grid-template-columns: var(--country-track) minmax(0, var(--field-track));
-  }
-
-  .application-login__zone {
-    margin-top: 1.15rem;
   }
 
   .application-home__welcome {

@@ -20,6 +20,10 @@ rollout:
     enabled: true
   aceSystem:
     enabled: true
+  # Shared application prerequisites (for example authentication) are
+  # rendered in their own namespace and rollout slice before ace-apps.
+  aceAppCore:
+    enabled: true
   aceApps:
     enabled: true
   applicationSupport:
@@ -85,6 +89,14 @@ infraNamespace:
 appsNamespace:
   create: true
   name: ""
+
+# Shared application prerequisites such as the platform authentication
+# service. zonctl injects ace-app-core in production; keeping this separate
+# from appsNamespace allows the application-facing workloads to be rolled out
+# only after these prerequisites are ready.
+appCoreNamespace:
+  create: true
+  name: ace-app-core
 
 # Permanent namespace for user-managed application workloads. This is separate
 # from appsNamespace, which contains co-packaged UI, host-agent, and

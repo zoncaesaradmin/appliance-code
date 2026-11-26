@@ -1,0 +1,13 @@
+{{- if eq (include "appliance-control-plane.aceAppCoreEnabled" .) "true" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: appliance-application-core
+  namespace: {{ include "appliance-control-plane.appCoreNamespace" . }}
+  labels:
+    {{- include "appliance-control-plane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: application-core
+data:
+  ownership: appliance-control-plane
+  contract-version: v1
+{{- end }}
