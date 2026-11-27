@@ -30,8 +30,8 @@ func TestCurrentDeliveryPackagesCoverEveryCapability(t *testing.T) {
 			t.Fatalf("unexpected package %q", packageID)
 		}
 	}
-	if owners["artifact"][0] != "dev-platform" || owners["dns"][0] != "dev-platform" || owners["workflows"][0] != "dev-platform" || owners["build"][0] != "dev-platform" {
-		t.Fatalf("dev-platform ownership = artifact:%s dns:%s workflows:%s build:%s", owners["artifact"], owners["dns"], owners["workflows"], owners["build"])
+	if owners["artifact"][0] != "storage-network" || owners["dns"][0] != "deviceuser" || owners["workflows"][0] != "build-workflows" || owners["build"][0] != "build-workflows" {
+		t.Fatalf("delivery ownership = artifact:%s dns:%s workflows:%s build:%s", owners["artifact"], owners["dns"], owners["workflows"], owners["build"])
 	}
 }
 

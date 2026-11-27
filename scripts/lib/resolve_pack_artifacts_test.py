@@ -27,7 +27,7 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         ).strip()
         return set(out.split()) if out else set()
 
-    def test_foundation_excludes_dev_platform_and_deviceuser(self):
+    def test_foundation_excludes_optional_platform_services(self):
         arts = self._resolve("foundation")
         self.assertIn("control-plane-image", arts)
         self.assertIn("ui-image", arts)
@@ -60,12 +60,17 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertIn("inference-manager-image", arts)
         self.assertIn("appliance-inference-chart", arts)
 
-    def test_dev_platform_includes_registry_dns_workflows(self):
-        arts = self._resolve("foundation", "dev-platform")
+    def test_storage_network_includes_registry(self):
+        arts = self._resolve("foundation", "storage-network")
         self.assertIn("artifact-server-image", arts)
         self.assertIn("appliance-registry-chart", arts)
-        self.assertIn("coredns-image", arts)
-        self.assertIn("appliance-dns-chart", arts)
+        self.assertNotIn("coredns-image", arts)
+        self.assertNotIn("workflows-chart", arts)
+        self.assertNotIn("workspace-provisioner-image", arts)
+
+    def test_build_workflows_includes_workflows(self):
+        arts = self._resolve("foundation", "build-workflows")
+        self.assertNotIn("artifact-server-image", arts)
         self.assertIn("workflows-chart", arts)
         self.assertIn("workspace-provisioner-image", arts)
 
@@ -73,6 +78,8 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         arts = self._resolve("foundation", "deviceuser")
         self.assertIn("host-agent-image", arts)
         self.assertIn("jellyfin-image", arts)
+        self.assertIn("coredns-image", arts)
+        self.assertIn("appliance-dns-chart", arts)
 
     def test_shell_exports(self):
         out = subprocess.check_output(

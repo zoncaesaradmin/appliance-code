@@ -1837,7 +1837,7 @@ body:has(.video-player) {
 .application-login__canvas::after {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(43, 31, 28, 0.12), transparent 58%, rgba(255, 249, 241, 0.12));
+  background: linear-gradient(90deg, rgba(255, 249, 241, 0.08), transparent 42%, rgba(255, 249, 241, 0.28));
   content: "";
 }
 
@@ -1846,55 +1846,11 @@ body:has(.video-player) {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
-}
-
-.application-login__story {
-  display: flex;
-  align-items: flex-end;
-  min-width: 0;
-  padding: clamp(0.25rem, 1vw, 0.75rem);
-  color: var(--brand-background);
-}
-
-.application-login__story-inner {
-  width: min(33rem, 100%);
-  border: 1px solid rgba(255, 249, 241, 0.2);
-  border-radius: 1.1rem;
-  padding: clamp(1.35rem, 3vw, 2.25rem);
-  background: rgba(91, 20, 45, 0.92);
-  box-shadow: 0 1.4rem 3.5rem rgba(59, 44, 44, 0.2);
-}
-
-.application-login__kicker {
-  margin: 0;
-  color: var(--app-secondary);
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.application-login__story h1 {
-  max-width: 12em;
-  margin: 0.65rem 0 0.75rem;
-  font-size: clamp(2rem, 3.4vw, 3.15rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.04;
-  text-wrap: balance;
-}
-
-.application-login__story-inner > p:not(.application-login__kicker) {
-  max-width: 30rem;
-  margin: 0;
-  color: rgba(255, 249, 241, 0.82);
-  font-size: clamp(0.98rem, 1.4vw, 1.1rem);
-  line-height: 1.5;
-  text-wrap: pretty;
+  object-position: 40% 50%;
 }
 
 .application-login__panel {
+  grid-column: 2;
   display: flex;
   flex-direction: column;
   min-height: calc(100vh - clamp(3rem, 6vw, 5.5rem));
@@ -2978,17 +2934,6 @@ body:has(.video-player) {
     grid-row: 1;
   }
 
-  .application-login__story {
-    z-index: 1;
-    grid-column: 1;
-    grid-row: 1;
-    padding: 1.5rem;
-  }
-
-  .application-login__story h1 {
-    max-width: 14em;
-  }
-
   .application-login__panel {
     z-index: 1;
     grid-column: 1;
@@ -3026,19 +2971,6 @@ body:has(.video-player) {
 
   .application-login {
     grid-template-rows: minmax(20rem, 42vh) auto;
-  }
-
-  .application-login__story {
-    padding: 1rem;
-  }
-
-  .application-login__story-inner {
-    border-radius: 0.9rem;
-    padding: 1.2rem;
-  }
-
-  .application-login__story h1 {
-    font-size: clamp(1.75rem, 8vw, 2.2rem);
   }
 
   .application-login__phone-input {

@@ -47,15 +47,6 @@ export function ApplicationLoginPage(props: { onAuthenticated: () => void }): Re
       <div className="application-login__canvas" aria-hidden="true">
         <img src="/zonited-login-neighborhood.jpg" alt="" />
       </div>
-      <section className="application-login__story" aria-labelledby="application-login-title">
-        <div className="application-login__story-inner">
-          <p className="application-login__kicker">Zonited</p>
-          <h1 id="application-login-title">Everything you need, around you.</h1>
-          <p>
-            Simplify neighborhood life — local services and shared workflows, in one community.
-          </p>
-        </div>
-      </section>
 
       <section className="application-login__panel" aria-label="Zonited sign in">
         <div className="application-login__form-wrap">

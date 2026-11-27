@@ -26,13 +26,16 @@
 
 ## Layout and components
 
-- Login uses a Neighborhood Canvas: a bundled local-life illustration fills the
-  viewport, a compact story plate carries the public benefit line, and the
-  authentication controls remain in a focused warm-cream panel. On narrow
-  screens the artwork becomes a short header above the form.
+- Login uses a Neighborhood Canvas: a bundled full-bleed Zonity-zone illustration
+  fills the viewport with no story card or wordmark overlay, and the
+  authentication controls remain in a focused warm-cream panel on the right.
+  On narrow screens the artwork becomes a short header above the form.
+  Service-ring and icon colors must match brand burgundy `#7F1D3D`.
 - Login artwork is a release asset, not a network dependency. It must remain
   available from the offline static-shell cache and must not load from
-  `zonited.com` or another public origin.
+  `zonited.com` or another public origin. Prefer a product-grade digital
+  composition over the marketing-site neighborhood painting, and keep brand
+  identity to the transparent wordmark so the artwork stays visible.
 - The application shell has no operator-console, account, or administration links. Application and operator URL spaces remain separate.
 - Inputs retain visible labels, focus rings, keyboard operation, and inline errors.
 - Mobile OTP entry separates country selection from the local number; India (+91) is the default and the local number is digit-only with country-specific length validation.
@@ -71,3 +74,16 @@
 - 2026-11-26: Replaced the full-height split login with the Neighborhood Canvas,
   using a login-specific bundled illustration, floating authentication panel,
   and responsive artwork header while preserving the OTP controls.
+- 2026-11-27: Replaced the login hero with a digital Zonity-map artwork so the
+  app entry stays distinct from the zonited.com marketing neighborhood painting.
+- 2026-11-27: Switched the login canvas to layered product-preview artwork,
+  lightened the story plate, and removed the long support sentence under the
+  benefit headline.
+- 2026-11-27: Moved the login canvas to the full-bleed Zonity-zone artwork while
+  keeping the light story plate.
+- 2026-11-27: Anchored the story plate to the bottom-left and cropped the canvas
+  so the Zonity service ring stays clear above it.
+- 2026-11-27: Removed the login story card and placed only the transparent
+  Zonited wordmark on the canvas.
+- 2026-11-27: Removed the temporary wordmark overlay and refreshed the Zonity
+  canvas so the service ring uses brand burgundy instead of a lighter rose.
