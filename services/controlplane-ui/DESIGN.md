@@ -26,11 +26,12 @@
 
 ## Layout and components
 
-- Login uses a Neighborhood Canvas: a bundled full-bleed Zonity-zone illustration
-  fills the viewport with no story card or wordmark overlay, and the
-  authentication controls remain in a focused warm-cream panel on the right.
-  On narrow screens the artwork becomes a short header above the form.
-  Service-ring and icon colors must match brand burgundy `#7F1D3D`.
+- Login uses a Neighborhood Canvas split: the bundled Zonity-zone illustration
+  owns the left pane with the service ring centered in that visible art, and
+  the warm-cream OTP panel owns the right pane (no overlay, no story/wordmark).
+  On narrow screens the artwork becomes a short header above the form, still
+  cropping so the ring stays centered. Service-ring and icon colors must match
+  brand burgundy `#7F1D3D`.
 - Login artwork is a release asset, not a network dependency. It must remain
   available from the offline static-shell cache and must not load from
   `zonited.com` or another public origin. Prefer a product-grade digital
@@ -90,3 +91,12 @@
 - 2026-11-27: Updated the login neighborhood canvas to the mixed apartment /
   shop / godown / house composition without radiating service lines, with
   restrained burgundy accents only on the ring and a few building edges.
+- 2026-11-27: Widened the desktop OTP panel, centered the service-ring crop on
+  desktop and mobile, and reinstalled the arrow-free neighborhood artwork.
+- 2026-11-27: Tightened mobile login spacing above the form while keeping a
+  tall enough artwork header for the service ring to stay visible.
+- 2026-11-27: Switched desktop login to a true art|panel split so the service
+  ring stays centered in the visible artwork on desktop and mobile.
+- 2026-11-27: Restored the full uncropped v3f1 neighborhood artwork, and on
+  mobile give the artwork half the viewport with object-fit contain so the
+  image is not cropped top or bottom.

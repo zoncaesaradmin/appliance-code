@@ -1818,18 +1818,21 @@ body:has(.video-player) {
   min-height: 100vh;
   min-height: 100svh;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(22rem, 27rem);
-  gap: clamp(1.5rem, 3vw, 3rem);
+  /* Artwork owns the left pane; OTP owns the right. The ring can stay
+     centered in the visible art without the panel covering it. */
+  grid-template-columns: minmax(0, 1fr) minmax(28rem, 36rem);
+  gap: 0;
   overflow: hidden;
-  padding: clamp(1.5rem, 3vw, 2.75rem);
+  padding: 0;
   background: var(--app-bg);
   color: var(--app-ink);
 }
 
 .application-login__canvas {
-  position: absolute;
-  z-index: -2;
-  inset: 0;
+  position: relative;
+  grid-column: 1;
+  min-height: 100vh;
+  min-height: 100svh;
   overflow: hidden;
   background: #e8d7ba;
 }
@@ -1837,8 +1840,9 @@ body:has(.video-player) {
 .application-login__canvas::after {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(255, 249, 241, 0.08), transparent 42%, rgba(255, 249, 241, 0.28));
+  background: linear-gradient(90deg, transparent 72%, rgba(255, 249, 241, 0.18));
   content: "";
+  pointer-events: none;
 }
 
 .application-login__canvas img {
@@ -1846,20 +1850,21 @@ body:has(.video-player) {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 40% 50%;
+  object-position: 50% 50%;
 }
 
 .application-login__panel {
   grid-column: 2;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - clamp(3rem, 6vw, 5.5rem));
-  min-height: calc(100svh - clamp(3rem, 6vw, 5.5rem));
-  border: 1px solid rgba(234, 217, 198, 0.92);
-  border-radius: 1.3rem;
-  padding: clamp(1.5rem, 4vw, 2.75rem);
-  background: rgba(255, 249, 241, 0.96);
-  box-shadow: 0 1.75rem 4rem rgba(59, 44, 44, 0.24);
+  min-height: 100vh;
+  min-height: 100svh;
+  border: 0;
+  border-left: 1px solid rgba(234, 217, 198, 0.92);
+  border-radius: 0;
+  padding: clamp(1.65rem, 4vw, 3rem);
+  background: rgba(255, 249, 241, 0.98);
+  box-shadow: none;
 }
 
 .application-login__brand {
@@ -1897,7 +1902,7 @@ body:has(.video-player) {
 }
 
 .application-login__form-wrap {
-  width: min(25rem, 100%);
+  width: min(28rem, 100%);
   margin: auto;
 }
 
@@ -2920,8 +2925,11 @@ body:has(.video-player) {
 
   .application-login {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(22rem, 44vh) auto;
+    /* Natural 16:9 art height from width, then the form — full image, no crop. */
+    grid-template-rows: auto auto;
+    align-content: start;
     gap: 0;
+    min-height: 100svh;
     overflow: visible;
     padding: 0;
     background: var(--app-bg);
@@ -2932,16 +2940,60 @@ body:has(.video-player) {
     z-index: 0;
     grid-column: 1;
     grid-row: 1;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    min-height: 0;
+  }
+
+  .application-login__canvas::after {
+    background: linear-gradient(180deg, transparent 78%, rgba(255, 249, 241, 0.28));
+  }
+
+  .application-login__canvas img {
+    /* Canvas is 16:9 to match the asset, so the full image shows without crop. */
+    object-fit: cover;
+    object-position: center center;
   }
 
   .application-login__panel {
     z-index: 1;
     grid-column: 1;
     grid-row: 2;
-    min-height: 36rem;
+    min-height: 0;
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    padding: 1.1rem 1.35rem 1.25rem;
+  }
+
+  .application-login__form-wrap {
+    width: min(28rem, 100%);
+    margin: 0 auto;
+  }
+
+  .application-login__brand {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+  }
+
+  .application-login__brand-logo {
+    width: 5.5rem;
+    height: 5.5rem;
+    border-radius: 1.05rem;
+    box-shadow: 0 0.75rem 1.6rem rgba(44, 29, 32, 0.12);
+  }
+
+  .application-login form {
+    margin-top: 0.85rem;
+  }
+
+  .application-login__controls {
+    gap: 0.85rem;
+  }
+
+  .application-login__footer {
+    margin-top: 1.15rem;
+    gap: 0.25rem;
   }
 }
 
@@ -2965,12 +3017,29 @@ body:has(.video-player) {
     padding: 18px;
   }
 
-  .application-login__panel {
-    padding: 1.5rem;
+  .application-login {
+    grid-template-rows: auto auto;
   }
 
-  .application-login {
-    grid-template-rows: minmax(20rem, 42vh) auto;
+  .application-login__panel {
+    padding: 1rem 1.2rem 1.15rem;
+  }
+
+  .application-login__brand {
+    margin-bottom: 0.65rem;
+  }
+
+  .application-login__brand-logo {
+    width: 5.15rem;
+    height: 5.15rem;
+  }
+
+  .application-login form {
+    margin-top: 0.75rem;
+  }
+
+  .application-login__footer {
+    margin-top: 1rem;
   }
 
   .application-login__phone-input {
