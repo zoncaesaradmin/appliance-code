@@ -2,9 +2,7 @@ import type React from "react";
 import { useEffect } from "react";
 import { AccountPage } from "../pages/AccountPage";
 import { AdminPage } from "../pages/AdminPage";
-import { AnalyzePage } from "../pages/AnalyzePage";
 import { ArtifactsPage } from "../pages/ArtifactsPage";
-import { BuilderPage } from "../pages/BuilderPage";
 import { FilesPage } from "../pages/FilesPage";
 import { VideosPage } from "../pages/VideosPage";
 import { ApplicationsPage } from "../pages/ApplicationsPage";
@@ -40,9 +38,6 @@ export function RouteView(props: {
       />
     );
   }
-  if (props.pathname.startsWith("/manage/builder")) {
-    return <BuilderPage pathname={props.pathname} />;
-  }
   // Legacy Manage → DNS; now Admin → LAN Services.
   if (props.pathname === "/manage/dns" || props.pathname.startsWith("/manage/dns/")) {
     return <Redirect to="/admin/lan-services" />;
@@ -63,9 +58,6 @@ export function RouteView(props: {
   }
   if (props.pathname.startsWith("/manage/ai-chat")) {
     return <CodingChatPage capabilities={props.capabilities} />;
-  }
-  if (props.pathname.startsWith("/analyze/workflows")) {
-    return <AnalyzePage />;
   }
   if (props.pathname.startsWith("/admin/applications")) {
     return <ApplicationsPage />;

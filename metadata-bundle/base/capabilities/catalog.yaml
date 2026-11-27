@@ -79,26 +79,6 @@ capabilities:
       requiredEntitlement: zon.capabilities.files
     artifacts:
       required: []
-  workflows:
-    displayName: Workflows
-    requires: [base]
-    conflicts: []
-    license:
-      requiredEntitlement: zon.capabilities.workflows
-    artifacts:
-      required:
-        - workflows-chart
-        - workflows-crds
-        - workflow-controller-image
-        - workflow-executor-image
-  build:
-    displayName: Build
-    requires: [base, host, workflows, artifact]
-    conflicts: []
-    license:
-      requiredEntitlement: zon.capabilities.build
-    artifacts:
-      required: [workspace-provisioner-image]
   artifact:
     displayName: Artifact
     requires: [base]

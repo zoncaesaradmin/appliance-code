@@ -17,9 +17,7 @@ import (
 	"appliance-code/services/controlplane/internal/app"
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/config"
-	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/logging"
-	"appliance-code/services/controlplane/internal/storage"
 )
 
 // freeAddr asks the OS for an available loopback port and returns it as an
@@ -130,77 +128,6 @@ func TestAppNewRequiresLoggers(t *testing.T) {
 	}
 }
 
-func TestWireServicesReconcilesBuildAndJobStateOnStartup(t *testing.T) {
-	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
-	cfg.WorkflowEngine = "fake"
-	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	cfg.BuildCatalog = devflows.Catalog{
-		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		Repos:        []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets: []devflows.BuildTarget{{
-			Name: "default", Repo: "app", Execution: devflows.ExecutionScript,
-			ImageRepository: "users/alice/app",
-		}},
-	}
-
-	logger, err := logging.New("error")
-	if err != nil {
-		t.Fatalf("logging.New: %v", err)
-	}
-	services, err := app.WireServices(cfg, logger)
-	if err != nil {
-		t.Fatalf("initial WireServices: %v", err)
-	}
-	now := time.Now().UTC()
-	user := storage.User{ID: "user-reconcile", Username: "alice", DisplayName: "Alice", State: storage.UserStateActive, CreatedAt: now, UpdatedAt: now}
-	if err := services.UserStore.Create(t.Context(), user); err != nil {
-		t.Fatalf("Create user: %v", err)
-	}
-	build := storage.Build{
-		ID: "build-reconcile", OwnerID: user.ID, Status: storage.BuildStatusRunning,
-		SourceRepoURL: "https://git.internal.example.com/team/app", SourceCommitSHA: "0123456789abcdef0123456789abcdef01234567",
-		ContainerfilePath: "Containerfile", ImageRepository: "users/alice/app", ImageTag: "v1",
-		BuilderImageDigest: "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", WorkflowName: "build-reconcile-workflow",
-		CreatedAt: now, UpdatedAt: now, StartedAt: &now, DeadlineAt: now.Add(-time.Minute),
-	}
-	if err := services.BuildStore.Create(t.Context(), build); err != nil {
-		t.Fatalf("Create build: %v", err)
-	}
-	job := storage.Job{
-		ID: "job-reconcile", OwnerID: user.ID, BuildID: build.ID, Type: storage.JobTypeBuild,
-		Status: storage.JobStatusRunning, TargetName: "default", CreatedAt: now, UpdatedAt: now, StartedAt: &now,
-	}
-	if err := services.JobStore.Create(t.Context(), job); err != nil {
-		t.Fatalf("Create job: %v", err)
-	}
-	if err := services.DB.Close(); err != nil {
-		t.Fatalf("closing first services DB: %v", err)
-	}
-
-	restarted, err := app.WireServices(cfg, logger)
-	if err != nil {
-		t.Fatalf("restart WireServices: %v", err)
-	}
-	defer restarted.DB.Close()
-
-	reconciledBuild, err := restarted.BuildStore.Get(t.Context(), build.ID)
-	if err != nil {
-		t.Fatalf("Get build: %v", err)
-	}
-	if reconciledBuild.Status != storage.BuildStatusTimedOut || reconciledBuild.ReasonCode != "deadline_exceeded" {
-		t.Fatalf("build after startup reconciliation = status %q reason %q, want timed_out/deadline_exceeded", reconciledBuild.Status, reconciledBuild.ReasonCode)
-	}
-	reconciledJob, err := restarted.JobStore.Get(t.Context(), job.ID)
-	if err != nil {
-		t.Fatalf("Get job: %v", err)
-	}
-	if reconciledJob.Status != storage.JobStatusFailed || reconciledJob.ReasonCode != "deadline_exceeded" {
-		t.Fatalf("job after startup reconciliation = status %q reason %q, want failed/deadline_exceeded", reconciledJob.Status, reconciledJob.ReasonCode)
-	}
-}
-
 func TestStorageProfileReadinessAcceptsRegistryAuthChallenge(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/" {
@@ -211,7 +138,7 @@ func TestStorageProfileReadinessAcceptsRegistryAuthChallenge(t *testing.T) {
 	defer srv.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileStorageLANDNS)
 	cfg.ArtifactServerBaseURL = srv.URL
 	cfg.ArtifactServerAllowFake = false
 	logger, err := logging.New("error")
@@ -252,7 +179,7 @@ func TestLANDNSProfileReadinessRequiresDNS(t *testing.T) {
 	defer dnsOK.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileStorageLANDNS)
 	cfg.DNSReadyURL = dnsOK.URL + "/ready"
 	logger, err := logging.New("error")
 	if err != nil {
@@ -282,7 +209,7 @@ func TestLANDNSProfileReadinessRequiresDNS(t *testing.T) {
 	}))
 	defer dnsDown.Close()
 	cfg = testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileStorageLANDNS)
 	cfg.DNSReadyURL = dnsDown.URL + "/ready"
 	logger, err = logging.New("error")
 	if err != nil {
@@ -318,7 +245,7 @@ func TestStorageProfileReadinessLogsDependencyFailures(t *testing.T) {
 	defer srv.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileStorageLANDNS)
 	cfg.ArtifactServerBaseURL = srv.URL
 	cfg.ArtifactServerAllowFake = false
 
@@ -370,7 +297,7 @@ func TestStorageProfileRegistryClientUsesInternalBearerAuth(t *testing.T) {
 	defer srv.Close()
 
 	cfg := testConfig(t)
-	cfg.ApplianceProfile = string(appliance.ProfileBuilderStorageLANDNS)
+	cfg.ApplianceProfile = string(appliance.ProfileStorageLANDNS)
 	cfg.ArtifactServerBaseURL = srv.URL
 	cfg.ArtifactServerAllowFake = false
 	logger, err := logging.New("error")

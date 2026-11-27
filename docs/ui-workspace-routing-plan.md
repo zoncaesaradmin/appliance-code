@@ -40,8 +40,7 @@ Existing control-plane URLs remain valid during migration:
 
 ```text
 /home/*       existing appliance home
-/manage/*     existing builder/files/media surface
-/analyze/*    existing workflow surface
+/manage/*     existing files/media surface
 /admin/*      existing administration surface
 ```
 

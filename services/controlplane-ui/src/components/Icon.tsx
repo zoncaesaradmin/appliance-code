@@ -7,7 +7,6 @@ export type IconName =
   | "alerts"
   | "analyze"
   | "artifacts"
-  | "builder"
   | "catalog"
   | "dns"
   | "files"
@@ -23,8 +22,7 @@ export type IconName =
   | "status"
   | "connectivity"
   | "user"
-  | "video"
-  | "workflows";
+  | "video";
 
 export function Icon(props: { name: IconName; className?: string }): React.JSX.Element {
   const common: SVGProps<SVGSVGElement> = {
@@ -101,13 +99,6 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
           <path d="M12 17h.01" />
         </svg>
       );
-    case "builder":
-      return (
-        <svg {...common}>
-          <path d="m14 4 6 6-6 6" />
-          <path d="m10 20-6-6 6-6" />
-        </svg>
-      );
     case "dns":
       return (
         <svg {...common}>
@@ -138,15 +129,6 @@ export function Icon(props: { name: IconName; className?: string }): React.JSX.E
           <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
           <path d="M4.5 8 12 12.2 19.5 8" />
           <path d="M12 21v-8.8" />
-        </svg>
-      );
-    case "workflows":
-      return (
-        <svg {...common}>
-          <path d="M6 7h4" />
-          <path d="M14 7h4" />
-          <path d="M6 17h4" />
-          <path d="M10 7c2 0 2 10 4 10h4" />
         </svg>
       );
     case "status":

@@ -49,24 +49,6 @@ const (
 	PermTokensRevokeSelf = "tokens.revoke.self"
 	PermTokensRevokeAny  = "tokens.revoke.any"
 
-	PermBuildsCreate     = "builds.create"
-	PermBuildsReadSelf   = "builds.read.self"
-	PermBuildsReadAny    = "builds.read.any"
-	PermBuildsCancelSelf = "builds.cancel.self"
-	PermBuildsCancelAny  = "builds.cancel.any"
-
-	PermWorkProfilesRead     = "work_profiles.read"
-	PermWorkspacesCreate     = "workspaces.create"
-	PermWorkspacesReadSelf   = "workspaces.read.self"
-	PermWorkspacesReadAny    = "workspaces.read.any"
-	PermWorkspacesDeleteSelf = "workspaces.delete.self"
-	PermWorkspacesDeleteAny  = "workspaces.delete.any"
-	PermBuildTargetsRead     = "build_targets.read"
-	PermJobsReadSelf         = "jobs.read.self"
-	PermJobsReadAny          = "jobs.read.any"
-	PermJobsCancelSelf       = "jobs.cancel.self"
-	PermJobsCancelAny        = "jobs.cancel.any"
-
 	PermArtifactsRead       = "artifacts.read"
 	PermArtifactsWrite      = "artifacts.write"
 	PermArtifactsDeleteSelf = "artifacts.delete.self"
@@ -141,24 +123,6 @@ var AllPermissions = []storage.Permission{
 	{Name: PermTokensCreateAny, Description: "Create API tokens for any user"},
 	{Name: PermTokensRevokeSelf, Description: "Revoke own API tokens"},
 	{Name: PermTokensRevokeAny, Description: "Revoke any user's API tokens"},
-
-	{Name: PermBuildsCreate, Description: "Submit builds"},
-	{Name: PermBuildsReadSelf, Description: "Read own builds"},
-	{Name: PermBuildsReadAny, Description: "Read any build"},
-	{Name: PermBuildsCancelSelf, Description: "Cancel own builds"},
-	{Name: PermBuildsCancelAny, Description: "Cancel any build"},
-
-	{Name: PermWorkProfilesRead, Description: "Read developer workflow profiles"},
-	{Name: PermWorkspacesCreate, Description: "Create own developer workspaces"},
-	{Name: PermWorkspacesReadSelf, Description: "Read own developer workspaces"},
-	{Name: PermWorkspacesReadAny, Description: "Read any developer workspace"},
-	{Name: PermWorkspacesDeleteSelf, Description: "Delete own developer workspaces"},
-	{Name: PermWorkspacesDeleteAny, Description: "Delete any developer workspace"},
-	{Name: PermBuildTargetsRead, Description: "Read configured build targets"},
-	{Name: PermJobsReadSelf, Description: "Read own developer workflow jobs"},
-	{Name: PermJobsReadAny, Description: "Read any developer workflow job"},
-	{Name: PermJobsCancelSelf, Description: "Cancel own developer workflow jobs"},
-	{Name: PermJobsCancelAny, Description: "Cancel any developer workflow job"},
 
 	{Name: PermArtifactsRead, Description: "Read artifact metadata and OCI artifact content"},
 	{Name: PermArtifactsWrite, Description: "Push OCI artifacts to the appliance registry"},
@@ -242,9 +206,6 @@ var BuiltInRoles = []BuiltInRole{
 		Name: Developer,
 		Permissions: []string{
 			PermTokensReadSelf, PermTokensCreateSelf, PermTokensRevokeSelf,
-			PermWorkProfilesRead, PermWorkspacesCreate, PermWorkspacesReadSelf, PermWorkspacesDeleteSelf,
-			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
-			PermJobsReadSelf, PermJobsCancelSelf,
 			PermArtifactsRead, PermArtifactsWrite, PermArtifactsDeleteSelf,
 			PermFilesRead, PermFilesWrite,
 			PermHostRead, PermOperationsReadSelf,
@@ -260,8 +221,7 @@ var BuiltInRoles = []BuiltInRole{
 		Name: Viewer,
 		Permissions: []string{
 			PermTokensReadSelf, PermTokensCreateSelf, PermTokensRevokeSelf,
-			PermWorkProfilesRead, PermWorkspacesReadAny, PermBuildTargetsRead,
-			PermBuildsReadAny, PermJobsReadAny, PermArtifactsRead, PermFilesRead, PermHostRead,
+			PermArtifactsRead, PermFilesRead, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRead,
 			PermInferenceModelsRead,
@@ -280,9 +240,6 @@ var BuiltInRoles = []BuiltInRole{
 		ID:   AutomationRoleID,
 		Name: Automation,
 		Permissions: []string{
-			PermWorkProfilesRead, PermWorkspacesCreate, PermWorkspacesReadSelf,
-			PermBuildTargetsRead, PermBuildsCreate, PermBuildsReadSelf, PermBuildsCancelSelf,
-			PermJobsReadSelf, PermJobsCancelSelf,
 			PermArtifactsRead, PermArtifactsWrite, PermFilesRead, PermFilesWrite, PermHostRead,
 			PermOperationsReadSelf,
 			PermDNSRecordsRegister,

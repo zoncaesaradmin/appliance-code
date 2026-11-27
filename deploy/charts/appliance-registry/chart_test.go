@@ -137,13 +137,6 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostPackagesDir, "avahi-daemon.deb"), []byte("deb"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	crds := filepath.Join(tmp, "crds")
-	if err := os.Mkdir(crds, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(crds, "workflow.yaml"), []byte("apiVersion: v1\nkind: List\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	out := filepath.Join(tmp, "release-input.tgz")
 	cmd := exec.Command("bash", filepath.Join(root, "scripts/package/archive-release-input.sh"),
 		"--out-file", out, "--code-version", "1.2.3", "--k3s-version", "v1.33.0+k3s1", "--deployment-topology", "embedded-etcd-v1",
@@ -158,7 +151,7 @@ func TestReleaseInputPublishesFirstClassArtifactServerArtifacts(t *testing.T) {
 		"--artifact-server-image-reference", "registry.local/artifact-server@sha256:"+digest,
 		"--blob-storage-image", blobStorageArchive,
 		"--blob-storage-image-reference", "registry.local/blob-storage@sha256:"+blobStorageDigest,
-		"--artifact-server-version", "2.1.8", "--workflows-crds-dir", crds)
+		"--artifact-server-version", "2.1.8")
 	cmd.Env = append(os.Environ(), "TARGET_ARCH=amd64")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("archive release input: %v\n%s", err, output)

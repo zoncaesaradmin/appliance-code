@@ -65,19 +65,19 @@ func TestUpsertAdminAndPeerOwnership(t *testing.T) {
 	}
 
 	_, err = svc.Upsert(ctx, dnsrecords.UpsertInput{
-		Name: "builder1", IPv4: "192.0.2.30", Owner: "peer-b", Actor: audit.SystemActor,
+		Name: "appliance1", IPv4: "192.0.2.30", Owner: "peer-b", Actor: audit.SystemActor,
 	})
 	if err != nil {
 		t.Fatalf("peer create: %v", err)
 	}
 	_, err = svc.Upsert(ctx, dnsrecords.UpsertInput{
-		Name: "builder1", IPv4: "192.0.2.31", Owner: "peer-b", Actor: audit.SystemActor,
+		Name: "appliance1", IPv4: "192.0.2.31", Owner: "peer-b", Actor: audit.SystemActor,
 	})
 	if err != nil {
 		t.Fatalf("peer renew: %v", err)
 	}
 	_, err = svc.Upsert(ctx, dnsrecords.UpsertInput{
-		Name: "builder1", IPv4: "192.0.2.32", Owner: "peer-c", Actor: audit.SystemActor,
+		Name: "appliance1", IPv4: "192.0.2.32", Owner: "peer-c", Actor: audit.SystemActor,
 	})
 	if err == nil || !strings.Contains(err.Error(), "conflict") {
 		t.Fatalf("foreign peer overwrite = %v, want conflict", err)

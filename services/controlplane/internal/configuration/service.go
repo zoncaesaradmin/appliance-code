@@ -46,7 +46,6 @@ type Snapshot struct {
 	CustomProfiles       []CustomProfile         `json:"customProfiles"`
 	ProfileActivation    ProfileActivation       `json:"profileActivation"`
 	DNSRecords           []DNSRecord             `json:"dnsRecords"`
-	BuilderCatalog       BuilderCatalog          `json:"builderCatalog"`
 	ApplicationDefs      []ApplicationDefinition `json:"applicationDefinitions"`
 	ApplicationInstances []ApplicationInstance   `json:"applicationInstances"`
 	Metadata             *MetadataBundleIdentity `json:"metadataBundle,omitempty"`
@@ -69,11 +68,6 @@ type DNSRecord struct {
 	TTL    int    `json:"ttl"`
 	Source string `json:"source"`
 	Owner  string `json:"owner,omitempty"`
-}
-
-type BuilderCatalog struct {
-	Document    string `json:"document"`
-	ContentType string `json:"contentType"`
 }
 
 type ApplicationDefinition struct {
@@ -99,19 +93,18 @@ type MetadataBundleIdentity struct {
 // Stores groups the existing domain repositories used to form a coherent
 // desired-state snapshot. They must all be constructed from the same DB.
 type Stores struct {
-	DB             storage.DB
-	Revisions      storage.ConfigurationRevisionStore
-	Licensing      storage.LicensingStore
-	DNS            storage.DNSRecordStore
-	BuilderCatalog storage.BuilderCatalogStore
-	Applications   storage.ApplicationStore
-	Metadata       storage.MetadataBundleStore
+	DB           storage.DB
+	Revisions    storage.ConfigurationRevisionStore
+	Licensing    storage.LicensingStore
+	DNS          storage.DNSRecordStore
+	Applications storage.ApplicationStore
+	Metadata     storage.MetadataBundleStore
 }
 
 type Service struct{ stores Stores }
 
 func NewService(stores Stores) (*Service, error) {
-	if stores.DB == nil || stores.Revisions == nil || stores.Licensing == nil || stores.DNS == nil || stores.BuilderCatalog == nil || stores.Applications == nil || stores.Metadata == nil {
+	if stores.DB == nil || stores.Revisions == nil || stores.Licensing == nil || stores.DNS == nil || stores.Applications == nil || stores.Metadata == nil {
 		return nil, fmt.Errorf("configuration: all persistence stores are required")
 	}
 	return &Service{stores: stores}, nil
@@ -281,11 +274,6 @@ func (s *Service) importSnapshot(ctx context.Context, payload []byte, actorID st
 			}); err != nil {
 				return fmt.Errorf("configuration: import DNS record %q: %w", record.Name, err)
 			}
-		}
-		if err := s.stores.BuilderCatalog.PutBuilderCatalog(txCtx, storage.BuilderCatalogRecord{
-			DocumentText: snapshot.BuilderCatalog.Document, ContentType: snapshot.BuilderCatalog.ContentType, UpdatedAt: now,
-		}); err != nil {
-			return fmt.Errorf("configuration: import builder catalog: %w", err)
 		}
 		for _, definition := range snapshot.ApplicationDefs {
 			if err := s.stores.Applications.UpsertDefinition(txCtx, storage.ApplicationDefinition{
@@ -491,10 +479,6 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("configuration: list DNS records: %w", err)
 	}
-	catalog, err := s.stores.BuilderCatalog.GetBuilderCatalog(ctx)
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("configuration: get builder catalog: %w", err)
-	}
 	definitions, err := s.stores.Applications.ListDefinitions(ctx)
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("configuration: list application definitions: %w", err)
@@ -507,7 +491,6 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	snapshot := Snapshot{
 		APIVersion:           SchemaVersion,
 		ProfileActivation:    ProfileActivation{DesiredProfileID: activation.DesiredProfileID},
-		BuilderCatalog:       BuilderCatalog{Document: catalog.DocumentText, ContentType: catalog.ContentType},
 		CustomProfiles:       []CustomProfile{},
 		DNSRecords:           []DNSRecord{},
 		ApplicationDefs:      []ApplicationDefinition{},

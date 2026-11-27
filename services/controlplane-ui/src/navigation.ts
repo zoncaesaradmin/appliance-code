@@ -65,14 +65,8 @@ export const MODES: Mode[] = [
     label: "Manage",
     shortLabel: "MG",
     icon: "manage",
-    defaultPath: "/manage/builder",
+    defaultPath: "/manage/files",
     features: [
-      {
-        label: "Builder",
-        path: "/manage/builder",
-        description: "Build submission, workspaces, and settings",
-        icon: "builder"
-      },
       {
         label: "Files",
         path: "/manage/files",
@@ -98,22 +92,6 @@ export const MODES: Mode[] = [
         description: "Open the appliance-hosted chat workspace",
         icon: "analyze",
         requiredCapability: "inference"
-      }
-    ],
-    visibleWhen: alwaysVisible
-  },
-  {
-    id: "analyze",
-    label: "Analyze",
-    shortLabel: "AZ",
-    icon: "analyze",
-    defaultPath: "/analyze/workflows",
-    features: [
-      {
-        label: "Workflows",
-        path: "/analyze/workflows",
-        description: "Operational view of current builder workflow activity",
-        icon: "workflows"
       }
     ],
     visibleWhen: alwaysVisible

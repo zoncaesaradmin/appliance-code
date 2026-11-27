@@ -14,7 +14,7 @@ import (
 )
 
 func TestFileArchiveTargetRoundTripAndRejectsTampering(t *testing.T) {
-	payload := []byte(`{"apiVersion":"configuration.zon/v1","customProfiles":[],"profileActivation":{},"dnsRecords":[],"builderCatalog":{"document":"","contentType":"application/json"},"applicationDefinitions":[],"applicationInstances":[]}`)
+	payload := []byte(`{"apiVersion":"configuration.zon/v1","customProfiles":[],"profileActivation":{},"dnsRecords":[],"applicationDefinitions":[],"applicationInstances":[]}`)
 	sum := sha256.Sum256(payload)
 	revision := storage.ConfigurationRevision{ID: "revision-1", SchemaVersion: SchemaVersion, Payload: payload, PayloadDigest: "sha256:" + hex.EncodeToString(sum[:]), CreatedAt: time.Now().UTC()}
 	data, manifest, err := Seal(revision, bytes.Repeat([]byte{4}, 32), "operator-key-1")

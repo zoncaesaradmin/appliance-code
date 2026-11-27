@@ -1,4 +1,7 @@
-# Appliance Metadata Bundle, Profiles, And Licensing Plan
+# Appliance Metadata Bundle, Profiles, And Licensing Plan (Historical)
+
+> Historical design record. Retired build/workflow profiles and APIs described
+> here are not part of the current product contract.
 
 ## Purpose
 

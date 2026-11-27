@@ -113,30 +113,6 @@ type ApplicationStore interface {
 	DeleteInstance(ctx context.Context, name string) error
 }
 
-// IdempotencyRecord is a cached response for a previously seen idempotency
-// key, retained for the plan's accepted 24-hour idempotency window.
-type IdempotencyRecord struct {
-	Key            string
-	Scope          string
-	RequestHash    string
-	ResponseStatus int
-	ResponseBody   []byte
-	CreatedAt      time.Time
-	ExpiresAt      time.Time
-}
-
-// IdempotencyStore persists IdempotencyRecord entries keyed by (scope, key).
-type IdempotencyStore interface {
-	// Reserve attempts to atomically claim key within scope. It returns the
-	// existing record and false if the key is already reserved (whether or
-	// not it has completed), or a zero record and true if this call claimed
-	// it.
-	Reserve(ctx context.Context, scope, key, requestHash string, ttl time.Duration) (existing IdempotencyRecord, claimed bool, err error)
-
-	// Complete stores the final response for a previously reserved key.
-	Complete(ctx context.Context, scope, key string, status int, body []byte) error
-}
-
 // MaintenanceCheckpoint tracks the cursor and last-run time for one named
 // in-process maintenance task, so restarts resume rather than restart from
 // scratch or duplicate work.

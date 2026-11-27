@@ -15,7 +15,6 @@ import (
 
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/applications"
-	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/serviceregistry"
 	"gopkg.in/yaml.v3"
@@ -93,16 +92,6 @@ type Config struct {
 	VideoTransferTimeout          time.Duration `json:"videoTransferTimeout"`
 	VideoMaxUploadBytes           int64         `json:"videoMaxUploadBytes"`
 
-	BuildDefaultDeadline            time.Duration    `json:"buildDefaultDeadline"`
-	WorkflowEngine                  string           `json:"workflowEngine"`
-	WorkflowInstanceID              string           `json:"workflowInstanceID"`
-	WorkflowExecutorServiceAccount  string           `json:"workflowExecutorServiceAccount"`
-	BuildCatalog                    devflows.Catalog `json:"buildCatalog"`
-	WorkspaceProvisionerImageDigest string           `json:"workspaceProvisionerImageDigest"`
-	BuilderImageDigest              string           `json:"builderImageDigest"`
-	WorkspaceRootDir                string           `json:"workspaceRootDir"`
-	WorkspaceClaimName              string           `json:"workspaceClaimName"`
-
 	ReadHeaderTimeout  time.Duration `json:"readHeaderTimeout"`
 	ReadTimeout        time.Duration `json:"readTimeout"`
 	WriteTimeout       time.Duration `json:"writeTimeout"`
@@ -174,18 +163,12 @@ func Default() Config {
 		// browser surfaces a generic NetworkError. Keep headroom for auth.
 		// Large /api/v1/files downloads also need this aligned with
 		// FilesTransferTimeout (ResponseController extends further when Unwrap works).
-		WriteTimeout:                   30 * time.Minute,
-		IdleTimeout:                    60 * time.Second,
-		ShutdownTimeout:                30 * time.Second,
-		MaxHeaderBytes:                 16 * 1024,
-		MaxBodyBytes:                   1 * 1024 * 1024,
-		AuditRetentionDays:             365,
-		BuildDefaultDeadline:           30 * time.Minute,
-		WorkflowEngine:                 "fake",
-		WorkflowInstanceID:             "appliance",
-		WorkflowExecutorServiceAccount: "appliance-workflows-executor",
-		WorkspaceRootDir:               "/data/zon/workspaces",
-		WorkspaceClaimName:             "appliance-workspaces",
+		WriteTimeout:       30 * time.Minute,
+		IdleTimeout:        60 * time.Second,
+		ShutdownTimeout:    30 * time.Second,
+		MaxHeaderBytes:     16 * 1024,
+		MaxBodyBytes:       1 * 1024 * 1024,
+		AuditRetentionDays: 365,
 	}
 }
 
@@ -245,7 +228,6 @@ func loadFile(path string, cfg *Config) error {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return err
 	}
-	cfg.BuildCatalog.Normalize()
 	return nil
 }
 
@@ -303,13 +285,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("CONFIGURATION_ARCHIVE_REGION", &cfg.ConfigurationArchiveRegion)
 	str("VIDEO_LIBRARY_OBJECT_PREFIX", &cfg.VideoLibraryObjectPrefix)
 	str("VIDEO_LIBRARY_PROJECTION_DIR", &cfg.VideoLibraryProjectionDir)
-	str("WORKFLOW_ENGINE", &cfg.WorkflowEngine)
-	str("WORKFLOW_INSTANCE_ID", &cfg.WorkflowInstanceID)
-	str("WORKFLOW_EXECUTOR_SERVICE_ACCOUNT", &cfg.WorkflowExecutorServiceAccount)
-	str("WORKSPACE_PROVISIONER_IMAGE_DIGEST", &cfg.WorkspaceProvisionerImageDigest)
-	str("BUILDER_IMAGE_DIGEST", &cfg.BuilderImageDigest)
-	str("WORKSPACE_ROOT_DIR", &cfg.WorkspaceRootDir)
-	str("WORKSPACE_CLAIM_NAME", &cfg.WorkspaceClaimName)
 
 	var errs []string
 	for _, databaseInt := range []struct {
@@ -380,7 +355,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		{"WRITE_TIMEOUT", &cfg.WriteTimeout},
 		{"IDLE_TIMEOUT", &cfg.IdleTimeout},
 		{"SHUTDOWN_TIMEOUT", &cfg.ShutdownTimeout},
-		{"BUILD_DEFAULT_DEADLINE", &cfg.BuildDefaultDeadline},
 		{"FILES_TRANSFER_TIMEOUT", &cfg.FilesTransferTimeout},
 		{"VIDEO_TRANSFER_TIMEOUT", &cfg.VideoTransferTimeout},
 	}
@@ -415,13 +389,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 		}
 	}
 
-	if v, ok := env[envPrefix+"BUILD_CATALOG_JSON"]; ok && strings.TrimSpace(v) != "" {
-		if err := json.Unmarshal([]byte(v), &cfg.BuildCatalog); err != nil {
-			errs = append(errs, fmt.Sprintf("BUILD_CATALOG_JSON: %v", err))
-		} else {
-			cfg.BuildCatalog.Normalize()
-		}
-	}
 	if v, ok := env[envPrefix+"SERVICE_REGISTRY_JSON"]; ok && strings.TrimSpace(v) != "" {
 		if err := json.Unmarshal([]byte(v), &cfg.ServiceRegistry); err != nil {
 			errs = append(errs, fmt.Sprintf("SERVICE_REGISTRY_JSON: %v", err))
@@ -450,7 +417,6 @@ func (c Config) Validate() error {
 	var errs []string
 
 	resolved, profileErr := c.ResolveProfile()
-	buildEnabled := false
 	filesEnabled := false
 	artifactEnabled := false
 	dnsEnabled := false
@@ -464,46 +430,12 @@ func (c Config) Validate() error {
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("applianceCatalog is invalid: %v", err))
 		}
-		buildEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameBuild)
 		filesEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameFiles)
 		artifactEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry)
 		dnsEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameLANDNS)
 		inferenceEnabled = appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime)
 		openWebUIEnabled = resolved.Capabilities.Enabled(appliance.CapabilityOpenWebUI)
 		videoEnabled = resolved.Capabilities.Enabled(appliance.CapabilityVideo)
-	}
-	if profileErr == nil && buildEnabled {
-		if !c.BuildCatalog.Empty() {
-			if err := c.BuildCatalog.Validate(); err != nil {
-				errs = append(errs, err.Error())
-			}
-		}
-		if strings.TrimSpace(c.WorkspaceRootDir) == "" {
-			errs = append(errs, "workspaceRootDir must not be empty when the build capability is enabled")
-		} else if !strings.HasPrefix(c.WorkspaceRootDir, "/") {
-			errs = append(errs, "workspaceRootDir must be an absolute path")
-		}
-		if strings.TrimSpace(c.WorkspaceClaimName) == "" {
-			errs = append(errs, "workspaceClaimName must not be empty when the build capability is enabled")
-		}
-		if strings.TrimSpace(c.WorkflowExecutorServiceAccount) == "" {
-			errs = append(errs, "workflowExecutorServiceAccount must not be empty when the build capability is enabled")
-		}
-		if strings.TrimSpace(c.WorkspaceProvisionerImageDigest) == "" {
-			errs = append(errs, "workspaceProvisionerImageDigest must not be empty when the build capability is enabled")
-		} else if !strings.Contains(c.WorkspaceProvisionerImageDigest, "@sha256:") {
-			errs = append(errs, "workspaceProvisionerImageDigest must be digest-pinned")
-		}
-		// builderImageDigest is operator-supplied (not packaged in the appliance).
-		// When set it must be digest-pinned; builds fail at submit if the catalog
-		// target cannot resolve a usable builder image.
-		if digest := strings.TrimSpace(c.BuilderImageDigest); digest != "" && !strings.Contains(digest, "@sha256:") {
-			errs = append(errs, "builderImageDigest must be digest-pinned when set")
-		}
-	} else if profileErr == nil && !buildEnabled && !c.BuildCatalog.Empty() {
-		if err := c.BuildCatalog.Validate(); err != nil {
-			errs = append(errs, err.Error())
-		}
 	}
 	if profileErr == nil && len(c.ServiceRegistry.Services) > 0 {
 		if err := c.ServiceRegistry.Validate(resolved.Capabilities); err != nil {
@@ -691,19 +623,12 @@ func (c Config) Validate() error {
 		errs = append(errs, "auditRetentionDays must be between 90 and 3650")
 	}
 
-	switch c.WorkflowEngine {
-	case "fake", "workflows":
-	default:
-		errs = append(errs, `workflowEngine must be one of "fake", "workflows"`)
-	}
-
 	durations := map[string]time.Duration{
-		"readHeaderTimeout":    c.ReadHeaderTimeout,
-		"readTimeout":          c.ReadTimeout,
-		"writeTimeout":         c.WriteTimeout,
-		"idleTimeout":          c.IdleTimeout,
-		"shutdownTimeout":      c.ShutdownTimeout,
-		"buildDefaultDeadline": c.BuildDefaultDeadline,
+		"readHeaderTimeout": c.ReadHeaderTimeout,
+		"readTimeout":       c.ReadTimeout,
+		"writeTimeout":      c.WriteTimeout,
+		"idleTimeout":       c.IdleTimeout,
+		"shutdownTimeout":   c.ShutdownTimeout,
 	}
 	for name, d := range durations {
 		if d <= 0 {

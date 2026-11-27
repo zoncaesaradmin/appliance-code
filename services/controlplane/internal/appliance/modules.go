@@ -19,7 +19,6 @@ const (
 	ModuleNameFiles            = "files"
 	ModuleNameArtifactRegistry = "artifact-registry"
 	ModuleNameLANDNS           = "lan-dns"
-	ModuleNameBuild            = "build"
 	ModuleNameInferenceRuntime = "inference-runtime"
 )
 
@@ -28,7 +27,6 @@ type ExecutionMode string
 const (
 	ExecutionModeClusterService ExecutionMode = "cluster-service"
 	ExecutionModeHostAgent      ExecutionMode = "host-agent"
-	ExecutionModeWorkflowBacked ExecutionMode = "workflow-backed"
 )
 
 type SecurityClass string

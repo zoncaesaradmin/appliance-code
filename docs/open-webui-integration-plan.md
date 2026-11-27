@@ -291,7 +291,7 @@ mapping, and having an admin disable access without deleting that history.
 - Current browser auth and ForwardAuth policy: `services/controlplane-ui/src/auth.ts`,
   `services/controlplane/internal/httpapi/forwardauth.go`, and
   `services/controlplane/internal/forwardauth/policy.go`.
-- Operator UI/API mapping: `docs/ui-control-plane-route-mapping.md`.
+- Operator UI/API mapping: the generated OpenAPI contract and active UI route map.
 - Open WebUI: [Kubernetes deployment](https://docs.openwebui.com/deployment/kubernetes/),
   [environment configuration](https://docs.openwebui.com/reference/env-configuration/),
   [offline mode](https://docs.openwebui.com/tutorials/maintenance/offline-mode/),

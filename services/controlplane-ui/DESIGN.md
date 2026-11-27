@@ -34,8 +34,8 @@
 - Login artwork is a release asset, not a network dependency. It must remain
   available from the offline static-shell cache and must not load from
   `zonited.com` or another public origin. Prefer a product-grade digital
-  composition over the marketing-site neighborhood painting, and keep brand
-  identity to the transparent wordmark so the artwork stays visible.
+  composition over the marketing-site neighborhood painting, with no story
+  card or wordmark overlay so the artwork stays fully visible.
 - The application shell has no operator-console, account, or administration links. Application and operator URL spaces remain separate.
 - Inputs retain visible labels, focus rings, keyboard operation, and inline errors.
 - Mobile OTP entry separates country selection from the local number; India (+91) is the default and the local number is digit-only with country-specific length validation.
@@ -87,3 +87,6 @@
   Zonited wordmark on the canvas.
 - 2026-11-27: Removed the temporary wordmark overlay and refreshed the Zonity
   canvas so the service ring uses brand burgundy instead of a lighter rose.
+- 2026-11-27: Updated the login neighborhood canvas to the mixed apartment /
+  shop / godown / house composition without radiating service lines, with
+  restrained burgundy accents only on the ring and a few building edges.

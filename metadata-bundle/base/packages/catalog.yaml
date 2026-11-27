@@ -11,10 +11,6 @@ packages:
     displayName: Storage Network Services
     description: Appliance-owned Artifact Server and OCI registry.
     capabilities: [artifact]
-  build-workflows:
-    displayName: Build Workflows
-    description: Workflow execution and build workspace provisioning.
-    capabilities: [workflows, build]
   deviceuser:
     displayName: Device User Services
     description: Host-agent-backed host and application management with appliance LAN DNS.

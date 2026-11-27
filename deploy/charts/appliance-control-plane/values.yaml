@@ -30,8 +30,6 @@ rollout:
     enabled: true
   dnsSupport:
     enabled: true
-  workflowsSupport:
-    enabled: true
 
 identity:
   instance: appliance
@@ -134,34 +132,16 @@ config:
   configurationArchivePrefix: configuration-archives
 
   trustedProxyCount: 1
-  workflowInstanceID: appliance
-  # Must match the ServiceAccount the appliance-workflows chart actually
-  # creates: "<appliance-workflows.fullname>-executor", where fullname is
-  # pinned via that chart's own fullnameOverride: "appliance-workflows".
-  # These are two independent charts with no template-level link between
-  # them, so this string has to be kept in sync by hand.
-  workflowExecutorServiceAccount: appliance-workflows-executor
-  # Developer workflow catalog used by the builder profile. Runtime catalogs are
-  # uploaded after install through the control-plane API/UI and stored in SQLite.
-  # Leave this empty at install for build-capable profiles.
-  buildCatalog: {}
   # Bundled appliance profile/module catalog. zonctl injects the signed
   # bundle copy so runtime profile/module resolution matches install-time
   # resolution.
-  # Appliance-owned generic image used by workspace provisioning workflows.
-  # zonctl injects this from the signed bundle for build-capable profiles.
-  workspaceProvisionerImageDigest: ""
-  # Optional day-2 operator default builder image digest. Builder images are
-  # not packaged in the appliance; build catalogs must set explicit
-  # digest-pinned builderImageDigest values for build pods.
-  builderImageDigest: ""
   # Internal Artifact Server data-plane endpoint. Artifact-bearing production profiles
-  # (builder, storage, storage-landns, builder-landns, builder-storage-landns)
+  # (storage, storage-landns)
   # fail closed if this is empty; local tests may explicitly enable fake Artifact Server.
   artifactServerBaseURL: "http://appliance-registry.artifacts.svc.cluster.local:5000"
   artifactServerAllowFake: false
-  # CoreDNS ready-plugin URL. DNS-bearing profiles (landns, storage-landns,
-  # builder-landns, builder-storage-landns) fail closed at control-plane
+  # CoreDNS ready-plugin URL. DNS-bearing profiles (landns, storage-landns)
+  # fail closed at control-plane
   # startup when this is empty so the appliance never reports dns-capable
   # while the LAN DNS release is missing.
   dnsReadyURL: ""
@@ -310,20 +290,6 @@ persistence:
   # Mounted over dataDir/metadata-bundles so the control plane prefers the
   # install-time archive over the embedded fallback.
   metadataBundlesHostPath: /data/zon/metadata-bundles
-
-workspaceStorage:
-  enabled: true
-  storageClassName: ""
-  size: 20Gi
-  accessMode: ReadWriteOnce
-  rootDir: /data/zon/workspaces # fixed host-visible workspace path, also used as the PV hostPath backing
-  # zonctl prepares /data/zon/workspaces before Helm runs. Keep this false:
-  # the chart no longer ships a helper Job for helm-only ownership prep,
-  # because that path depended on a separate root+hostPath container image and
-  # was incompatible with both Restricted PSA and the appliance's offline
-  # install contract.
-  prepareJob:
-    enabled: false
 
 service:
   publicPort: 8080
@@ -572,9 +538,7 @@ ingress:
 serviceAccount:
   create: true
   name: ""
-  # No Kubernetes API access is needed by the control plane yet; Phase 6
-  # (build vertical slice) adds a narrowly scoped Role for Workflow
-  # submission, at which point this is revisited.
+  # No Kubernetes API access is needed by the control plane.
   automountServiceAccountToken: false
 
 resources:

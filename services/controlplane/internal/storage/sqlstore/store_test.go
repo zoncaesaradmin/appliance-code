@@ -111,39 +111,6 @@ func TestOperationsStoreLifecycle(t *testing.T) {
 	}
 }
 
-func TestIdempotencyStoreReserveAndComplete(t *testing.T) {
-	ctx := context.Background()
-	db := openTestDB(t)
-	idem := sqlstore.NewIdempotencyStore(db)
-
-	_, claimed, err := idem.Reserve(ctx, "builds.create", "key-1", "hash-1", time.Hour)
-	if err != nil {
-		t.Fatalf("first Reserve: %v", err)
-	}
-	if !claimed {
-		t.Fatalf("first Reserve should have claimed the key")
-	}
-
-	existing, claimed, err := idem.Reserve(ctx, "builds.create", "key-1", "hash-1", time.Hour)
-	if err != nil {
-		t.Fatalf("second Reserve: %v", err)
-	}
-	if claimed {
-		t.Fatalf("second Reserve should not re-claim an already-reserved key")
-	}
-	if existing.RequestHash != "hash-1" {
-		t.Errorf("existing.RequestHash = %q, want hash-1", existing.RequestHash)
-	}
-
-	if err := idem.Complete(ctx, "builds.create", "key-1", 201, []byte(`{"id":"b1"}`)); err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-
-	if err := idem.Complete(ctx, "builds.create", "no-such-key", 200, nil); !errors.Is(err, storage.ErrNotFound) {
-		t.Errorf("Complete(missing) error = %v, want ErrNotFound", err)
-	}
-}
-
 func TestMaintenanceStoreSaveAndGet(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)

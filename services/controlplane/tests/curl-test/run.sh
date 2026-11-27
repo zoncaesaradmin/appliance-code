@@ -28,11 +28,6 @@ ALICE_PASSWORD="alice-password-123"
 ROLE_NAME="curl-token-reader"
 API_TOKEN_NAME="curl-admin-token"
 ALICE_API_TOKEN_NAME="curl-alice-token"
-BUILD_SOURCE_URL="https://git.internal.example.com/team/app"
-BUILD_SOURCE_SHA="0123456789abcdef0123456789abcdef01234567"
-BUILD_IMAGE_REPOSITORY="users/admin/app"
-BUILD_IMAGE_TAG="v1"
-BUILD_BUILDER_DIGEST="buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 rm -rf "${RUN_DIR}"
 mkdir -p "${RUN_DIR}" "${LOG_DIR}" "${BIN_DIR}" "${DATA_DIR}" "${PASSWORD_DIR}"
@@ -176,36 +171,9 @@ wait_for_ready() {
 printf '%s\n' "${ADMIN_PASSWORD}" > "${PASSWORD_DIR}/admin.txt"
 cat > "${CONFIG_FILE}" <<EOF
 {
-  "applianceProfile": "builder-storage-landns",
-  "allowedGitSourceHosts": ["git.internal.example.com"],
-  "workspaceProvisionerImageDigest": "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "builderImageDigest": "${BUILD_BUILDER_DIGEST}",
+  "applianceProfile": "storage-landns",
 	"dnsReadyURL": "http://dns-server.dns.svc.cluster.local:8181/ready",
-	"dnsAllowFakeZoneSync": true,
-  "buildCatalog": {
-    "workProfiles": [
-      {
-        "name": "builder",
-        "description": "Builder workflows",
-        "repos": [
-          {"name": "app", "enabledByDefault": true}
-        ]
-      }
-    ],
-    "repos": [
-      {"name": "app", "url": "${BUILD_SOURCE_URL}", "defaultRef": "${BUILD_SOURCE_SHA}"}
-    ],
-    "buildTargets": [
-      {
-        "name": "default",
-        "aliases": ["app"],
-        "repo": "app",
-        "execution": "repo_script",
-        "imageRepository": "${BUILD_IMAGE_REPOSITORY}",
-        "imageTagTemplate": "{commit12}"
-      }
-    ]
-  }
+	"dnsAllowFakeZoneSync": true
 }
 EOF
 
@@ -272,24 +240,6 @@ curl_request GET "${PUBLIC_URL}/api/v1/auth/session" "Bearer ${admin_access_toke
 assert_status 200 "GET /api/v1/auth/session"
 assert_contains "${CURL_RESPONSE_BODY}" "\"userId\"" "session response"
 assert_contains "${CURL_RESPONSE_BODY}" '"authMethod":"session"' "session response"
-
-builder_git_access_body_file="${RUN_DIR}/builder-git-access.json"
-cat > "${builder_git_access_body_file}" <<EOF
-{"host":"git.internal.example.com","username":"builder-user","token":"builder-token"}
-EOF
-curl_request PUT "${PUBLIC_URL}/api/v1/builder/git-access/git-internal" "Bearer ${admin_access_token}" "${builder_git_access_body_file}"
-assert_status 200 "PUT /api/v1/builder/git-access/git-internal"
-assert_contains "${CURL_RESPONSE_BODY}" '"configured":true' "builder Git access response"
-assert_contains "${CURL_RESPONSE_BODY}" '"name":"git-internal"' "builder Git access response"
-assert_contains "${CURL_RESPONSE_BODY}" '"host":"git.internal.example.com"' "builder Git access response"
-
-builder_catalog_body_file="${RUN_DIR}/builder-catalog.json"
-cat > "${builder_catalog_body_file}" <<EOF
-{"workProfiles":[{"name":"default","repos":[{"name":"app","enabledByDefault":true}]}],"repos":[{"name":"app","url":"https://git.internal.example.com/team/app.git","defaultRef":"main"}]}
-EOF
-curl_request PUT "${PUBLIC_URL}/api/v1/builder/catalog" "Bearer ${admin_access_token}" "${builder_catalog_body_file}"
-assert_status 200 "PUT /api/v1/builder/catalog"
-assert_contains "${CURL_RESPONSE_BODY}" '"configured":true' "builder catalog response"
 
 refresh_body_file="${RUN_DIR}/refresh.json"
 cat > "${refresh_body_file}" <<EOF
@@ -397,32 +347,6 @@ assert_status 400 "GET /api/v1/registry/token with malformed scope"
 delete_grant_url="${PUBLIC_URL}/api/v1/registry/grants/${grant_id}"
 curl_request DELETE "${delete_grant_url}" "Bearer ${admin_access_token}"
 assert_status 204 "DELETE /api/v1/registry/grants/{id}"
-
-build_body_file="${RUN_DIR}/create-build.json"
-cat > "${build_body_file}" <<EOF
-{
-  "sourceRepoUrl":"${BUILD_SOURCE_URL}",
-  "sourceCommitSha":"${BUILD_SOURCE_SHA}",
-  "imageRepository":"${BUILD_IMAGE_REPOSITORY}",
-  "imageTag":"${BUILD_IMAGE_TAG}"
-}
-EOF
-curl_request POST "${PUBLIC_URL}/api/v1/builds" "Bearer ${admin_access_token}" "${build_body_file}"
-assert_status 201 "POST /api/v1/builds"
-build_id="$(json_field "${CURL_RESPONSE_BODY}" "id")"
-assert_contains "${CURL_RESPONSE_BODY}" '"status":"running"' "create build response"
-
-curl_request GET "${PUBLIC_URL}/api/v1/builds/${build_id}" "Bearer ${admin_access_token}"
-assert_status 200 "GET /api/v1/builds/{id}"
-assert_contains "${CURL_RESPONSE_BODY}" "\"id\":\"${build_id}\"" "get build response"
-
-curl_request GET "${PUBLIC_URL}/api/v1/builds" "Bearer ${admin_access_token}"
-assert_status 200 "GET /api/v1/builds"
-assert_contains "${CURL_RESPONSE_BODY}" "\"id\":\"${build_id}\"" "list builds response"
-
-curl_request GET "${PUBLIC_URL}/api/v1/builds/${build_id}/logs" "Bearer ${admin_access_token}"
-assert_status 200 "GET /api/v1/builds/{id}/logs"
-assert_contains "${CURL_RESPONSE_BODY}" "fake logs for workflow" "build logs response"
 
 oversized_body_file="${RUN_DIR}/oversized-login.json"
 {

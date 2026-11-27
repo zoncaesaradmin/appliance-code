@@ -83,9 +83,6 @@ releases, enabling only the set it is currently applying.
 {{- if and .Values.rollout .Values.rollout.dnsSupport .Values.rollout.dnsSupport.enabled -}}true{{- end -}}
 {{- end -}}
 
-{{- define "appliance-control-plane.workflowsSupportEnabled" -}}
-{{- if and .Values.rollout .Values.rollout.workflowsSupport .Values.rollout.workflowsSupport.enabled -}}true{{- end -}}
-{{- end -}}
 
 {{/*
 Namespace for operator-facing apps co-packaged with the control-plane chart:
@@ -235,13 +232,6 @@ ServiceAccount name.
 {{- end -}}
 
 {{/*
-Whether the control plane should get API access for workflow submission.
-*/}}
-{{- define "appliance-control-plane.workflowsEnabled" -}}
-{{- if has "workflows" (.Values.config.enabledCapabilities | default (list)) -}}true{{- else -}}false{{- end -}}
-{{- end -}}
-
-{{/*
 Whether the control plane manages LAN DNS zone ConfigMap sync.
 */}}
 {{- define "appliance-control-plane.dnsAdminEnabled" -}}
@@ -252,14 +242,7 @@ Whether the control plane manages LAN DNS zone ConfigMap sync.
 Whether the control-plane ServiceAccount token must be mounted.
 */}}
 {{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
-{{- if or (eq (include "appliance-control-plane.workflowsEnabled" .) "true") (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationsEnabled" .) "true") (has "inference" (.Values.config.enabledCapabilities | default (list))) -}}true{{- else -}}false{{- end -}}
-{{- end -}}
-
-{{/*
-Fixed namespace for appliance-owned workflows in v1.
-*/}}
-{{- define "appliance-control-plane.workflowNamespace" -}}
-appliance-builds
+{{- if or (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationsEnabled" .) "true") (has "inference" (.Values.config.enabledCapabilities | default (list))) -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*
@@ -417,20 +400,6 @@ Action Runtime PVC name (own SQLite store; never share the control-plane PVC).
 */}}
 {{- define "appliance-control-plane.actionRuntimeClaimName" -}}
 {{- printf "%s-data" (include "appliance-control-plane.actionRuntimeName" .) -}}
-{{- end -}}
-
-{{/*
-Workspace PV name for the fixed host-path builder workspace storage.
-*/}}
-{{- define "appliance-control-plane.workspaceVolumeName" -}}
-{{- printf "%s-workspaces" (include "appliance-control-plane.fullname" .) -}}
-{{- end -}}
-
-{{/*
-Workspace PVC name for builder workflow pods.
-*/}}
-{{- define "appliance-control-plane.workspaceClaimName" -}}
-{{- printf "%s-workspaces" (include "appliance-control-plane.fullname" .) -}}
 {{- end -}}
 
 {{/*

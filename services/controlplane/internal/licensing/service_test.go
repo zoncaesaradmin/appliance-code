@@ -90,7 +90,7 @@ func TestAcceptBaseEntitlementDoesNotDowngradeLicensed(t *testing.T) {
 	doc := `{
 		"version":1,
 		"issuer":"zon",
-		"capabilities":["base","host","workflows","artifact"],
+		"capabilities":["base","host","artifact"],
 		"signature":"offline-dev",
 		"validFrom":"2020-01-01T00:00:00Z",
 		"validTo":"2099-01-01T00:00:00Z"
@@ -126,7 +126,7 @@ func TestImportLicenseAcceptsOfflineDev(t *testing.T) {
 	doc := `{
 		"version":1,
 		"issuer":"zon",
-		"capabilities":["base","host","workflows","artifact"],
+		"capabilities":["base","host","artifact"],
 		"signature":"offline-dev",
 		"validFrom":"2020-01-01T00:00:00Z",
 		"validTo":"2099-01-01T00:00:00Z"

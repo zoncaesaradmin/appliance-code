@@ -34,10 +34,10 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 	}
 }
 
-func TestResolveModulesIncludesArtifactAndBuildWhenEnabled(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("builder-storage-landns")
+func TestResolveModulesIncludesArtifactWhenEnabled(t *testing.T) {
+	resolved, err := appliance.ResolveProfile("storage-landns")
 	if err != nil {
-		t.Fatalf("ResolveProfile(builder): %v", err)
+		t.Fatalf("ResolveProfile(storage-landns): %v", err)
 	}
 	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {
@@ -45,15 +45,12 @@ func TestResolveModulesIncludesArtifactAndBuildWhenEnabled(t *testing.T) {
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameArtifactRegistry) {
-		t.Fatal("builder modules should include artifact-registry")
-	}
-	if !appliance.ModuleEnabled(modules, appliance.ModuleNameBuild) {
-		t.Fatal("builder modules should include build")
+		t.Fatal("storage-landns modules should include artifact-registry")
 	}
 }
 
 func TestResolveModulesIncludesDNSWhenEnabled(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("builder-storage-landns")
+	resolved, err := appliance.ResolveProfile("storage-landns")
 	if err != nil {
 		t.Fatalf("ResolveProfile(landns): %v", err)
 	}
@@ -79,9 +76,6 @@ func TestResolveModulesIncludesVideoCapabilityWithoutRuntimeModule(t *testing.T)
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
 		t.Fatal("training modules should include files")
-	}
-	if appliance.ModuleEnabled(modules, appliance.ModuleNameBuild) {
-		t.Fatal("training profile should not include build")
 	}
 	if appliance.ModuleEnabled(modules, appliance.ModuleNameInferenceRuntime) {
 		t.Fatal("training profile should not include inference-runtime")
@@ -110,9 +104,9 @@ func TestResolveModulesSuppressesModuleWhenNotEntitled(t *testing.T) {
 }
 
 func TestResolveModulesSkipsHostAgentWithoutHostCapability(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("builder-storage-landns")
+	resolved, err := appliance.ResolveProfile("storage-landns")
 	if err != nil {
-		t.Fatalf("ResolveProfile(builder): %v", err)
+		t.Fatalf("ResolveProfile(storage-landns): %v", err)
 	}
 	hostless := appliance.ModuleDescriptor{
 		Name:                 "host-agent",
@@ -122,7 +116,7 @@ func TestResolveModulesSkipsHostAgentWithoutHostCapability(t *testing.T) {
 	}
 	modules := appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, []appliance.ModuleDescriptor{hostless})
 	if len(modules) != 0 {
-		t.Fatalf("ResolveModules(builder) with missing capability returned %d modules, want 0", len(modules))
+		t.Fatalf("ResolveModules with missing capability returned %d modules, want 0", len(modules))
 	}
 }
 
@@ -133,7 +127,7 @@ func (denyAllEntitlements) IsEntitled(appliance.ModuleDescriptor, appliance.Enti
 }
 
 func TestInferenceRuntimeUsesSharedGateway(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("builder-lanllm-storage-landns")
+	resolved, err := appliance.ResolveProfile("private-ai")
 	if err != nil {
 		t.Fatal(err)
 	}

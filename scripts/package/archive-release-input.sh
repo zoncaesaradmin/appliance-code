@@ -86,22 +86,9 @@ Options:
   --inference-version VERSION      Inference compatibility version. Defaults to
                                    the appliance-inference chart appVersion.
   --extra-oci-image PATH           Repeatable additional OCI image archive to
-                                   include in release-input, for example a
-                                   builder task image required by a profile.
+                                   include in release-input.
   --extra-oci-image-reference REF  Repeatable canonical image reference for the
                                    corresponding --extra-oci-image.
-  --workflows-version VERSION      Optional pinned workflows engine version.
-  --workflow-controller-image PATH
-                                   Optional workflow controller image archive.
-  --workflow-controller-image-reference REF
-                                   Canonical workflow controller image reference
-                                   contained in the OCI archive.
-  --workflow-executor-image PATH  Optional workflow executor image archive.
-  --workflow-executor-image-reference REF
-                                   Canonical workflow executor image reference
-                                   contained in the OCI archive.
-  --workflows-crds-dir DIR         Optional directory containing the versioned
-                                   workflow CRD bundle to copy into release-input.
   --k3s-version VERSION            Pinned K3s version. Required.
   --deployment-topology TOPOLOGY   Required immutable deployment topology.
                                    The only currently accepted value is
@@ -134,7 +121,6 @@ source "${SCRIPT_DIR}/target-arch.sh"
 target_arch_resolve
 CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-control-plane"
 MESSAGE_BROKER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-message-broker"
-WORKFLOWS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-workflows"
 ARTIFACT_SERVER_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-registry"
 DNS_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-dns"
 INFERENCE_CHART_DIR="${REPO_ROOT}/deploy/charts/appliance-inference"
@@ -172,12 +158,6 @@ OPEN_WEBUI_IMAGE_REFERENCE=""
 OPEN_WEBUI_GATEWAY_IMAGE=""
 OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE=""
 INFERENCE_VERSION=""
-WORKFLOWS_VERSION=""
-WORKFLOW_CONTROLLER_IMAGE=""
-WORKFLOW_CONTROLLER_IMAGE_REFERENCE=""
-WORKFLOW_EXECUTOR_IMAGE=""
-WORKFLOW_EXECUTOR_IMAGE_REFERENCE=""
-WORKFLOWS_CRDS_DIR=""
 EXTRA_OCI_IMAGES=()
 EXTRA_OCI_IMAGE_REFERENCES=()
 K3S_VERSION=""
@@ -330,30 +310,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --extra-oci-image-reference)
       EXTRA_OCI_IMAGE_REFERENCES+=("${2:-}")
-      shift 2
-      ;;
-    --workflows-version)
-      WORKFLOWS_VERSION="${2:-}"
-      shift 2
-      ;;
-    --workflow-controller-image)
-      WORKFLOW_CONTROLLER_IMAGE="${2:-}"
-      shift 2
-      ;;
-    --workflow-controller-image-reference)
-      WORKFLOW_CONTROLLER_IMAGE_REFERENCE="${2:-}"
-      shift 2
-      ;;
-    --workflow-executor-image)
-      WORKFLOW_EXECUTOR_IMAGE="${2:-}"
-      shift 2
-      ;;
-    --workflow-executor-image-reference)
-      WORKFLOW_EXECUTOR_IMAGE_REFERENCE="${2:-}"
-      shift 2
-      ;;
-    --workflows-crds-dir)
-      WORKFLOWS_CRDS_DIR="${2:-}"
       shift 2
       ;;
     --k3s-version)
@@ -827,14 +783,6 @@ if [[ -z "${INFERENCE_RUNTIME_IMAGE}" || -z "${INFERENCE_MANAGER_IMAGE}" ]]; the
   OPEN_WEBUI_GATEWAY_IMAGE=""
   OPEN_WEBUI_GATEWAY_IMAGE_REFERENCE=""
 fi
-if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" && ! -f "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
-  echo "archive-release-input: workflow controller image not found: ${WORKFLOW_CONTROLLER_IMAGE}" >&2
-  exit 1
-fi
-if [[ -n "${WORKFLOW_EXECUTOR_IMAGE}" && ! -f "${WORKFLOW_EXECUTOR_IMAGE}" ]]; then
-  echo "archive-release-input: workflow executor image not found: ${WORKFLOW_EXECUTOR_IMAGE}" >&2
-  exit 1
-fi
 if [[ ${#EXTRA_OCI_IMAGES[@]} -ne ${#EXTRA_OCI_IMAGE_REFERENCES[@]} ]]; then
   echo "archive-release-input: every --extra-oci-image must have a matching --extra-oci-image-reference" >&2
   exit 2
@@ -852,24 +800,6 @@ if [[ ${#EXTRA_OCI_IMAGES[@]} -gt 0 ]]; then
       exit 2
     fi
   done
-fi
-if [[ -n "${WORKFLOWS_CRDS_DIR}" && ! -d "${WORKFLOWS_CRDS_DIR}" ]]; then
-  echo "archive-release-input: workflows CRDs directory not found: ${WORKFLOWS_CRDS_DIR}" >&2
-  exit 1
-fi
-# Package the workflows chart only when CRDs (or other workflows inputs) are
-# provided. ADR 0011 still requires workflows in the complete appliance, but
-# pack-selective builds (build-workflows pack omitted) may skip workflows inputs.
-# Never ship the chart without CRDs: that installs a controller that
-# crash-loops on "get workflows.argoproj.io" until install times out.
-if [[ -z "${WORKFLOWS_CRDS_DIR}" ]]; then
-  if [[ -n "${WORKFLOWS_VERSION}" || -n "${WORKFLOW_CONTROLLER_IMAGE}" || -n "${WORKFLOW_EXECUTOR_IMAGE}" ]]; then
-    echo "archive-release-input: workflows inputs require --workflows-crds-dir; the workflow controller cannot start without its CRDs" >&2
-    exit 1
-  fi
-elif [[ ! -d "${WORKFLOWS_CHART_DIR}" ]]; then
-  echo "archive-release-input: --workflows-crds-dir was set but workflows chart is missing: ${WORKFLOWS_CHART_DIR}" >&2
-  exit 1
 fi
 if [[ ! -f "${VALUES_SCHEMA_PATH}" ]]; then
   echo "archive-release-input: missing chart values schema: ${VALUES_SCHEMA_PATH}" >&2
@@ -985,7 +915,6 @@ OPEN_WEBUI_GATEWAY_BASENAME=""
 BLOB_STORAGE_BASENAME=""
 CHART_ARCHIVE="appliance-chart-${CODE_VERSION}.tgz"
 MESSAGE_BROKER_CHART_ARCHIVE="appliance-message-broker-${CODE_VERSION}.tgz"
-WORKFLOWS_CHART_ARCHIVE="workflows-chart-${CODE_VERSION}.tgz"
 ARTIFACT_SERVER_CHART_ARCHIVE="appliance-registry-chart-${CODE_VERSION}.tgz"
 DNS_CHART_ARCHIVE="appliance-dns-chart-${CODE_VERSION}.tgz"
 INFERENCE_CHART_ARCHIVE="appliance-inference-chart-${CODE_VERSION}.tgz"
@@ -1053,17 +982,7 @@ if [[ -n "${OPEN_WEBUI_GATEWAY_IMAGE}" ]]; then
 fi
 cp "${VALUES_SCHEMA_PATH}" "${RELEASE_INPUT_DIR}/${CONFIG_SCHEMA_BASENAME}"
 
-WORKFLOW_CONTROLLER_BASENAME=""
-WORKFLOW_EXECUTOR_BASENAME=""
 EXTRA_OCI_BASENAMES=()
-if [[ -n "${WORKFLOW_CONTROLLER_IMAGE}" ]]; then
-  WORKFLOW_CONTROLLER_BASENAME="$(basename "${WORKFLOW_CONTROLLER_IMAGE}")"
-  link_or_copy_file "${WORKFLOW_CONTROLLER_IMAGE}" "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}"
-fi
-if [[ -n "${WORKFLOW_EXECUTOR_IMAGE}" ]]; then
-  WORKFLOW_EXECUTOR_BASENAME="$(basename "${WORKFLOW_EXECUTOR_IMAGE}")"
-  link_or_copy_file "${WORKFLOW_EXECUTOR_IMAGE}" "${RELEASE_INPUT_DIR}/${WORKFLOW_EXECUTOR_BASENAME}"
-fi
 if [[ ${#EXTRA_OCI_IMAGES[@]} -gt 0 ]]; then
   for extra_image in "${EXTRA_OCI_IMAGES[@]}"; do
     extra_basename="$(basename "${extra_image}")"
@@ -1104,13 +1023,6 @@ if [[ -n "${INFERENCE_RUNTIME_IMAGE}" ]]; then
   INFERENCE_CHART_BASENAME="${INFERENCE_CHART_ARCHIVE}"
 fi
 
-if [[ -n "${WORKFLOWS_CRDS_DIR}" && -d "${WORKFLOWS_CHART_DIR}" ]]; then
-  mkdir -p "${TMP_DIR}/workflows-chart"
-  cp -R "${WORKFLOWS_CHART_DIR}/." "${TMP_DIR}/workflows-chart/"
-  tar -C "${TMP_DIR}" -czf "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" workflows-chart
-  copy_dir_or_empty "${WORKFLOWS_CRDS_DIR}" "${RELEASE_INPUT_DIR}/workflows-crds"
-fi
-
 {
   printf '{\n'
   printf '  "k3sVersion": "%s",\n' "${K3S_VERSION}"
@@ -1124,9 +1036,6 @@ fi
   fi
   if [[ -n "${INFERENCE_VERSION}" ]]; then
     printf ',\n  "inferenceVersion": "%s"' "${INFERENCE_VERSION}"
-  fi
-  if [[ -n "${WORKFLOWS_VERSION}" ]]; then
-    printf ',\n  "workflowsVersion": "%s"' "${WORKFLOWS_VERSION}"
   fi
   if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
     printf ',\n  "supportedUpgradeSources": ['
@@ -1170,9 +1079,6 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   if [[ -n "${DNS_CHART_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${DNS_CHART_BASENAME}" | sed 's/^sha256://')" "${DNS_CHART_BASENAME}"
   fi
-  if [[ -f "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" | sed 's/^sha256://')" "${WORKFLOWS_CHART_ARCHIVE}"
-  fi
   if [[ -n "${ARTIFACT_SERVER_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${ARTIFACT_SERVER_BASENAME}" | sed 's/^sha256://')" "${ARTIFACT_SERVER_BASENAME}"
   fi
@@ -1193,12 +1099,6 @@ copy_dir_or_empty "${TESTS_DIR}" "${RELEASE_INPUT_DIR}/tests"
   fi
   if [[ -n "${OPEN_WEBUI_GATEWAY_BASENAME}" ]]; then
     printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${OPEN_WEBUI_GATEWAY_BASENAME}" | sed 's/^sha256://')" "${OPEN_WEBUI_GATEWAY_BASENAME}"
-  fi
-  if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_CONTROLLER_BASENAME}"
-  fi
-  if [[ -n "${WORKFLOW_EXECUTOR_BASENAME}" ]]; then
-    printf '%s  %s\n' "$(sha256_file "${RELEASE_INPUT_DIR}/${WORKFLOW_EXECUTOR_BASENAME}" | sed 's/^sha256://')" "${WORKFLOW_EXECUTOR_BASENAME}"
   fi
   if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
     for extra_basename in "${EXTRA_OCI_BASENAMES[@]}"; do
@@ -1241,10 +1141,6 @@ if [[ ${#SUPPORTED_UPGRADE_SOURCES[@]} -gt 0 ]]; then
   SUPPORTED_UPGRADES_JSON+=']'
 fi
 
-WORKFLOWS_COMPATIBILITY_JSON=""
-if [[ -n "${WORKFLOWS_VERSION}" ]]; then
-  WORKFLOWS_COMPATIBILITY_JSON=', "workflowsVersion": "'"${WORKFLOWS_VERSION}"'"'
-fi
 ARTIFACT_SERVER_COMPATIBILITY_JSON=""
 if [[ -n "${ARTIFACT_SERVER_VERSION}" ]]; then
   ARTIFACT_SERVER_COMPATIBILITY_JSON=', "artifactServerVersion": "'"${ARTIFACT_SERVER_VERSION}"'"'
@@ -1320,24 +1216,6 @@ if [[ -n "${INFERENCE_CHART_BASENAME}" ]]; then
 fi
 
 
-OPTIONAL_WORKFLOWS_ARTIFACTS_JSON=""
-if [[ -f "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" ]]; then
-  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
-    "workflowsChart": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${WORKFLOWS_CHART_ARCHIVE}" "${WORKFLOWS_CHART_ARCHIVE}")"
-fi
-if [[ -d "${RELEASE_INPUT_DIR}/workflows-crds" ]]; then
-  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
-    "workflowsCRDs": '"$(render_dir_artifact "workflows-crds")"
-fi
-if [[ -n "${WORKFLOW_CONTROLLER_BASENAME}" ]]; then
-  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
-    "workflowControllerImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${WORKFLOW_CONTROLLER_BASENAME}" "${WORKFLOW_CONTROLLER_BASENAME}" "${WORKFLOW_CONTROLLER_IMAGE_REFERENCE}")"
-fi
-if [[ -n "${WORKFLOW_EXECUTOR_BASENAME}" ]]; then
-  OPTIONAL_WORKFLOWS_ARTIFACTS_JSON+=',
-    "workflowExecutorImage": '"$(render_file_artifact "${RELEASE_INPUT_DIR}/${WORKFLOW_EXECUTOR_BASENAME}" "${WORKFLOW_EXECUTOR_BASENAME}" "${WORKFLOW_EXECUTOR_IMAGE_REFERENCE}")"
-fi
-
 OPTIONAL_EXTRA_OCI_IMAGES_JSON=""
 if [[ ${#EXTRA_OCI_BASENAMES[@]} -gt 0 ]]; then
   OPTIONAL_EXTRA_OCI_IMAGES_JSON=',
@@ -1380,11 +1258,11 @@ $(if [[ -n "${POSTGRES_IMAGE}" ]]; then printf '    "postgresImage": %s,\n' "$(r
     "sbom": $(render_dir_artifact "sbom"),
     "provenance": $(render_dir_artifact "provenance"),
     "notices": $(render_dir_artifact "notices"),
-    "tests": $(render_dir_artifact "tests")${OPTIONAL_WORKFLOWS_ARTIFACTS_JSON}${OPTIONAL_EXTRA_OCI_IMAGES_JSON}
+    "tests": $(render_dir_artifact "tests")${OPTIONAL_EXTRA_OCI_IMAGES_JSON}
   },
   "compatibility": {
     "k3sVersion": "${K3S_VERSION}",
-    "chartVersion": "${CHART_VERSION}"${DEPLOYMENT_TOPOLOGY_JSON}${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${INFERENCE_COMPATIBILITY_JSON}${WORKFLOWS_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
+    "chartVersion": "${CHART_VERSION}"${DEPLOYMENT_TOPOLOGY_JSON}${ARTIFACT_SERVER_COMPATIBILITY_JSON}${DNS_COMPATIBILITY_JSON}${INFERENCE_COMPATIBILITY_JSON}${SUPPORTED_UPGRADES_JSON}
   }
 }
 JSON

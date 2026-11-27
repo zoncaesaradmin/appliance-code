@@ -96,7 +96,7 @@ type Catalog struct {
 }
 
 // ResourceManager applies the stable Kubernetes contract for an application.
-// It deliberately has no dependency on Action Runtime or workflows.
+// It deliberately has no dependency on Action Runtime or other background services.
 type ResourceManager interface {
 	Apply(ctx context.Context, definition Definition) (string, error)
 	Delete(ctx context.Context, definition Definition) error

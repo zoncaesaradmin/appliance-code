@@ -21,7 +21,6 @@ modules:
   - {name: files, kind: platform, requiredCapabilities: [files], executionMode: cluster-service, entitlementKey: files, securityClass: restricted}
   - {name: artifact-registry, kind: platform, requiredCapabilities: [artifact], executionMode: cluster-service, entitlementKey: artifact-registry, securityClass: restricted}
   - {name: lan-dns, kind: platform, requiredCapabilities: [dns], executionMode: cluster-service, entitlementKey: lan-dns, securityClass: restricted}
-  - {name: build, kind: platform, requiredCapabilities: [build], executionMode: workflow-backed, entitlementKey: build, securityClass: restricted}
   - name: inference-runtime
     kind: platform
     requiredCapabilities: [inference]

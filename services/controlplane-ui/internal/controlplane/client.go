@@ -82,100 +82,6 @@ type SetupStatus struct {
 	Initialized bool `json:"initialized"`
 }
 
-type WorkProfile struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description,omitempty"`
-	Repos       []WorkProfileRepo `json:"repos,omitempty"`
-}
-
-type WorkProfileRepo struct {
-	Name             string `json:"name"`
-	EnabledByDefault bool   `json:"enabledByDefault,omitempty"`
-}
-
-type Workspace struct {
-	ID            string     `json:"id"`
-	OwnerID       string     `json:"ownerId"`
-	Name          string     `json:"name"`
-	WorkProfile   string     `json:"workProfile"`
-	SourceRepoURL string     `json:"sourceRepoUrl"`
-	SourceRef     string     `json:"sourceRef"`
-	Status        string     `json:"status"`
-	ReasonCode    string     `json:"reasonCode,omitempty"`
-	ErrorMessage  string     `json:"errorMessage,omitempty"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
-	DeletedAt     *time.Time `json:"deletedAt,omitempty"`
-}
-
-type CreateWorkspaceRequest struct {
-	Name        string `json:"name"`
-	WorkProfile string `json:"workProfile"`
-}
-
-type BuilderCatalogStatus struct {
-	Configured   bool           `json:"configured"`
-	UpdatedAt    *time.Time     `json:"updatedAt,omitempty"`
-	ContentType  string         `json:"contentType,omitempty"`
-	Catalog      map[string]any `json:"catalog"`
-	Document     string         `json:"document"`
-	CanConfigure bool           `json:"canConfigure"`
-}
-
-type BuilderGitCredential struct {
-	Name     string `json:"name"`
-	Host     string `json:"host"`
-	Username string `json:"username"`
-}
-
-type BuilderGitAccessStatus struct {
-	Configured    bool                   `json:"configured"`
-	RequiredHosts []string               `json:"requiredHosts,omitempty"`
-	CoveredHosts  []string               `json:"coveredHosts,omitempty"`
-	MissingHosts  []string               `json:"missingHosts,omitempty"`
-	Credentials   []BuilderGitCredential `json:"credentials,omitempty"`
-	CanConfigure  bool                   `json:"canConfigure"`
-}
-
-type UpsertBuilderGitAccessRequest struct {
-	Host     string `json:"host"`
-	Username string `json:"username"`
-	Token    string `json:"token"`
-}
-
-type BuildTarget struct {
-	Name              string   `json:"name"`
-	Aliases           []string `json:"aliases,omitempty"`
-	Description       string   `json:"description,omitempty"`
-	Repo              string   `json:"repo"`
-	Execution         string   `json:"execution"`
-	Args              []string `json:"args,omitempty"`
-	ContainerfilePath string   `json:"containerfilePath"`
-	ImageRepository   string   `json:"imageRepository"`
-}
-
-type SubmitBuildRequest struct {
-	TargetName string `json:"targetName"`
-	ImageTag   string `json:"imageTag,omitempty"`
-}
-
-type Job struct {
-	ID           string     `json:"id"`
-	OwnerID      string     `json:"ownerId"`
-	WorkspaceID  string     `json:"workspaceId,omitempty"`
-	BuildID      string     `json:"buildId,omitempty"`
-	Type         string     `json:"type"`
-	Status       string     `json:"status"`
-	TargetName   string     `json:"targetName,omitempty"`
-	ArtifactRef  string     `json:"artifactRef,omitempty"`
-	ReasonCode   string     `json:"reasonCode,omitempty"`
-	ErrorMessage string     `json:"errorMessage,omitempty"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
-	StartedAt    *time.Time `json:"startedAt,omitempty"`
-	CompletedAt  *time.Time `json:"completedAt,omitempty"`
-}
-
 type RegistryReferrer struct {
 	MediaType    string `json:"mediaType"`
 	Digest       string `json:"digest"`
@@ -367,7 +273,7 @@ func (c *Client) Ready(ctx context.Context) (Health, error) {
 }
 
 // Capabilities reports the resolved capability set for the running
-// appliance instance (e.g. "base", "workflows", "build", "artifact") —
+// appliance instance (e.g. "base", "artifact", "dns") —
 // what the profile actually enables, not the profile name itself. It's
 // a public, unauthenticated endpoint (like SetupStatus), always
 // available regardless of profile since CapabilityBase is universal.
@@ -568,203 +474,6 @@ func repositoryPath(repository string) string {
 	return strings.Join(parts, "/")
 }
 
-func (c *Client) ListWorkProfiles(ctx context.Context, accessToken string) ([]WorkProfile, error) {
-	var result struct {
-		Items []WorkProfile `json:"items"`
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/work-profiles", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
-		return nil, err
-	}
-	return result.Items, nil
-}
-
-func (c *Client) ListWorkspaces(ctx context.Context, accessToken string) ([]Workspace, error) {
-	var result struct {
-		Items []Workspace `json:"items"`
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/workspaces", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
-		return nil, err
-	}
-	return result.Items, nil
-}
-
-func (c *Client) CurrentWorkspace(ctx context.Context, accessToken string) (*Workspace, error) {
-	var out *Workspace
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *Client) CreateWorkspace(ctx context.Context, accessToken string, in CreateWorkspaceRequest) (Workspace, error) {
-	var out Workspace
-	body, _ := json.Marshal(in)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/workspaces", bytes.NewReader(body))
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	if err := c.doJSON(req, http.StatusCreated, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) SetCurrentWorkspace(ctx context.Context, accessToken, workspaceID string) (Workspace, error) {
-	var out Workspace
-	body, _ := json.Marshal(map[string]string{"workspaceId": workspaceID})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/current-workspace", bytes.NewReader(body))
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) DeleteWorkspace(ctx context.Context, accessToken, workspaceID string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/workspaces/"+workspaceID, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	return c.doJSON(req, http.StatusNoContent, nil)
-}
-
-func (c *Client) BuilderCatalog(ctx context.Context, accessToken string) (BuilderCatalogStatus, error) {
-	var out BuilderCatalogStatus
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/builder/catalog", nil)
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) PutBuilderCatalog(ctx context.Context, accessToken string, document []byte, contentType string) (BuilderCatalogStatus, error) {
-	var out BuilderCatalogStatus
-	if strings.TrimSpace(contentType) == "" {
-		contentType = "application/yaml"
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/api/v1/builder/catalog", bytes.NewReader(document))
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", contentType)
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) BuilderGitAccess(ctx context.Context, accessToken string) (BuilderGitAccessStatus, error) {
-	var out BuilderGitAccessStatus
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/builder/git-access", nil)
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) UpsertBuilderGitAccess(ctx context.Context, accessToken, name string, in UpsertBuilderGitAccessRequest) (BuilderGitAccessStatus, error) {
-	var out BuilderGitAccessStatus
-	body, _ := json.Marshal(in)
-	path := c.baseURL + "/api/v1/builder/git-access/" + url.PathEscape(strings.TrimSpace(name))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, path, bytes.NewReader(body))
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) DeleteBuilderGitAccess(ctx context.Context, accessToken, name string) (BuilderGitAccessStatus, error) {
-	var out BuilderGitAccessStatus
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/api/v1/builder/git-access/"+url.PathEscape(strings.TrimSpace(name)), nil)
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) ListCurrentBuildTargets(ctx context.Context, accessToken string) ([]BuildTarget, error) {
-	var result struct {
-		Items []BuildTarget `json:"items"`
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace/build-targets", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &result); err != nil {
-		return nil, err
-	}
-	return result.Items, nil
-}
-
-func (c *Client) SubmitCurrentBuild(ctx context.Context, accessToken string, in SubmitBuildRequest) (Job, error) {
-	var out Job
-	body, _ := json.Marshal(in)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/current-workspace/builds", bytes.NewReader(body))
-	if err != nil {
-		return out, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Content-Type", "application/json")
-	if err := c.doJSON(req, http.StatusCreated, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-func (c *Client) CurrentWorkspaceBuildStatus(ctx context.Context, accessToken string) (*Job, error) {
-	var out *Job
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/v1/current-workspace/build-status", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	if err := c.doJSON(req, http.StatusOK, &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *Client) doJSON(req *http.Request, wantStatus int, out any) error {
 	body, err := c.do(req, wantStatus)
 	if err != nil {
@@ -786,23 +495,16 @@ func (c *Client) do(req *http.Request, wantStatus int) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
 	responseBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		c.trace(req, wantStatus, resp.StatusCode, time.Since(start), requestBody, nil, readErr)
 		return nil, readErr
 	}
 	if resp.StatusCode != wantStatus {
-		statusErr := &HTTPStatusError{
-			Method:     req.Method,
-			Path:       req.URL.Path,
-			StatusCode: resp.StatusCode,
-			Body:       string(limitBytes(responseBody, 4096)),
-		}
+		statusErr := &HTTPStatusError{Method: req.Method, Path: req.URL.Path, StatusCode: resp.StatusCode, Body: string(limitBytes(responseBody, 4096))}
 		c.trace(req, wantStatus, resp.StatusCode, time.Since(start), requestBody, responseBody, statusErr)
 		return nil, statusErr
 	}
-
 	c.trace(req, wantStatus, resp.StatusCode, time.Since(start), requestBody, responseBody, nil)
 	return responseBody, nil
 }
@@ -811,31 +513,14 @@ func (c *Client) trace(req *http.Request, wantStatus, status int, duration time.
 	if !c.traceHTTP {
 		return
 	}
-	suppressedPath := isSuppressedTracePath(req.URL.Path)
-
-	args := []any{
-		"component", "ui-controlplane-client",
-		"method", req.Method,
-		"path", req.URL.Path,
-		"wantStatus", wantStatus,
-		"status", status,
-		"duration", duration.String(),
-	}
-	if requestSummary := summarizeJSONForLog(requestBody); requestSummary != nil {
-		args = append(args, "request", requestSummary)
-	}
-	if responseSummary := summarizeJSONForLog(responseBody); responseSummary != nil {
-		args = append(args, "response", responseSummary)
-	}
 	if callErr != nil {
-		args = append(args, "error", callErr.Error())
-		c.logger.WithContext(req.Context()).Warnw("control plane API call", args...)
+		c.logger.WithContext(req.Context()).Warnw("control plane API call", "method", req.Method, "path", req.URL.Path, "wantStatus", wantStatus, "status", status, "duration", duration.String(), "error", callErr.Error())
 		return
 	}
-	if suppressedPath {
+	if isSuppressedTracePath(req.URL.Path) {
 		return
 	}
-	c.logger.WithContext(req.Context()).Infow("control plane API call", args...)
+	c.logger.WithContext(req.Context()).Infow("control plane API call", "method", req.Method, "path", req.URL.Path, "wantStatus", wantStatus, "status", status, "duration", duration.String(), "request", summarizeJSONForLog(requestBody), "response", summarizeJSONForLog(responseBody))
 }
 
 func withTrace(req *http.Request) *http.Request {

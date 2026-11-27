@@ -12,17 +12,12 @@ import (
 type Profile string
 
 const (
-	ProfileCore                       Profile = "core"
-	ProfileBuilder                    Profile = "builder"
-	ProfileStorage                    Profile = "storage"
-	ProfileLANDNS                     Profile = "landns"
-	ProfileStorageLANDNS              Profile = "storage-landns"
-	ProfileBuilderLANDNS              Profile = "builder-landns"
-	ProfileBuilderStorageLANDNS       Profile = "builder-storage-landns"
-	ProfileLANLLM                     Profile = "lanllm"
-	ProfileBuilderLANLLM              Profile = "builder-lanllm"
-	ProfileBuilderLANLLMStorageLANDNS Profile = "builder-lanllm-storage-landns"
-	ProfileTraining                   Profile = "training"
+	ProfileCore          Profile = "core"
+	ProfileStorage       Profile = "storage"
+	ProfileLANDNS        Profile = "landns"
+	ProfileStorageLANDNS Profile = "storage-landns"
+	ProfileLANLLM        Profile = "lanllm"
+	ProfileTraining      Profile = "training"
 )
 
 // Capability is the implementation-facing appliance capability name resolved
@@ -37,8 +32,6 @@ const (
 	CapabilityApplicationAuth     Capability = "application-auth"
 	CapabilityLANDiscovery        Capability = "lan-discovery"
 	CapabilityHost                Capability = "host"
-	CapabilityWorkflows           Capability = "workflows"
-	CapabilityBuild               Capability = "build"
 	CapabilityFiles               Capability = "files"
 	CapabilityArtifact            Capability = "artifact"
 	CapabilityDNS                 Capability = "dns"

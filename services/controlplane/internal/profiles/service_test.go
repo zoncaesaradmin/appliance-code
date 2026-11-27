@@ -90,30 +90,28 @@ func TestActivationFailsMissingEntitlement(t *testing.T) {
 	if _, err := lic.AcceptBaseEntitlement(context.Background(), audit.SystemActor); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err := svc.Activate(context.Background(), audit.SystemActor, "builder-storage-landns")
+	_, _, err := svc.Activate(context.Background(), audit.SystemActor, "storage-landns")
 	if err == nil {
-		t.Fatal("expected entitlement failure for builder profile")
+		t.Fatal("expected entitlement failure for storage-landns profile")
 	}
 }
 
 func TestActivationFailsMissingBundleArtifact(t *testing.T) {
 	svc, lic := openProfiles(t, profiles.ManifestBundleChecker{
 		Present: map[string]struct{}{
-			"control-plane-image":         {},
-			"control-plane-chart":         {},
-			"host-agent-image":            {},
-			"artifact-server-image":       {},
-			"appliance-registry-chart":    {},
-			"workspace-provisioner-image": {},
-			"coredns-image":               {},
-			"appliance-dns-chart":         {},
-			// workflow-templates intentionally missing (required by workflows/build)
+			"control-plane-image": {},
+			"control-plane-chart": {},
+			"host-agent-image":    {},
+			// artifact-server-image intentionally missing
+			"appliance-registry-chart": {},
+			"coredns-image":            {},
+			"appliance-dns-chart":      {},
 		},
 	})
 	if _, err := lic.AcceptBaseEntitlement(context.Background(), audit.SystemActor); err != nil {
 		t.Fatal(err)
 	}
-	validation, err := svc.Validate(context.Background(), "builder-storage-landns")
+	validation, err := svc.Validate(context.Background(), "storage-landns")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,6 @@ import (
 
 	"appliance-code/services/controlplane/internal/appliance"
 	"appliance-code/services/controlplane/internal/config"
-	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/serviceregistry"
 )
 
@@ -150,47 +149,13 @@ func TestLoadRejectsUnknownApplianceProfile(t *testing.T) {
 	}
 }
 
-func TestBuilderProfileAllowsEmptyBuildCatalogAtStartup(t *testing.T) {
-	cfg := config.Default()
-	cfg.ApplianceProfile = "builder-storage-landns"
-	cfg.ArtifactServerBaseURL = "http://appliance-registry.artifacts.svc.cluster.local:5000"
-	cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
-	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("builder profile with empty catalog Validate: %v", err)
-	}
-}
-
-func TestBuilderProfileRejectsInvalidSeedBuildCatalog(t *testing.T) {
-	cfg := config.Default()
-	cfg.ApplianceProfile = "builder-storage-landns"
-	cfg.ArtifactServerBaseURL = "http://appliance-registry.artifacts.svc.cluster.local:5000"
-	cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
-	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	cfg.BuildCatalog = devflows.Catalog{Repos: []devflows.Repo{{Name: "app"}}}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected invalid seeded catalog to fail validation")
-	}
-}
-
 func TestArtifactProfilesRequireRealArtifactServerInProduction(t *testing.T) {
-	for _, profile := range []string{"builder-storage-landns"} {
+	for _, profile := range []string{"storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
 			cfg.ArtifactServerAllowFake = false
-			switch profile {
-			case "builder-storage-landns":
-				cfg.BuildCatalog = testBuildCatalog()
-				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-			}
-			switch profile {
-			case "builder-storage-landns":
-				cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
-			}
+			cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "artifactServerBaseURL") {
 				t.Fatalf("Validate without artifact server URL = %v, want artifactServerBaseURL error", err)
 			}
@@ -203,18 +168,12 @@ func TestArtifactProfilesRequireRealArtifactServerInProduction(t *testing.T) {
 }
 
 func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
-	for _, profile := range []string{"builder-storage-landns"} {
+	for _, profile := range []string{"storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
 			cfg.DNSReadyURL = ""
-			switch profile {
-			case "builder-storage-landns":
-				cfg.ArtifactServerAllowFake = true
-				cfg.BuildCatalog = testBuildCatalog()
-				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-			}
+			cfg.ArtifactServerAllowFake = true
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "dnsReadyURL") {
 				t.Fatalf("Validate without DNS ready URL = %v, want dnsReadyURL error", err)
 			}
@@ -227,19 +186,11 @@ func TestDNSProfilesRequireDNSReadyURL(t *testing.T) {
 }
 
 func TestInferenceProfilesRequireInferenceGatewayBaseURL(t *testing.T) {
-	for _, profile := range []string{"builder-lanllm-storage-landns"} {
+	for _, profile := range []string{"private-ai"} {
 		t.Run(profile, func(t *testing.T) {
 			cfg := config.Default()
 			cfg.ApplianceProfile = profile
 			cfg.InferenceGatewayBaseURL = ""
-			switch profile {
-			case "builder-lanllm-storage-landns":
-				cfg.ArtifactServerAllowFake = true
-				cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
-				cfg.BuildCatalog = testBuildCatalog()
-				cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-				cfg.BuilderImageDigest = "dev-build@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-			}
 			if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "inferenceGatewayBaseURL") {
 				t.Fatalf("Validate without inference gateway URL = %v, want inferenceGatewayBaseURL error", err)
 			}
@@ -271,12 +222,10 @@ func TestTrainingProfileRequiresBlobStorage(t *testing.T) {
 
 func TestArtifactProfileAllowsExplicitFakeArtifactServerForLocalTests(t *testing.T) {
 	cfg := config.Default()
-	cfg.ApplianceProfile = "builder-storage-landns"
+	cfg.ApplianceProfile = "storage-landns"
 	cfg.ArtifactServerAllowFake = true
 	cfg.ArtifactServerBaseURL = ""
 	cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
-	cfg.WorkspaceProvisionerImageDigest = "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	cfg.BuilderImageDigest = "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("explicit local fake artifact server should remain valid: %v", err)
 	}
@@ -294,31 +243,6 @@ func TestFilesProfilesRequireObjectPrefixAndBlob(t *testing.T) {
 	cfg.BlobStorageAccessKey = ""
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "blob storage") {
 		t.Fatalf("Validate without blob credentials = %v, want blob storage error", err)
-	}
-}
-
-func testBuildCatalog() devflows.Catalog {
-	return devflows.Catalog{
-		WorkProfiles: []devflows.WorkProfile{{Name: "builder", Description: "Builder workflows", Repos: []devflows.ProfileRepo{{Name: "app", EnabledByDefault: true}}}},
-		Repos:        []devflows.Repo{{Name: "app", URL: "https://git.internal.example.com/team/app.git", DefaultRef: "0123456789abcdef0123456789abcdef01234567"}},
-		BuildTargets: []devflows.BuildTarget{{Name: "default", Aliases: []string{"app"}, Repo: "app", Execution: devflows.ExecutionScript, ImageRepository: "users/alice/app", ImageTagTemplate: "{commit12}"}},
-	}
-}
-
-func TestLoadAppliesBuildCatalogJSON(t *testing.T) {
-	jsonCatalog := `{"workProfiles":[{"name":"builder","repos":[{"name":"app","enabledByDefault":true}]}],"repos":[{"name":"app","url":"https://git.internal.example.com/team/app.git","defaultRef":"0123456789abcdef0123456789abcdef01234567"}],"buildTargets":[{"name":"default","aliases":["app"],"repo":"app","execution":"script","args":["build.sh"],"imageRepository":"users/alice/app"}]}`
-	cfg, err := config.Load([]string{
-		"APPLIANCE_PROFILE=builder-storage-landns",
-		"APPLIANCE_BUILD_CATALOG_JSON=" + jsonCatalog,
-		"APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"APPLIANCE_BUILDER_IMAGE_DIGEST=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"APPLIANCE_DNS_READY_URL=http://dns-server.dns.svc.cluster.local:8181/ready",
-	})
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(cfg.BuildCatalog.BuildTargets) != 1 {
-		t.Fatalf("BuildCatalog targets = %+v, want one", cfg.BuildCatalog.BuildTargets)
 	}
 }
 

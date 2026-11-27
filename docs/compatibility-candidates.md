@@ -11,7 +11,6 @@ Use this set to start compatibility testing. The release compatibility manifest 
 | Host OS | Ubuntu Server 24.04 LTS amd64 | Accepted appliance baseline; validate kernel, cgroup v2, user namespaces, ext4, AppArmor, and power-loss behavior |
 | K3s | v1.36.1+k3s1 | Current stable release at snapshot; includes Kubernetes 1.36.1, Traefik 3.6.13, containerd 2.2.3-k3s1, etcd 3.6.7-k3s1, and SQLite 3.53.0 |
 | Traefik | K3s-bundled 3.6.13 | Avoid a second ingress lifecycle; verify route, TLS, headers, limits, and NetworkPolicy behavior |
-| Argo Workflows | Pin during E0-01 | Select a supported stable release compatible with the pinned Kubernetes API; verify CRDs, namespace-scoped controller, executor, Workflow TTL, RBAC, upgrade, air-gap, and controller-restart behavior |
 | zot | v2.1.18 full image | Current documented stable line; pin image digest and prove the ADR 0010 extension profile |
 | Podman | v5.8.2 | Conservative stable 5.8 patch for runtime/client tests rather than adopting a new major before evidence |
 | Buildah | v1.43.1 | Version bundled by Podman 5.8.2; rootless K3s isolation/storage gate remains mandatory |
@@ -49,7 +48,6 @@ The machine-readable manifest must include:
 
 - [Go release history](https://go.dev/doc/devel/release)
 - [K3s releases](https://github.com/k3s-io/k3s/releases)
-- [Argo Workflows releases](https://github.com/argoproj/argo-workflows/releases)
 - [zot documentation](https://zotregistry.dev/)
 - [Podman releases](https://github.com/containers/podman/releases)
 - [Buildah releases](https://buildah.io/releases/)

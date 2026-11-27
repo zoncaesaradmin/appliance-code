@@ -17,8 +17,8 @@ describe("navigation model", () => {
     expect(home && modeUsesFeatureSelector(home)).toBe(false);
   });
 
-  it("uses transient feature selectors for Manage, Analyze, and Admin", () => {
-    for (const id of ["manage", "analyze", "admin"]) {
+  it("uses transient feature selectors for Manage and Admin", () => {
+    for (const id of ["manage", "admin"]) {
       const mode = MODES.find((entry) => entry.id === id);
 
       expect(mode, `${id} mode should exist`).toBeDefined();
@@ -30,7 +30,6 @@ describe("navigation model", () => {
   it("maps nested paths to the owning mode", () => {
     expect(currentMode("/manage/files").id).toBe("manage");
     expect(currentMode("/manage/videos").id).toBe("manage");
-    expect(currentMode("/analyze/workflows").id).toBe("analyze");
     expect(currentMode("/admin/system-status").id).toBe("admin");
     expect(currentMode("/admin/system-status/resources").id).toBe("admin");
     expect(currentMode("/admin/profiles").id).toBe("admin");
@@ -88,7 +87,7 @@ describe("navigation model", () => {
       session: { username: "developer", permissions: ["builds.create", "artifacts.read"] }
     });
 
-    expect(modes.map((mode) => mode.id)).toEqual(["home", "manage", "analyze"]);
+    expect(modes.map((mode) => mode.id)).toEqual(["home", "manage"]);
     expect(currentMode("/admin/system-status", modes).id).toBe("home");
   });
 

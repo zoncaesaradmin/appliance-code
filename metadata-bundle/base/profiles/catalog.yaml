@@ -11,14 +11,6 @@ profiles:
     displayName: storage-landns
     description: "File storage, artifact registry, and LAN DNS."
     capabilities: [base, actions, lan-discovery, files, artifact, dns]
-  builder-storage-landns:
-    displayName: builder-storage-landns
-    description: "Built-in appliance profile."
-    capabilities: [base, actions, lan-discovery, host, files, workflows, build, artifact, dns, applications]
-  builder-lanllm-storage-landns:
-    displayName: builder-lanllm-storage-landns
-    description: "Full union: builder, registry/storage, LAN DNS, CPU LLM inference, and optional Open WebUI chat."
-    capabilities: [base, actions, lan-discovery, host, files, workflows, build, artifact, dns, inference, open-webui, applications]
   training:
     displayName: training
     description: "Core appliance plus video library and playback."

@@ -1,21 +1,14 @@
 import { clearAuth, loadAuth, saveAuth } from "./auth";
-import { MockControlPlaneClient } from "./mockClient";
 import type {
   APIToken,
   ApplianceIdentity,
-  BuilderCatalogStatus,
-  BuilderGitAccessStatus,
-  BuildTarget,
   CapabilitiesResponse,
   CreateRegistryGrantRequest,
   CreateTokenRequest,
   CreateTokenResponse,
-  CreateWorkspaceRequest,
   DNSRecord,
   DNSRecordsResult,
   Health,
-  Job,
-  JobStep,
   LicensingStatus,
   LoginResponse,
   NotificationItem,
@@ -25,12 +18,8 @@ import type {
   RegistryGrant,
   Session,
   SetupStatus,
-  SubmitBuildRequest,
-  UpdateBuilderGitAccessRequest,
   UpsertDNSRecordRequest,
   Version,
-  WorkProfile,
-  Workspace,
   ApplianceCapabilityInfo,
   ApplianceProfile,
   ApplianceMetadataBundleStatus,
@@ -141,24 +130,6 @@ export interface ControlPlaneClient {
   listDNSRecords(): Promise<DNSRecordsResult>;
   upsertDNSRecord(name: string, request: UpsertDNSRecordRequest): Promise<DNSRecord>;
   deleteDNSRecord(name: string): Promise<void>;
-  listWorkProfiles(): Promise<WorkProfile[]>;
-  listWorkspaces(): Promise<Workspace[]>;
-  getCurrentWorkspace(): Promise<Workspace | null>;
-  createWorkspace(request: CreateWorkspaceRequest): Promise<Workspace>;
-  setCurrentWorkspace(workspaceId: string): Promise<void>;
-  deleteWorkspace(workspaceId: string): Promise<void>;
-  getBuilderCatalog(): Promise<BuilderCatalogStatus>;
-  putBuilderCatalog(document: string, contentType?: string): Promise<BuilderCatalogStatus>;
-  getBuilderGitAccess(): Promise<BuilderGitAccessStatus>;
-  updateBuilderGitAccess(request: UpdateBuilderGitAccessRequest): Promise<BuilderGitAccessStatus>;
-  deleteBuilderGitAccess(name: string): Promise<BuilderGitAccessStatus>;
-  listBuildTargets(): Promise<BuildTarget[]>;
-  submitBuild(request: SubmitBuildRequest): Promise<Job>;
-  getCurrentBuildStatus(): Promise<Job | null>;
-  listJobs(): Promise<Job[]>;
-  getJob(jobId: string): Promise<Job>;
-  listJobSteps(jobId: string): Promise<JobStep[]>;
-  cancelJob(jobId: string): Promise<Job>;
   listRepositories(): Promise<string[]>;
   listRepositoryTags(repository: string): Promise<string[]>;
   listRepositoryReferrers(repository: string, digest: string): Promise<RegistryDescriptor[]>;
@@ -371,112 +342,6 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
     await this.request(`/api/v1/dns/records/${encodeURIComponent(name)}`, { method: "DELETE" });
   }
 
-  async listWorkProfiles(): Promise<WorkProfile[]> {
-    const response = await this.request<{ items: WorkProfile[] }>("/api/v1/work-profiles");
-    return response.items;
-  }
-
-  async listWorkspaces(): Promise<Workspace[]> {
-    const response = await this.request<{ items: Workspace[] }>("/api/v1/workspaces");
-    return response.items;
-  }
-
-  async getCurrentWorkspace(): Promise<Workspace | null> {
-    return this.request("/api/v1/current-workspace");
-  }
-
-  async createWorkspace(request: CreateWorkspaceRequest): Promise<Workspace> {
-    return this.request("/api/v1/workspaces", { method: "POST", body: request });
-  }
-
-  async setCurrentWorkspace(workspaceId: string): Promise<void> {
-    await this.request("/api/v1/current-workspace", {
-      method: "POST",
-      body: { workspaceId }
-    });
-  }
-
-  async deleteWorkspace(workspaceId: string): Promise<void> {
-    await this.request(`/api/v1/workspaces/${encodeURIComponent(workspaceId)}`, {
-      method: "DELETE"
-    });
-  }
-
-  async getBuilderCatalog(): Promise<BuilderCatalogStatus> {
-    return this.request("/api/v1/builder/catalog");
-  }
-
-  async putBuilderCatalog(document: string, contentType = "application/yaml"): Promise<BuilderCatalogStatus> {
-    return this.request("/api/v1/builder/catalog", {
-      method: "PUT",
-      rawBody: document,
-      contentType
-    });
-  }
-
-  async getBuilderGitAccess(): Promise<BuilderGitAccessStatus> {
-    return this.request("/api/v1/builder/git-access");
-  }
-
-  async updateBuilderGitAccess(
-    request: UpdateBuilderGitAccessRequest
-  ): Promise<BuilderGitAccessStatus> {
-    const name = request.name.trim();
-    return this.request(`/api/v1/builder/git-access/${encodeURIComponent(name)}`, {
-      method: "PUT",
-      body: {
-        host: request.host,
-        username: request.username,
-        token: request.token
-      }
-    });
-  }
-
-  async deleteBuilderGitAccess(name: string): Promise<BuilderGitAccessStatus> {
-    return this.request(`/api/v1/builder/git-access/${encodeURIComponent(name)}`, {
-      method: "DELETE"
-    });
-  }
-
-  async listBuildTargets(): Promise<BuildTarget[]> {
-    const response = await this.request<{ items: BuildTarget[] }>(
-      "/api/v1/current-workspace/build-targets"
-    );
-    return response.items;
-  }
-
-  async submitBuild(request: SubmitBuildRequest): Promise<Job> {
-    return this.request("/api/v1/current-workspace/builds", {
-      method: "POST",
-      body: request
-    });
-  }
-
-  async getCurrentBuildStatus(): Promise<Job | null> {
-    return this.request("/api/v1/current-workspace/build-status");
-  }
-
-  async listJobs(): Promise<Job[]> {
-    const response = await this.request<{ items: Job[] }>("/api/v1/jobs");
-    return response.items || [];
-  }
-
-  async getJob(jobId: string): Promise<Job> {
-    return this.request(`/api/v1/jobs/${encodeURIComponent(jobId)}`);
-  }
-
-  async listJobSteps(jobId: string): Promise<JobStep[]> {
-    const response = await this.request<{ items: JobStep[] }>(
-      `/api/v1/jobs/${encodeURIComponent(jobId)}/steps`
-    );
-    return response.items || [];
-  }
-
-  async cancelJob(jobId: string): Promise<Job> {
-    return this.request(`/api/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
-      method: "POST"
-    });
-  }
 
   async listRepositories(): Promise<string[]> {
     const response = await this.request<{ items: string[] }>("/api/v1/registry/repositories");
@@ -952,11 +817,5 @@ function networkRequestError(error: unknown): Error {
 }
 
 export function createControlPlaneClient(): ControlPlaneClient {
-  const mode =
-    import.meta.env.MODE === "mock" ||
-    import.meta.env.VITE_CONTROL_PLANE_MODE === "mock";
-  if (mode) {
-    return new MockControlPlaneClient();
-  }
   return new RemoteControlPlaneClient(import.meta.env.VITE_CONTROL_PLANE_BASE_URL || "");
 }

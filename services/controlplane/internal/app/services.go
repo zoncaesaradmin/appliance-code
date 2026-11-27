@@ -23,11 +23,8 @@ import (
 	"appliance-code/services/controlplane/internal/authn"
 	"appliance-code/services/controlplane/internal/authz"
 	"appliance-code/services/controlplane/internal/blobstore"
-	"appliance-code/services/controlplane/internal/buildergit"
-	"appliance-code/services/controlplane/internal/builds"
 	"appliance-code/services/controlplane/internal/config"
 	"appliance-code/services/controlplane/internal/configuration"
-	"appliance-code/services/controlplane/internal/devflows"
 	"appliance-code/services/controlplane/internal/dnsrecords"
 	"appliance-code/services/controlplane/internal/inference"
 	"appliance-code/services/controlplane/internal/keys"
@@ -42,13 +39,10 @@ import (
 	"appliance-code/services/controlplane/internal/tokens"
 	"appliance-code/services/controlplane/internal/users"
 	"appliance-code/services/controlplane/internal/webui"
-	"appliance-code/services/controlplane/internal/workflows"
-	"appliance-code/services/controlplane/internal/workflows/engine"
 )
 
 const (
 	SessionAudience               = "appliance-api"
-	workflowNamespace             = "appliance-builds"
 	artifactServerAudience        = "artifact-server"
 	internalArtifactServerSubject = "appliance-control-plane"
 )
@@ -64,10 +58,6 @@ type Services struct {
 	AuditStore         storage.AuditStore
 	RegistryGrantStore storage.RegistryGrantStore
 	DNSRecordStore     storage.DNSRecordStore
-	BuildStore         storage.BuildStore
-	IdempotencyStore   storage.IdempotencyStore
-	WorkspaceStore     storage.WorkspaceStore
-	JobStore           storage.JobStore
 	ApplicationStore   storage.ApplicationStore
 	FocusContentStore  storage.FocusContentStore
 	WebUIGrantStore    storage.WebUILaunchGrantStore
@@ -80,10 +70,6 @@ type Services struct {
 	Authz                *authz.Service
 	RegistryAuthorizer   *registryauth.Authorizer
 	ArtifactServer       artifactserver.Client
-	WorkflowEngine       workflows.Engine
-	Builds               *builds.Service
-	Devflows             *devflows.Service
-	BuilderGit           *buildergit.Service
 	DNS                  *dnsrecords.Service
 	Licensing            *licensing.Service
 	Metadata             metadatabundle.Runtime
@@ -130,7 +116,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		return nil, fmt.Errorf("app: resolving modules: %w", err)
 	}
 	artifactEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameArtifactRegistry)
-	buildEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameBuild)
 	dnsEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameLANDNS)
 	inferenceEnabled := appliance.ModuleEnabled(resolvedModules, appliance.ModuleNameInferenceRuntime)
 	ctx := context.Background()
@@ -211,10 +196,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		}
 	}
 
-	buildStore := stores.BuildStore
-	idempotencyStore := stores.IdempotencyStore
-	workspaceStore := stores.WorkspaceStore
-	jobStore := stores.JobStore
 	applicationStore := stores.ApplicationStore
 	focusContentStore := stores.FocusContentStore
 	webuiGrantStore := stores.WebUIGrantStore
@@ -225,13 +206,12 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		return nil, fmt.Errorf("app: wiring application management: %w", err)
 	}
 	configurationSvc, err := configuration.NewService(configuration.Stores{
-		DB:             db,
-		Revisions:      stores.ConfigurationStore,
-		Licensing:      licensingStore,
-		DNS:            dnsRecordStore,
-		BuilderCatalog: stores.BuilderCatalogStore,
-		Applications:   applicationStore,
-		Metadata:       stores.MetadataStore,
+		DB:           db,
+		Revisions:    stores.ConfigurationStore,
+		Licensing:    licensingStore,
+		DNS:          dnsRecordStore,
+		Applications: applicationStore,
+		Metadata:     stores.MetadataStore,
 	})
 	if err != nil {
 		db.Close()
@@ -291,91 +271,8 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		db.Close()
 		return nil, fmt.Errorf("app: wiring application resource manager: %w", err)
 	}
-	builderCatalogStore := stores.BuilderCatalogStore
 	usersSvc := users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial)
 	tokensSvc := tokens.NewService(db, tokenStore, recorder, keyMaterial)
-	var workflowEngine workflows.Engine
-	if buildEnabled {
-		switch cfg.WorkflowEngine {
-		case "fake":
-			workflowEngine = workflows.NewFake()
-		case "workflows":
-			var err error
-			workflowEngine, err = engine.NewInCluster(workflowNamespace, cfg.WorkflowInstanceID, cfg.WorkflowExecutorServiceAccount)
-			if err != nil {
-				db.Close()
-				return nil, fmt.Errorf("app: wiring workflow engine: %w", err)
-			}
-		}
-	}
-
-	var buildsSvc *builds.Service
-	var devflowsSvc *devflows.Service
-	var builderGitSvc *buildergit.Service
-	if buildEnabled {
-		// Runtime catalog starts empty (or from SQLite). Config/env catalog is
-		// only a test/bootstrap seed when the DB row is empty.
-		seedCatalog := cfg.BuildCatalog
-		seedCatalog.Normalize()
-		allowedGitHosts, err := seedCatalog.RepoHosts()
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: deriving build catalog git hosts: %w", err)
-		}
-		secretManager := buildergit.SecretManager(buildergit.NewMemorySecretManager())
-		if cfg.WorkflowEngine == "workflows" {
-			secretManager, err = buildergit.NewInClusterSecretManager()
-			if err != nil {
-				db.Close()
-				return nil, fmt.Errorf("app: wiring builder Git secret manager: %w", err)
-			}
-		}
-		builderGitSvc, err = buildergit.NewService(secretManager, workflowNamespace, allowedGitHosts)
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: wiring builder Git service: %w", err)
-		}
-		allowedBuilderImages := []string{}
-		if digest := strings.TrimSpace(cfg.BuilderImageDigest); digest != "" {
-			allowedBuilderImages = []string{digest}
-		}
-		buildsSvc = builds.NewService(db, buildStore, idempotencyStore, workflowEngine, recorder,
-			allowedGitHosts, allowedBuilderImages, cfg.BuildDefaultDeadline,
-			cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, seedCatalog.SensitiveLogValues()...)
-		registryHost, err := builds.RegistryHostFromOrigin(cfg.CanonicalOrigin)
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: deriving registry push host: %w", err)
-		}
-		if err := buildsSvc.ConfigureRegistryPush(builds.RegistryPushConfig{
-			Host:      registryHost,
-			TLSVerify: "false",
-			Namespace: workflowNamespace,
-			Secrets:   secretManager,
-			Tokens:    tokensSvc,
-			Users:     usersSvc,
-		}); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: configuring build registry push: %w", err)
-		}
-		devflowsSvc, err = devflows.NewService(seedCatalog, builderCatalogStore, workspaceStore, jobStore, buildsSvc, workflowEngine, cfg.WorkspaceProvisionerImageDigest, cfg.BuilderImageDigest, cfg.WorkspaceRootDir, cfg.WorkspaceClaimName, builderGitSvc, logger, recorder)
-		if err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: wiring developer workflows: %w", err)
-		}
-		if err := devflowsSvc.LoadPersistedCatalog(ctx); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: loading builder catalog: %w", err)
-		}
-		if err := buildsSvc.ReconcileAll(ctx); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: reconciling builds: %w", err)
-		}
-		if err := devflowsSvc.ReconcileAll(ctx); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("app: reconciling developer workflow jobs: %w", err)
-		}
-	}
 
 	var dnsSvc *dnsrecords.Service
 	if dnsEnabled {
@@ -417,10 +314,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		AuditStore:           auditStore,
 		RegistryGrantStore:   registryGrantStore,
 		DNSRecordStore:       dnsRecordStore,
-		BuildStore:           buildStore,
-		IdempotencyStore:     idempotencyStore,
-		WorkspaceStore:       workspaceStore,
-		JobStore:             jobStore,
 		ApplicationStore:     applicationStore,
 		FocusContentStore:    focusContentStore,
 		WebUIGrantStore:      webuiGrantStore,
@@ -432,10 +325,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		Authz:                authz.NewService(roleStore),
 		RegistryAuthorizer:   registryAuthorizer,
 		ArtifactServer:       artifactServerClient,
-		WorkflowEngine:       workflowEngine,
-		Builds:               buildsSvc,
-		Devflows:             devflowsSvc,
-		BuilderGit:           builderGitSvc,
 		DNS:                  dnsSvc,
 		Licensing:            licensingSvc,
 		Metadata:             metadataSvc,

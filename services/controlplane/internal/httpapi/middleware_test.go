@@ -47,14 +47,14 @@ func TestAPIExchangeLogRedactsRequestAndResponse(t *testing.T) {
 	}
 
 	handler := Chain(TraceID, RequestID, APIExchangeLog(logger))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/current-workspace" {
-			t.Fatalf("path = %s, want /api/v1/current-workspace", r.URL.Path)
+		if r.URL.Path != "/api/v1/auth/session" {
+			t.Fatalf("path = %s, want /api/v1/auth/session", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"workspaceId":"ws_demo","accessToken":"secret-access"}`))
+		_, _ = w.Write([]byte(`{"userId":"user-1","accessToken":"secret-access"}`))
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/current-workspace", strings.NewReader(`{"workspaceId":"ws_demo","password":"secret-password"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/session", strings.NewReader(`{"userId":"user-1","password":"secret-password"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(ctxutil.TraceIDHeader, "trace-controlplane-456")
 	rec := httptest.NewRecorder()
@@ -62,8 +62,8 @@ func TestAPIExchangeLogRedactsRequestAndResponse(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	record := findLogRecord(t, logBuf.String(), "http api exchange")
-	if got := record["path"]; got != "/api/v1/current-workspace" {
-		t.Fatalf("path = %#v, want /api/v1/current-workspace", got)
+	if got := record["path"]; got != "/api/v1/auth/session" {
+		t.Fatalf("path = %#v, want /api/v1/auth/session", got)
 	}
 	if got := int(record["status"].(float64)); got != http.StatusOK {
 		t.Fatalf("status = %d, want 200", got)
@@ -79,8 +79,8 @@ func TestAPIExchangeLogRedactsRequestAndResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("request = %#v, want object", record["request"])
 	}
-	if got := request["workspaceId"]; got != "ws_demo" {
-		t.Fatalf("request.workspaceId = %#v, want ws_demo", got)
+	if got := request["userId"]; got != "user-1" {
+		t.Fatalf("request.userId = %#v, want user-1", got)
 	}
 	if got := request["password"]; got != "[REDACTED]" {
 		t.Fatalf("request.password = %#v, want [REDACTED]", got)
@@ -90,8 +90,8 @@ func TestAPIExchangeLogRedactsRequestAndResponse(t *testing.T) {
 	if !ok {
 		t.Fatalf("response = %#v, want object", record["response"])
 	}
-	if got := response["workspaceId"]; got != "ws_demo" {
-		t.Fatalf("response.workspaceId = %#v, want ws_demo", got)
+	if got := response["userId"]; got != "user-1" {
+		t.Fatalf("response.userId = %#v, want user-1", got)
 	}
 	if got := response["accessToken"]; got != "[REDACTED]" {
 		t.Fatalf("response.accessToken = %#v, want [REDACTED]", got)
@@ -190,7 +190,7 @@ func TestAccessLogSuppressesPublicAPIRequests(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/work-profiles", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/session", nil)
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)

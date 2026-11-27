@@ -25,7 +25,7 @@ func TestImportRequiresMatchingStagedMetadataBundle(t *testing.T) {
 	metadata := sqlstore.NewMetadataBundleStore(db)
 	service, err := NewService(Stores{
 		DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db),
-		DNS: sqlstore.NewDNSRecordStore(db), BuilderCatalog: sqlstore.NewBuilderCatalogStore(db),
+		DNS:          sqlstore.NewDNSRecordStore(db),
 		Applications: sqlstore.NewApplicationStore(db), Metadata: metadata,
 	})
 	if err != nil {
@@ -33,7 +33,6 @@ func TestImportRequiresMatchingStagedMetadataBundle(t *testing.T) {
 	}
 	payload, err := json.Marshal(Snapshot{
 		APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{}, DNSRecords: []DNSRecord{},
-		BuilderCatalog:  BuilderCatalog{Document: "", ContentType: "application/json"},
 		ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
 		Metadata: &MetadataBundleIdentity{Version: "metadata-v1", SoftwareVersion: "release-v1", Digest: "sha256:metadata", Signature: "signature-v1"},
 	})
@@ -72,7 +71,7 @@ func TestReplacePreservesPriorRevisionAndReplacesDesiredState(t *testing.T) {
 	}
 	service, err := NewService(Stores{
 		DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db),
-		DNS: sqlstore.NewDNSRecordStore(db), BuilderCatalog: sqlstore.NewBuilderCatalogStore(db),
+		DNS:          sqlstore.NewDNSRecordStore(db),
 		Applications: sqlstore.NewApplicationStore(db), Metadata: sqlstore.NewMetadataBundleStore(db),
 	})
 	if err != nil {
@@ -80,8 +79,8 @@ func TestReplacePreservesPriorRevisionAndReplacesDesiredState(t *testing.T) {
 	}
 	oldPayload, err := json.Marshal(Snapshot{
 		APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{{ID: "old", Capabilities: json.RawMessage(`[]`)}},
-		DNSRecords:     []DNSRecord{{Name: "old", IPv4: "192.0.2.10", TTL: 60, Source: string(storage.DNSRecordSourceAdmin)}},
-		BuilderCatalog: BuilderCatalog{Document: "", ContentType: "application/json"}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
+		DNSRecords:      []DNSRecord{{Name: "old", IPv4: "192.0.2.10", TTL: 60, Source: string(storage.DNSRecordSourceAdmin)}},
+		ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +90,8 @@ func TestReplacePreservesPriorRevisionAndReplacesDesiredState(t *testing.T) {
 	}
 	newPayload, err := json.Marshal(Snapshot{
 		APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{{ID: "new", Capabilities: json.RawMessage(`[]`)}},
-		DNSRecords:     []DNSRecord{{Name: "new", IPv4: "192.0.2.20", TTL: 120, Source: string(storage.DNSRecordSourceAdmin)}},
-		BuilderCatalog: BuilderCatalog{Document: "", ContentType: "application/json"}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
+		DNSRecords:      []DNSRecord{{Name: "new", IPv4: "192.0.2.20", TTL: 120, Source: string(storage.DNSRecordSourceAdmin)}},
+		ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,11 +127,11 @@ func TestReplaceAndReconcileReportsAppliedRevision(t *testing.T) {
 	if err := db.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	service, err := NewService(Stores{DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db), DNS: sqlstore.NewDNSRecordStore(db), BuilderCatalog: sqlstore.NewBuilderCatalogStore(db), Applications: sqlstore.NewApplicationStore(db), Metadata: sqlstore.NewMetadataBundleStore(db)})
+	service, err := NewService(Stores{DB: db, Revisions: sqlstore.NewConfigurationRevisionStore(db), Licensing: sqlstore.NewLicensingStore(db), DNS: sqlstore.NewDNSRecordStore(db), Applications: sqlstore.NewApplicationStore(db), Metadata: sqlstore.NewMetadataBundleStore(db)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, err := json.Marshal(Snapshot{APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{}, DNSRecords: []DNSRecord{}, BuilderCatalog: BuilderCatalog{Document: "", ContentType: "application/json"}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{}})
+	payload, err := json.Marshal(Snapshot{APIVersion: SchemaVersion, CustomProfiles: []CustomProfile{}, DNSRecords: []DNSRecord{}, ApplicationDefs: []ApplicationDefinition{}, ApplicationInstances: []ApplicationInstance{}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -40,7 +40,6 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertNotIn("host-agent-image", arts)
         self.assertNotIn("jellyfin-image", arts)
         self.assertNotIn("inference-runtime-image", arts)
-        self.assertNotIn("workspace-provisioner-image", arts)
 
     def test_foundation_plus_acc_llm(self):
         arts = self._resolve("foundation", "acc-llm")
@@ -65,14 +64,6 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertIn("artifact-server-image", arts)
         self.assertIn("appliance-registry-chart", arts)
         self.assertNotIn("coredns-image", arts)
-        self.assertNotIn("workflows-chart", arts)
-        self.assertNotIn("workspace-provisioner-image", arts)
-
-    def test_build_workflows_includes_workflows(self):
-        arts = self._resolve("foundation", "build-workflows")
-        self.assertNotIn("artifact-server-image", arts)
-        self.assertIn("workflows-chart", arts)
-        self.assertIn("workspace-provisioner-image", arts)
 
     def test_deviceuser_includes_host_agent_image(self):
         arts = self._resolve("foundation", "deviceuser")

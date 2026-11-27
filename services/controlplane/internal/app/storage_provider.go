@@ -21,28 +21,23 @@ import (
 // depending on a concrete SQL backend. The PostgreSQL provider supplies this
 // complete set for appliance and cloud deployments.
 type StorageSet struct {
-	DB                  storage.DB
-	UserStore           storage.UserStore
-	RoleStore           storage.RoleStore
-	TokenStore          storage.TokenStore
-	SessionStore        storage.SessionStore
-	ThrottleStore       storage.ThrottleStore
-	AuditStore          storage.AuditStore
-	OperationsStore     storage.OperationsStore
-	RegistryGrantStore  storage.RegistryGrantStore
-	DNSRecordStore      storage.DNSRecordStore
-	LicensingStore      storage.LicensingStore
-	MetadataStore       storage.MetadataBundleStore
-	BuildStore          storage.BuildStore
-	IdempotencyStore    storage.IdempotencyStore
-	WorkspaceStore      storage.WorkspaceStore
-	JobStore            storage.JobStore
-	ApplicationStore    storage.ApplicationStore
-	FocusContentStore   storage.FocusContentStore
-	WebUIGrantStore     storage.WebUILaunchGrantStore
-	WebUIBridgeStore    storage.WebUIBridgeSessionStore
-	BuilderCatalogStore storage.BuilderCatalogStore
-	ConfigurationStore  storage.ConfigurationRevisionStore
+	DB                 storage.DB
+	UserStore          storage.UserStore
+	RoleStore          storage.RoleStore
+	TokenStore         storage.TokenStore
+	SessionStore       storage.SessionStore
+	ThrottleStore      storage.ThrottleStore
+	AuditStore         storage.AuditStore
+	OperationsStore    storage.OperationsStore
+	RegistryGrantStore storage.RegistryGrantStore
+	DNSRecordStore     storage.DNSRecordStore
+	LicensingStore     storage.LicensingStore
+	MetadataStore      storage.MetadataBundleStore
+	ApplicationStore   storage.ApplicationStore
+	FocusContentStore  storage.FocusContentStore
+	WebUIGrantStore    storage.WebUILaunchGrantStore
+	WebUIBridgeStore   storage.WebUIBridgeSessionStore
+	ConfigurationStore storage.ConfigurationRevisionStore
 }
 
 // StorageProvider opens and migrates one complete persistence backend. The
@@ -79,28 +74,23 @@ func (localSQLStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 		return StorageSet{}, fmt.Errorf("migrating SQLite storage: %w", err)
 	}
 	return StorageSet{
-		DB:                  db,
-		UserStore:           sqlstore.NewUserStore(db),
-		RoleStore:           sqlstore.NewRoleStore(db),
-		TokenStore:          sqlstore.NewTokenStore(db),
-		SessionStore:        sqlstore.NewSessionStore(db),
-		ThrottleStore:       sqlstore.NewThrottleStore(db),
-		AuditStore:          sqlstore.NewAuditStore(db),
-		OperationsStore:     sqlstore.NewOperationsStore(db),
-		RegistryGrantStore:  sqlstore.NewRegistryGrantStore(db),
-		DNSRecordStore:      sqlstore.NewDNSRecordStore(db),
-		LicensingStore:      sqlstore.NewLicensingStore(db),
-		MetadataStore:       sqlstore.NewMetadataBundleStore(db),
-		BuildStore:          sqlstore.NewBuildStore(db),
-		IdempotencyStore:    sqlstore.NewIdempotencyStore(db),
-		WorkspaceStore:      sqlstore.NewWorkspaceStore(db),
-		JobStore:            sqlstore.NewJobStore(db),
-		ApplicationStore:    sqlstore.NewApplicationStore(db),
-		FocusContentStore:   sqlstore.NewFocusContentStore(db),
-		WebUIGrantStore:     sqlstore.NewWebUILaunchGrantStore(db),
-		WebUIBridgeStore:    sqlstore.NewWebUIBridgeSessionStore(db),
-		BuilderCatalogStore: sqlstore.NewBuilderCatalogStore(db),
-		ConfigurationStore:  sqlstore.NewConfigurationRevisionStore(db),
+		DB:                 db,
+		UserStore:          sqlstore.NewUserStore(db),
+		RoleStore:          sqlstore.NewRoleStore(db),
+		TokenStore:         sqlstore.NewTokenStore(db),
+		SessionStore:       sqlstore.NewSessionStore(db),
+		ThrottleStore:      sqlstore.NewThrottleStore(db),
+		AuditStore:         sqlstore.NewAuditStore(db),
+		OperationsStore:    sqlstore.NewOperationsStore(db),
+		RegistryGrantStore: sqlstore.NewRegistryGrantStore(db),
+		DNSRecordStore:     sqlstore.NewDNSRecordStore(db),
+		LicensingStore:     sqlstore.NewLicensingStore(db),
+		MetadataStore:      sqlstore.NewMetadataBundleStore(db),
+		ApplicationStore:   sqlstore.NewApplicationStore(db),
+		FocusContentStore:  sqlstore.NewFocusContentStore(db),
+		WebUIGrantStore:    sqlstore.NewWebUILaunchGrantStore(db),
+		WebUIBridgeStore:   sqlstore.NewWebUIBridgeSessionStore(db),
+		ConfigurationStore: sqlstore.NewConfigurationRevisionStore(db),
 	}, nil
 }
 
@@ -116,28 +106,23 @@ func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 		return StorageSet{}, fmt.Errorf("migrating PostgreSQL storage: %w", err)
 	}
 	return StorageSet{
-		DB:                  db,
-		UserStore:           sqlstore.NewUserStore(db),
-		RoleStore:           sqlstore.NewRoleStore(db),
-		TokenStore:          sqlstore.NewTokenStore(db),
-		SessionStore:        sqlstore.NewSessionStore(db),
-		ThrottleStore:       sqlstore.NewThrottleStore(db),
-		AuditStore:          sqlstore.NewAuditStore(db),
-		OperationsStore:     sqlstore.NewOperationsStore(db),
-		RegistryGrantStore:  sqlstore.NewRegistryGrantStore(db),
-		DNSRecordStore:      sqlstore.NewDNSRecordStore(db),
-		LicensingStore:      sqlstore.NewLicensingStore(db),
-		MetadataStore:       sqlstore.NewMetadataBundleStore(db),
-		BuildStore:          sqlstore.NewBuildStore(db),
-		IdempotencyStore:    sqlstore.NewIdempotencyStore(db),
-		WorkspaceStore:      sqlstore.NewWorkspaceStore(db),
-		JobStore:            sqlstore.NewJobStore(db),
-		ApplicationStore:    sqlstore.NewApplicationStore(db),
-		FocusContentStore:   sqlstore.NewFocusContentStore(db),
-		WebUIGrantStore:     sqlstore.NewWebUILaunchGrantStore(db),
-		WebUIBridgeStore:    sqlstore.NewWebUIBridgeSessionStore(db),
-		BuilderCatalogStore: sqlstore.NewBuilderCatalogStore(db),
-		ConfigurationStore:  sqlstore.NewConfigurationRevisionStore(db),
+		DB:                 db,
+		UserStore:          sqlstore.NewUserStore(db),
+		RoleStore:          sqlstore.NewRoleStore(db),
+		TokenStore:         sqlstore.NewTokenStore(db),
+		SessionStore:       sqlstore.NewSessionStore(db),
+		ThrottleStore:      sqlstore.NewThrottleStore(db),
+		AuditStore:         sqlstore.NewAuditStore(db),
+		OperationsStore:    sqlstore.NewOperationsStore(db),
+		RegistryGrantStore: sqlstore.NewRegistryGrantStore(db),
+		DNSRecordStore:     sqlstore.NewDNSRecordStore(db),
+		LicensingStore:     sqlstore.NewLicensingStore(db),
+		MetadataStore:      sqlstore.NewMetadataBundleStore(db),
+		ApplicationStore:   sqlstore.NewApplicationStore(db),
+		FocusContentStore:  sqlstore.NewFocusContentStore(db),
+		WebUIGrantStore:    sqlstore.NewWebUILaunchGrantStore(db),
+		WebUIBridgeStore:   sqlstore.NewWebUIBridgeSessionStore(db),
+		ConfigurationStore: sqlstore.NewConfigurationRevisionStore(db),
 	}, nil
 }
 

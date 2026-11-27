@@ -239,7 +239,6 @@ func baseFreeCapabilities() []string {
 		string(appliance.CapabilityLANDiscovery),
 		string(appliance.CapabilityHost),
 		string(appliance.CapabilityFiles),
-		string(appliance.CapabilityWorkflows),
 	}
 }
 

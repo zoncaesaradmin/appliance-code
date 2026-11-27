@@ -1,4 +1,8 @@
-# Appliance Control Plane V1 Plan
+# Appliance Control Plane V1 Plan (Historical)
+
+> Historical design record. The build/workflow-engine plan in this document was
+> retired and is not part of the current product contract. See the signed
+> metadata catalogs and current profile documentation for the supported surface.
 
 ## Purpose
 
@@ -610,7 +614,7 @@ Exit criterion: Artifact Server scores at least 4.0/5 under the evidence-based r
 
 ### P0 Decision: Workflow Engine Behind The Control Plane
 
-Use Argo Workflows as the underlying workflow engine implementation in the complete v1 appliance. See [ADR 0011](adr/0011-argo-workflows-engine.md).
+The historical design used a namespace-scoped workflow engine. That design was retired before the current product contract.
 
 - Deploy one namespace-scoped Workflow Controller and manage workflows only in the dedicated build namespace.
 - Do not expose Argo Server/UI through Traefik and do not create a second user identity or authorization path.
@@ -629,7 +633,7 @@ Accepted v1 boundary:
 - Builds are available only to trusted developers and automation identities; v1 does not claim hostile tenant isolation.
 - Use one appliance-generated Workflow per build with ephemeral, rootless Buildah task pods and never mount a host runtime socket.
 - Accept `Containerfile` builds from allowlisted internal HTTPS Git sources at immutable commit SHAs and publish OCI output to the artifact server. A file literally named `Dockerfile` is accepted only as a Buildah-compatible filename alias.
-- Isolate any required builder security-profile exception to the build namespace. See [ADR 0003](adr/0003-trusted-build-boundary.md).
+- Isolate any required builder security-profile exception to the build namespace (historical; retired).
 
 Minimum controls:
 
@@ -1300,8 +1304,8 @@ Already accepted:
 - One Go server for REST and MCP, with shared authn/authz.
 - Dedicated, product-managed single-node K3s with Traefik; Helm under an installer wrapper for release packaging ([ADR 0001](adr/0001-dedicated-k3s-appliance.md)).
 - Artifact Server with control-plane-issued OCI access tokens and generic OCI/ORAS artifact support ([ADR 0008](adr/0008-zot-oci-artifact-registry.md)); the Distribution and Nexus decisions in ADRs 0007 and 0002 are superseded.
-- Namespace-scoped workflow engine behind the control plane in the complete v1 appliance ([ADR 0011](adr/0011-argo-workflows-engine.md)).
-- Trusted-only rootless Buildah workflow tasks for the first build implementation ([ADR 0003](adr/0003-trusted-build-boundary.md)).
+- Namespace-scoped workflow engine behind the control plane (historical; retired).
+- Trusted-only rootless Buildah workflow tasks for the first build implementation (historical; retired).
 - Buildah, Podman, Skopeo, ORAS, Artifact Server, and Helm responsibilities are fixed by the explicit OCI toolchain contract ([ADR 0009](adr/0009-oci-toolchain.md)).
 - SQLite behind storage interfaces for the control plane; one replica while SQLite is active ([ADR 0004](adr/0004-control-plane-sqlite.md)).
 - Purpose-separated keys and explicit production TLS modes ([ADR 0005](adr/0005-secrets-keys-and-tls.md)).
@@ -1625,13 +1629,13 @@ Near-term combinations already covered by the current model are:
 - LAN DNS only
 - combined artifact + LAN DNS
 - combined build + artifact + LAN DNS (`builder-landns` /
-  `builder-storage-landns`)
+  `builder-storage-landns`) (historical; retired).
 
 The `dns` capability is intentionally introduced before the DNS workload
 itself. That lets install/config/reporting flows recognize DNS-bearing
 profiles now while the actual DNS service pod, readiness, and runtime
 behavior land as a later slice. See
-[landns-profile-phasing.md](landns-profile-phasing.md).
+the signed metadata profile and capability catalogs.
 
 The cleanest way to leave room for later expansion is still to model
 capabilities as feature modules behind one control plane, rather than as

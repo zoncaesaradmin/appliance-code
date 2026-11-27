@@ -116,8 +116,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		AuditH: &httpapi.AuditHandlers{
 			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
 		},
-		MCPHandler: mcp.NewHandler(authDeps, cfg.CanonicalOrigin,
-			mcp.WithDeveloperWorkflows(services.Devflows, services.ApplianceProfile.Capabilities)),
+		MCPHandler:      mcp.NewHandler(authDeps, cfg.CanonicalOrigin),
 		ProxiedServices: append(httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry), httpapi.ServiceProxyRegistration{Name: "host-agent", Capability: appliance.CapabilityHost, BaseURL: "http://host-agent.ace-apps.svc.cluster.local:8080", InternalToken: actionruntimeauth.TokenFromPepper(services.Keys.APITokenPepper), Routes: []httpapi.ServiceProxyRoute{{Method: "POST", ExternalPath: "/api/v1/system-backups", UpstreamPath: "/internal/v1/system-backups", Permission: "system.operate"}, {Method: "GET", ExternalPath: "/api/v1/system-backups/{id}", UpstreamPath: "/internal/v1/system-backups/{id}", Permission: "system.read"}, {Method: "POST", ExternalPath: "/api/v1/system-backups/{id}/restore", UpstreamPath: "/internal/v1/system-backups/{id}/restore", Permission: "system.operate"}}}),
 		Audit:           services.Audit,
 	}
@@ -171,10 +170,6 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 				return nil, fmt.Errorf("materialize video library projection: %w", err)
 			}
 		}
-	}
-	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameBuild) {
-		deps.BuildsH = &httpapi.BuildHandlers{Builds: services.Builds}
-		deps.DevflowsH = &httpapi.DeveloperWorkflowHandlers{Devflows: services.Devflows, BuilderGit: services.BuilderGit, Logger: logger, Audit: services.Audit}
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameLANDNS) {
 		if services.DNS == nil {

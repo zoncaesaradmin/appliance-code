@@ -16,7 +16,6 @@ VERIFY_BUILD_LOG := $(VERIFY_LOG_DIR)/verify-build.log
 VERIFY_LINT_LOG := $(VERIFY_LOG_DIR)/verify-lint.log
 VERIFY_TEST_LOG := $(VERIFY_LOG_DIR)/verify-test.log
 VERIFY_CURL_LOG := $(VERIFY_LOG_DIR)/verify-curl.log
-VERIFY_E2E_LOG := $(VERIFY_LOG_DIR)/verify-e2e.log
 VERIFY_COVERAGE_LOG := $(VERIFY_LOG_DIR)/verify-coverage.log
 VERIFY_K3S_LOG := $(VERIFY_LOG_DIR)/verify-k3s.log
 
@@ -156,7 +155,7 @@ DEV_FORWARD_ENV_VARS := DEV_REGISTRY_USER DEV_REGISTRY_TOKEN DEV_IMAGE_TAG DEV_I
 DEV_FORWARD_ENV_FLAGS := $(foreach var,$(DEV_FORWARD_ENV_VARS),-e $(var))
 SUDOERS_FILE := /etc/sudoers.d/appliance-podman-nopasswd
 
-.PHONY: build test test-curl test-e2e lint coverage verify run stop dev-k3s clean dev-shell dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-channel-integration-image-archive package-ordering-image-archive package-application-identity-image-archive package-auth-service-image-archive package-workflow-controller-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-open-webui-gateway-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-postgresql-image-archive package-host-packages package-metadata-bundle package-release-input-tar
+.PHONY: build test test-curl lint coverage verify run stop dev-k3s clean dev-shell dev-registry-login dev-registry-auth-check dev-sudo-setup package-control-plane-image-archive package-ui-image-archive package-host-agent-image-archive package-channel-integration-image-archive package-ordering-image-archive package-application-identity-image-archive package-auth-service-image-archive package-artifact-server-image-archive package-dns-server-image-archive package-inference-runtime-image-archive package-inference-manager-image-archive package-open-webui-image-archive package-open-webui-gateway-image-archive package-blob-storage-image-archive package-message-broker-image-archive package-postgresql-image-archive package-host-packages package-metadata-bundle package-release-input-tar
 
 ## build: compile the local server binary (services/controlplane/bin/appliance-server)
 build:
@@ -185,10 +184,6 @@ test:
 ## test-curl: run the backend's curl-based live HTTP reference flow
 test-curl:
 	@$(MAKE) -C $(BACKEND_DIR) test-curl
-
-## test-e2e: run the local live-server SDK-driven end-to-end suite
-test-e2e:
-	@$(MAKE) -C $(E2E_DIR) test-local
 
 ## lint: vet/staticcheck/gofmt across every module
 lint:
@@ -259,13 +254,6 @@ verify:
 		exit 1; \
 	fi; \
 	echo "verify stage: backend curl checks passed"; \
-	echo "verify stage: local live-server e2e"; \
-	if ! $(MAKE) --no-print-directory test-e2e >"$(VERIFY_E2E_LOG)" 2>&1; then \
-		echo "verify: local live-server e2e failed"; \
-		echo "verify: inspect $(VERIFY_E2E_LOG)"; \
-		exit 1; \
-	fi; \
-	echo "verify stage: local live-server e2e passed"; \
 	echo "verify stage: coverage"; \
 	if ! $(MAKE) --no-print-directory coverage >"$(VERIFY_COVERAGE_LOG)" 2>&1; then \
 		echo "verify: coverage failed"; \
@@ -395,18 +383,6 @@ package-auth-service-image-archive:
 			--out-file "$$out_file" \
 			--reference-out-file "$$reference_out_file" \
 			--image-tag "$$image_tag"
-
-## package-workflow-controller-image-archive: always build and export the
-## appliance-owned workflow-controller wrapper image as an OCI archive
-## tarball for release-input packaging.
-package-workflow-controller-image-archive:
-	@workflows_version="$${WORKFLOWS_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-workflows/Chart.yaml)}"; \
-	out_file="$${OUT_FILE:-$(CURDIR)/.run/workflow-controller-$$workflows_version.tar}"; \
-	mkdir -p "$$(dirname "$$out_file")"; \
-	bash ./scripts/package/export-workflow-controller-image-archive.sh \
-		--out-file "$$out_file" \
-		$${WORKFLOW_CONTROLLER_BASE_IMAGE:+--base-image "$${WORKFLOW_CONTROLLER_BASE_IMAGE}"} \
-		$${WORKFLOWS_VERSION:+--image-tag "$${WORKFLOWS_VERSION}"}
 
 ## package-artifact-server-image-archive: build the appliance artifact-server
 ## wrapper (upstream registry binary + thin entrypoint; native application.log
@@ -542,15 +518,11 @@ package-metadata-bundle:
 
 ## package-release-input-tar: create the versioned release-input tarball handoff
 ## by always building the control-plane image archive from this checkout.
-## WORKFLOWS_CRDS_DIR is required: the workflows chart is always packaged
-## (ADR 0011 requires it in the complete v1 appliance), and a bundle
-## shipping the chart without its CRDs installs a workflow controller
-## that crash-loops forever on startup.
 ## DEPLOYMENT_TOPOLOGY is likewise required so a newly emitted release input
 ## cannot silently select the retired one-server/agent topology.
 package-release-input-tar:
-	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${WORKFLOWS_CRDS_DIR:-}" ] || [ -z "$${DEPLOYMENT_TOPOLOGY:-}" ]; then \
-		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, WORKFLOWS_CRDS_DIR, and DEPLOYMENT_TOPOLOGY" >&2; \
+	@if [ -z "$${OUT_FILE:-}" ] || [ -z "$${K3S_VERSION:-}" ] || [ -z "$${DEPLOYMENT_TOPOLOGY:-}" ]; then \
+		echo "package-release-input-tar: set OUT_FILE, K3S_VERSION, and DEPLOYMENT_TOPOLOGY" >&2; \
 		exit 2; \
 	fi
 	@control_plane_image="$(CURDIR)/.run/control-plane-api-$(CONTROL_PLANE_CODE_VERSION).tar"; \
@@ -560,8 +532,6 @@ package-release-input-tar:
 	host_agent_binary="$(CURDIR)/services/hostagent/bin/appliance-host-agentd"; \
 	host_packages_dir="$${HOST_PACKAGES_DIR:-$(CURDIR)/.run/host-packages}"; \
 	host_packages_os_version="$${HOST_PACKAGES_OS_VERSION:-$${OS_VERSION:-24.04}}"; \
-	workflows_version="$${WORKFLOWS_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-workflows/Chart.yaml)}"; \
-	workflow_controller_image="$(CURDIR)/.run/workflow-controller-$$workflows_version.tar"; \
 	artifact_server_version="$${ARTIFACT_SERVER_VERSION:-$$(sed -n 's/^appVersion: *\"\\{0,1\\}\\([^\"[:space:]]*\\)\"\\{0,1\\}[[:space:]]*$$/\\1/p' ./deploy/charts/appliance-registry/Chart.yaml)}"; \
 	artifact_server_image="$${ARTIFACT_SERVER_IMAGE:-$(CURDIR)/.run/artifact-server-$$artifact_server_version.tar}"; \
 	artifact_server_reference_file="$(CURDIR)/.run/artifact-server-$$artifact_server_version.reference"; \
@@ -578,7 +548,6 @@ package-release-input-tar:
 	application_identity_reference_file="$(CURDIR)/.run/application-identity-image.reference"; \
 	auth_service_image="$(CURDIR)/.run/auth-service-image.tar"; \
 	auth_service_reference_file="$(CURDIR)/.run/auth-service-image.reference"; \
-	workflow_controller_image_ref="localhost/appliance-workflow-controller:$$workflows_version"; \
 	$(MAKE) --no-print-directory package-control-plane-image-archive OUT_FILE="$$control_plane_image"; \
 	$(MAKE) --no-print-directory package-ui-image-archive OUT_FILE="$$ui_image"; \
 	$(MAKE) --no-print-directory package-channel-integration-image-archive OUT_FILE="$$channel_integration_image" REFERENCE_OUT_FILE="$$channel_integration_reference_file"; \
@@ -600,14 +569,6 @@ package-release-input-tar:
 	ordering_image_ref="$$(tr -d '\r\n' < "$$ordering_reference_file")"; \
 	application_identity_image_ref="$$(tr -d '\r\n' < "$$application_identity_reference_file")"; \
 	auth_service_image_ref="$$(tr -d '\r\n' < "$$auth_service_reference_file")"; \
-	if [ -n "$$workflows_version" ] && [ -z "$${WORKFLOW_CONTROLLER_IMAGE:-}" ]; then \
-		$(MAKE) --no-print-directory package-workflow-controller-image-archive \
-			OUT_FILE="$$workflow_controller_image" \
-			WORKFLOWS_VERSION="$$workflows_version" \
-			WORKFLOW_CONTROLLER_BASE_IMAGE="$${WORKFLOW_CONTROLLER_BASE_IMAGE:-quay.io/argoproj/workflow-controller:$$workflows_version}"; \
-		WORKFLOW_CONTROLLER_IMAGE="$$workflow_controller_image"; \
-		WORKFLOW_CONTROLLER_IMAGE_REFERENCE="$${WORKFLOW_CONTROLLER_IMAGE_REFERENCE:-$$workflow_controller_image_ref}"; \
-	fi; \
 	if [ -z "$${ARTIFACT_SERVER_IMAGE:-}" ]; then \
 		src_image="$${ARTIFACT_SERVER_SOURCE_IMAGE:-}"; \
 		$(MAKE) --no-print-directory package-artifact-server-image-archive \
@@ -659,12 +620,6 @@ package-release-input-tar:
 	if [ -n "$${PROVENANCE_DIR:-}" ]; then set -- "$$@" --provenance-dir "$${PROVENANCE_DIR}"; fi; \
 	if [ -n "$${NOTICES_DIR:-}" ]; then set -- "$$@" --notices-dir "$${NOTICES_DIR}"; fi; \
 	if [ -n "$${TESTS_DIR:-}" ]; then set -- "$$@" --tests-dir "$${TESTS_DIR}"; fi; \
-	if [ -n "$$workflows_version" ]; then set -- "$$@" --workflows-version "$$workflows_version"; fi; \
-	if [ -n "$${WORKFLOW_CONTROLLER_IMAGE:-}" ]; then set -- "$$@" --workflow-controller-image "$${WORKFLOW_CONTROLLER_IMAGE}"; fi; \
-	if [ -n "$${WORKFLOW_CONTROLLER_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --workflow-controller-image-reference "$${WORKFLOW_CONTROLLER_IMAGE_REFERENCE}"; fi; \
-	if [ -n "$${WORKFLOW_EXECUTOR_IMAGE:-}" ]; then set -- "$$@" --workflow-executor-image "$${WORKFLOW_EXECUTOR_IMAGE}"; fi; \
-	if [ -n "$${WORKFLOW_EXECUTOR_IMAGE_REFERENCE:-}" ]; then set -- "$$@" --workflow-executor-image-reference "$${WORKFLOW_EXECUTOR_IMAGE_REFERENCE}"; fi; \
-	if [ -n "$${WORKFLOWS_CRDS_DIR:-}" ]; then set -- "$$@" --workflows-crds-dir "$${WORKFLOWS_CRDS_DIR}"; fi; \
 	bash ./scripts/package/archive-release-input.sh "$$@"
 
 # --- Developer Container (Linux only — see docs/dev-container.md) -----

@@ -454,15 +454,7 @@ func TestApplianceCAVolumeMountsPublicCertOnly(t *testing.T) {
 }
 
 func TestRenderedChartContainsNoExternalHelperImages(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "config.applianceProfile=builder",
-		"--set", "config.buildCatalog.workProfiles[0].name=builder",
-		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	)...)
+	docs := renderChart(t, defaultRenderArgs()...)
 	rendered, err := yaml.Marshal(docs)
 	if err != nil {
 		t.Fatalf("marshal rendered manifests: %v", err)
@@ -911,7 +903,6 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 		"--set", "rollout.aceApps.enabled=true",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 	)...)
 	if findByKindAndName(aceAppsDocs, "Deployment", "blob-storage") != nil {
 		t.Fatal("ace-apps rollout must not render blob-storage Deployment")
@@ -926,7 +917,6 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 	)...)
 	if findByKindAndName(aceSystemDocs, "Deployment", "blob-storage") != nil {
 		t.Fatal("ace-system rollout must not render blob-storage Deployment")
@@ -937,7 +927,6 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 	)...)
 	blobDeploy := findByKindAndName(infraDocs, "Deployment", "blob-storage")
 	if blobDeploy == nil {
@@ -978,7 +967,6 @@ func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 		"--set", "appCoreNamespace.name=ace-app-core",
 	)...)
 	ns := findByKindAndName(docs, "Namespace", "ace-app-core")
@@ -1012,7 +1000,6 @@ func TestApplicationIdentityEndpointBelongsToAceAppsRollout(t *testing.T) {
 		"--set", "rollout.aceAppCore.enabled=true",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 	}
 	appCoreDocs := renderChart(t, append(defaultRenderArgs(), base...)...)
 	if findByKindAndName(appCoreDocs, "ConfigMap", "application-auth-endpoint") != nil {
@@ -1034,36 +1021,6 @@ func TestApplicationIdentityEndpointBelongsToAceAppsRollout(t *testing.T) {
 	}
 	if findByKindAndName(appsDocs, "NetworkPolicy", "identity-allow") == nil {
 		t.Fatal("identity NetworkPolicy must render in the ace-apps rollout")
-	}
-}
-
-func TestBuildCatalogRendersAsControlPlaneConfig(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "config.applianceProfile=builder",
-		"--set", "config.buildCatalog.workProfiles[0].name=builder",
-		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	)...)
-	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
-	if cm == nil {
-		t.Fatal("expected control-plane ConfigMap")
-	}
-	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_PROFILE"].(string); got != "builder" {
-		t.Fatalf("APPLIANCE_PROFILE = %q, want builder", got)
-	}
-	catalogJSON, _ := data["APPLIANCE_BUILD_CATALOG_JSON"].(string)
-	if catalogJSON == "" || !bytes.Contains([]byte(catalogJSON), []byte("workProfiles")) {
-		t.Fatalf("APPLIANCE_BUILD_CATALOG_JSON = %q, want rendered catalog", catalogJSON)
-	}
-	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
-		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want rendered provisioner image", got)
-	}
-	if got, _ := data["APPLIANCE_BUILDER_IMAGE_DIGEST"].(string); got != "buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
-		t.Fatalf("APPLIANCE_BUILDER_IMAGE_DIGEST = %q, want rendered builder image", got)
 	}
 }
 
@@ -1095,25 +1052,13 @@ func TestArtifactProfilesRenderRealArtifactServerDependency(t *testing.T) {
 }
 
 func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
-	for _, profile := range []string{"landns", "storage-landns", "builder-landns", "builder-storage-landns"} {
+	for _, profile := range []string{"landns", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			args := append(defaultRenderArgs(),
 				"--set", "config.applianceProfile="+profile,
 				"--set", "config.enabledCapabilities={dns}",
 				"--set", "config.dnsReadyURL=http://dns-server.dns.svc.cluster.local:8181/ready",
 			)
-			switch profile {
-			case "builder-landns", "builder-storage-landns":
-				args = append(args,
-					"--set", "config.enabledCapabilities={dns,workflows,build,artifact}",
-					"--set", "config.buildCatalog.workProfiles[0].name=builder",
-					"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
-					"--set", "config.buildCatalog.repos[0].name=app",
-					"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-					"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-					"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				)
-			}
 			docs := renderChart(t, args...)
 			cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
 			data, _ := at(cm, "data").(map[string]any)
@@ -1137,11 +1082,6 @@ func TestDNSProfilesRenderDNSReadyURL(t *testing.T) {
 			sa := findByKindAndName(docs, "ServiceAccount", controlPlaneDeploymentName)
 			if got, _ := at(sa, "automountServiceAccountToken").(bool); !got {
 				t.Fatalf("dns profiles must automount the service account token")
-			}
-			if profile == "builder-landns" || profile == "builder-storage-landns" {
-				if findByKindAndName(docs, "Role", controlPlaneDeploymentName+"-workflows") == nil {
-					t.Fatalf("expected workflow Role for build+dns profile %s", profile)
-				}
 			}
 		})
 	}
@@ -1172,27 +1112,13 @@ func TestValuesSchemaRejectsArtifactProfilesWithoutArtifactServerURL(t *testing.
 
 func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
 	requireHelm(t)
-	for _, profile := range []string{"landns", "storage-landns", "builder-landns", "builder-storage-landns"} {
+	for _, profile := range []string{"landns", "storage-landns"} {
 		t.Run(profile, func(t *testing.T) {
 			valuesPath := filepath.Join(t.TempDir(), profile+"-without-dns.yaml")
 			values := fmt.Sprintf("config:\n  applianceProfile: %s\n  enabledCapabilities: [dns]\n  dnsReadyURL: \"\"\n", profile)
 			switch profile {
 			case "storage-landns":
 				values += "  artifactServerBaseURL: \"http://appliance-registry.artifacts.svc.cluster.local:5000\"\n  artifactServerAllowFake: false\n"
-			case "builder-landns", "builder-storage-landns":
-				values += `  artifactServerBaseURL: "http://appliance-registry.artifacts.svc.cluster.local:5000"
-  artifactServerAllowFake: false
-  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  buildCatalog:
-    workProfiles:
-      - name: builder
-        repos:
-          - name: app
-    repos:
-      - name: app
-        url: https://git.internal.example.com/team/app.git
-`
 			}
 			if err := os.WriteFile(valuesPath, []byte(values), 0o600); err != nil {
 				t.Fatal(err)
@@ -1205,64 +1131,6 @@ func TestValuesSchemaRejectsDNSProfilesWithoutDNSReadyURL(t *testing.T) {
 				t.Fatalf("lint failed for wrong reason:\n%s", out)
 			}
 		})
-	}
-}
-
-func TestValuesSchemaRejectsUnsafeBuildCatalogPath(t *testing.T) {
-	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "bad-values.yaml")
-	values := []byte(`
-config:
-  applianceProfile: builder
-  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  buildCatalog:
-    workProfiles:
-      - name: builder
-        repos:
-          - name: app
-    repos:
-      - name: app
-        url: https://git.internal.example.com/team/app.git
-    buildTargets:
-      - name: default
-        repo: app
-        execution: script
-        args: [build.sh]
-        scriptPath: ../build.sh
-        imageRepository: users/alice/app
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("writing test values: %v", err)
-	}
-	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted unsafe build catalog path\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("buildCatalog")) && !bytes.Contains(out, []byte("scriptPath")) {
-		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
-	}
-}
-
-func TestValuesSchemaAllowsBuilderWithEmptyBuildCatalog(t *testing.T) {
-	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "builder-empty-catalog.yaml")
-	values := []byte(`
-config:
-  applianceProfile: builder
-  buildCatalog: {}
-  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  artifactServerBaseURL: http://appliance-registry.artifacts.svc.cluster.local:5000
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("writing test values: %v", err)
-	}
-	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm lint rejected builder with empty buildCatalog:\n%s", out)
 	}
 }
 
@@ -1307,236 +1175,6 @@ config:
 	if !bytes.Contains(out, []byte("inferenceGatewayBaseURL")) {
 		t.Fatalf("helm lint failed for the wrong reason:\n%s", out)
 	}
-}
-
-func TestValuesSchemaAllowsBuilderWithoutDay2BuilderImageDigest(t *testing.T) {
-	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "builder-no-day2-builder.yaml")
-	// builderImageDigest is an optional day-2 default (not packaged). Install
-	// must succeed with empty/omitted; catalogs supply digests at build submit.
-	values := []byte(`
-config:
-  applianceProfile: builder
-  buildCatalog: {}
-  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-  builderImageDigest: ""
-  artifactServerBaseURL: http://appliance-registry.artifacts.svc.cluster.local:5000
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("writing test values: %v", err)
-	}
-	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("helm lint rejected builder with empty day-2 builderImageDigest:\n%s", out)
-	}
-}
-
-func TestValuesSchemaRejectsBuilderWithoutWorkspaceProvisionerImage(t *testing.T) {
-	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "bad-builder-catalog.yaml")
-	values := []byte(`
-config:
-  applianceProfile: builder
-  enabledCapabilities: [build]
-  buildCatalog:
-    workProfiles:
-      - name: builder
-        repos:
-          - name: app
-    repos:
-      - name: app
-        url: https://git.internal.example.com/team/app.git
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("writing test values: %v", err)
-	}
-	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted builder config without workspaceProvisionerImageDigest\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("workspaceProvisionerImageDigest")) {
-		t.Fatalf("helm lint failed for the wrong reason; output:\n%s", out)
-	}
-}
-
-func TestValuesSchemaRejectsSSHCatalogRepo(t *testing.T) {
-	requireHelm(t)
-	valuesPath := filepath.Join(t.TempDir(), "ssh-catalog.yaml")
-	values := []byte(`
-config:
-  applianceProfile: builder
-  workspaceProvisionerImageDigest: workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-  builderImageDigest: buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  buildCatalog:
-    workProfiles:
-      - name: builder
-        repos:
-          - name: app
-    repos:
-      - name: app
-        url: git@git.internal.example.com:team/app.git
-`)
-	if err := os.WriteFile(valuesPath, values, 0o600); err != nil {
-		t.Fatalf("writing test values: %v", err)
-	}
-	cmd := exec.Command("helm", "lint", chartDir(t), "-f", valuesPath)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm lint unexpectedly accepted SSH catalog repo\n%s", out)
-	}
-}
-
-func TestBuilderWorkspacePVCAndConfigRender(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "config.applianceProfile=builder",
-		"--set", "config.enabledCapabilities={build,workflows}",
-		"--set", "config.buildCatalog.workProfiles[0].name=builder",
-		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	)...)
-	pv := findByKindAndName(docs, "PersistentVolume", controlPlaneDeploymentName+"-workspaces")
-	if pv == nil {
-		t.Fatal("expected builder workspace PV")
-	}
-	if hostPath, _ := at(pv, "spec", "hostPath", "path").(string); hostPath != "/data/zon/workspaces" {
-		t.Fatalf("workspace PV hostPath = %q, want /data/zon/workspaces", hostPath)
-	}
-	pvc := findByKindAndName(docs, "PersistentVolumeClaim", controlPlaneDeploymentName+"-workspaces")
-	if pvc == nil {
-		t.Fatal("expected builder workspace PVC")
-	}
-	if ns, _ := at(pvc, "metadata", "namespace").(string); ns != "appliance-builds" {
-		t.Fatalf("workspace PVC namespace = %q, want appliance-builds", ns)
-	}
-	if volumeName, _ := at(pvc, "spec", "volumeName").(string); volumeName != "controlplane-workspaces" {
-		t.Fatalf("workspace PVC volumeName = %q, want controlplane-workspaces", volumeName)
-	}
-	jobs := findByKind(docs, "Job")
-	for _, job := range jobs {
-		name, _ := at(job, "metadata", "name").(string)
-		if strings.HasPrefix(name, "controlplane-workspace-storage-prep-") {
-			t.Fatalf("workspace storage prep Job must be disabled by default (PSA restricted + helm --wait); got %q", name)
-		}
-	}
-	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
-	if cm == nil {
-		t.Fatal("expected control-plane ConfigMap")
-	}
-	data, _ := at(cm, "data").(map[string]any)
-	if got, _ := data["APPLIANCE_WORKSPACE_ROOT_DIR"].(string); got != "/data/zon/workspaces" {
-		t.Fatalf("APPLIANCE_WORKSPACE_ROOT_DIR = %q, want /data/zon/workspaces", got)
-	}
-	if got, _ := data["APPLIANCE_WORKSPACE_CLAIM_NAME"].(string); got != "controlplane-workspaces" {
-		t.Fatalf("APPLIANCE_WORKSPACE_CLAIM_NAME = %q, want controlplane-workspaces", got)
-	}
-	if got, _ := data["APPLIANCE_WORKFLOW_INSTANCE_ID"].(string); got != "appliance" {
-		t.Fatalf("APPLIANCE_WORKFLOW_INSTANCE_ID = %q, want appliance", got)
-	}
-	if got, _ := data["APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT"].(string); got != "appliance-workflows-executor" {
-		t.Fatalf("APPLIANCE_WORKFLOW_EXECUTOR_SERVICE_ACCOUNT = %q, want appliance-workflows-executor", got)
-	}
-	if got, _ := data["APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST"].(string); got != "workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
-		t.Fatalf("APPLIANCE_WORKSPACE_PROVISIONER_IMAGE_DIGEST = %q, want workspace provisioner image", got)
-	}
-}
-
-func TestBuilderWorkspacePrepareJobOptInFailsFast(t *testing.T) {
-	requireHelm(t)
-	extraArgs := append(defaultRenderArgs(),
-		"--set", "config.applianceProfile=builder",
-		"--set", "config.enabledCapabilities={build,workflows}",
-		"--set", "config.buildCatalog.workProfiles[0].name=builder",
-		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"--set", "workspaceStorage.prepareJob.enabled=true",
-	)
-	args := append([]string{"template", "appliance", chartDir(t), "--namespace", "appliance"}, extraArgs...)
-	out, err := exec.Command("helm", args...).CombinedOutput()
-	if err == nil {
-		t.Fatalf("helm template unexpectedly accepted workspaceStorage.prepareJob.enabled=true\n%s", out)
-	}
-	if !bytes.Contains(out, []byte("workspaceStorage.prepareJob.enabled is not supported")) {
-		t.Fatalf("helm template failed for the wrong reason:\n%s", out)
-	}
-}
-
-func TestBuilderWorkflowRBACRenders(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "config.applianceProfile=builder",
-		"--set", "config.enabledCapabilities={build,workflows}",
-		"--set", "config.buildCatalog.workProfiles[0].name=builder",
-		"--set", "config.buildCatalog.workProfiles[0].repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].name=app",
-		"--set", "config.buildCatalog.repos[0].url=https://git.internal.example.com/team/app.git",
-		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	)...)
-	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
-	if dep == nil {
-		t.Fatal("expected control-plane Deployment")
-	}
-	if automount, _ := at(dep, "spec", "template", "spec", "automountServiceAccountToken").(bool); !automount {
-		t.Fatal("builder/workflows deployment should mount a service account token")
-	}
-	role := findByKindAndName(docs, "Role", controlPlaneDeploymentName+"-workflows")
-	if role == nil {
-		t.Fatal("expected workflow Role for builder/workflows")
-	}
-	if ns, _ := at(role, "metadata", "namespace").(string); ns != "appliance-builds" {
-		t.Fatalf("workflow Role namespace = %q, want appliance-builds", ns)
-	}
-	rules, _ := at(role, "rules").([]any)
-	if !roleRuleAllowsResource(rules, "secrets", "create", "get", "list", "update", "delete") {
-		t.Fatal("workflow Role should allow create/get/list/update/delete on secrets for named builder Git access")
-	}
-	if rb := findByKindAndName(docs, "RoleBinding", controlPlaneDeploymentName+"-workflows"); rb == nil {
-		t.Fatal("expected workflow RoleBinding for builder/workflows")
-	}
-	cm := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
-	if cm == nil {
-		t.Fatal("expected control-plane ConfigMap")
-	}
-	data, _ := at(cm, "data").(map[string]any)
-	if _, ok := data["APPLIANCE_WORKFLOW_NAMESPACE"]; ok {
-		t.Fatal("control-plane ConfigMap should not expose APPLIANCE_WORKFLOW_NAMESPACE once the namespace is fixed in code")
-	}
-}
-
-func roleRuleAllowsResource(rules []any, resource string, verbs ...string) bool {
-	need := map[string]struct{}{}
-	for _, verb := range verbs {
-		need[verb] = struct{}{}
-	}
-	for _, rawRule := range rules {
-		rule, ok := rawRule.(map[string]any)
-		if !ok {
-			continue
-		}
-		resources, _ := rule["resources"].([]any)
-		if !containsString(resources, resource) {
-			continue
-		}
-		ruleVerbs, _ := rule["verbs"].([]any)
-		missing := false
-		for verb := range need {
-			if !containsString(ruleVerbs, verb) {
-				missing = true
-				break
-			}
-		}
-		if !missing {
-			return true
-		}
-	}
-	return false
 }
 
 func TestAppsNamespacePlacesUIAndHostAwayFromControlplane(t *testing.T) {
@@ -1667,7 +1305,6 @@ func TestApplicationCapabilityMountsControlPlaneTokenInAceSystemRollout(t *testi
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 		"--set", "config.enabledCapabilities={applications}",
 	)...)
 	deployment := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
@@ -1686,7 +1323,6 @@ func TestApplicationSupportRolloutRendersResourcesForApplicationCapability(t *te
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.applicationSupport.enabled=true",
 		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "rollout.workflowsSupport.enabled=false",
 		"--set", "config.enabledCapabilities={applications}",
 	)...)
 	if marker := findByKindAndName(docs, "ConfigMap", "appliance-application-management"); marker == nil {
@@ -1694,21 +1330,6 @@ func TestApplicationSupportRolloutRendersResourcesForApplicationCapability(t *te
 	}
 	if role := findByKindAndName(docs, "Role", "controlplane-applications"); role == nil {
 		t.Fatal("application-support rollout must grant the control plane application permissions")
-	}
-}
-
-func TestWorkflowsBuildNamespaceIsInstallerOwned(t *testing.T) {
-	docs := renderChart(t,
-		"--set", "config.applianceProfile=builder",
-		"--set", "config.enabledCapabilities={build,workflows}",
-		"--set", "namespace.name=ace-system",
-		"--set", "appsNamespace.name=ace-apps",
-		"--set", "config.workspaceProvisionerImageDigest=workspace-provisioner@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-		"--set", "config.builderImageDigest=buildah@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	)
-	ns := findByKindAndName(docs, "Namespace", "appliance-builds")
-	if ns != nil {
-		t.Fatal("workflows build namespace must be installer-owned, not Helm-owned")
 	}
 }
 

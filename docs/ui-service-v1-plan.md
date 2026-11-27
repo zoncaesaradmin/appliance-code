@@ -46,9 +46,8 @@ V1 UI technology choices:
 The browser talks to the UI service. The UI service talks to the control-plane
 API over the in-cluster service DNS name.
 
-See [UI To Control-Plane Route Mapping](ui-control-plane-route-mapping.md) for
-the maintained operator-facing route map and the required documentation update
-rule for UI/API integration changes.
+The generated OpenAPI contract and active UI route map are the maintained
+references for UI/API integration changes.
 
 ## V1 Implementation Choices
 

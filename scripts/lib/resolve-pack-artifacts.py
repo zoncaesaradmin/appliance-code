@@ -46,11 +46,6 @@ KNOWN_ARTIFACTS = (
     "open-webui-image",
     "open-webui-gateway-image",
     "appliance-inference-chart",
-    "workspace-provisioner-image",
-    "workflows-chart",
-    "workflows-crds",
-    "workflow-controller-image",
-    "workflow-executor-image",
     "jellyfin-image",
 )
 

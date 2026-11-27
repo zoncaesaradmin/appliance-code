@@ -194,7 +194,7 @@ func NewInClusterManager(network ...NetworkProjector) (ResourceManager, error) {
 	if host == "" || port == "" {
 		return nil, nil
 	}
-	// Profiles without workflows/DNS (core, storage, lanllm, training, …) do not
+	// Profiles without DNS (core, storage, private-ai, training, …) do not
 	// automount a ServiceAccount token. Application reconcile already no-ops when
 	// the manager is nil; fail closed only when a token is present but unreadable.
 	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
