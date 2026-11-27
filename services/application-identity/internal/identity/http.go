@@ -43,19 +43,19 @@ func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.resolveChannelPrincipal(w, r)
 		return
 	}
-	if r.URL.Path == "/api/shared/v1/onboarding/nearby" {
+	if r.URL.Path == "/api/app/v1/onboarding/nearby" {
 		h.nearbyZones(w, r)
 		return
 	}
-	if r.URL.Path == "/api/shared/v1/onboarding/memberships" {
+	if r.URL.Path == "/api/app/v1/onboarding/memberships" {
 		h.activeMemberships(w, r)
 		return
 	}
-	if r.URL.Path == "/api/shared/v1/onboarding/join" {
+	if r.URL.Path == "/api/app/v1/onboarding/join" {
 		h.joinZone(w, r)
 		return
 	}
-	if r.URL.Path == "/api/shared/v1/onboarding/zone-requests" {
+	if r.URL.Path == "/api/app/v1/onboarding/zone-requests" {
 		h.requestZoneCreation(w, r)
 		return
 	}
@@ -72,7 +72,7 @@ func (h HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func isAuthProxyPath(path string) bool {
 	switch path {
-	case "/api/v1/auth/capabilities", "/api/shared/v1/auth/otp/challenges", "/api/shared/v1/auth/otp/verify", "/api/shared/v1/auth/logout", "/api/shared/v1/auth/session", "/api/shared/v1/auth/principal":
+	case "/api/app/v1/auth/capabilities", "/api/app/v1/auth/otp/challenges", "/api/app/v1/auth/otp/verify", "/api/app/v1/auth/logout", "/api/app/v1/auth/session":
 		return true
 	default:
 		return false
@@ -111,7 +111,7 @@ func (h HTTPHandler) proxyAuth(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, response.Body)
 }
 
-// resolveChannelPrincipal is deliberately outside the public /api/shared
+// resolveChannelPrincipal is deliberately outside the public /api/app
 // surface. It requires a target-generated key and accepts only the generic
 // channel contract; provider-specific validation remains in the adapter.
 func (h HTTPHandler) resolveChannelPrincipal(w http.ResponseWriter, r *http.Request) {

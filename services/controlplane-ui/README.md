@@ -22,6 +22,7 @@ The Go host serves:
 - `/` (the signed-profile-selected public entry) and deep SPA routes such as `/admin/lan-services`
 - `/console` and `/console/login` for the appliance operations console
 - `/app` and `/app/login` for the Zonited application workspace
+- `/geo` and `/geo/login` for the Geo-Zone employee workspace
 - immutable files under `/assets/`
 - `/manifest.webmanifest`, `/icon.svg`, and the static-shell service worker
   used by the installable Zonited PWA. The worker never caches `/api/`, health,

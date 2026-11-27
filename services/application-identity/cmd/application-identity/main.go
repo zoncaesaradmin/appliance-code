@@ -175,7 +175,7 @@ func main() {
 	}
 	authClient := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("auth service redirect rejected") }}
 	service := identity.NewOnboardingService(store, c.origin, identity.HTTPPrincipalResolver{URL: c.authServiceURL, Client: authClient})
-	limiter, err := identity.NewPostgresRequestLimiter(db, c.rateKey, 10*time.Minute, map[string]int{"/api/shared/v1/auth/otp/challenges": 20, "/api/shared/v1/auth/otp/verify": 50, "/api/shared/v1/onboarding/nearby": 60, "/api/shared/v1/onboarding/join": 20, "/api/shared/v1/onboarding/zone-requests": 10})
+	limiter, err := identity.NewPostgresRequestLimiter(db, c.rateKey, 10*time.Minute, map[string]int{"/api/app/v1/auth/otp/challenges": 20, "/api/app/v1/auth/otp/verify": 50, "/api/app/v1/onboarding/nearby": 60, "/api/app/v1/onboarding/join": 20, "/api/app/v1/onboarding/zone-requests": 10})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -15,6 +15,11 @@ routes are a compatibility proxy to the URL configured by
 `auth-service.ace-app-core.svc.cluster.local` endpoint or a deployment-time
 external Auth Service endpoint.
 
+The public application authentication surface is under
+`/api/app/v1/auth/...`. The application-identity service uses the internal
+`/internal/v1/auth/principal` endpoint for service-to-service principal
+resolution; it is not part of the public ingress API.
+
 For local/test delivery, retrieve a pending code only from the private socket
 inside the Auth Service pod:
 

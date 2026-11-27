@@ -85,7 +85,7 @@ func TestHandlerHealthAndCapabilities(t *testing.T) {
 	}{
 		{name: "live", path: "/health/live", want: http.StatusOK},
 		{name: "ready", path: "/health/ready", want: http.StatusOK},
-		{name: "capabilities", path: "/api/v1/auth/capabilities", want: http.StatusOK},
+		{name: "capabilities", path: "/api/app/v1/auth/capabilities", want: http.StatusOK},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

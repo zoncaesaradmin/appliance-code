@@ -1,0 +1,28 @@
+* { box-sizing: border-box; }
+html, body, #geo-app { min-height: 100%; margin: 0; }
+body { background: #f4f0e9; color: #25231f; font: 16px/1.5 system-ui, sans-serif; }
+.geo-login { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, .9fr); }
+.geo-login__visual { position: relative; overflow: hidden; padding: clamp(2rem, 7vw, 7rem); background: #25231f; color: #f7f2e8; }
+.geo-login__visual::after { content: ""; position: absolute; inset: 0; opacity: .22; background-image: linear-gradient(#d8ccb9 1px, transparent 1px), linear-gradient(90deg, #d8ccb9 1px, transparent 1px); background-size: 54px 54px; transform: rotate(-8deg) scale(1.2); }
+.geo-login__mark, .geo-login__eyebrow, .geo-login__visual h1, .geo-login__visual p { position: relative; z-index: 1; }
+.geo-login__mark { font-size: 2.6rem; color: #c35222; }
+.geo-login__eyebrow, .geo-login__brand, .geo-login__kicker { letter-spacing: .14em; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+.geo-login__visual h1 { max-width: 14ch; margin: 2rem 0 1rem; font: 600 clamp(3rem, 7vw, 6.5rem)/.95 Georgia, serif; }
+.geo-login__visual p { max-width: 32rem; color: #d8ccb9; font-size: 1.15rem; }
+.geo-login__panel { display: flex; flex-direction: column; justify-content: center; padding: clamp(2rem, 7vw, 7rem); background: #fffdf8; }
+.geo-login__brand { color: #25231f; }
+.geo-login__brand span { display: block; margin-top: .3rem; color: #9b9184; font-size: .58rem; letter-spacing: .12em; }
+.geo-login__kicker { margin: 5rem 0 0; color: #c35222; }
+.geo-login__panel h2 { margin: .5rem 0; font: 600 clamp(2rem, 4vw, 3.5rem)/1.05 Georgia, serif; }
+.geo-login__lede { max-width: 28rem; color: #6d655c; }
+.geo-login__form { display: grid; gap: 1rem; max-width: 28rem; margin-top: 1.5rem; }
+.geo-login__form label { display: grid; gap: .35rem; color: #4a433b; font-weight: 600; }
+.geo-login__form input { width: 100%; border: 1px solid #cec5b9; border-radius: .2rem; padding: .8rem .9rem; color: #25231f; background: #fff; font: inherit; }
+.geo-login__form input:focus { outline: 2px solid #c35222; outline-offset: 2px; }
+.geo-login__persist { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: .5rem !important; font-size: .85rem; font-weight: 500 !important; }
+.geo-login__persist input { width: auto; }
+.geo-login__form button { border: 0; border-radius: .2rem; padding: .85rem 1rem; background: #25231f; color: white; cursor: pointer; font: inherit; font-weight: 700; }
+.geo-login__form button:disabled { cursor: wait; opacity: .55; }
+.geo-login__error { min-height: 1.5rem; margin: 0; color: #a33b2d; }
+.geo-login__console { margin-top: 2rem; color: #6d655c; font-size: .85rem; }
+@media (max-width: 800px) { .geo-login { grid-template-columns: 1fr; } .geo-login__visual { min-height: 38vh; padding: 2rem; } .geo-login__visual h1 { margin-top: 1rem; } .geo-login__panel { padding: 2rem; } .geo-login__kicker { margin-top: 2rem; } }

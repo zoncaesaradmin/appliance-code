@@ -25,12 +25,13 @@ type controlPlane interface {
 }
 
 type Server struct {
-	cfg        Config
-	cp         controlPlane
-	logger     uilogging.Logger
-	indexPath  string
-	assetsRoot string
-	assets     http.Handler
+	cfg          Config
+	cp           controlPlane
+	logger       uilogging.Logger
+	indexPath    string
+	geoIndexPath string
+	assetsRoot   string
+	assets       http.Handler
 }
 
 func New(cfg Config, cp controlPlane, logger uilogging.Logger) (http.Handler, error) {
@@ -45,12 +46,13 @@ func New(cfg Config, cp controlPlane, logger uilogging.Logger) (http.Handler, er
 	}
 	staticDir := filepath.Clean(cfg.StaticDir)
 	server := &Server{
-		cfg:        cfg,
-		cp:         cp,
-		logger:     logger,
-		indexPath:  filepath.Join(staticDir, "index.html"),
-		assetsRoot: staticDir,
-		assets:     http.FileServer(http.Dir(staticDir)),
+		cfg:          cfg,
+		cp:           cp,
+		logger:       logger,
+		indexPath:    filepath.Join(staticDir, "index.html"),
+		geoIndexPath: filepath.Join(staticDir, "geo.html"),
+		assetsRoot:   staticDir,
+		assets:       http.FileServer(http.Dir(staticDir)),
 	}
 
 	mux := http.NewServeMux()
@@ -113,11 +115,25 @@ func (s *Server) spa(w http.ResponseWriter, r *http.Request) {
 	if path == "." {
 		path = ""
 	}
+	if path == "geo" || strings.HasPrefix(path, "geo/") {
+		s.serveGeoIndex(w, r)
+		return
+	}
 	if path != "" && hasFileExtension(path) {
 		s.serveStatic(w, r)
 		return
 	}
 	s.serveIndex(w, r)
+}
+
+func (s *Server) serveGeoIndex(w http.ResponseWriter, r *http.Request) {
+	if _, err := os.Stat(s.geoIndexPath); err != nil {
+		s.logger.WithContext(r.Context()).Warnw("Geo UI static bundle missing", "indexPath", s.geoIndexPath, "error", err)
+		http.Error(w, "Geo UI bundle is not available", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.ServeFile(w, r, s.geoIndexPath)
 }
 
 func (s *Server) serveStatic(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +184,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		// frame-src/object-src blob: allow in-app PDF and document previews from object URLs.
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://tile.openstreetmap.org data: blob:; connect-src 'self'; font-src 'self'; frame-src 'self' blob:; object-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }

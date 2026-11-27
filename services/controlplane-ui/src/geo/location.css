@@ -1,0 +1,10 @@
+#navigate label { margin-bottom: 0; }
+#coordinates { font-family: ui-monospace, monospace; }
+#coordinates[aria-invalid="true"] { border-color: oklch(55% .16 30); }
+.coordinate-help { margin: 7px 0 12px; font-size: 12px; line-height: 1.4; color: oklch(45% .025 200); }
+.coordinate-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.coordinate-actions button { min-height: 40px; }
+.coordinate-actions button:disabled { opacity: .6; cursor: wait; }
+.coordinate-status { min-height: 1.2em; margin: 9px 0 0; font-size: 12px; line-height: 1.4; color: oklch(42% .07 160); }
+.coordinate-status:empty { display: none; }
+.coordinate-status.error { color: oklch(48% .17 30); }

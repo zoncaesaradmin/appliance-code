@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { loadEnv } from "vite";
+import { resolve } from "node:path";
 
 function json(res, status, body) {
   res.statusCode = status;
@@ -34,13 +35,13 @@ function mockApiPlugin(enabled) {
         if (req.method === "GET" && path === "/api/v1/health") {
           return json(res, 200, { status: "ok" });
         }
-        if (req.method === "GET" && path === "/api/shared/v1/auth/session") {
+        if (req.method === "GET" && path === "/api/app/v1/auth/session") {
           return json(res, 200, { authenticated: false });
         }
-        if (req.method === "POST" && path === "/api/shared/v1/auth/otp/challenges") {
+        if (req.method === "POST" && path === "/api/app/v1/auth/otp/challenges") {
           return json(res, 200, { challenge_id: "mock-challenge" });
         }
-        if (req.method === "POST" && path === "/api/shared/v1/auth/otp/verify") {
+        if (req.method === "POST" && path === "/api/app/v1/auth/otp/verify") {
           return json(res, 200, {});
         }
         return next();
@@ -63,7 +64,13 @@ export function createViteConfig(mode) {
     build: {
       outDir,
       sourcemap: true,
-      emptyOutDir: false
+      emptyOutDir: false,
+      rollupOptions: {
+        input: {
+          appliance: resolve(process.cwd(), "index.html"),
+          geo: resolve(process.cwd(), "geo.html")
+        }
+      }
     },
     server: {
       host,

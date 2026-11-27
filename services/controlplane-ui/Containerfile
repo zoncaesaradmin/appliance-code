@@ -33,7 +33,7 @@ FROM --platform=$BUILDPLATFORM ${UI_NODE_IMAGE} AS web-build
 ARG USE_PREBAKED_NPM
 WORKDIR /src
 COPY package.json package-lock.json ./
-COPY tsconfig.json index.html ./
+COPY tsconfig.json index.html geo.html ./
 COPY scripts ./scripts
 COPY src ./src
 # Vite copies public/ into the static bundle. Keep the offline brand assets,

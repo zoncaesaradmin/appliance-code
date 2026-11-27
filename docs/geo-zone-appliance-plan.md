@@ -15,11 +15,34 @@ The `geo-zone` profile selects all four capabilities plus the shared `base` and
 Geo-Zone-specific artifacts; it is intentionally not split into one pack per
 service.
 
-The first implementation slice is metadata and routing only. Runtime images,
-the PostGIS chart/migrations, the data API, and the offline basemap must be
-added as signed release-input artifacts before `geo-zone` is offered for a
-production install. This keeps the profile fail-closed instead of shipping an
-apparently enabled profile with an online basemap or an unverified image.
+The Geo employee entrypoint and Zone Studio editor are now delivered as a
+second static entrypoint in the shared appliance UI image. `/geo/login` uses
+the appliance's local username/password session API and `/geo` serves the
+MapLibre/Terra Draw editor. Geo data requests remain behind the control-plane
+`/api/v1/geo/*` proxy and are authorized with `geo.read` and `geo.write`.
+
+Runtime images, the PostGIS chart/migrations, the data API, and the offline
+basemap must still be added as signed release-input artifacts before the Geo
+profile is offered for a production install. Until then the editor is a
+real, authenticated UI shell but its persistence API is intentionally
+fail-closed when the Geo data service is absent.
+
+## User flow
+
+1. Install or activate the `geo-zone` profile with the signed `geo-stack`
+   pack present.
+2. Complete normal appliance setup and create the first local administrator.
+3. Open `/geo/login` and sign in with that local username/password. A
+   successful session lands at `/geo`; `/console/login` remains the separate
+   appliance-operations entrypoint and `/app/login` remains the OTP-based
+   application entrypoint.
+4. The built-in administrator already has `geo.read` and `geo.write`. For
+   other employees, assign those permissions through a local role before
+   granting them Geo access.
+
+The UI and login boundary are therefore usable before the persistence service
+is shipped, while missing Geo runtime artifacts cannot silently become an
+internet-backed or unauthenticated fallback.
 
 The standalone Zone Studio catalog remains useful as the source inventory, but
 its `ingress`, `auth-service`, and `backups` components map to appliance-owned

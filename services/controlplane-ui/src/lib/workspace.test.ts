@@ -6,6 +6,7 @@ import {
   isApplicationEntryPath,
   isApplicationPath,
   isApplicationSession,
+  isGeoPath,
   loginDestination,
   safeNextPath,
   workspaceForPath
@@ -18,6 +19,9 @@ describe("workspace routing", () => {
     expect(isApplicationPath("/app/login")).toBe(true);
     expect(workspaceForPath("/")).toBe("console");
     expect(workspaceForPath("/", "application-core")).toBe("app");
+    expect(workspaceForPath("/geo")).toBe("geo");
+    expect(isGeoPath("/geo/login")).toBe(true);
+    expect(workspaceForPath("/", "geo-zone")).toBe("geo");
   });
 
   it("does not treat an operator session as an application session", () => {
@@ -36,6 +40,8 @@ describe("workspace routing", () => {
   it("uses a code-defined profile policy with a console fallback", () => {
     expect(defaultLoginPath("application-core")).toBe("/app/login");
     expect(defaultAuthenticatedPath("application-core")).toBe("/app");
+    expect(defaultLoginPath("geo-zone")).toBe("/geo/login");
+    expect(defaultAuthenticatedPath("geo-zone")).toBe("/geo");
     expect(isApplicationEntryPath("/", "application-core")).toBe(true);
     expect(defaultLoginPath("core")).toBe("/console/login");
     expect(defaultAuthenticatedPath("unknown-profile")).toBe("/home");
@@ -48,6 +54,7 @@ describe("workspace routing", () => {
     expect(safeNextPath("/login")).toBe("/home");
     expect(safeNextPath("/console/login")).toBe("/home");
     expect(safeNextPath("/app/login")).toBe("/home");
+    expect(safeNextPath("/geo/login")).toBe("/home");
     expect(safeNextPath("/console")).toBe("/console");
   });
 
@@ -59,6 +66,8 @@ describe("workspace routing", () => {
     expect(loginDestination("/console/login", "")).toBe("/home");
     expect(loginDestination("/app", "")).toBe("/app");
     expect(loginDestination("/app/login", "")).toBe("/app");
+    expect(loginDestination("/geo", "")).toBe("/geo");
+    expect(loginDestination("/geo/login", "")).toBe("/geo");
     expect(loginDestination("/console/login", "?next=%2Fconsole%2Fadmin%2Fprofiles")).toBe(
       "/console/admin/profiles"
     );

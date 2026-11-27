@@ -421,7 +421,7 @@ ForwardAuth middleware name.
     - name: {{ include "appliance-control-plane.fullname" . }}
       port: {{ .Values.service.publicPort }}
 {{- if eq (include "appliance-control-plane.applicationIdentityEnabled" .) "true" }}
-- match: {{ printf "%sPathPrefix(`/api/shared/`)" $hostMatch }}
+- match: {{ printf "%sPathPrefix(`/api/app/`)" $hostMatch }}
   kind: Rule
   priority: 105
   services:

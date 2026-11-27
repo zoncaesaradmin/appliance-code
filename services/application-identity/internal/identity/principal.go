@@ -80,7 +80,7 @@ type HTTPPrincipalResolver struct {
 }
 
 func (c HTTPPrincipalResolver) ResolvePrincipal(ctx context.Context, token string) (Principal, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.URL, "/")+"/api/shared/v1/auth/principal", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.URL, "/")+"/internal/v1/auth/principal", nil)
 	if err != nil {
 		return Principal{}, err
 	}

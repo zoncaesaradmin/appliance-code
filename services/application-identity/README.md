@@ -7,27 +7,28 @@ appliance operator authentication API.
 
 The public API is:
 
-- `GET /api/v1/auth/capabilities` for the Auth Service's enabled authentication
+- `GET /api/app/v1/auth/capabilities` for the Auth Service's enabled authentication
   methods and delivery channels
-- `POST /api/shared/v1/auth/otp/challenges` with `{"phone":"+..."}`
-- `POST /api/shared/v1/auth/otp/verify` with `{"challenge_id":"...","code":"123456"}`
-- `GET /api/shared/v1/auth/session`
-- `POST /api/shared/v1/auth/logout`
-- `GET /api/shared/v1/onboarding/memberships` for the signed-in user's active
+- `POST /api/app/v1/auth/otp/challenges` with `{"phone":"+..."}`
+- `POST /api/app/v1/auth/otp/verify` with `{"challenge_id":"...","code":"123456"}`
+- `GET /api/app/v1/auth/session`
+- `POST /api/app/v1/auth/logout`
+- `GET /api/app/v1/onboarding/memberships` for the signed-in user's active
   Zonity memberships
 - Nearby-zone responses include each active zone's latitude, longitude, and
   calculated distance so onboarding clients can show a map confirmation.
-- `POST /api/shared/v1/onboarding/nearby` with a signed-in session or a
+- `POST /api/app/v1/onboarding/nearby` with a signed-in session or a
   short-lived channel discovery token and `{\"latitude\":…,\"longitude\":…}`
-- `POST /api/shared/v1/onboarding/join` with an authenticated session and a
+- `POST /api/app/v1/onboarding/join` with an authenticated session and a
   selected public zone ID
-- `POST /api/shared/v1/onboarding/zone-requests` with an authenticated session
+- `POST /api/app/v1/onboarding/zone-requests` with an authenticated session
   and a requested Zonity name
 
 The public auth paths remain available through this service as a routing
 boundary, but are always forwarded to the deployment-configured Auth Service
 endpoint. The identity service also asks that endpoint to resolve an
-authenticated principal for onboarding; it does not implement OTP, session,
+authenticated principal for onboarding through the internal
+`/internal/v1/auth/principal` endpoint; it does not implement OTP, session,
 or browser-authentication storage itself. The Auth Service owns the local
 development inbox and publishes the encrypted `event.identity.otp.requested`
 event in integrated deployments.

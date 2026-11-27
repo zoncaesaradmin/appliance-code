@@ -93,48 +93,48 @@ async function request<T>(path: string, fallback: string, init: RequestInit = {}
 
 export const applicationAuth = {
   session(): Promise<ApplicationSessionStatus> {
-    return request<ApplicationSessionStatus>("/api/shared/v1/auth/session", "Sign-in is unavailable.");
+    return request<ApplicationSessionStatus>("/api/app/v1/auth/session", "Sign-in is unavailable.");
   },
   memberships(): Promise<{ memberships: ActiveMembership[] }> {
-    return request<{ memberships: ActiveMembership[] }>("/api/shared/v1/onboarding/memberships", "Could not load your Zonity memberships.");
+    return request<{ memberships: ActiveMembership[] }>("/api/app/v1/onboarding/memberships", "Could not load your Zonity memberships.");
   },
   challenge(phone: string): Promise<{ challenge_id: string }> {
-    return request<{ challenge_id: string }>("/api/shared/v1/auth/otp/challenges", "Could not send a code. Try again.", {
+    return request<{ challenge_id: string }>("/api/app/v1/auth/otp/challenges", "Could not send a code. Try again.", {
       method: "POST",
       headers: { Origin: window.location.origin },
       body: JSON.stringify({ phone })
     });
   },
   verify(challengeId: string, code: string): Promise<void> {
-    return request<void>("/api/shared/v1/auth/otp/verify", "Could not verify the code. Try again.", {
+    return request<void>("/api/app/v1/auth/otp/verify", "Could not verify the code. Try again.", {
       method: "POST",
       headers: { Origin: window.location.origin },
       body: JSON.stringify({ challenge_id: challengeId, code })
     });
   },
   logout(): Promise<void> {
-    return request<void>("/api/shared/v1/auth/logout", "Could not sign out. Try again.", {
+    return request<void>("/api/app/v1/auth/logout", "Could not sign out. Try again.", {
       method: "POST",
       headers: { Origin: window.location.origin },
       body: "{}"
     }).then(() => undefined);
   },
   nearby(latitude: number, longitude: number, discoveryToken = ""): Promise<{ zones: NearbyZone[] }> {
-    return request<{ zones: NearbyZone[] }>("/api/shared/v1/onboarding/nearby", "Could not find nearby Zonities.", {
+    return request<{ zones: NearbyZone[] }>("/api/app/v1/onboarding/nearby", "Could not find nearby Zonities.", {
       method: "POST",
       headers: { Origin: window.location.origin },
       body: JSON.stringify({ latitude, longitude, radius_km: 10, ...(discoveryToken ? { discovery_token: discoveryToken } : {}) })
     });
   },
   join(zoneID: string, latitude: number, longitude: number): Promise<{ zone_id: string; status: string; approval_mode: string }> {
-    return request<{ zone_id: string; status: string; approval_mode: string }>("/api/shared/v1/onboarding/join", "Could not submit the join request.", {
+    return request<{ zone_id: string; status: string; approval_mode: string }>("/api/app/v1/onboarding/join", "Could not submit the join request.", {
       method: "POST",
       headers: { Origin: window.location.origin },
       body: JSON.stringify({ zone_id: zoneID, latitude, longitude })
     });
   },
   requestZone(name: string): Promise<{ name: string; status: string }> {
-    return request<{ name: string; status: string }>("/api/shared/v1/onboarding/zone-requests", "Could not submit the Zonity request.", {
+    return request<{ name: string; status: string }>("/api/app/v1/onboarding/zone-requests", "Could not submit the Zonity request.", {
       method: "POST",
       headers: { Origin: window.location.origin },
       body: JSON.stringify({ name })

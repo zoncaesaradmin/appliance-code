@@ -42,6 +42,7 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "index.html"), "<!doctype html><html><body>controlplane-ui</body></html>")
+	mustWriteFile(t, filepath.Join(root, "geo.html"), "<!doctype html><html><body>geo-zone-ui</body></html>")
 	mustWriteFile(t, filepath.Join(root, "assets", "app.js"), "console.log('ok');")
 
 	logger, err := uilogging.NewWithWriter("debug", os.Stdout)
@@ -74,6 +75,20 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 		}
 		if !strings.Contains(rec.Body.String(), "controlplane-ui") {
 			t.Fatalf("expected index body, got %q", rec.Body.String())
+		}
+	})
+
+	t.Run("Geo paths serve the Geo entrypoint", func(t *testing.T) {
+		for _, path := range []string{"/geo", "/geo/login"} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s got status %d, want 200", path, rec.Code)
+			}
+			if !strings.Contains(rec.Body.String(), "geo-zone-ui") {
+				t.Fatalf("%s expected Geo entrypoint, got %q", path, rec.Body.String())
+			}
 		}
 	})
 
@@ -123,8 +138,8 @@ func TestSPARoutesServeIndexAndAssets(t *testing.T) {
 		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-src 'self' blob:") {
 			t.Fatalf("Content-Security-Policy = %q, want frame-src blob for document preview", got)
 		}
-		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "img-src 'self' https://tile.openstreetmap.org") {
-			t.Fatalf("Content-Security-Policy = %q, want OpenStreetMap tiles", got)
+		if got := rec.Header().Get("Content-Security-Policy"); !strings.Contains(got, "worker-src 'self' blob:") {
+			t.Fatalf("Content-Security-Policy = %q, want local MapLibre workers", got)
 		}
 	})
 }

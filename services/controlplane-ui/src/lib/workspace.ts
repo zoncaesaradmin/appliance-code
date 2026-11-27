@@ -1,10 +1,10 @@
 import type { Session } from "../types";
 
-export type Workspace = "app" | "console";
+export type Workspace = "app" | "console" | "geo";
 
 type LandingPolicy = {
-  loginPath: "/app/login" | "/console/login";
-  authenticatedPath: "/app" | "/home";
+  loginPath: "/app/login" | "/console/login" | "/geo/login";
+  authenticatedPath: "/app" | "/home" | "/geo";
 };
 
 const defaultLandingPolicy: LandingPolicy = {
@@ -19,13 +19,21 @@ const profileLandingPolicies: Record<string, LandingPolicy> = {
   "application-core": {
     loginPath: "/app/login",
     authenticatedPath: "/app"
+  },
+  "geo-zone": {
+    loginPath: "/geo/login",
+    authenticatedPath: "/geo"
   }
 };
 
-const INTERNAL_PATH = /^(?:\/(?:app|console|home|manage|analyze|admin|account)(?:\/|$)|\/$)/;
+const INTERNAL_PATH = /^(?:\/(?:app|console|geo|home|manage|analyze|admin|account)(?:\/|$)|\/$)/;
 
 export function isApplicationPath(pathname: string): boolean {
   return pathname === "/app" || pathname.startsWith("/app/");
+}
+
+export function isGeoPath(pathname: string): boolean {
+  return pathname === "/geo" || pathname.startsWith("/geo/");
 }
 
 export function landingPolicyForProfile(profile: string | null | undefined): LandingPolicy {
@@ -45,6 +53,10 @@ export function isApplicationEntryPath(pathname: string, profile: string | null 
   return pathname === "/" && defaultLoginPath(profile) === "/app/login";
 }
 
+export function isGeoEntryPath(pathname: string, profile: string | null | undefined): boolean {
+  return pathname === "/" && defaultLoginPath(profile) === "/geo/login";
+}
+
 /**
  * Application sessions are intentionally a separate identity contract from
  * the appliance's local operator sessions. The application OTP service will
@@ -57,6 +69,9 @@ export function isApplicationSession(session: Pick<Session, "domain" | "authMeth
 export function workspaceForPath(pathname: string, profile?: string | null): Workspace {
   if (isApplicationPath(pathname) || isApplicationEntryPath(pathname, profile)) {
     return "app";
+  }
+  if (isGeoPath(pathname) || isGeoEntryPath(pathname, profile)) {
+    return "geo";
   }
   return "console";
 }
@@ -98,6 +113,7 @@ export function safeNextPath(raw: string | null | undefined, fallback = "/home")
     value === "/login" ||
     value === "/console/login" ||
     value === "/app/login" ||
+    value === "/geo/login" ||
     value === "/setup"
   ) {
     return fallback;
@@ -121,6 +137,9 @@ export function loginDestination(pathname: string, search: string, profile?: str
       return "/app";
     }
     return pathname;
+  }
+  if (isGeoPath(pathname)) {
+    return pathname === "/geo/login" ? "/geo" : pathname;
   }
   return pathname === "/" ? defaultAuthenticatedPath(profile) : "/home";
 }

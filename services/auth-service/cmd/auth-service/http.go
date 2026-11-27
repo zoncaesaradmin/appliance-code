@@ -39,17 +39,17 @@ func (h authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 		}
 		return
-	case "/api/v1/auth/capabilities":
+	case "/api/app/v1/auth/capabilities":
 		writeJSON(w, http.StatusOK, map[string]any{"service": "auth-service", "authentication": map[string]any{"methods": []string{"otp"}, "deliveryChannels": h.deliveryChannels}})
 		return
-	case "/api/shared/v1/auth/principal":
+	case "/internal/v1/auth/principal":
 		h.principal(w, r)
 		return
-	case "/api/shared/v1/auth/session":
+	case "/api/app/v1/auth/session":
 		h.session(w, r)
 		return
 	}
-	if !strings.HasPrefix(r.URL.Path, "/api/shared/v1/auth/") {
+	if !strings.HasPrefix(r.URL.Path, "/api/app/v1/auth/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -62,7 +62,7 @@ func (h authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		authError(w, http.StatusForbidden, "Request origin is not allowed.")
 		return
 	}
-	if r.URL.Path == "/api/shared/v1/auth/logout" {
+	if r.URL.Path == "/api/app/v1/auth/logout" {
 		if err := h.store.revokeSession(r.Context(), cookieValue(r), time.Now()); err != nil {
 			authError(w, 503, "Could not sign out. Try again.")
 			return
@@ -75,7 +75,7 @@ func (h authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if host, _, err := net.SplitHostPort(client); err == nil {
 		client = host
 	}
-	if r.URL.Path == "/api/shared/v1/auth/otp/challenges" {
+	if r.URL.Path == "/api/app/v1/auth/otp/challenges" {
 		var in struct {
 			Phone            string   `json:"phone"`
 			DeliveryChannels []string `json:"delivery_channels,omitempty"`
@@ -99,7 +99,7 @@ func (h authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 201, map[string]string{"challenge_id": id})
 		return
 	}
-	if r.URL.Path != "/api/shared/v1/auth/otp/verify" {
+	if r.URL.Path != "/api/app/v1/auth/otp/verify" {
 		http.NotFound(w, r)
 		return
 	}

@@ -42,7 +42,12 @@
 - Mobile OTP entry separates country selection from the local number; India (+91) is the default and the local number is digit-only with country-specific length validation.
 - Authentication actions use full-width, vertically separated primary and secondary buttons so the code step has a clear next action and a calm recovery path.
 - Motion is limited to opacity/transform and respects reduced-motion preferences.
-- Nearby discovery shows the searched point and returned Zonity points on an OpenStreetMap tile view. Users can choose another point on the map before searching again; map failure never blocks the platform-managed Zonity request path.
+- Nearby discovery lives in the post-login Explore dialog (and `/app/discover`):
+  zoom controls on the location preview, compact footer actions, and two clear
+  workflows in one place — **Search near me** (device location) and move the pin
+  on the map, then **Search from pinned location**. Do not add a second
+  competing search entry on the landing page; keep “Find a Zonity” as the
+  single opener.
 
 ## PWA and security
 
@@ -102,3 +107,9 @@
   image is not cropped top or bottom.
 - 2026-11-27: Set the live login neighborhood art to the A2 phone-style 16:9
   crop centered on the service ring; removed draft option/preview assets.
+- 2026-11-27: Updated live login neighborhood art with Indian mini-truck,
+  distant vegetable cart, varied houses, edge people, and clipped corner
+  house; removed draft detail-option assets.
+- 2026-11-27: Installed P2 polish of the login neighborhood art (calmer
+  cream/sage balance and breathing room around the ring); removed draft
+  palette/polish assets.
