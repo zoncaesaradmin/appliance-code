@@ -36,6 +36,9 @@ podSecurityContext:
     type: RuntimeDefault
 
 networkPolicy:
+  # The app-core slice contains shared application prerequisites such as
+  # auth-service and must be able to publish/consume platform events.
   allowedNamespaces:
     - ace-system
+    - ace-app-core
     - ace-apps
