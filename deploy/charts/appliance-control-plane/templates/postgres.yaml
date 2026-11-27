@@ -96,7 +96,10 @@ spec:
             matchLabels:
               {{- include "appliance-control-plane.orderingSelectorLabels" . | nindent 14 }}
     {{- end }}
-    {{- if eq (include "appliance-control-plane.applicationAuthEnabled" .) "true" }}
+    # The PostgreSQL policy is rendered during the ace-infra rollout slice,
+    # before capability-specific app-core values are applied. Keep this
+    # ingress rule independent of that slice's capability list; the
+    # namespace/pod labels still restrict it to the packaged auth service.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -104,7 +107,6 @@ spec:
           podSelector:
             matchLabels:
               {{- include "appliance-control-plane.authServiceSelectorLabels" . | nindent 14 }}
-    {{- end }}
       ports: [{protocol: TCP, port: 5432}]
   egress:
     - to:
