@@ -42,6 +42,10 @@ const (
 	CapabilityFocusContent        Capability = "focus-content"
 	CapabilityApplications        Capability = "applications"
 	CapabilityPlaintextHTTP       Capability = "plaintext-http"
+	CapabilityGeoSpatialStore     Capability = "geo-spatial-store"
+	CapabilityGeoDataAPI          Capability = "geo-data-api"
+	CapabilityGeoBasemap          Capability = "geo-basemap"
+	CapabilityGeoZoneEditor       Capability = "geo-zone-editor"
 )
 
 type CapabilityCatalog map[Capability]capabilityDefinition

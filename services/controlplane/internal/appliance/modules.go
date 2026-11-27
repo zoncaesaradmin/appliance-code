@@ -20,6 +20,8 @@ const (
 	ModuleNameArtifactRegistry = "artifact-registry"
 	ModuleNameLANDNS           = "lan-dns"
 	ModuleNameInferenceRuntime = "inference-runtime"
+	ModuleNameGeoDataAPI       = "geo-data-api"
+	ModuleNameGeoZoneEditor    = "geo-zone-editor"
 )
 
 type ExecutionMode string

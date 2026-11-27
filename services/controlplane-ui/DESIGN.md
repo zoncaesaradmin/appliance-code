@@ -100,6 +100,5 @@
 - 2026-11-27: Restored the full uncropped v3f1 neighborhood artwork, and on
   mobile give the artwork half the viewport with object-fit contain so the
   image is not cropped top or bottom.
-- 2026-11-27: Recentering the service ring must not scale after a horizontal
-  crop (that enlarges ring height vs the frame). Prefer left-trim plus
-  same-height right extension so ring diameter / image height stays unchanged.
+- 2026-11-27: Set the live login neighborhood art to the A2 phone-style 16:9
+  crop centered on the service ring; removed draft option/preview assets.

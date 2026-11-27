@@ -156,3 +156,41 @@ capabilities:
       requiredEntitlement: zon.capabilities.plaintext-http
     artifacts:
       required: []
+  geo-spatial-store:
+    displayName: Geo Spatial Store
+    requires: [base, application-auth]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.geo-spatial-store
+    artifacts:
+      # Runtime artifacts are added with the Geo-Zone service implementation.
+      # Keeping this capability in the signed catalog now establishes the
+      # dependency/entitlement seam without making the installer guess at
+      # unverified images.
+      required: []
+  geo-data-api:
+    displayName: Geo Data API
+    requires: [base, application-auth, geo-spatial-store]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.geo-data-api
+    artifacts:
+      required: []
+  geo-basemap:
+    displayName: Geo Basemap
+    requires: [base]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.geo-basemap
+    artifacts:
+      # The basemap must be an appliance-owned offline asset. No public tile
+      # provider is selected by metadata or used as a runtime fallback.
+      required: []
+  geo-zone-editor:
+    displayName: Geo-Zone Editor
+    requires: [base, application-auth, geo-data-api, geo-basemap]
+    conflicts: []
+    license:
+      requiredEntitlement: zon.capabilities.geo-zone-editor
+    artifacts:
+      required: []

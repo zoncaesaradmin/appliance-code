@@ -7,6 +7,10 @@ profiles:
     displayName: application-core
     description: "Application as appliance base profile."
     capabilities: [base, commerce, channel-integrations, application-identity, application-auth]
+  geo-zone:
+    displayName: geo-zone
+    description: "Geo-Zone spatial data appliance profile using the common foundation authentication service."
+    capabilities: [base, application-auth, geo-spatial-store, geo-data-api, geo-basemap, geo-zone-editor]
   storage-landns:
     displayName: storage-landns
     description: "File storage, artifact registry, and LAN DNS."

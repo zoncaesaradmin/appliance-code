@@ -104,6 +104,9 @@ const (
 	PermApplicationsManage       = "applications.manage"
 	PermOrdersRead               = "orders.read"
 	PermOrdersWrite              = "orders.write"
+
+	PermGeoRead  = "geo.read"
+	PermGeoWrite = "geo.write"
 )
 
 // AllPermissions is the complete published v1 permission catalog.
@@ -176,6 +179,8 @@ var AllPermissions = []storage.Permission{
 	{Name: PermNotificationsAcknowledge, Description: "Acknowledge system notifications"},
 	{Name: PermOrdersRead, Description: "Read ordering offerings and submitted orders"},
 	{Name: PermOrdersWrite, Description: "Submit orders"},
+	{Name: PermGeoRead, Description: "Read Geo-Zone boundaries and spatial query results"},
+	{Name: PermGeoWrite, Description: "Create, update, and export Geo-Zone boundaries"},
 }
 
 func allPermissionNames() []string {
@@ -214,6 +219,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermFocusContentManage,
 			PermMCPInvoke,
 			PermOrdersRead, PermOrdersWrite,
+			PermGeoRead, PermGeoWrite,
 		},
 	},
 	{
@@ -229,6 +235,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermNotificationsRead,
 			PermLicensingRead,
 			PermOrdersRead,
+			PermGeoRead,
 		},
 	},
 	{
@@ -247,6 +254,7 @@ var BuiltInRoles = []BuiltInRole{
 			PermInferenceUse, PermInferenceModelsRead,
 			PermVideoLibraryRead, PermVideoLibraryWrite, PermVideoPlay,
 			PermOrdersRead, PermOrdersWrite,
+			PermGeoRead, PermGeoWrite,
 		},
 	},
 }

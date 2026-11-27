@@ -21,6 +21,26 @@ modules:
   - {name: files, kind: platform, requiredCapabilities: [files], executionMode: cluster-service, entitlementKey: files, securityClass: restricted}
   - {name: artifact-registry, kind: platform, requiredCapabilities: [artifact], executionMode: cluster-service, entitlementKey: artifact-registry, securityClass: restricted}
   - {name: lan-dns, kind: platform, requiredCapabilities: [dns], executionMode: cluster-service, entitlementKey: lan-dns, securityClass: restricted}
+  - name: geo-data-api
+    kind: platform
+    requiredCapabilities: [geo-data-api]
+    executionMode: cluster-service
+    entitlementKey: geo-data-api
+    baseURL: http://geo-data-api.geo.svc.cluster.local:8080
+    securityClass: restricted
+    routes:
+      - {method: ANY, externalPath: "/api/v1/geo/{path...}", upstreamPath: "/api/v1/geo/{path...}", permission: geo.read}
+  - name: geo-zone-editor
+    kind: platform
+    requiredCapabilities: [geo-zone-editor]
+    dependencies: [geo-data-api]
+    executionMode: cluster-service
+    entitlementKey: geo-zone-editor
+    baseURL: http://geo-zone-editor.geo.svc.cluster.local:8080
+    securityClass: restricted
+    routes:
+      - {method: GET, externalPath: /geo, upstreamPath: /, permission: geo.read}
+      - {method: GET, externalPath: "/geo/{path...}", upstreamPath: "/{path...}", permission: geo.read}
   - name: inference-runtime
     kind: platform
     requiredCapabilities: [inference]

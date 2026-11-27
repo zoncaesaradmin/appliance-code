@@ -7,6 +7,10 @@ packages:
     displayName: App Stack
     description: Channel integrations and application-facing services such as ordering.
     capabilities: [channel-integrations, commerce, application-identity]
+  geo-stack:
+    displayName: Geo Stack
+    description: Geo-Zone spatial storage, data APIs, offline basemap, and editor capabilities.
+    capabilities: [geo-spatial-store, geo-data-api, geo-basemap, geo-zone-editor]
   storage-network:
     displayName: Storage Network Services
     description: Appliance-owned Artifact Server and OCI registry.

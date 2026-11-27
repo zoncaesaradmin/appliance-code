@@ -1,4 +1,4 @@
-const CACHE_NAME = "zonity-shell-v18";
+const CACHE_NAME = "zonity-shell-v19";
 const SHELL_URLS = [
   "/",
   "/app",
