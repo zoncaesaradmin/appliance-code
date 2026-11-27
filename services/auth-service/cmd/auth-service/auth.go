@@ -123,11 +123,14 @@ func (s *authStore) verify(ctx context.Context, id string, expected [32]byte, no
 	var attempts int
 	var consumed sql.NullTime
 	err = tx.QueryRowContext(ctx, `SELECT phone,digest,expires_at,attempts,consumed_at FROM identity_otp_challenges WHERE id=$1 FOR UPDATE`, id).Scan(&phone, &stored, &expires, &attempts, &consumed)
-	if errors.Is(err, sql.ErrNoRows) || consumed.Valid || !now.Before(expires) || attempts >= 5 {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", errInvalidChallenge
 	}
 	if err != nil {
 		return "", err
+	}
+	if consumed.Valid || !now.Before(expires) || attempts >= 5 {
+		return "", errInvalidChallenge
 	}
 	if !hmac.Equal(stored, expected[:]) {
 		if _, err := tx.ExecContext(ctx, `UPDATE identity_otp_challenges SET attempts=attempts+1 WHERE id=$1`, id); err != nil {
@@ -149,7 +152,7 @@ func (s *authStore) verify(ctx context.Context, id string, expected [32]byte, no
 		return "", err
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenRaw)
-	if _, err := tx.ExecContext(ctx, `INSERT INTO identity_sessions (token_hash,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)`, sha256.Sum256([]byte(token)), userID, now, sessionExpiry); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO identity_sessions (token_hash,user_id,created_at,expires_at) VALUES ($1,$2,$3,$4)`, sessionTokenHash(token), userID, now, sessionExpiry); err != nil {
 		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE identity_otp_challenges SET consumed_at=$2 WHERE id=$1`, id, now); err != nil {
@@ -166,7 +169,7 @@ func (s *authStore) validSession(ctx context.Context, token string, now time.Tim
 		return errInvalidChallenge
 	}
 	var id string
-	err = s.db.QueryRowContext(ctx, `SELECT user_id FROM identity_sessions WHERE token_hash=$1 AND expires_at>$2 AND revoked_at IS NULL`, sha256.Sum256([]byte(token)), now).Scan(&id)
+	err = s.db.QueryRowContext(ctx, `SELECT user_id FROM identity_sessions WHERE token_hash=$1 AND expires_at>$2 AND revoked_at IS NULL`, sessionTokenHash(token), now).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errInvalidChallenge
 	}
@@ -177,8 +180,13 @@ func (s *authStore) revokeSession(ctx context.Context, token string, now time.Ti
 	if err != nil || len(raw) != 32 {
 		return nil
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE identity_sessions SET revoked_at=$2 WHERE token_hash=$1 AND revoked_at IS NULL`, sha256.Sum256([]byte(token)), now)
+	_, err = s.db.ExecContext(ctx, `UPDATE identity_sessions SET revoked_at=$2 WHERE token_hash=$1 AND revoked_at IS NULL`, sessionTokenHash(token), now)
 	return err
+}
+
+func sessionTokenHash(token string) []byte {
+	digest := sha256.Sum256([]byte(token))
+	return digest[:]
 }
 
 type localInbox struct {

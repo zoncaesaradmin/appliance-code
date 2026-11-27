@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -142,7 +141,7 @@ func (h authHandler) principal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var userID, tenantID, channelID, audience, authMethod string
-	err := h.store.db.QueryRowContext(r.Context(), `SELECT s.user_id, COALESCE(s.tenant_id, 'zonited-solutions'), COALESCE(s.channel_id, 'customer-web'), COALESCE(s.audience, 'customer'), COALESCE(s.auth_method, 'mobile_otp') FROM identity_sessions s WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.revoked_at IS NULL`, sha256.Sum256([]byte(token)), time.Now()).Scan(&userID, &tenantID, &channelID, &audience, &authMethod)
+	err := h.store.db.QueryRowContext(r.Context(), `SELECT s.user_id, COALESCE(s.tenant_id, 'zonited-solutions'), COALESCE(s.channel_id, 'customer-web'), COALESCE(s.audience, 'customer'), COALESCE(s.auth_method, 'mobile_otp') FROM identity_sessions s WHERE s.token_hash=$1 AND s.expires_at>$2 AND s.revoked_at IS NULL`, sessionTokenHash(token), time.Now()).Scan(&userID, &tenantID, &channelID, &audience, &authMethod)
 	if errors.Is(err, sql.ErrNoRows) {
 		authError(w, http.StatusUnauthorized, "Sign in first.")
 		return
