@@ -27,6 +27,8 @@ so the appliance administrator can use `/geo/login` immediately. Other local
 users need a role that grants the Geo permissions; the Geo login page itself
 does not create a separate user or role database.
 
-The Geo page currently uses a local MapLibre background style so it does not
-require public map tiles at runtime. The signed Geo stack must provide the
-appliance-owned basemap assets before geographic basemap data is enabled.
+The Geo page uses a local MapLibre coordinate grid when no geographic basemap
+style is configured. This keeps the editor and location pin useful without
+public map tiles. A signed Geo basemap pack can provide `VITE_MAP_STYLE` with
+an appliance-owned style and local tile assets; the page never falls back to a
+public tile provider.

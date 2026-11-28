@@ -5,6 +5,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { TerraDraw, TerraDrawPolygonMode, TerraDrawSelectMode } from 'terra-draw';
 import { TerraDrawMapLibreGLAdapter } from 'terra-draw-maplibre-gl-adapter';
+import { createOfflineBasemapStyle, updateOfflineGrid } from './basemap.js';
 import { parseCoordinates } from './coordinates.js';
 import './style.css';
 import './vertices.css';
@@ -27,8 +28,14 @@ let draw, selected = null, zones = [], dirty = false, loadingZone = false;
 function setDirty(value) { dirty = value; $('#state').textContent = value ? 'UNSAVED' : selected ? 'SAVED' : 'UNSAVED'; }
 function canDiscard() { return !dirty || window.confirm('Discard your unsaved changes?'); }
 window.addEventListener('beforeunload', (event) => { if (dirty) event.preventDefault(); });
-const map = new maplibregl.Map({container:'map',style:import.meta.env.VITE_MAP_STYLE || {version:8,sources:{},layers:[{id:'background',type:'background',paint:{'background-color':'#e8e4dc'}}]},center:[73.8567,18.5204],zoom:13});
+const initialCenter = [73.8567, 18.5204];
+const configuredMapStyle = import.meta.env.VITE_MAP_STYLE?.trim();
+const offlineMap = !configuredMapStyle;
+const map = new maplibregl.Map({container:'map',style:configuredMapStyle || createOfflineBasemapStyle(initialCenter),center:initialCenter,zoom:13});
 map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+map.addControl(new maplibregl.AttributionControl({customAttribution: offlineMap ? 'Offline coordinate map' : undefined}), 'bottom-left');
+if (offlineMap) $('#hint').textContent = 'Offline coordinate map · navigate to a location, then draw its boundary.';
+map.on('moveend', () => { if (offlineMap) updateOfflineGrid(map); });
 let locationMarker, locationRequest = 0;
 function locationStatus(message, error = false) {
   $('#coordinate-status').textContent = message;

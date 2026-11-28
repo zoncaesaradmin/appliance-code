@@ -24,8 +24,10 @@ MapLibre/Terra Draw editor. Geo data requests remain behind the control-plane
 Runtime images, the PostGIS chart/migrations, the data API, and the offline
 basemap must still be added as signed release-input artifacts before the Geo
 profile is offered for a production install. Until then the editor is a
-real, authenticated UI shell but its persistence API is intentionally
-fail-closed when the Geo data service is absent.
+real, authenticated UI shell with a local coordinate-grid fallback; its
+persistence API is intentionally fail-closed when the Geo data service is
+absent. The fallback is not a substitute for the signed geographic basemap
+pack described below.
 
 ## User flow
 
