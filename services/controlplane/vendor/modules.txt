@@ -1,3 +1,6 @@
+# appliance-code/sdk/golang/geosnapshot v0.0.0-00010101000000-000000000000 => ../../sdk/golang/geosnapshot
+## explicit; go 1.26.0
+appliance-code/sdk/golang/geosnapshot
 # appliance-code/sdk/golang/servicehealth v0.0.0-00010101000000-000000000000 => ../../sdk/golang/servicehealth
 ## explicit; go 1.26.0
 appliance-code/sdk/golang/servicehealth
@@ -137,3 +140,4 @@ modernc.org/sqlite
 modernc.org/sqlite/lib
 modernc.org/sqlite/vtab
 # appliance-code/sdk/golang/servicehealth => ../../sdk/golang/servicehealth
+# appliance-code/sdk/golang/geosnapshot => ../../sdk/golang/geosnapshot
