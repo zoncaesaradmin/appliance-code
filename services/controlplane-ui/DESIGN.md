@@ -43,11 +43,15 @@
 - Authentication actions use full-width, vertically separated primary and secondary buttons so the code step has a clear next action and a calm recovery path.
 - Motion is limited to opacity/transform and respects reduced-motion preferences.
 - Nearby discovery lives in the post-login Explore dialog (and `/app/discover`):
-  zoom controls on the location preview, compact footer actions, and two clear
-  workflows in one place — **Search near me** (device location) and move the pin
-  on the map, then **Search from pinned location**. Do not add a second
-  competing search entry on the landing page; keep “Find a Zonity” as the
-  single opener.
+  the map is centered on the device's current location as soon as location
+  access succeeds, with the current-location state called out below it. The
+  map uses the signed appliance basemap supplied through `VITE_MAP_STYLE`, or
+  the Zone Studio OpenFreeMap Bright style when no override is configured.
+  Compact footer actions keep the
+  two clear workflows in one place — choose another location by moving the
+  pin, then **Search from pinned location**, or return to the current location
+  after a pin move. Do not add a second competing search entry on the landing
+  page; keep “Find a Zonity” as the single opener.
 
 ## PWA and security
 
@@ -100,6 +104,10 @@
   desktop and mobile, and reinstalled the arrow-free neighborhood artwork.
 - 2026-11-27: Tightened mobile login spacing above the form while keeping a
   tall enough artwork header for the service ring to stay visible.
+- 2026-11-28: Made nearby discovery current-location-first: the map confirms
+  the current location immediately, the footer offers another location instead
+  of a redundant current-location prompt, and configured appliance basemap
+  styles render as geographic MapLibre maps with the same pin/search flow.
 - 2026-11-27: Switched desktop login to a true art|panel split so the service
   ring stays centered in the visible artwork on desktop and mobile.
 - 2026-11-27: Restored the full uncropped v3f1 neighborhood artwork, and on

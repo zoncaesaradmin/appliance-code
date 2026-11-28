@@ -7,7 +7,9 @@ granular capabilities:
 
 - `geo-spatial-store` — PostGIS-backed boundary persistence and migrations.
 - `geo-data-api` — authenticated spatial queries and GeoJSON export.
-- `geo-basemap` — appliance-owned, offline map tiles/styles and attribution.
+- `geo-basemap` — map style, tiles and attribution. The current port preserves
+  the connected OpenFreeMap style used by Zone Studio; an appliance-owned
+  offline archive remains the production hardening path.
 - `geo-zone-editor` — the MapLibre/Terra Draw editor and its static assets.
 
 The `geo-zone` profile selects all four capabilities plus the shared `base` and
@@ -27,13 +29,13 @@ installations that still use the former `geo` namespace require an explicit,
 data-preserving migration before upgrading; changing this value alone must not
 be used as an in-place storage migration.
 
-Runtime images, the PostGIS chart/migrations, the data API, and the offline
-basemap must still be added as signed release-input artifacts before the Geo
-profile is offered for a production install. Until then the editor is a
-real, authenticated UI shell with a local coordinate-grid fallback; its
-persistence API is intentionally fail-closed when the Geo data service is
-absent. The fallback is not a substitute for the signed geographic basemap
-pack described below.
+Runtime images, the PostGIS chart/migrations and the data API must still be
+added as signed release-input artifacts before the Geo profile is offered for a
+production install. The editor now renders the geographic OpenFreeMap style by
+default, matching the standalone POC; `VITE_MAP_STYLE` can replace it with a
+local signed style, and `VITE_MAP_STYLE=offline` remains available for local
+development. Its persistence API is intentionally fail-closed when the Geo
+data service is absent.
 
 ## User flow
 

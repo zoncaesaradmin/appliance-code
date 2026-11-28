@@ -29,9 +29,14 @@ function setDirty(value) { dirty = value; $('#state').textContent = value ? 'UNS
 function canDiscard() { return !dirty || window.confirm('Discard your unsaved changes?'); }
 window.addEventListener('beforeunload', (event) => { if (dirty) event.preventDefault(); });
 const initialCenter = [73.8567, 18.5204];
+// Keep the standalone Zone Studio behavior as the usable default. A release
+// can override this with its local signed style through VITE_MAP_STYLE; the
+// explicit "offline" value remains available for development without tiles.
+const defaultMapStyle = 'https://tiles.openfreemap.org/styles/bright';
 const configuredMapStyle = import.meta.env.VITE_MAP_STYLE?.trim();
-const offlineMap = !configuredMapStyle;
-const map = new maplibregl.Map({container:'map',style:configuredMapStyle || createOfflineBasemapStyle(initialCenter),center:initialCenter,zoom:13});
+const offlineMap = configuredMapStyle === 'offline';
+const mapStyle = offlineMap ? createOfflineBasemapStyle(initialCenter) : (configuredMapStyle || defaultMapStyle);
+const map = new maplibregl.Map({container:'map',style:mapStyle,center:initialCenter,zoom:13});
 map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 map.addControl(new maplibregl.AttributionControl({customAttribution: offlineMap ? 'Offline coordinate map' : undefined}), 'bottom-left');
 if (offlineMap) $('#hint').textContent = 'Offline coordinate map · navigate to a location, then draw its boundary.';

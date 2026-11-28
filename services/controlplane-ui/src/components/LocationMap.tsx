@@ -1,4 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import type * as maplibregl from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 export interface MapLocation {
   latitude: number;
@@ -25,6 +28,24 @@ const MIN_ZOOM = 10;
 const MAX_ZOOM = 16;
 const DEFAULT_ZOOM = 13;
 
+// Match the original Zone Studio map behavior until a release supplies its
+// appliance-local style. Set VITE_MAP_STYLE=offline to exercise the local
+// coordinate fallback during development.
+const defaultMapStyle = import.meta.env.MODE === "test"
+  ? ""
+  : "https://tiles.openfreemap.org/styles/bright";
+const configuredMapStyle = import.meta.env.VITE_MAP_STYLE?.trim();
+const mapStyle = configuredMapStyle === "offline" ? "" : (configuredMapStyle || defaultMapStyle);
+let maplibrePromise: Promise<typeof import("maplibre-gl")> | null = null;
+
+function loadMapLibre(): Promise<typeof import("maplibre-gl")> {
+  maplibrePromise ??= import("maplibre-gl").then((module) => {
+    module.setWorkerUrl(workerUrl);
+    return module;
+  });
+  return maplibrePromise;
+}
+
 function project(location: MapLocation, zoom: number): { x: number; y: number } {
   const scale = TILE_SIZE * 2 ** zoom;
   const latitude = Math.max(-85.05112878, Math.min(85.05112878, location.latitude));
@@ -43,6 +64,104 @@ function unproject(point: { x: number; y: number }, zoom: number): MapLocation {
 }
 
 export function LocationMap(props: LocationMapProps): React.JSX.Element {
+  if (mapStyle) {
+    return <ConfiguredLocationMap {...props} style={mapStyle} />;
+  }
+
+  return <OfflineLocationMap {...props} />;
+}
+
+function ConfiguredLocationMap(props: LocationMapProps & { style: string }): React.JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const maplibreRef = useRef<typeof import("maplibre-gl") | null>(null);
+  const userMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const zoneMarkersRef = useRef<maplibregl.Marker[]>([]);
+  const interactiveRef = useRef(props.interactive);
+  const onSelectRef = useRef(props.onSelect);
+  const [mapReady, setMapReady] = useState(false);
+
+  interactiveRef.current = props.interactive;
+  onSelectRef.current = props.onSelect;
+
+  useEffect(() => {
+    let disposed = false;
+    if (!containerRef.current) return;
+    setMapReady(false);
+    void loadMapLibre().then((maplibre) => {
+      if (disposed || !containerRef.current) return;
+      maplibreRef.current = maplibre;
+      const map = new maplibre.Map({
+        container: containerRef.current,
+        style: props.style,
+        center: [props.location.longitude, props.location.latitude],
+        zoom: DEFAULT_ZOOM,
+        attributionControl: { compact: true }
+      });
+      mapRef.current = map;
+      map.addControl(new maplibre.NavigationControl({ showCompass: false }), "top-right");
+      map.on("load", () => setMapReady(true));
+      map.on("click", (event) => {
+        if (!interactiveRef.current || !onSelectRef.current) return;
+        onSelectRef.current({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
+      });
+    });
+    return () => {
+      disposed = true;
+      mapRef.current?.remove();
+      mapRef.current = null;
+      maplibreRef.current = null;
+      userMarkerRef.current = null;
+      zoneMarkersRef.current = [];
+    };
+  }, [props.style]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibre = maplibreRef.current;
+    if (!map || !maplibre) return;
+    map.setCenter([props.location.longitude, props.location.latitude]);
+    if (!userMarkerRef.current) {
+      const marker = document.createElement("span");
+      marker.className = "application-location-map__geographic-user";
+      marker.setAttribute("aria-label", "Selected location");
+      userMarkerRef.current = new maplibre.Marker({ element: marker, anchor: "center" }).addTo(map);
+    }
+    userMarkerRef.current.setLngLat([props.location.longitude, props.location.latitude]);
+  }, [props.location.latitude, props.location.longitude, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const maplibre = maplibreRef.current;
+    if (!map || !maplibre || !mapReady) return;
+    for (const marker of zoneMarkersRef.current) marker.remove();
+    zoneMarkersRef.current = (props.zones ?? []).map((zone) => {
+      const marker = document.createElement("span");
+      marker.className = "application-location-map__geographic-zone";
+      marker.setAttribute("aria-label", zone.name);
+      marker.setAttribute("title", zone.name);
+      return new maplibre.Marker({ element: marker, anchor: "center" })
+        .setLngLat([zone.longitude, zone.latitude])
+        .addTo(map);
+    });
+    return () => {
+      for (const marker of zoneMarkersRef.current) marker.remove();
+    };
+  }, [props.zones, mapReady]);
+
+  return <div
+    ref={containerRef}
+    className={`application-location-map application-location-map--geographic${props.interactive ? " application-location-map--interactive" : ""}`}
+    role={props.interactive ? "application" : undefined}
+    aria-label={props.label ?? "Location map"}
+  >
+    <span className="application-location-map__radius" aria-hidden="true" />
+    {props.interactive ? <span className="application-location-map__hint">Tap the map to move the pin</span> : null}
+    <span className="application-location-map__label">Current location</span>
+  </div>;
+}
+
+function OfflineLocationMap(props: LocationMapProps): React.JSX.Element {
   const defaultZoom = props.defaultZoom ?? DEFAULT_ZOOM;
   const [zoom, setZoom] = useState(defaultZoom);
   const center = project(props.location, zoom);

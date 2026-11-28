@@ -2679,6 +2679,86 @@ body:has(.video-player) {
   isolation: isolate;
 }
 
+.application-location-map--geographic {
+  background: #e7e2d8;
+}
+
+.application-location-map--geographic .maplibregl-map,
+.application-location-map--geographic .maplibregl-canvas-container,
+.application-location-map--geographic .maplibregl-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 14.5rem;
+}
+
+.application-location-map--geographic .maplibregl-map {
+  position: absolute;
+  inset: 0;
+}
+
+.application-location-map--geographic .maplibregl-ctrl-top-right {
+  top: 0.55rem;
+  right: 0.55rem;
+}
+
+.application-location-map--geographic .maplibregl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid rgba(127, 29, 61, 0.18);
+  border-radius: 0.45rem;
+  background: rgba(255, 249, 241, 0.96);
+  box-shadow: 0 0.35rem 0.9rem rgba(59, 44, 44, 0.12);
+}
+
+.application-location-map--geographic .maplibregl-ctrl-group button {
+  width: 2rem;
+  height: 2rem;
+}
+
+.application-location-map--geographic .maplibregl-ctrl-attrib {
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem 0 0 0;
+  background: rgba(255, 249, 241, 0.88);
+  color: var(--text-primary);
+  font-size: 0.62rem;
+}
+
+.application-location-map__radius {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  width: min(70%, 15rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgba(127, 29, 61, 0.42);
+  border-radius: 50%;
+  background: rgba(127, 29, 61, 0.06);
+  pointer-events: none;
+}
+
+.application-location-map__geographic-user,
+.application-location-map__geographic-zone {
+  display: block;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.application-location-map__geographic-user {
+  width: 1rem;
+  height: 1rem;
+  border: 3px solid var(--brand-background);
+  background: var(--brand-primary);
+  box-shadow: 0 0 0 0.35rem rgba(127, 29, 61, 0.22);
+}
+
+.application-location-map__geographic-zone {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid var(--brand-background);
+  background: var(--action-deep-sage);
+  box-shadow: 0 0 0 0.22rem rgba(73, 109, 80, 0.24);
+}
+
 .application-location-map--interactive {
   cursor: crosshair;
   outline: 2px solid rgba(127, 29, 61, 0.18);

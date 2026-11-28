@@ -64,6 +64,12 @@ the same browser-side API shape used in production.
 If the appliance API is already reachable from the same origin, omit
 `VITE_CONTROL_PLANE_PROXY_TARGET`.
 
+For a geographic application/Geo map during development, set `VITE_MAP_STYLE`
+to an appliance-owned MapLibre style JSON (or a local style URL with its
+bundled tile sources). When it is unset, the UI uses the original Zone Studio
+OpenFreeMap Bright style. Set `VITE_MAP_STYLE=offline` to exercise the local
+coordinate fallback without map tiles.
+
 ## Build And Verification
 
 ```bash

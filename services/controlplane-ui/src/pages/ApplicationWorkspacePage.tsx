@@ -95,11 +95,13 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
   const [joinMode, setJoinMode] = useState("");
   const [error, setError] = useState("");
   const [location, setLocation] = useState<GeoLocation | null>(null);
+  const [locationSource, setLocationSource] = useState<"current" | "pinned">("current");
   const [choosingAnother, setChoosingAnother] = useState(false);
   const [locationNeedsSearch, setLocationNeedsSearch] = useState(false);
 
-  async function findNearby(nextLocation: GeoLocation): Promise<void> {
+  async function findNearby(nextLocation: GeoLocation, source: "current" | "pinned" = "current"): Promise<void> {
     setLocation(nextLocation);
+    setLocationSource(source);
     setSelected("");
     setError("");
     setChoosingAnother(false);
@@ -164,6 +166,7 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
   function selectAnother(nextLocation: MapLocation): void {
     setChoosingAnother(true);
     setLocation({ ...nextLocation });
+    setLocationSource("pinned");
     setLocationNeedsSearch(true);
     setZones([]);
     setSelected("");
@@ -178,25 +181,26 @@ function NearbyJoinDialog(props: { onClose: () => void; onJoined: () => void }):
         <div><p className="application-landing__eyebrow">ZONITY ACCESS</p><h2 id="application-nearby-title">Explore nearby</h2></div>
         <button className="application-modal__close" type="button" onClick={props.onClose} aria-label="Close">×</button>
       </header>
-      <p className="application-modal__description">Search from your current location, or move the pin on the map and search again.</p>
+      <p className="application-modal__description">Your current location is shown on the map. Move the pin to search somewhere else.</p>
       {status === "locating" || status === "loading" ? <p className="application-modal__status">{status === "locating" ? "Getting your location…" : "Finding Zonities near you…"}</p> : null}
       {location ? <div className="application-location-panel">
-        <LocationMap location={location} zones={locationNeedsSearch ? [] : zones} interactive={mapInteractive} onSelect={selectAnother} label="Location checked for nearby Zonities" />
-        <p className="application-location-panel__details">Location checked: {formatLocation(location)}.</p>
+        <LocationMap location={location} zones={locationNeedsSearch ? [] : zones} interactive={mapInteractive} onSelect={selectAnother} label={locationSource === "current" ? "Current location map" : "Pinned location map"} />
+        <p className="application-location-panel__details">{locationSource === "current" ? "This is your current location" : "Pinned location"} · {formatLocation(location)}.</p>
         {locationNeedsSearch ? <p className="application-location-panel__hint">Pin moved. Search from this pinned location when you are ready.</p> : choosingAnother ? <p className="application-location-panel__hint">Tap the map to place the pin, then search from that location.</p> : <p className="application-location-panel__hint">Zoom to confirm the place, or tap the map to choose another point.</p>}
       </div> : null}
-      {locationNeedsSearch ? <button className="button button--primary application-modal__primary" type="button" onClick={() => { if (location) void findNearby(location); }}>Search from pinned location</button> : null}
+      {locationNeedsSearch ? <button className="button button--primary application-modal__primary" type="button" onClick={() => { if (location) void findNearby(location, "pinned"); }}>Search from pinned location</button> : null}
       {status === "ready" && zones.length > 0 && !locationNeedsSearch ? <>
         <p className="application-modal__status">Choose a Zonity to request access.</p>
         <div className="application-zone-list">{zones.map((zone) => <label className="application-zone-option" key={zone.id}><input type="radio" name="landing-zone" value={zone.id} checked={selected === zone.id} onChange={() => setSelected(zone.id)} /><span><strong>{zone.name}</strong><small>{zone.distance_km.toFixed(1)} km away</small></span></label>)}</div>
         <button className="button button--primary application-modal__primary" type="button" disabled={!selected} onClick={() => void join()}>Request access</button>
       </> : null}
-      {status === "ready" && zones.length === 0 && !locationNeedsSearch ? <p className="application-modal__empty">There are no Zonities within 10 km of this location yet. Move the pin or use your current location to try again.</p> : null}
+      {status === "ready" && zones.length === 0 && !locationNeedsSearch ? <p className="application-modal__empty">There are no Zonities within 10 km of this location yet. Move the pin to search somewhere else.</p> : null}
       {status === "joined" ? <p className="application-modal__empty">{joinMode === "auto_no_admin" ? "You joined this Zonity." : "Your request was sent to the Zonity admin."}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       <footer className="application-modal__footer">
-        {showLocationActions ? <button className="button button--ghost application-modal__action" type="button" onClick={() => void locate()}>Search near me</button> : null}
-        {showLocationActions && location ? <button className="button button--ghost application-modal__action" type="button" onClick={startMapPick}>Move pin on map</button> : null}
+        {showLocationActions && location && locationSource === "pinned" ? <button className="button button--ghost application-modal__action" type="button" onClick={() => void locate()}>Use current location</button> : null}
+        {showLocationActions && location ? <button className="button button--ghost application-modal__action" type="button" onClick={startMapPick}>{choosingAnother ? "Move pin on map" : "Choose another location"}</button> : null}
+        {showLocationActions && !location ? <button className="button button--ghost application-modal__action" type="button" onClick={() => void locate()}>Try current location</button> : null}
         <button className="button button--ghost application-modal__action" type="button" onClick={props.onClose}>{status === "joined" ? "Done" : "Not now"}</button>
       </footer>
     </section>
@@ -221,11 +225,13 @@ function NearbyDiscoveryPage(): React.JSX.Element {
       return null;
     }
   });
+  const [locationSource, setLocationSource] = useState<"current" | "pinned">("current");
   const [choosingAnother, setChoosingAnother] = useState(false);
   const [locationNeedsSearch, setLocationNeedsSearch] = useState(false);
 
-  async function findNearby(nextLocation: GeoLocation): Promise<void> {
+  async function findNearby(nextLocation: GeoLocation, source: "current" | "pinned" = "current"): Promise<void> {
     setLocation(nextLocation);
+    setLocationSource(source);
     setError("");
     setChoosingAnother(false);
     setLocationNeedsSearch(false);
@@ -269,6 +275,7 @@ function NearbyDiscoveryPage(): React.JSX.Element {
   function selectAnother(nextLocation: MapLocation): void {
     setChoosingAnother(true);
     setLocation({ ...nextLocation });
+    setLocationSource("pinned");
     setLocationNeedsSearch(true);
     setZones([]);
     setSelected("");
@@ -312,20 +319,21 @@ function NearbyDiscoveryPage(): React.JSX.Element {
 
   const mapInteractive = Boolean(location) && status !== "joined" && status !== "locating" && status !== "loading";
 
-  return <PageFrame title="Find nearby Zonities" eyebrow="Discovery" description="Search near you, or move the pin on the map and search that place. You choose whether to request access." pathname="/app/discover" onNavigate={navigate} tabs={[]}>
+  return <PageFrame title="Find nearby Zonities" eyebrow="Discovery" description="Your current location appears on the map first. Move the pin to search another place, then choose whether to request access." pathname="/app/discover" onNavigate={navigate} tabs={[]}>
     <div className="application-home">
-      <Card title="Your location" subtitle="Coordinates are used only to calculate nearby results.">
+      <Card title="Your location" subtitle="Your current location is shown on the map and used to calculate nearby results.">
         <div className="button-row">
-          <button className="button button--primary" type="button" onClick={() => void locate()} disabled={status === "locating" || status === "loading"}>{status === "locating" ? "Getting location…" : status === "loading" ? "Finding nearby…" : "Search near me"}</button>
-          {location && status !== "joined" && status !== "locating" && status !== "loading" ? <button className="button button--ghost" type="button" onClick={startMapPick}>Move pin on map</button> : null}
+          {!location || status === "locating" || status === "loading" ? <button className="button button--primary" type="button" onClick={() => void locate()} disabled={status === "locating" || status === "loading"}>{status === "locating" ? "Getting location…" : status === "loading" ? "Finding nearby…" : "Use current location"}</button> : null}
+          {location && status !== "joined" && status !== "locating" && status !== "loading" && locationSource === "pinned" ? <button className="button button--primary" type="button" onClick={() => void locate()}>Use current location</button> : null}
+          {location && status !== "joined" && status !== "locating" && status !== "loading" ? <button className="button button--ghost" type="button" onClick={startMapPick}>Choose another location</button> : null}
           <button className="button button--ghost" type="button" onClick={() => navigate("/app")}>Back</button>
         </div>
         {location ? <div className="application-location-panel">
-          <LocationMap location={location} zones={locationNeedsSearch ? [] : zones} interactive={mapInteractive} onSelect={selectAnother} label="Location checked for nearby Zonities" />
-          <p className="application-location-panel__details">Location checked: {formatLocation(location)}.</p>
+          <LocationMap location={location} zones={locationNeedsSearch ? [] : zones} interactive={mapInteractive} onSelect={selectAnother} label="Current location map" />
+          <p className="application-location-panel__details">{locationSource === "current" ? "This is your current location" : "Pinned location"} · {formatLocation(location)}.</p>
           {locationNeedsSearch ? <p className="application-location-panel__hint">Pin moved. Search from this pinned location when you are ready.</p> : choosingAnother ? <p className="application-location-panel__hint">Tap the map to place the pin, then search from that location.</p> : <p className="application-location-panel__hint">Zoom to confirm the place, or tap the map to choose another point.</p>}
         </div> : null}
-        {locationNeedsSearch ? <button className="button button--primary" type="button" onClick={() => { if (location) void findNearby(location); }}>Search from pinned location</button> : null}
+        {locationNeedsSearch ? <button className="button button--primary" type="button" onClick={() => { if (location) void findNearby(location, "pinned"); }}>Search from pinned location</button> : null}
         {error ? <p className="form-error" role="alert">{error}</p> : null}
       </Card>
       {status === "joined" ? <Card title={joinMode === "auto_no_admin" ? "You are in" : "Request sent"} subtitle={joinMode === "auto_no_admin" ? "This Zonity does not have a Zonity admin yet." : "The Zonity admin can review your request."}><p>{joinMode === "auto_no_admin" ? "Your request was approved automatically because there is no active Zonity admin." : "Your request is pending Zonity admin approval."}</p></Card> : null}
