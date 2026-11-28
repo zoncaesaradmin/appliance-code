@@ -120,7 +120,7 @@ spec:
           lifecycle:
             postStart:
               exec:
-                command: ["sh", "-ec", "until pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"; do sleep 2; done; psql -v ON_ERROR_STOP=1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" --set=passwd=\"$POSTGRES_PASSWORD\" -c \"ALTER ROLE \\\"$POSTGRES_USER\\\" PASSWORD :'passwd';\""]
+                command: ["sh", "-ec", "until pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"; do sleep 2; done; psql -v ON_ERROR_STOP=1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" -c \"ALTER ROLE \\\"$POSTGRES_USER\\\" PASSWORD '$POSTGRES_PASSWORD';\""]
           securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, capabilities: {drop: ["ALL"]}}
           readinessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]}, periodSeconds: 10}
           livenessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]}, periodSeconds: 20}
