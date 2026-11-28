@@ -46,7 +46,6 @@ KNOWN_ARTIFACTS = (
     "open-webui-image",
     "open-webui-gateway-image",
     "appliance-inference-chart",
-    "jellyfin-image",
 )
 
 # Convenience aliases used by build-full-bundle packaging gates.

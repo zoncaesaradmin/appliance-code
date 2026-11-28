@@ -17,8 +17,8 @@ packages:
     capabilities: [artifact]
   deviceuser:
     displayName: Device User Services
-    description: Host-agent-backed host and application management with appliance LAN DNS.
-    capabilities: [host, applications, dns]
+    description: Host-agent-backed host management with appliance LAN DNS.
+    capabilities: [host, dns]
   std-llm:
     displayName: Standard LLM
     description: Standard inference using Ollama for simpler, lower-capacity deployments. The runtime uses CPU or a host GPU when one is available. Does not include Open WebUI; add the open-webui pack for the optional chat UI.

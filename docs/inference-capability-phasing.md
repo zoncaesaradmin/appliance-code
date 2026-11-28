@@ -1,7 +1,7 @@
 # Private AI runtime and model management
 
 Private AI is a first-class appliance capability. It is not implemented through
-the generic Applications catalog because the platform owns its authentication,
+the retired generic application-management catalog because the platform owns its authentication,
 stable API, persistent model storage, lifecycle checks, and upgrade contract.
 
 The forward-compatible serving topology and the migration away from the current

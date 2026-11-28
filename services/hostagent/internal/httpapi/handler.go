@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"appliance-code/services/hostagent/internal/bridge"
-	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/internalauth"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/systembackup"
@@ -39,16 +38,14 @@ func NewHandlerWithControllers(hostBridge bridge.Bridge, wifiClient wificlient.C
 	return NewHandlerWithInternalToken(hostBridge, wifiClient, wifiAP, mdnsCtrl, "")
 }
 
-// NewHandlerWithInternalToken protects the privileged firewall projection with
-// a control-plane-only credential. The public host-agent pod never receives an
-// unqualified port-opening request.
+// NewHandlerWithInternalToken protects privileged system-backup operations
+// with a control-plane-only credential.
 func NewHandlerWithInternalToken(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller, internalToken string) http.Handler {
 	return newHandler(hostBridge, wifiClient, wifiAP, mdnsCtrl, internalToken, false)
 }
 
-// NewUnixSocketHandler enables firewall projection only for callers which can
-// open the root-owned, group-restricted host-agent daemon socket. The network
-// facing host-agent pod still requires the control-plane credential.
+// NewUnixSocketHandler enables privileged operations for callers which can
+// open the root-owned, group-restricted host-agent daemon socket.
 func NewUnixSocketHandler(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifiAP wifiap.Controller, mdnsCtrl mdns.Controller) http.Handler {
 	return newHandler(hostBridge, wifiClient, wifiAP, mdnsCtrl, "", true)
 }
@@ -63,7 +60,7 @@ func newHandler(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifi
 	if mdnsCtrl == nil {
 		mdnsCtrl = mdns.NewManager()
 	}
-	handler := &Handler{bridge: hostBridge, wifiClient: wifiClient, wifiAP: wifiAP, mdns: mdnsCtrl, internalToken: strings.TrimSpace(internalToken), trustedSocket: trustedSocket}
+	handler := &Handler{bridge: hostBridge, wifiClient: wifiClient, wifiAP: wifiAP, mdns: mdnsCtrl, internalToken: internalToken, trustedSocket: trustedSocket}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handler.healthz)
 	mux.HandleFunc("GET /internal/v1/host/info", handler.info)
@@ -77,9 +74,6 @@ func newHandler(hostBridge bridge.Bridge, wifiClient wificlient.Controller, wifi
 	mux.HandleFunc("PUT /internal/v1/host/wifi-ap", handler.wifiAPPut)
 	mux.HandleFunc("GET /internal/v1/host/mdns", handler.mdnsGet)
 	mux.HandleFunc("PUT /internal/v1/host/mdns", handler.mdnsPut)
-	mux.HandleFunc("GET /internal/v1/host/application-firewall/{application}", handler.applicationFirewallGet)
-	mux.HandleFunc("PUT /internal/v1/host/application-firewall/{application}", handler.applicationFirewallPut)
-	mux.HandleFunc("PUT /internal/v1/host/application-mdns/{application}", handler.applicationMDNSPut)
 	mux.HandleFunc("POST /internal/v1/system-backups", handler.systemBackupCreate)
 	mux.HandleFunc("GET /internal/v1/system-backups/{id}", handler.systemBackupGet)
 	mux.HandleFunc("POST /internal/v1/system-backups/{id}/restore", handler.systemBackupRestore)
@@ -128,62 +122,6 @@ func (h *Handler) systemBackupRestore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, s)
-}
-
-func (h *Handler) applicationMDNSPut(w http.ResponseWriter, r *http.Request) {
-	if !h.authorized(r) {
-		writeError(w, http.StatusUnauthorized, "internal authentication failed")
-		return
-	}
-	var request mdns.ApplicationRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid application mdns body")
-		return
-	}
-	if request.Application != r.PathValue("application") {
-		writeError(w, http.StatusBadRequest, "application mdns path and body must match")
-		return
-	}
-	if err := h.bridge.ApplicationMDNSApply(r.Context(), request); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func (h *Handler) applicationFirewallGet(w http.ResponseWriter, r *http.Request) {
-	if !h.authorized(r) {
-		writeError(w, http.StatusUnauthorized, "internal authentication failed")
-		return
-	}
-	status, err := h.bridge.ApplicationFirewallStatus(r.Context(), r.PathValue("application"))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, status)
-}
-
-func (h *Handler) applicationFirewallPut(w http.ResponseWriter, r *http.Request) {
-	if !h.authorized(r) {
-		writeError(w, http.StatusUnauthorized, "internal authentication failed")
-		return
-	}
-	var policy firewall.ApplicationPolicy
-	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid application firewall body")
-		return
-	}
-	if policy.Application != r.PathValue("application") {
-		writeError(w, http.StatusBadRequest, "application firewall path and body must match")
-		return
-	}
-	status, err := h.bridge.ApplicationFirewallApply(r.Context(), policy)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, status)
 }
 
 func (h *Handler) authorized(r *http.Request) bool {

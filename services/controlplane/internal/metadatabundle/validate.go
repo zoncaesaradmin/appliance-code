@@ -18,7 +18,6 @@ var allowedTopDirs = map[string]struct{}{
 	"mcp-tools":     {},
 	"debug-tools":   {},
 	"modules":       {},
-	"applications":  {},
 	"packages":      {},
 }
 
@@ -244,7 +243,6 @@ func validateDirectoryLayout(root string) error {
 		filepath.Join(root, "capabilities", "catalog.yaml"),
 		filepath.Join(root, "packages", "catalog.yaml"),
 		filepath.Join(root, "modules", "catalog.yaml"),
-		filepath.Join(root, "applications", "catalog.yaml"),
 	} {
 		if _, err := os.Stat(req); err != nil {
 			return fmt.Errorf("metadatabundle: missing required file %s", filepath.Base(filepath.Dir(req))+"/"+filepath.Base(req))

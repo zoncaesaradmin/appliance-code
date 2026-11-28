@@ -41,23 +41,6 @@ type ApplyRequest struct {
 	ApplianceName string `json:"applianceName,omitempty"`
 }
 
-// ApplicationService is a catalog-approved mDNS advertisement. It contains
-// only the small Avahi service shape an application needs, never raw XML.
-type ApplicationService struct {
-	Name        string `json:"name"`
-	ServiceType string `json:"serviceType"`
-	Port        int    `json:"port"`
-}
-
-type ApplicationRequest struct {
-	Application string               `json:"application"`
-	Services    []ApplicationService `json:"services"`
-	// Aliases are reviewed application host names (for example
-	// jellyfin.local). They are advertised by the host agent, never by the
-	// application pod itself.
-	Aliases []string `json:"aliases,omitempty"`
-}
-
 // Controller is the apply/status surface used by the HTTP API.
 type Controller interface {
 	Status(ctx context.Context) (Status, error)
@@ -65,8 +48,6 @@ type Controller interface {
 }
 
 type persistedState struct {
-	ApplianceName       string                          `json:"applianceName,omitempty"`
-	Desired             bool                            `json:"desired"`
-	ApplicationServices map[string][]ApplicationService `json:"applicationServices,omitempty"`
-	ApplicationAliases  map[string][]string             `json:"applicationAliases,omitempty"`
+	ApplianceName string `json:"applianceName,omitempty"`
+	Desired       bool   `json:"desired"`
 }

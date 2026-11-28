@@ -15,7 +15,6 @@ or download a different bundle.
 | `dns` | Appliance-owned LAN DNS backed by CoreDNS. |
 | `inference` | Local OpenAI-compatible inference APIs. |
 | `video` | Video library storage and playback. |
-| `applications` | User-managed application lifecycle through the host agent. |
 | `plaintext-http` | Optional HTTP ingress for profiles that explicitly require it. |
 
 Every capability depends on `base`; additional dependencies are declared in
@@ -30,7 +29,7 @@ The current signed catalog defines these profiles:
 | `core` | `base`, `actions`, `lan-discovery`, `files` |
 | `application-core` | `base`, `commerce`, `channel-integrations`, `application-identity`, `application-auth` |
 | `storage-landns` | `base`, `actions`, `lan-discovery`, `files`, `artifact`, `dns` |
-| `training` | `base`, `actions`, `lan-discovery`, `host`, `files`, `video`, `guest-access`, `focus-content`, `applications`, `plaintext-http` |
+| `training` | `base`, `actions`, `lan-discovery`, `files`, `video`, `guest-access`, `focus-content`, `plaintext-http` |
 | `private-ai` | `base`, `actions`, `lan-discovery`, `inference` |
 | `private-ai-webui` | `base`, `actions`, `lan-discovery`, `inference`, `open-webui` |
 

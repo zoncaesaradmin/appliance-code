@@ -16,7 +16,6 @@ import (
 	"appliance-code/services/controlplane/internal/actionruntimeauth"
 	"appliance-code/services/controlplane/internal/actionruntimeclient"
 	"appliance-code/services/controlplane/internal/appliance"
-	"appliance-code/services/controlplane/internal/applications"
 	"appliance-code/services/controlplane/internal/artifactserver"
 	"appliance-code/services/controlplane/internal/audit"
 	"appliance-code/services/controlplane/internal/auditops"
@@ -58,7 +57,6 @@ type Services struct {
 	AuditStore         storage.AuditStore
 	RegistryGrantStore storage.RegistryGrantStore
 	DNSRecordStore     storage.DNSRecordStore
-	ApplicationStore   storage.ApplicationStore
 	FocusContentStore  storage.FocusContentStore
 	WebUIGrantStore    storage.WebUILaunchGrantStore
 	WebUIBridgeStore   storage.WebUIBridgeSessionStore
@@ -75,8 +73,6 @@ type Services struct {
 	Metadata             metadatabundle.Runtime
 	Profiles             *profiles.Service
 	Notifications        *notifications.Service
-	Applications         *applications.Service
-	ApplicationRuntime   applications.ResourceManager
 	Inference            *inference.Service
 	WebUI                *webui.Service
 	Configuration        *configuration.Service
@@ -196,22 +192,15 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		}
 	}
 
-	applicationStore := stores.ApplicationStore
 	focusContentStore := stores.FocusContentStore
 	webuiGrantStore := stores.WebUIGrantStore
 	webuiBridgeStore := stores.WebUIBridgeStore
-	applicationsSvc, err := applications.NewService(applicationStore, cfg.ApplicationCatalog)
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("app: wiring application management: %w", err)
-	}
 	configurationSvc, err := configuration.NewService(configuration.Stores{
-		DB:           db,
-		Revisions:    stores.ConfigurationStore,
-		Licensing:    licensingStore,
-		DNS:          dnsRecordStore,
-		Applications: applicationStore,
-		Metadata:     stores.MetadataStore,
+		DB:        db,
+		Revisions: stores.ConfigurationStore,
+		Licensing: licensingStore,
+		DNS:       dnsRecordStore,
+		Metadata:  stores.MetadataStore,
 	})
 	if err != nil {
 		db.Close()
@@ -263,14 +252,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 			return nil, fmt.Errorf("app: wiring WebUI grants: %w", err)
 		}
 	}
-	applicationRuntime, err := applications.NewInClusterManager(applications.NewHostAgentProjector(
-		"http://host-agent.ace-apps.svc.cluster.local:8080",
-		actionruntimeauth.TokenFromPepper(keyMaterial.APITokenPepper),
-	))
-	if err != nil {
-		db.Close()
-		return nil, fmt.Errorf("app: wiring application resource manager: %w", err)
-	}
 	usersSvc := users.NewService(db, userStore, roleStore, tokenStore, sessionStore, throttleStore, recorder, keyMaterial)
 	tokensSvc := tokens.NewService(db, tokenStore, recorder, keyMaterial)
 
@@ -314,7 +295,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		AuditStore:           auditStore,
 		RegistryGrantStore:   registryGrantStore,
 		DNSRecordStore:       dnsRecordStore,
-		ApplicationStore:     applicationStore,
 		FocusContentStore:    focusContentStore,
 		WebUIGrantStore:      webuiGrantStore,
 		WebUIBridgeStore:     webuiBridgeStore,
@@ -330,8 +310,6 @@ func wireServicesWithStorageProvider(cfg config.Config, resolved appliance.Resol
 		Metadata:             metadataSvc,
 		Profiles:             profilesSvc,
 		Notifications:        notificationsSvc,
-		Applications:         applicationsSvc,
-		ApplicationRuntime:   applicationRuntime,
 		Inference:            inferenceSvc,
 		WebUI:                webuiSvc,
 		Configuration:        configurationSvc,

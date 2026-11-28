@@ -6,7 +6,7 @@ import (
 	"appliance-code/services/controlplane/internal/appliance"
 )
 
-func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) {
+func TestResolveModulesIncludesFilesForTraining(t *testing.T) {
 	resolved, err := appliance.ResolveProfile("training")
 	if err != nil {
 		t.Fatalf("ResolveProfile(core): %v", err)
@@ -16,21 +16,11 @@ func TestResolveModulesIncludesHostAgentWhenHostCapabilityEnabled(t *testing.T) 
 		t.Fatalf("DevelopmentModuleCatalog: %v", err)
 	}
 	modules = appliance.ResolveModules(resolved, appliance.AlwaysEntitled{}, modules)
-	if len(modules) != 2 {
-		t.Fatalf("ResolveModules(training) returned %d modules, want 2", len(modules))
-	}
-	if !appliance.ModuleEnabled(modules, appliance.ModuleNameHostAgent) {
-		t.Fatal("training modules should include host-agent")
+	if len(modules) != 1 {
+		t.Fatalf("ResolveModules(training) returned %d modules, want 1", len(modules))
 	}
 	if !appliance.ModuleEnabled(modules, appliance.ModuleNameFiles) {
 		t.Fatal("training modules should include files")
-	}
-	module, _ := appliance.ModuleNamed(modules, appliance.ModuleNameHostAgent)
-	if module.PrimaryCapability() != appliance.CapabilityHost {
-		t.Fatalf("PrimaryCapability = %q, want %q", module.PrimaryCapability(), appliance.CapabilityHost)
-	}
-	if len(module.Routes) != 11 {
-		t.Fatalf("len(module.Routes) = %d, want 11", len(module.Routes))
 	}
 }
 

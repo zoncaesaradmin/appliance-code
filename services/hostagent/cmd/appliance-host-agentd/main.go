@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"appliance-code/services/hostagent/internal/bridge"
-	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/httpapi"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/process"
@@ -64,7 +63,6 @@ func main() {
 	wifiClientManager := wificlient.NewManager()
 	wifiManager := wifiap.NewManager()
 	mdnsManager := mdns.NewManager()
-	firewallManager := firewall.NewManager()
 	backupManager := systembackup.NewManager("", "")
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
 	defer cancelLifecycle()
@@ -72,11 +70,9 @@ func main() {
 		reconcileDay2Features(logger, wifiClientManager, wifiManager, mdnsManager)
 		reconcileMDNSPeriodically(lifecycleCtx, logger, mdnsManager)
 	}()
-	go reconcileApplicationFirewall(logger, firewallManager)
-
 	server := &http.Server{
 		Handler: httpapi.NewUnixSocketHandler(
-			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager, Firewall: firewallManager, SystemBackup: backupManager},
+			bridge.Local{Root: "/", WifiClient: wifiClientManager, WifiAP: wifiManager, MDNS: mdnsManager, SystemBackup: backupManager},
 			wifiClientManager,
 			wifiManager,
 			mdnsManager,
@@ -116,12 +112,6 @@ func reconcileMDNSPeriodically(ctx context.Context, logger *slog.Logger, manager
 				logger.Warn("mdns periodic reconcile failed", "error", err)
 			}
 		}
-	}
-}
-
-func reconcileApplicationFirewall(logger *slog.Logger, manager *firewall.Manager) {
-	if err := manager.Reconcile(context.Background()); err != nil {
-		logger.Warn("application firewall reconcile failed", "error", err)
 	}
 }
 

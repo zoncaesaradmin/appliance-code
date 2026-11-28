@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"appliance-code/services/hostagent/internal/firewall"
 	"appliance-code/services/hostagent/internal/host"
+	"appliance-code/services/hostagent/internal/internalauth"
 	"appliance-code/services/hostagent/internal/mdns"
 	"appliance-code/services/hostagent/internal/systembackup"
 	"appliance-code/services/hostagent/internal/wifiap"
@@ -35,9 +35,6 @@ type Bridge interface {
 	WifiAPApply(ctx context.Context, req wifiap.ApplyRequest) (wifiap.Status, error)
 	MDNSStatus(ctx context.Context) (mdns.Status, error)
 	MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Status, error)
-	ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error
-	ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error)
-	ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error)
 	SystemBackupCreate(ctx context.Context, archive []byte) (systembackup.Status, error)
 	SystemBackupGet(ctx context.Context, id string) (systembackup.Status, error)
 	SystemBackupRestore(ctx context.Context, id string) (systembackup.Status, error)
@@ -48,7 +45,6 @@ type Local struct {
 	WifiClient   wificlient.Controller
 	WifiAP       wifiap.Controller
 	MDNS         mdns.Controller
-	Firewall     firewall.Controller
 	SystemBackup *systembackup.Manager
 }
 
@@ -72,13 +68,6 @@ func (l Local) mdnsCtrl() mdns.Controller {
 		return l.MDNS
 	}
 	return mdns.NewManager()
-}
-
-func (l Local) firewallCtrl() firewall.Controller {
-	if l.Firewall != nil {
-		return l.Firewall
-	}
-	return firewall.NewManager()
 }
 
 func (l Local) Ping(context.Context) error {
@@ -129,21 +118,6 @@ func (l Local) MDNSApply(ctx context.Context, req mdns.ApplyRequest) (mdns.Statu
 	return l.mdnsCtrl().Apply(ctx, req)
 }
 
-func (l Local) ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error {
-	manager, ok := l.mdnsCtrl().(*mdns.Manager)
-	if !ok {
-		return fmt.Errorf("bridge: application mDNS requires the host mDNS manager")
-	}
-	return manager.ApplyApplicationServices(ctx, req)
-}
-
-func (l Local) ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error) {
-	return l.firewallCtrl().Status(ctx, application)
-}
-
-func (l Local) ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error) {
-	return l.firewallCtrl().Apply(ctx, policy)
-}
 func (l Local) SystemBackupCreate(ctx context.Context, archive []byte) (systembackup.Status, error) {
 	if l.SystemBackup == nil {
 		return systembackup.Status{}, fmt.Errorf("system backup is not configured")
@@ -170,10 +144,6 @@ type UnixSocketClient struct {
 	internalToken string
 }
 
-// SetInternalToken authorizes only the privileged firewall projection over the
-// socket; ordinary host status and Wi-Fi APIs retain their existing contract.
-func (c *UnixSocketClient) SetInternalToken(token string) { c.internalToken = strings.TrimSpace(token) }
-
 func NewUnixSocketClient(socketPath string) *UnixSocketClient {
 	socketPath = strings.TrimSpace(socketPath)
 	transport := &http.Transport{
@@ -187,6 +157,12 @@ func NewUnixSocketClient(socketPath string) *UnixSocketClient {
 		baseURL:    "http://host-agentd",
 		client:     &http.Client{Transport: transport, Timeout: 60 * time.Second},
 	}
+}
+
+// SetInternalToken configures the credential used for privileged host-agent
+// requests forwarded over the Unix socket.
+func (c *UnixSocketClient) SetInternalToken(token string) {
+	c.internalToken = strings.TrimSpace(token)
 }
 
 func (c *UnixSocketClient) Ping(ctx context.Context) error {
@@ -259,21 +235,6 @@ func (c *UnixSocketClient) MDNSApply(ctx context.Context, req mdns.ApplyRequest)
 	return status, err
 }
 
-func (c *UnixSocketClient) ApplicationMDNSApply(ctx context.Context, req mdns.ApplicationRequest) error {
-	return c.do(ctx, http.MethodPut, "/internal/v1/host/application-mdns/"+url.PathEscape(req.Application), req, nil)
-}
-
-func (c *UnixSocketClient) ApplicationFirewallStatus(ctx context.Context, application string) (firewall.Status, error) {
-	var status firewall.Status
-	err := c.do(ctx, http.MethodGet, "/internal/v1/host/application-firewall/"+url.PathEscape(application), nil, &status)
-	return status, err
-}
-
-func (c *UnixSocketClient) ApplicationFirewallApply(ctx context.Context, policy firewall.ApplicationPolicy) (firewall.Status, error) {
-	var status firewall.Status
-	err := c.do(ctx, http.MethodPut, "/internal/v1/host/application-firewall/"+url.PathEscape(policy.Application), policy, &status)
-	return status, err
-}
 func (c *UnixSocketClient) SystemBackupCreate(ctx context.Context, archive []byte) (systembackup.Status, error) {
 	var s systembackup.Status
 	err := c.do(ctx, http.MethodPost, "/internal/v1/system-backups", map[string][]byte{"archive": archive}, &s)
@@ -348,8 +309,8 @@ func (c *UnixSocketClient) do(ctx context.Context, method, path string, body any
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.internalToken != "" && strings.Contains(path, "/application-firewall/") {
-		req.Header.Set("X-Appliance-Internal-Auth", c.internalToken)
+	if c.internalToken != "" {
+		req.Header.Set(internalauth.HeaderName, c.internalToken)
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {

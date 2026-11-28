@@ -77,42 +77,6 @@ type OperationsStore interface {
 	UpdateStatus(ctx context.Context, id string, status OperationStatus, resultBody, problemBody []byte) error
 }
 
-// ApplicationDefinition is a validated, immutable application contract.
-type ApplicationDefinition struct {
-	Name      string    `json:"name"`
-	Version   string    `json:"version"`
-	Document  []byte    `json:"document,omitempty"`
-	CreatedAt time.Time `json:"createdAt,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt,omitempty"`
-}
-
-// ApplicationInstance is durable desired and observed state for one
-// application installation.
-type ApplicationInstance struct {
-	Name              string    `json:"name"`
-	DefinitionName    string    `json:"definitionName"`
-	DefinitionVersion string    `json:"definitionVersion"`
-	DesiredState      string    `json:"desiredState"`
-	ObservedState     string    `json:"observedState"`
-	Message           string    `json:"message,omitempty"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
-}
-
-// ApplicationStore persists application definitions and instances. It is
-// intentionally separate from workflow and metadata-bundle storage.
-type ApplicationStore interface {
-	UpsertDefinition(ctx context.Context, definition ApplicationDefinition) error
-	GetDefinition(ctx context.Context, name, version string) (ApplicationDefinition, error)
-	ListDefinitions(ctx context.Context) ([]ApplicationDefinition, error)
-	DeleteDefinition(ctx context.Context, name, version string) error
-	UpsertInstance(ctx context.Context, instance ApplicationInstance) error
-	UpdateInstanceStatus(ctx context.Context, name, observedState, message string, updatedAt time.Time) error
-	GetInstance(ctx context.Context, name string) (ApplicationInstance, error)
-	ListInstances(ctx context.Context) ([]ApplicationInstance, error)
-	DeleteInstance(ctx context.Context, name string) error
-}
-
 // MaintenanceCheckpoint tracks the cursor and last-run time for one named
 // in-process maintenance task, so restarts resume rather than restart from
 // scratch or duplicate work.

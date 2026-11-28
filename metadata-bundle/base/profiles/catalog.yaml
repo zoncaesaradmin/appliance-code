@@ -18,7 +18,7 @@ profiles:
   training:
     displayName: training
     description: "Core appliance plus video library and playback."
-    capabilities: [base, actions, lan-discovery, host, files, video, guest-access, focus-content, applications, plaintext-http]
+    capabilities: [base, actions, lan-discovery, files, video, guest-access, focus-content, plaintext-http]
   private-ai:
     displayName: private-ai
     description: "Private ai appliance providing multi user inference."

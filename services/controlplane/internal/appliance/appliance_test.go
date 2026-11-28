@@ -13,7 +13,7 @@ func TestResolveProfileUsesCanonicalMetadataCatalog(t *testing.T) {
 	}{
 		{"core", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityFiles}},
 		{"storage-landns", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityFiles, appliance.CapabilityArtifact, appliance.CapabilityDNS}},
-		{"training", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityHost, appliance.CapabilityFiles, appliance.CapabilityVideo, appliance.CapabilityApplications, appliance.CapabilityPlaintextHTTP}},
+		{"training", []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityActions, appliance.CapabilityFiles, appliance.CapabilityVideo, appliance.CapabilityPlaintextHTTP}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestStorageLANDNSDoesNotRequireHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, capability := range []appliance.Capability{appliance.CapabilityHost, appliance.CapabilityApplications} {
+	for _, capability := range []appliance.Capability{appliance.CapabilityHost} {
 		if resolved.Capabilities.Enabled(capability) {
 			t.Fatalf("storage-landns unexpectedly enables %q", capability)
 		}

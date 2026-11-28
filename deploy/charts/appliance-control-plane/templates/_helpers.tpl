@@ -59,14 +59,6 @@ releases, enabling only the set it is currently applying.
 {{- if and .Values.rollout .Values.rollout.aceAppCore .Values.rollout.aceAppCore.enabled -}}true{{- end -}}
 {{- end -}}
 
-{{- define "appliance-control-plane.applicationSupportEnabled" -}}
-{{- if and .Values.rollout .Values.rollout.applicationSupport .Values.rollout.applicationSupport.enabled (eq (include "appliance-control-plane.applicationsEnabled" .) "true") -}}true{{- end -}}
-{{- end -}}
-
-{{- define "appliance-control-plane.applicationsEnabled" -}}
-{{- if has "applications" (.Values.config.enabledCapabilities | default (list)) -}}true{{- end -}}
-{{- end -}}
-
 {{- define "appliance-control-plane.plaintextHTTPEnabled" -}}
 {{- if has "plaintext-http" (.Values.config.enabledCapabilities | default (list)) -}}true{{- end -}}
 {{- end -}}
@@ -122,13 +114,6 @@ and isolated chart tests self-contained.
 {{- else -}}
 ace-app-core
 {{- end -}}
-{{- end -}}
-
-{{/*
-Permanent namespace for user-managed application workloads.
-*/}}
-{{- define "appliance-control-plane.applicationNamespace" -}}
-{{- .Values.applicationNamespace.name | default "apps" -}}
 {{- end -}}
 
 {{/*
@@ -242,7 +227,7 @@ Whether the control plane manages LAN DNS zone ConfigMap sync.
 Whether the control-plane ServiceAccount token must be mounted.
 */}}
 {{- define "appliance-control-plane.serviceAccountTokenRequired" -}}
-{{- if or (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (eq (include "appliance-control-plane.applicationsEnabled" .) "true") (has "inference" (.Values.config.enabledCapabilities | default (list))) -}}true{{- else -}}false{{- end -}}
+{{- if or (eq (include "appliance-control-plane.dnsAdminEnabled" .) "true") (has "inference" (.Values.config.enabledCapabilities | default (list))) -}}true{{- else -}}false{{- end -}}
 {{- end -}}
 
 {{/*

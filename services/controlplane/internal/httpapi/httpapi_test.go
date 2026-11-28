@@ -25,10 +25,9 @@ import (
 
 type testServer struct {
 	*httptest.Server
-	services           *app.Services
-	blobStore          *fakeS3
-	videoStore         *fakeS3 // alias of blobStore for video tests
-	videoProjectionDir string
+	services   *app.Services
+	blobStore  *fakeS3
+	videoStore *fakeS3 // alias of blobStore for video tests
 }
 
 func newTestServer(t *testing.T) *testServer {
@@ -133,7 +132,6 @@ func newTestServerWithProfileAndCatalog(t *testing.T, profile appliance.Profile)
 		cfg.BlobStorageBucket = "appliance"
 		cfg.BlobStorageAccessKey = "test-access-key"
 		cfg.BlobStorageSecretKey = "test-secret-key"
-		cfg.VideoLibraryProjectionDir = t.TempDir()
 	}
 	if resolved.Capabilities.Enabled(appliance.CapabilityDNS) {
 		cfg.DNSReadyURL = "http://dns-server.dns.svc.cluster.local:8181/ready"
@@ -190,7 +188,6 @@ func newTestServerWithProfileAndCatalog(t *testing.T, profile appliance.Profile)
 		NotificationsH: &httpapi.NotificationHandlers{Notifications: services.Notifications, Audit: services.Audit},
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
-		ApplicationsH:  &httpapi.ApplicationHandlers{Applications: services.Applications},
 		ConfigurationH: &httpapi.ConfigurationHandlers{Configuration: services.Configuration, Archives: services.ConfigurationArchive},
 		AuditH: &httpapi.AuditHandlers{
 			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
@@ -235,7 +232,6 @@ func newTestServerWithProfileAndCatalog(t *testing.T, profile appliance.Profile)
 			deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
 				Store:           blobClient,
 				ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
-				ProjectionDir:   cfg.VideoLibraryProjectionDir,
 				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
 				TransferTimeout: cfg.VideoTransferTimeout,
 				Audit:           services.Audit,
@@ -256,7 +252,7 @@ func newTestServerWithProfileAndCatalog(t *testing.T, profile appliance.Profile)
 	}
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return &testServer{Server: srv, services: services, blobStore: blobStore, videoStore: blobStore, videoProjectionDir: cfg.VideoLibraryProjectionDir}
+	return &testServer{Server: srv, services: services, blobStore: blobStore, videoStore: blobStore}
 }
 
 // bootstrapAdmin creates the first administrator directly through the
@@ -335,7 +331,7 @@ func TestCapabilitiesReflectsResolvedProfile(t *testing.T) {
 	}{
 		{appliance.ProfileCore, []string{"actions", "base", "files", "lan-discovery"}},
 		{appliance.ProfileStorageLANDNS, []string{"actions", "artifact", "base", "dns", "files", "lan-discovery"}},
-		{appliance.ProfileTraining, []string{"actions", "applications", "base", "files", "focus-content", "guest-access", "host", "lan-discovery", "plaintext-http", "video"}},
+		{appliance.ProfileTraining, []string{"actions", "base", "files", "focus-content", "guest-access", "lan-discovery", "plaintext-http", "video"}},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.profile), func(t *testing.T) {
@@ -438,78 +434,19 @@ func TestCoreProfileDoesNotExposeArtifactRoutes(t *testing.T) {
 	}
 }
 
-func TestHostRoutesProxyThroughControlPlane(t *testing.T) {
+func TestTrainingProfileDoesNotExposeHostRoutes(t *testing.T) {
 	ts := newTestServerWithProfile(t, appliance.ProfileTraining)
 	ts.bootstrapAdmin(t, "admin", testPassword)
 	token := ts.login(t, "admin", testPassword)
 
 	for _, path := range []string{"/api/v1/host/info", "/api/v1/host/stats", "/api/v1/host/health", "/api/v1/host/wifi", "/api/v1/host/wifi/scan", "/api/v1/host/wifi-ap", "/api/v1/host/mdns"} {
 		resp := ts.doJSON(t, http.MethodGet, path, token, "")
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("%s status = %d, want 200", path, resp.StatusCode)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404", path, resp.StatusCode)
 		}
 		resp.Body.Close()
 	}
-	resp := ts.doJSON(t, http.MethodPut, "/api/v1/host/wifi/enable", token, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("wifi enable status = %d, want 200", resp.StatusCode)
-	}
-	resp.Body.Close()
-
-	resp = ts.doJSON(t, http.MethodGet, "/api/v1/host/mdns", token, "")
-	defer resp.Body.Close()
-	var mdns struct {
-		AdvertisedName string `json:"advertisedName"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&mdns); err != nil {
-		t.Fatalf("decode host mdns: %v", err)
-	}
-	if mdns.AdvertisedName != "appliance-01.local" {
-		t.Fatalf("advertisedName = %q, want appliance-01.local", mdns.AdvertisedName)
-	}
 }
-
-func TestApplicationsUseOnlyReleaseCatalogAndAdminLifecycle(t *testing.T) {
-	ts := newTestServerWithProfile(t, appliance.ProfileTraining)
-	ts.bootstrapAdmin(t, "admin", testPassword)
-	token := ts.login(t, "admin", testPassword)
-
-	resp := ts.doJSON(t, http.MethodGet, "/api/v1/applications", token, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("list applications status = %d", resp.StatusCode)
-	}
-	var catalog struct {
-		Items []struct {
-			Name    string `json:"name"`
-			Version string `json:"version"`
-		} `json:"items"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&catalog); err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if len(catalog.Items) != 1 || catalog.Items[0].Name != "jellyfin" || catalog.Items[0].Version != "10.10.7" {
-		t.Fatalf("catalog = %+v", catalog.Items)
-	}
-
-	resp = ts.doJSON(t, http.MethodPost, "/api/v1/applications/jellyfin/install", token, `{"version":"10.10.7"}`)
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("install status = %d", resp.StatusCode)
-	}
-	resp.Body.Close()
-	resp = ts.doJSON(t, http.MethodPost, "/api/v1/applications/jellyfin/disable", token, "")
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("disable status = %d", resp.StatusCode)
-	}
-	resp.Body.Close()
-
-	resp = ts.doJSON(t, http.MethodPost, "/api/v1/applications", token, `{}`)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("mutable application registration status = %d, want 404", resp.StatusCode)
-	}
-}
-
 func TestSetupStatusAndFirstAdminFlow(t *testing.T) {
 	ts := newTestServer(t)
 

@@ -5,7 +5,6 @@ import { AdminPage } from "../pages/AdminPage";
 import { ArtifactsPage } from "../pages/ArtifactsPage";
 import { FilesPage } from "../pages/FilesPage";
 import { VideosPage } from "../pages/VideosPage";
-import { ApplicationsPage } from "../pages/ApplicationsPage";
 import { AIServicePage } from "../pages/AIServicePage";
 import { ApplicationWorkspacePage } from "../pages/ApplicationWorkspacePage";
 import { CodingChatPage } from "../pages/CodingChatPage";
@@ -58,9 +57,6 @@ export function RouteView(props: {
   }
   if (props.pathname.startsWith("/manage/ai-chat")) {
     return <CodingChatPage capabilities={props.capabilities} />;
-  }
-  if (props.pathname.startsWith("/admin/applications")) {
-    return <ApplicationsPage />;
   }
   if (props.pathname.startsWith("/admin/ai-services")) {
     return <AIServicePage />;

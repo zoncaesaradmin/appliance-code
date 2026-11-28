@@ -36,7 +36,7 @@ func (p archiveKeyProvider) ConfigurationArchiveKey(context.Context) ([]byte, st
 }
 
 func TestArchiveServiceExportAndVerify(t *testing.T) {
-	payload := []byte(`{"apiVersion":"configuration.zon/v1","customProfiles":[],"profileActivation":{},"dnsRecords":[],"applicationDefinitions":[],"applicationInstances":[]}`)
+	payload := []byte(`{"apiVersion":"configuration.zon/v1","customProfiles":[],"profileActivation":{},"dnsRecords":[]}`)
 	sum := sha256.Sum256(payload)
 	revision := storage.ConfigurationRevision{
 		ID: "revision-1", SchemaVersion: SchemaVersion, Payload: payload,

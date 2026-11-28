@@ -24,7 +24,6 @@ type Bundle struct {
 	Capabilities CapabilityCatalog
 	Packages     PackageCatalog
 	Modules      ModuleCatalog
-	Applications ApplicationCatalog
 	DebugTools   *DebugToolsSection
 }
 
@@ -113,12 +112,6 @@ type ModuleRoute struct {
 	// may be empty in that mode.
 	StripPrefix string `yaml:"stripPrefix,omitempty" json:"stripPrefix,omitempty"`
 	Permission  string `yaml:"permission" json:"permission"`
-}
-
-// ApplicationCatalog is preserved as raw YAML so the application subsystem
-// owns its contract schema without creating an import cycle here.
-type ApplicationCatalog struct {
-	Raw []byte `yaml:"-" json:"-"`
 }
 
 type CapabilityLicense struct {

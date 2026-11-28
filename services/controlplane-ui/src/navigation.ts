@@ -140,13 +140,6 @@ export const MODES: Mode[] = [
         icon: "status"
       },
       {
-        label: "Applications",
-        path: "/admin/applications",
-        description: "Enable and disable approved appliance applications",
-        icon: "artifacts",
-        requiredCapability: "applications"
-      },
-      {
         label: "AI Services",
         path: "/admin/ai-services",
         description: "Inspect the inference runtime and manage installed models",

@@ -108,7 +108,6 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			Notifications: services.Notifications, RuntimeProfile: string(services.ApplianceProfile.Name),
 		},
 		NotificationsH: &httpapi.NotificationHandlers{Notifications: services.Notifications, Audit: services.Audit},
-		ApplicationsH:  &httpapi.ApplicationHandlers{Applications: services.Applications},
 		FocusContentH:  &httpapi.FocusContentHandlers{Store: services.FocusContentStore, Audit: services.Audit},
 		ProfilesH:      &httpapi.ProfileHandlers{Profiles: services.Profiles},
 		MetadataH:      &httpapi.MetadataBundleHandlers{Metadata: services.Metadata},
@@ -159,15 +158,10 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			deps.VideoLibraryH = &httpapi.VideoLibraryHandlers{
 				Store:           blobClient,
 				ObjectPrefix:    cfg.VideoLibraryObjectPrefix,
-				ProjectionDir:   cfg.VideoLibraryProjectionDir,
 				MaxUploadBytes:  cfg.VideoMaxUploadBytes,
 				TransferTimeout: cfg.VideoTransferTimeout,
 				Audit:           services.Audit,
 				Logger:          logger,
-			}
-			if err := syncVideoProjection(context.Background(), deps.VideoLibraryH, processLogger); err != nil {
-				services.DB.Close()
-				return nil, fmt.Errorf("materialize video library projection: %w", err)
 			}
 		}
 	}
@@ -252,23 +246,6 @@ func (a *App) Run(ctx context.Context) error {
 	if a.services != nil && a.services.AuditOps != nil {
 		a.services.AuditOps.StartMaintenance(ctx, time.Hour)
 	}
-	if a.services != nil && a.services.Applications != nil && a.services.ApplicationRuntime != nil {
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				if err := a.services.Applications.ReconcileAll(ctx, a.services.ApplicationRuntime); err != nil {
-					a.processLogger.Warnw("application reconciliation failed", "error", err)
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-				}
-			}
-		}()
-	}
-
 	go func() {
 		a.processLogger.Infow("public listener starting", "addr", a.cfg.PublicAddr)
 		if err := a.public.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

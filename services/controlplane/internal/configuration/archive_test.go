@@ -11,7 +11,7 @@ import (
 )
 
 func TestArchiveSealOpenAndTamperRejection(t *testing.T) {
-	payload := []byte(`{"apiVersion":"configuration.zon/v1","customProfiles":[],"profileActivation":{},"dnsRecords":[],"applicationDefinitions":[],"applicationInstances":[]}`)
+	payload := []byte(`{"apiVersion":"configuration.zon/v1","customProfiles":[],"profileActivation":{},"dnsRecords":[]}`)
 	sum := sha256.Sum256(payload)
 	revision := storage.ConfigurationRevision{ID: "revision-1", SchemaVersion: SchemaVersion, Payload: payload, PayloadDigest: "sha256:" + hex.EncodeToString(sum[:]), CreatedAt: time.Now().UTC()}
 	key := bytes.Repeat([]byte{7}, 32)

@@ -140,14 +140,6 @@ capabilities:
       requiredEntitlement: zon.capabilities.focus-content
     artifacts:
       required: []
-  applications:
-    displayName: Applications
-    requires: [base, host]
-    conflicts: []
-    license:
-      requiredEntitlement: zon.capabilities.applications
-    artifacts:
-      required: [host-agent-image, jellyfin-image]
   plaintext-http:
     displayName: Plaintext HTTP
     requires: [base]

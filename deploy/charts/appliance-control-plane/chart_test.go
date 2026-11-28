@@ -239,7 +239,7 @@ func TestPodAndContainerSecurityHardening(t *testing.T) {
 	}
 
 	if automount, _ := podSpec["automountServiceAccountToken"].(bool); automount {
-		t.Error("automountServiceAccountToken should be false when Application Management is not enabled by the signed profile")
+		t.Error("automountServiceAccountToken should be false when no privileged capability is enabled")
 	}
 
 	podSecCtx, _ := podSpec["securityContext"].(map[string]any)
@@ -901,7 +901,6 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 		"--set", "rollout.aceInfra.enabled=false",
 		"--set", "rollout.aceSystem.enabled=false",
 		"--set", "rollout.aceApps.enabled=true",
-		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
 	)...)
 	if findByKindAndName(aceAppsDocs, "Deployment", "blob-storage") != nil {
@@ -915,7 +914,6 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 		"--set", "rollout.aceInfra.enabled=false",
 		"--set", "rollout.aceSystem.enabled=true",
 		"--set", "rollout.aceApps.enabled=false",
-		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
 	)...)
 	if findByKindAndName(aceSystemDocs, "Deployment", "blob-storage") != nil {
@@ -925,7 +923,6 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 		"--set", "rollout.aceInfra.enabled=true",
 		"--set", "rollout.aceSystem.enabled=false",
 		"--set", "rollout.aceApps.enabled=false",
-		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
 	)...)
 	blobDeploy := findByKindAndName(infraDocs, "Deployment", "blob-storage")
@@ -965,7 +962,6 @@ func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
 		"--set", "rollout.aceSystem.enabled=false",
 		"--set", "rollout.aceAppCore.enabled=true",
 		"--set", "rollout.aceApps.enabled=false",
-		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
 		"--set", "appCoreNamespace.name=ace-app-core",
 	)...)
@@ -998,7 +994,6 @@ func TestApplicationIdentityEndpointBelongsToAceAppsRollout(t *testing.T) {
 		"--set", "rollout.aceSystem.enabled=false",
 		"--set", "rollout.aceApps.enabled=false",
 		"--set", "rollout.aceAppCore.enabled=true",
-		"--set", "rollout.applicationSupport.enabled=false",
 		"--set", "rollout.dnsSupport.enabled=false",
 	}
 	appCoreDocs := renderChart(t, append(defaultRenderArgs(), base...)...)
@@ -1280,56 +1275,6 @@ func TestImagePullSecretsRenderedOnControlplaneAndAppsDeployments(t *testing.T) 
 		if got, _ := entry["name"].(string); got != "appliance-image-pull" {
 			t.Fatalf("%s imagePullSecrets[0].name = %q", name, got)
 		}
-	}
-}
-
-func TestApplicationNamespaceIsAlwaysProvisioned(t *testing.T) {
-	docs := renderChart(t, "--set", "namespace.name=ace-system", "--set", "appsNamespace.name=ace-apps", "--set", "config.enabledCapabilities={applications}")
-	ns := findByKindAndName(docs, "Namespace", "apps")
-	if ns != nil {
-		t.Fatal("application namespace must be installer-owned, not Helm-owned")
-	}
-	marker := findByKindAndName(docs, "ConfigMap", "appliance-application-management")
-	if marker == nil {
-		t.Fatal("expected application-management namespace marker")
-	}
-	if got, _ := at(marker, "metadata", "namespace").(string); got != "apps" {
-		t.Fatalf("application-management marker namespace = %q", got)
-	}
-}
-
-func TestApplicationCapabilityMountsControlPlaneTokenInAceSystemRollout(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "rollout.aceInfra.enabled=false",
-		"--set", "rollout.aceSystem.enabled=true",
-		"--set", "rollout.aceApps.enabled=false",
-		"--set", "rollout.applicationSupport.enabled=false",
-		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "config.enabledCapabilities={applications}",
-	)...)
-	deployment := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
-	if deployment == nil {
-		t.Fatal("expected control-plane deployment")
-	}
-	if got, _ := at(deployment, "spec", "template", "spec", "automountServiceAccountToken").(bool); !got {
-		t.Fatal("applications capability must mount a service-account token in the ace-system rollout")
-	}
-}
-
-func TestApplicationSupportRolloutRendersResourcesForApplicationCapability(t *testing.T) {
-	docs := renderChart(t, append(defaultRenderArgs(),
-		"--set", "rollout.aceInfra.enabled=false",
-		"--set", "rollout.aceSystem.enabled=false",
-		"--set", "rollout.aceApps.enabled=false",
-		"--set", "rollout.applicationSupport.enabled=true",
-		"--set", "rollout.dnsSupport.enabled=false",
-		"--set", "config.enabledCapabilities={applications}",
-	)...)
-	if marker := findByKindAndName(docs, "ConfigMap", "appliance-application-management"); marker == nil {
-		t.Fatal("application-support rollout must render the application management marker")
-	}
-	if role := findByKindAndName(docs, "Role", "controlplane-applications"); role == nil {
-		t.Fatal("application-support rollout must grant the control plane application permissions")
 	}
 }
 

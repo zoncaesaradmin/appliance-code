@@ -37,8 +37,6 @@ import type {
   HostMDNSApplyRequest,
   ApplianceFileListResult,
   ApplianceFileUploadResult,
-  ApplicationDefinition,
-  ApplicationInstance,
   AuditEventsResult,
   FocusContent,
   InferenceRuntimeStatus,
@@ -174,10 +172,6 @@ export interface ControlPlaneClient {
   applyHostWifiAP(request: HostWifiAPApplyRequest): Promise<HostWifiAPStatus>;
   getHostMDNS(): Promise<HostMDNSStatus>;
   applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus>;
-  listApplications(): Promise<ApplicationDefinition[]>;
-  listApplicationInstances(): Promise<ApplicationInstance[]>;
-  installApplication(name: string, version: string): Promise<ApplicationInstance>;
-  disableApplication(name: string): Promise<ApplicationInstance>;
   getInferenceStatus(): Promise<InferenceRuntimeStatus>;
   getInferenceCatalog(params?: { sort?: "parameters" | "memory" | "name"; order?: "asc" | "desc" }): Promise<InferenceCatalog>;
   listInferenceModels(): Promise<InferenceModel[]>;
@@ -619,24 +613,6 @@ export class RemoteControlPlaneClient implements ControlPlaneClient {
 
   async applyHostMDNS(request: HostMDNSApplyRequest): Promise<HostMDNSStatus> {
 	return this.request("/api/v1/host/mdns", { method: "PUT", body: request });
-  }
-
-  async listApplications(): Promise<ApplicationDefinition[]> {
-	const result = await this.request<{ items?: ApplicationDefinition[] }>("/api/v1/applications");
-	return result.items || [];
-  }
-
-  async listApplicationInstances(): Promise<ApplicationInstance[]> {
-	const result = await this.request<{ items?: ApplicationInstance[] }>("/api/v1/application-instances");
-	return result.items || [];
-  }
-
-  async installApplication(name: string, version: string): Promise<ApplicationInstance> {
-	return this.request(`/api/v1/applications/${encodeURIComponent(name)}/install`, { method: "POST", body: { version } });
-  }
-
-  async disableApplication(name: string): Promise<ApplicationInstance> {
-	return this.request(`/api/v1/applications/${encodeURIComponent(name)}/disable`, { method: "POST" });
   }
 
   async getInferenceStatus(): Promise<InferenceRuntimeStatus> {

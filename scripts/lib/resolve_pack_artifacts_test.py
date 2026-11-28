@@ -38,7 +38,6 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertNotIn("artifact-server-image", arts)
         self.assertNotIn("coredns-image", arts)
         self.assertNotIn("host-agent-image", arts)
-        self.assertNotIn("jellyfin-image", arts)
         self.assertNotIn("inference-runtime-image", arts)
 
     def test_foundation_plus_acc_llm(self):
@@ -68,7 +67,6 @@ class ResolvePackArtifactsTest(unittest.TestCase):
     def test_deviceuser_includes_host_agent_image(self):
         arts = self._resolve("foundation", "deviceuser")
         self.assertIn("host-agent-image", arts)
-        self.assertIn("jellyfin-image", arts)
         self.assertIn("coredns-image", arts)
         self.assertIn("appliance-dns-chart", arts)
 

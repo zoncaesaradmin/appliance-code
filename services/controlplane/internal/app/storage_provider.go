@@ -33,7 +33,6 @@ type StorageSet struct {
 	DNSRecordStore     storage.DNSRecordStore
 	LicensingStore     storage.LicensingStore
 	MetadataStore      storage.MetadataBundleStore
-	ApplicationStore   storage.ApplicationStore
 	FocusContentStore  storage.FocusContentStore
 	WebUIGrantStore    storage.WebUILaunchGrantStore
 	WebUIBridgeStore   storage.WebUIBridgeSessionStore
@@ -86,7 +85,6 @@ func (localSQLStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 		DNSRecordStore:     sqlstore.NewDNSRecordStore(db),
 		LicensingStore:     sqlstore.NewLicensingStore(db),
 		MetadataStore:      sqlstore.NewMetadataBundleStore(db),
-		ApplicationStore:   sqlstore.NewApplicationStore(db),
 		FocusContentStore:  sqlstore.NewFocusContentStore(db),
 		WebUIGrantStore:    sqlstore.NewWebUILaunchGrantStore(db),
 		WebUIBridgeStore:   sqlstore.NewWebUIBridgeSessionStore(db),
@@ -118,7 +116,6 @@ func (postgresStorageProvider) Open(ctx context.Context, cfg config.Config) (Sto
 		DNSRecordStore:     sqlstore.NewDNSRecordStore(db),
 		LicensingStore:     sqlstore.NewLicensingStore(db),
 		MetadataStore:      sqlstore.NewMetadataBundleStore(db),
-		ApplicationStore:   sqlstore.NewApplicationStore(db),
 		FocusContentStore:  sqlstore.NewFocusContentStore(db),
 		WebUIGrantStore:    sqlstore.NewWebUILaunchGrantStore(db),
 		WebUIBridgeStore:   sqlstore.NewWebUIBridgeSessionStore(db),

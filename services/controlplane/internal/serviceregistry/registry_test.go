@@ -8,9 +8,11 @@ import (
 )
 
 func TestRegistryFromModulesConvertsHostAgentDescriptor(t *testing.T) {
-	resolved, err := appliance.ResolveProfile("training")
+	resolved, err := appliance.ResolveProfileWithCatalog("host-test", appliance.ProfileCatalog{
+		"host-test": {Capabilities: []appliance.Capability{appliance.CapabilityBase, appliance.CapabilityHost}},
+	})
 	if err != nil {
-		t.Fatalf("ResolveProfile(core): %v", err)
+		t.Fatalf("ResolveProfile(host-test): %v", err)
 	}
 	modules, err := appliance.DevelopmentModuleCatalog()
 	if err != nil {

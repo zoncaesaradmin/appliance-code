@@ -42,13 +42,11 @@ var ErrIncompatibleSnapshot = errors.New("configuration: incompatible snapshot")
 // database records only metadata-bundle identity: payload bytes for a signed
 // bundle are validated and staged by the installer/recovery coordinator.
 type Snapshot struct {
-	APIVersion           string                  `json:"apiVersion"`
-	CustomProfiles       []CustomProfile         `json:"customProfiles"`
-	ProfileActivation    ProfileActivation       `json:"profileActivation"`
-	DNSRecords           []DNSRecord             `json:"dnsRecords"`
-	ApplicationDefs      []ApplicationDefinition `json:"applicationDefinitions"`
-	ApplicationInstances []ApplicationInstance   `json:"applicationInstances"`
-	Metadata             *MetadataBundleIdentity `json:"metadataBundle,omitempty"`
+	APIVersion        string                  `json:"apiVersion"`
+	CustomProfiles    []CustomProfile         `json:"customProfiles"`
+	ProfileActivation ProfileActivation       `json:"profileActivation"`
+	DNSRecords        []DNSRecord             `json:"dnsRecords"`
+	Metadata          *MetadataBundleIdentity `json:"metadataBundle,omitempty"`
 }
 
 type CustomProfile struct {
@@ -70,19 +68,6 @@ type DNSRecord struct {
 	Owner  string `json:"owner,omitempty"`
 }
 
-type ApplicationDefinition struct {
-	Name     string          `json:"name"`
-	Version  string          `json:"version"`
-	Document json.RawMessage `json:"document"`
-}
-
-type ApplicationInstance struct {
-	Name              string `json:"name"`
-	DefinitionName    string `json:"definitionName"`
-	DefinitionVersion string `json:"definitionVersion"`
-	DesiredState      string `json:"desiredState"`
-}
-
 type MetadataBundleIdentity struct {
 	Version         string `json:"version"`
 	SoftwareVersion string `json:"softwareVersion"`
@@ -93,18 +78,17 @@ type MetadataBundleIdentity struct {
 // Stores groups the existing domain repositories used to form a coherent
 // desired-state snapshot. They must all be constructed from the same DB.
 type Stores struct {
-	DB           storage.DB
-	Revisions    storage.ConfigurationRevisionStore
-	Licensing    storage.LicensingStore
-	DNS          storage.DNSRecordStore
-	Applications storage.ApplicationStore
-	Metadata     storage.MetadataBundleStore
+	DB        storage.DB
+	Revisions storage.ConfigurationRevisionStore
+	Licensing storage.LicensingStore
+	DNS       storage.DNSRecordStore
+	Metadata  storage.MetadataBundleStore
 }
 
 type Service struct{ stores Stores }
 
 func NewService(stores Stores) (*Service, error) {
-	if stores.DB == nil || stores.Revisions == nil || stores.Licensing == nil || stores.DNS == nil || stores.Applications == nil || stores.Metadata == nil {
+	if stores.DB == nil || stores.Revisions == nil || stores.Licensing == nil || stores.DNS == nil || stores.Metadata == nil {
 		return nil, fmt.Errorf("configuration: all persistence stores are required")
 	}
 	return &Service{stores: stores}, nil
@@ -275,21 +259,6 @@ func (s *Service) importSnapshot(ctx context.Context, payload []byte, actorID st
 				return fmt.Errorf("configuration: import DNS record %q: %w", record.Name, err)
 			}
 		}
-		for _, definition := range snapshot.ApplicationDefs {
-			if err := s.stores.Applications.UpsertDefinition(txCtx, storage.ApplicationDefinition{
-				Name: definition.Name, Version: definition.Version, Document: definition.Document, CreatedAt: now, UpdatedAt: now,
-			}); err != nil {
-				return fmt.Errorf("configuration: import application definition %s@%s: %w", definition.Name, definition.Version, err)
-			}
-		}
-		for _, instance := range snapshot.ApplicationInstances {
-			if err := s.stores.Applications.UpsertInstance(txCtx, storage.ApplicationInstance{
-				Name: instance.Name, DefinitionName: instance.DefinitionName, DefinitionVersion: instance.DefinitionVersion,
-				DesiredState: instance.DesiredState, ObservedState: "pending", CreatedAt: now, UpdatedAt: now,
-			}); err != nil {
-				return fmt.Errorf("configuration: import application instance %q: %w", instance.Name, err)
-			}
-		}
 		sum := sha256.Sum256(canonicalPayload)
 		imported = storage.ConfigurationRevision{
 			ID:            uuid.NewString(),
@@ -320,24 +289,6 @@ func importMessage(replace bool) string {
 // the caller transaction and deliberately leaves immutable revisions in place
 // so a prior configuration remains auditable and exportable.
 func (s *Service) clearDesiredState(ctx context.Context) error {
-	instances, err := s.stores.Applications.ListInstances(ctx)
-	if err != nil {
-		return fmt.Errorf("configuration: list instances for replacement: %w", err)
-	}
-	for _, instance := range instances {
-		if err := s.stores.Applications.DeleteInstance(ctx, instance.Name); err != nil {
-			return fmt.Errorf("configuration: remove application instance %q: %w", instance.Name, err)
-		}
-	}
-	definitions, err := s.stores.Applications.ListDefinitions(ctx)
-	if err != nil {
-		return fmt.Errorf("configuration: list definitions for replacement: %w", err)
-	}
-	for _, definition := range definitions {
-		if err := s.stores.Applications.DeleteDefinition(ctx, definition.Name, definition.Version); err != nil {
-			return fmt.Errorf("configuration: remove application definition %s@%s: %w", definition.Name, definition.Version, err)
-		}
-	}
 	dnsRecords, err := s.stores.DNS.List(ctx)
 	if err != nil {
 		return fmt.Errorf("configuration: list DNS records for replacement: %w", err)
@@ -373,15 +324,7 @@ func (s *Service) ensureEmpty(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("configuration: inspect destination DNS records: %w", err)
 	}
-	definitions, err := s.stores.Applications.ListDefinitions(ctx)
-	if err != nil {
-		return fmt.Errorf("configuration: inspect destination application definitions: %w", err)
-	}
-	instances, err := s.stores.Applications.ListInstances(ctx)
-	if err != nil {
-		return fmt.Errorf("configuration: inspect destination application instances: %w", err)
-	}
-	if len(profiles) != 0 || len(dnsRecords) != 0 || len(definitions) != 0 || len(instances) != 0 {
+	if len(profiles) != 0 || len(dnsRecords) != 0 {
 		return fmt.Errorf("%w: desired configuration already exists", ErrDestinationNotClean)
 	}
 	return nil
@@ -418,7 +361,7 @@ func validateSnapshot(payload []byte) (Snapshot, []byte, error) {
 	if snapshot.APIVersion != SchemaVersion {
 		return Snapshot{}, nil, fmt.Errorf("%w: unsupported snapshot apiVersion %q", ErrInvalidSnapshot, snapshot.APIVersion)
 	}
-	seenProfiles, seenDNS, seenDefinitions, seenInstances := map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}, map[string]struct{}{}
+	seenProfiles, seenDNS := map[string]struct{}{}, map[string]struct{}{}
 	for _, profile := range snapshot.CustomProfiles {
 		if profile.ID == "" || !json.Valid(profile.Capabilities) {
 			return Snapshot{}, nil, fmt.Errorf("%w: invalid custom profile", ErrInvalidSnapshot)
@@ -436,25 +379,6 @@ func validateSnapshot(payload []byte) (Snapshot, []byte, error) {
 			return Snapshot{}, nil, fmt.Errorf("%w: duplicate DNS record %q", ErrInvalidSnapshot, record.Name)
 		}
 		seenDNS[record.Name] = struct{}{}
-	}
-	for _, definition := range snapshot.ApplicationDefs {
-		key := definition.Name + "@" + definition.Version
-		if definition.Name == "" || definition.Version == "" || !json.Valid(definition.Document) {
-			return Snapshot{}, nil, fmt.Errorf("%w: invalid application definition", ErrInvalidSnapshot)
-		}
-		if _, exists := seenDefinitions[key]; exists {
-			return Snapshot{}, nil, fmt.Errorf("%w: duplicate application definition %q", ErrInvalidSnapshot, key)
-		}
-		seenDefinitions[key] = struct{}{}
-	}
-	for _, instance := range snapshot.ApplicationInstances {
-		if instance.Name == "" || instance.DefinitionName == "" || instance.DefinitionVersion == "" || instance.DesiredState == "" {
-			return Snapshot{}, nil, fmt.Errorf("%w: invalid application instance", ErrInvalidSnapshot)
-		}
-		if _, exists := seenInstances[instance.Name]; exists {
-			return Snapshot{}, nil, fmt.Errorf("%w: duplicate application instance %q", ErrInvalidSnapshot, instance.Name)
-		}
-		seenInstances[instance.Name] = struct{}{}
 	}
 	if metadata := snapshot.Metadata; metadata != nil && (metadata.Version == "" || metadata.SoftwareVersion == "" || metadata.Digest == "") {
 		return Snapshot{}, nil, fmt.Errorf("%w: incomplete metadata bundle identity", ErrInvalidSnapshot)
@@ -479,22 +403,11 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("configuration: list DNS records: %w", err)
 	}
-	definitions, err := s.stores.Applications.ListDefinitions(ctx)
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("configuration: list application definitions: %w", err)
-	}
-	instances, err := s.stores.Applications.ListInstances(ctx)
-	if err != nil {
-		return Snapshot{}, fmt.Errorf("configuration: list application instances: %w", err)
-	}
-
 	snapshot := Snapshot{
-		APIVersion:           SchemaVersion,
-		ProfileActivation:    ProfileActivation{DesiredProfileID: activation.DesiredProfileID},
-		CustomProfiles:       []CustomProfile{},
-		DNSRecords:           []DNSRecord{},
-		ApplicationDefs:      []ApplicationDefinition{},
-		ApplicationInstances: []ApplicationInstance{},
+		APIVersion:        SchemaVersion,
+		ProfileActivation: ProfileActivation{DesiredProfileID: activation.DesiredProfileID},
+		CustomProfiles:    []CustomProfile{},
+		DNSRecords:        []DNSRecord{},
 	}
 	for _, profile := range profiles {
 		capabilities := json.RawMessage(profile.CapabilitiesJSON)
@@ -505,15 +418,6 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	for _, record := range dnsRecords {
 		snapshot.DNSRecords = append(snapshot.DNSRecords, DNSRecord{Name: record.Name, IPv4: record.IPv4, TTL: record.TTL, Source: string(record.Source), Owner: record.Owner})
-	}
-	for _, definition := range definitions {
-		if !json.Valid(definition.Document) {
-			return Snapshot{}, fmt.Errorf("configuration: application definition %s@%s is not JSON", definition.Name, definition.Version)
-		}
-		snapshot.ApplicationDefs = append(snapshot.ApplicationDefs, ApplicationDefinition{Name: definition.Name, Version: definition.Version, Document: definition.Document})
-	}
-	for _, instance := range instances {
-		snapshot.ApplicationInstances = append(snapshot.ApplicationInstances, ApplicationInstance{Name: instance.Name, DefinitionName: instance.DefinitionName, DefinitionVersion: instance.DefinitionVersion, DesiredState: instance.DesiredState})
 	}
 	if active, err := s.stores.Metadata.GetMetadataBundle(ctx, "active"); err == nil {
 		// Development/bootstrap metadata can exist before it has a signed,
@@ -531,14 +435,5 @@ func (s *Service) snapshot(ctx context.Context) (Snapshot, error) {
 	// archived bytes and digest do not vary by storage engine/query plan.
 	sort.Slice(snapshot.CustomProfiles, func(i, j int) bool { return snapshot.CustomProfiles[i].ID < snapshot.CustomProfiles[j].ID })
 	sort.Slice(snapshot.DNSRecords, func(i, j int) bool { return snapshot.DNSRecords[i].Name < snapshot.DNSRecords[j].Name })
-	sort.Slice(snapshot.ApplicationDefs, func(i, j int) bool {
-		if snapshot.ApplicationDefs[i].Name == snapshot.ApplicationDefs[j].Name {
-			return snapshot.ApplicationDefs[i].Version < snapshot.ApplicationDefs[j].Version
-		}
-		return snapshot.ApplicationDefs[i].Name < snapshot.ApplicationDefs[j].Name
-	})
-	sort.Slice(snapshot.ApplicationInstances, func(i, j int) bool {
-		return snapshot.ApplicationInstances[i].Name < snapshot.ApplicationInstances[j].Name
-	})
 	return snapshot, nil
 }

@@ -258,9 +258,10 @@ func TestLoadRejectsApplianceCatalogJSONOverride(t *testing.T) {
 }
 
 func TestLoadAppliesServiceRegistryJSON(t *testing.T) {
-	registryJSON := `{"services":[{"name":"host-agent","capability":"host","baseURL":"http://127.0.0.1:18086","routes":[{"method":"GET","externalPath":"/api/v1/host/info","upstreamPath":"/internal/v1/host/info","permission":"host.read"}]}]}`
+	registryJSON := `{"services":[{"name":"artifact-server-proxy","capability":"artifact","baseURL":"http://127.0.0.1:18086","routes":[{"method":"GET","externalPath":"/api/v1/artifacts","upstreamPath":"/api/v1/artifacts","permission":"artifact.read"}]}]}`
 	cfg, err := config.Load([]string{
-		"APPLIANCE_PROFILE=training",
+		"APPLIANCE_PROFILE=storage-landns",
+		"APPLIANCE_DNS_READY_URL=http://dns-server.dns.svc.cluster.local:8181/ready",
 		"APPLIANCE_SERVICE_REGISTRY_JSON=" + registryJSON,
 	})
 	if err != nil {
@@ -270,7 +271,7 @@ func TestLoadAppliesServiceRegistryJSON(t *testing.T) {
 		t.Fatalf("ServiceRegistry = %+v, want one service", cfg.ServiceRegistry.Services)
 	}
 	svc := cfg.ServiceRegistry.Services[0]
-	if svc.Name != "host-agent" || svc.Capability != appliance.CapabilityHost || svc.BaseURL != "http://127.0.0.1:18086" {
+	if svc.Name != "artifact-server-proxy" || svc.Capability != appliance.CapabilityArtifact || svc.BaseURL != "http://127.0.0.1:18086" {
 		t.Fatalf("service = %+v", svc)
 	}
 }

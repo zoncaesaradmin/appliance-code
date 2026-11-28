@@ -100,8 +100,6 @@ const (
 	PermProfilesActivate         = "profiles.activate"
 	PermNotificationsRead        = "notifications.read"
 	PermNotificationsAcknowledge = "notifications.acknowledge"
-	PermApplicationsRead         = "applications.read"
-	PermApplicationsManage       = "applications.manage"
 	PermOrdersRead               = "orders.read"
 	PermOrdersWrite              = "orders.write"
 
@@ -173,8 +171,6 @@ var AllPermissions = []storage.Permission{
 	{Name: PermMetadataManage, Description: "Validate, install, or roll back appliance metadata bundles"},
 	{Name: PermProfilesRead, Description: "Read appliance profile catalog from the active metadata bundle"},
 	{Name: PermProfilesActivate, Description: "Validate and activate appliance profiles"},
-	{Name: PermApplicationsRead, Description: "Read managed applications"},
-	{Name: PermApplicationsManage, Description: "Manage application definitions and instances"},
 	{Name: PermNotificationsRead, Description: "Read system notifications"},
 	{Name: PermNotificationsAcknowledge, Description: "Acknowledge system notifications"},
 	{Name: PermOrdersRead, Description: "Read ordering offerings and submitted orders"},

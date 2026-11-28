@@ -8,16 +8,13 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"appliance-code/services/controlplane/internal/appliance"
-	"appliance-code/services/controlplane/internal/applications"
 	"appliance-code/services/controlplane/internal/metadatabundle"
 	"appliance-code/services/controlplane/internal/serviceregistry"
-	"gopkg.in/yaml.v3"
 )
 
 // Config is the complete typed configuration surface for the control plane
@@ -46,12 +43,9 @@ type Config struct {
 	// another backend.
 	Database DatabaseConfig `json:"database"`
 
-	ApplicationLogPath string `json:"applicationLogPath"`
-	LogLevel           string `json:"logLevel"`
-	TrustedProxyCount  int    `json:"trustedProxyCount"`
-	// ApplicationCatalog is parsed from the bundled metadata catalog. Helm and
-	// process environment cannot supply application contracts.
-	ApplicationCatalog      applications.Catalog     `json:"-"`
+	ApplicationLogPath      string                   `json:"applicationLogPath"`
+	LogLevel                string                   `json:"logLevel"`
+	TrustedProxyCount       int                      `json:"trustedProxyCount"`
 	ActionRuntimeBaseURL    string                   `json:"actionRuntimeBaseURL"`
 	ArtifactServerBaseURL   string                   `json:"artifactServerBaseURL"`
 	ArtifactServerAllowFake bool                     `json:"artifactServerAllowFake"`
@@ -88,7 +82,6 @@ type Config struct {
 	ConfigurationArchiveSecretKey string        `json:"configurationArchiveSecretKey"`
 	ConfigurationArchiveRegion    string        `json:"configurationArchiveRegion"`
 	VideoLibraryObjectPrefix      string        `json:"videoLibraryObjectPrefix"`
-	VideoLibraryProjectionDir     string        `json:"videoLibraryProjectionDir"`
 	VideoTransferTimeout          time.Duration `json:"videoTransferTimeout"`
 	VideoMaxUploadBytes           int64         `json:"videoMaxUploadBytes"`
 
@@ -146,7 +139,6 @@ func Default() Config {
 		ConfigurationArchiveTarget: "file",
 		ConfigurationArchivePrefix: "configuration-archives",
 		VideoLibraryObjectPrefix:   "video/library",
-		VideoLibraryProjectionDir:  "/var/lib/appliance/video-media",
 		VideoTransferTimeout:       30 * time.Minute,
 		VideoMaxUploadBytes:        20 * 1024 * 1024 * 1024,
 		DNSZoneName:                "appliance.internal",
@@ -284,7 +276,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("CONFIGURATION_ARCHIVE_SECRET_KEY", &cfg.ConfigurationArchiveSecretKey)
 	str("CONFIGURATION_ARCHIVE_REGION", &cfg.ConfigurationArchiveRegion)
 	str("VIDEO_LIBRARY_OBJECT_PREFIX", &cfg.VideoLibraryObjectPrefix)
-	str("VIDEO_LIBRARY_PROJECTION_DIR", &cfg.VideoLibraryProjectionDir)
 
 	var errs []string
 	for _, databaseInt := range []struct {
@@ -397,18 +388,6 @@ func applyEnv(cfg *Config, env map[string]string) error {
 
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "; "))
-	}
-	return nil
-}
-
-func deriveApplicationCatalog(cfg *Config) error {
-	cfg.ApplicationCatalog = applications.Catalog{}
-	b, err := cfg.metadataBundle()
-	if err != nil {
-		return err
-	}
-	if err := yaml.Unmarshal(b.Applications.Raw, &cfg.ApplicationCatalog); err != nil {
-		return err
 	}
 	return nil
 }
@@ -547,10 +526,6 @@ func (c Config) Validate() error {
 		}
 		if strings.Trim(strings.TrimSpace(c.VideoLibraryObjectPrefix), "/") == "" {
 			errs = append(errs, "videoLibraryObjectPrefix must not be empty when the video capability is enabled")
-		}
-		projectionDir := strings.TrimSpace(c.VideoLibraryProjectionDir)
-		if !filepath.IsAbs(projectionDir) || filepath.Clean(projectionDir) == "/" {
-			errs = append(errs, "videoLibraryProjectionDir must be an absolute non-root path when the video capability is enabled")
 		}
 		if c.VideoTransferTimeout <= 0 {
 			errs = append(errs, "videoTransferTimeout must be positive when the video capability is enabled")
@@ -699,7 +674,7 @@ func (c *Config) LoadMetadata() error {
 		}
 		c.Metadata = b
 	}
-	return deriveApplicationCatalog(c)
+	return nil
 }
 
 func (c Config) metadataBundle() (*metadatabundle.Bundle, error) {
