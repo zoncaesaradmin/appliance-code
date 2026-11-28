@@ -74,6 +74,26 @@ func (s snapshotBlobStore) Put(ctx context.Context, key string, body io.Reader, 
 	return geodata.SnapshotObject{Key: object.Key, Size: object.Size}, nil
 }
 
+func (s snapshotBlobStore) List(ctx context.Context, prefix string) ([]string, error) {
+	result, err := s.client.ListAll(ctx, strings.Trim(prefix, "/")+"/")
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(result.Objects))
+	for _, object := range result.Objects {
+		keys = append(keys, object.Key)
+	}
+	return keys, nil
+}
+
+func (s snapshotBlobStore) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	response, _, err := s.client.Get(ctx, key, "")
+	if err != nil {
+		return nil, err
+	}
+	return response.Body, nil
+}
+
 func snapshotStoreFromEnv() (geodata.SnapshotObjectStore, string, error) {
 	endpoint := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_ENDPOINT"))
 	bucket := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_BUCKET"))

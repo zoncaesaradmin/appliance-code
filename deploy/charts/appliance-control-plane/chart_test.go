@@ -1009,6 +1009,10 @@ func TestGeoTokenIsPreparedForAceSystemBeforeGeoWorkload(t *testing.T) {
 	if !strings.Contains(geoPostgresContainers, "ALTER ROLE") || !strings.Contains(geoPostgresContainers, "$POSTGRES_USER") || !strings.Contains(geoPostgresContainers, "PASSWORD") {
 		t.Fatal("Geo PostgreSQL must reconcile the persisted role password on startup")
 	}
+	migrations := findByKindAndName(appsDocs, "ConfigMap", "geo-migrations")
+	if migrations == nil || !strings.Contains(fmt.Sprint(at(migrations, "data", "migrations.sql")), "api.import_zones") {
+		t.Fatal("Geo migrations must provide the shared snapshot import function")
+	}
 }
 
 func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {

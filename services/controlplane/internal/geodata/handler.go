@@ -4,19 +4,19 @@
 package geodata
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"compress/gzip"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
+
+	"appliance-code/sdk/golang/geosnapshot"
 )
 
 const InternalAuthHeader = "X-Appliance-Internal-Auth"
@@ -40,26 +40,13 @@ type Store interface {
 // snapshots. The concrete implementation is the appliance's S3-compatible
 // blob client; keeping this interface here makes the export atomic and easy to
 // test without coupling the Geo API to a storage implementation.
-type SnapshotObjectStore interface {
-	Put(context.Context, string, io.Reader, int64, string) (SnapshotObject, error)
-}
+type SnapshotObjectStore = geosnapshot.Store
+type SnapshotObject = geosnapshot.SnapshotObject
+type SnapshotExport = geosnapshot.Manifest
 
-type SnapshotObject struct {
-	Key  string
-	Size int64
-}
-
-type SnapshotExport struct {
-	SchemaVersion    int    `json:"schemaVersion"`
-	SnapshotID       string `json:"snapshotId"`
-	ExportedAt       string `json:"exportedAt"`
-	ZoneCount        int    `json:"zoneCount"`
-	ContentKey       string `json:"contentKey"`
-	ManifestKey      string `json:"manifestKey"`
-	CurrentKey       string `json:"currentKey"`
-	ContentSHA256    string `json:"contentSha256"`
-	ContentBytes     int64  `json:"contentBytes"`
-	CompressedBytes  int64  `json:"compressedBytes"`
+type SnapshotList struct {
+	Prefix    string           `json:"prefix"`
+	Snapshots []SnapshotExport `json:"snapshots"`
 }
 
 func NewHandler(store Store, internalToken string) (http.Handler, error) {
@@ -70,8 +57,11 @@ func NewHandlerWithSnapshotStore(store Store, internalToken string, snapshots Sn
 	if store == nil || strings.TrimSpace(internalToken) == "" {
 		return nil, errors.New("geo data store and internal token are required")
 	}
-	if snapshots != nil && strings.Trim(strings.TrimSpace(snapshotPrefix), "/") == "" {
-		snapshotPrefix = "geo/zones"
+	if snapshots != nil {
+		snapshotPrefix = strings.Trim(strings.TrimSpace(snapshotPrefix), "/")
+		if snapshotPrefix == "" {
+			snapshotPrefix = "geo/zones"
+		}
 	}
 	expected := sha256.Sum256([]byte(internalToken))
 	mux := http.NewServeMux()
@@ -101,6 +91,19 @@ func NewHandlerWithSnapshotStore(store Store, internalToken string, snapshots Sn
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(zones)
+	}))
+	mux.HandleFunc("GET /api/v1/geo/snapshots", protect(func(w http.ResponseWriter, r *http.Request) {
+		if snapshots == nil {
+			http.Error(w, "snapshot export is not configured", http.StatusServiceUnavailable)
+			return
+		}
+		list, err := listSnapshots(r.Context(), snapshots, snapshotPrefix)
+		if err != nil {
+			http.Error(w, "could not list zone snapshots", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(list)
 	}))
 	mux.HandleFunc("POST /api/v1/geo/snapshots/export", protect(func(w http.ResponseWriter, r *http.Request) {
 		if snapshots == nil {
@@ -148,60 +151,48 @@ func exportSnapshot(ctx context.Context, store Store, snapshots SnapshotObjectSt
 	if err != nil {
 		return SnapshotExport{}, err
 	}
-	var collection struct {
-		Type     string            `json:"type"`
-		Features []json.RawMessage `json:"features"`
-	}
-	if err := json.Unmarshal(content, &collection); err != nil || collection.Type != "FeatureCollection" || collection.Features == nil {
-		return SnapshotExport{}, fmt.Errorf("invalid zone export")
-	}
-	content = bytes.TrimSpace(content)
-	digest := sha256.Sum256(content)
-	digestHex := hex.EncodeToString(digest[:])
-	exportedAt := now().UTC()
-	snapshotID := exportedAt.Format("20060102T150405Z") + "-" + digestHex[:16]
-	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
-	base := prefix + "/" + snapshotID
-	contentKey := base + ".geojson.gz"
-	manifestKey := base + ".manifest.json"
-	currentKey := prefix + "/current.json"
+	return geosnapshot.Write(ctx, snapshots, prefix, content, now())
+}
 
-	var compressed bytes.Buffer
-	writer := gzip.NewWriter(&compressed)
-	if _, err := writer.Write(content); err != nil {
-		return SnapshotExport{}, fmt.Errorf("compress zone export: %w", err)
-	}
-	if err := writer.Close(); err != nil {
-		return SnapshotExport{}, fmt.Errorf("finish zone export compression: %w", err)
-	}
-	if _, err := snapshots.Put(ctx, contentKey, bytes.NewReader(compressed.Bytes()), int64(compressed.Len()), "application/geo+json"); err != nil {
-		return SnapshotExport{}, fmt.Errorf("upload zone snapshot: %w", err)
-	}
-	result := SnapshotExport{
-		SchemaVersion:   1,
-		SnapshotID:      snapshotID,
-		ExportedAt:      exportedAt.Format(time.RFC3339Nano),
-		ZoneCount:       len(collection.Features),
-		ContentKey:      contentKey,
-		ManifestKey:     manifestKey,
-		CurrentKey:      currentKey,
-		ContentSHA256:   digestHex,
-		ContentBytes:    int64(len(content)),
-		CompressedBytes: int64(compressed.Len()),
-	}
-	manifest, err := json.MarshalIndent(result, "", "  ")
+func listSnapshots(ctx context.Context, snapshots SnapshotObjectStore, prefix string) (SnapshotList, error) {
+	keys, err := snapshots.List(ctx, prefix)
 	if err != nil {
-		return SnapshotExport{}, fmt.Errorf("encode zone snapshot manifest: %w", err)
+		return SnapshotList{}, fmt.Errorf("list snapshot objects: %w", err)
 	}
-	if _, err := snapshots.Put(ctx, manifestKey, bytes.NewReader(manifest), int64(len(manifest)), "application/json"); err != nil {
-		return SnapshotExport{}, fmt.Errorf("upload zone snapshot manifest: %w", err)
+	result := SnapshotList{Prefix: prefix, Snapshots: make([]SnapshotExport, 0)}
+	for _, key := range keys {
+		if !strings.HasSuffix(key, ".manifest.json") {
+			continue
+		}
+		body, err := snapshots.Get(ctx, key)
+		if err != nil {
+			return SnapshotList{}, fmt.Errorf("read snapshot manifest: %w", err)
+		}
+		payload, readErr := io.ReadAll(io.LimitReader(body, 1<<20+1))
+		closeErr := body.Close()
+		if readErr != nil {
+			return SnapshotList{}, fmt.Errorf("read snapshot manifest: %w", readErr)
+		}
+		if closeErr != nil {
+			return SnapshotList{}, fmt.Errorf("close snapshot manifest: %w", closeErr)
+		}
+		if len(payload) > 1<<20 {
+			return SnapshotList{}, errors.New("snapshot manifest is too large")
+		}
+		var snapshot SnapshotExport
+		if err := json.Unmarshal(payload, &snapshot); err != nil {
+			return SnapshotList{}, fmt.Errorf("decode snapshot manifest: %w", err)
+		}
+		if snapshot.SchemaVersion != 1 || snapshot.SnapshotID == "" || snapshot.ContentKey == "" || snapshot.ManifestKey != key {
+			return SnapshotList{}, fmt.Errorf("invalid snapshot manifest %q", key)
+		}
+		result.Snapshots = append(result.Snapshots, snapshot)
 	}
-	current, err := json.Marshal(result)
-	if err != nil {
-		return SnapshotExport{}, fmt.Errorf("encode current zone snapshot pointer: %w", err)
-	}
-	if _, err := snapshots.Put(ctx, currentKey, bytes.NewReader(current), int64(len(current)), "application/json"); err != nil {
-		return SnapshotExport{}, fmt.Errorf("publish current zone snapshot: %w", err)
-	}
+	sort.Slice(result.Snapshots, func(i, j int) bool {
+		if result.Snapshots[i].ExportedAt == result.Snapshots[j].ExportedAt {
+			return result.Snapshots[i].SnapshotID > result.Snapshots[j].SnapshotID
+		}
+		return result.Snapshots[i].ExportedAt > result.Snapshots[j].ExportedAt
+	})
 	return result, nil
 }

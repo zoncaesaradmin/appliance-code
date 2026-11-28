@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -50,6 +51,22 @@ func (s *fakeSnapshotStore) Put(_ context.Context, key string, body io.Reader, s
 	s.objects[key] = content
 	s.contentType[key] = contentType
 	return SnapshotObject{Key: key, Size: size}, nil
+}
+
+func (s *fakeSnapshotStore) List(_ context.Context, _ string) ([]string, error) {
+	keys := make([]string, 0, len(s.objects))
+	for key := range s.objects {
+		keys = append(keys, key)
+	}
+	return keys, nil
+}
+
+func (s *fakeSnapshotStore) Get(_ context.Context, key string) (io.ReadCloser, error) {
+	content, ok := s.objects[key]
+	if !ok {
+		return nil, errors.New("object not found")
+	}
+	return io.NopCloser(bytes.NewReader(content)), nil
 }
 
 func TestEditorEndpointsRequireInternalAuthentication(t *testing.T) {
@@ -150,6 +167,20 @@ func TestSnapshotExportPublishesVerifiableCurrentSnapshot(t *testing.T) {
 	if current != result {
 		t.Fatalf("current pointer %+v does not match response %+v", current, result)
 	}
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/geo/snapshots", nil)
+	listReq.Header.Set(InternalAuthHeader, "test-internal-token")
+	listRec := httptest.NewRecorder()
+	h.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status %d, want %d", listRec.Code, http.StatusOK)
+	}
+	var listed SnapshotList
+	if err := json.NewDecoder(listRec.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Snapshots) != 1 || listed.Snapshots[0] != result {
+		t.Fatalf("listed snapshots %+v, want %+v", listed.Snapshots, result)
+	}
 }
 
 func TestSnapshotExportRequiresStorageConfiguration(t *testing.T) {
@@ -163,5 +194,12 @@ func TestSnapshotExportRequiresStorageConfiguration(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/geo/snapshots", nil)
+	listReq.Header.Set(InternalAuthHeader, "test-internal-token")
+	listRec := httptest.NewRecorder()
+	h.ServeHTTP(listRec, listReq)
+	if listRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("list status %d, want %d", listRec.Code, http.StatusServiceUnavailable)
 	}
 }

@@ -43,7 +43,38 @@ END $$;
 CREATE OR REPLACE FUNCTION api.export_zones() RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT jsonb_build_object('type','FeatureCollection','features',COALESCE(jsonb_agg(jsonb_build_object('type','Feature','id',z.id,'geometry',ST_AsGeoJSON(z.boundary)::jsonb,'properties',jsonb_build_object('name',z.name,'description',z.description,'revision',z.revision,'area_sq_m',ST_Area(z.boundary::geography),'perimeter_m',ST_Perimeter(z.boundary::geography)) ) ORDER BY z.name,z.id),'[]'::jsonb)) FROM public.zones z;
 $$;
+CREATE OR REPLACE FUNCTION api.import_zones(p_zones jsonb)
+RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE item jsonb; shape geometry; imported integer := 0;
+BEGIN
+  IF p_zones IS NULL OR jsonb_typeof(p_zones) <> 'array' THEN
+    RAISE EXCEPTION 'Zone snapshot must be an array of at most 10000 zones';
+  END IF;
+  IF jsonb_array_length(p_zones) > 10000 THEN
+    RAISE EXCEPTION 'Zone snapshot must be an array of at most 10000 zones';
+  END IF;
+  DELETE FROM public.zones;
+  FOR item IN SELECT value FROM jsonb_array_elements(p_zones) LOOP
+    IF item->>'id' IS NULL OR trim(item->>'name') = '' THEN
+      RAISE EXCEPTION 'Zone snapshot contains a missing ID or name';
+    END IF;
+    IF item->'geometry'->>'type' NOT IN ('Polygon', 'MultiPolygon') THEN
+      RAISE EXCEPTION 'Zone snapshot contains an unsupported geometry';
+    END IF;
+    shape := ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(item->'geometry'),4326));
+    IF ST_NDims(shape) <> 2 OR ST_IsEmpty(shape) OR NOT ST_IsValid(shape) OR ST_NPoints(shape) > 10000 THEN
+      RAISE EXCEPTION 'Invalid boundary in zone snapshot: %', ST_IsValidReason(shape);
+    END IF;
+    IF ST_XMin(shape) < -180 OR ST_XMax(shape) > 180 OR ST_YMin(shape) < -90 OR ST_YMax(shape) > 90 THEN
+      RAISE EXCEPTION 'Zone snapshot coordinates are out of range';
+    END IF;
+    INSERT INTO public.zones(id, name, description, boundary, revision)
+      VALUES ((item->>'id')::uuid, trim(item->>'name'), coalesce(item->>'description',''), shape, greatest(coalesce((item->>'revision')::integer,1),1));
+    imported := imported + 1;
+  END LOOP;
+  RETURN imported;
+END $$;
 GRANT USAGE ON SCHEMA api TO geo;
 GRANT SELECT ON api.zones, public.zones TO geo;
-GRANT EXECUTE ON FUNCTION api.save_zone(text,text,jsonb,uuid,integer), api.export_zones() TO geo;
+GRANT EXECUTE ON FUNCTION api.save_zone(text,text,jsonb,uuid,integer), api.export_zones(), api.import_zones(jsonb) TO geo;
 INSERT INTO public.zone_schema_migrations(version) VALUES ('001_init.sql'), ('002_export.sql'), ('003_access.sql'), ('004_migration_history.sql') ON CONFLICT DO NOTHING;

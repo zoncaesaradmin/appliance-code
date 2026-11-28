@@ -11,6 +11,14 @@
 {{- $dbPassword := "" -}}
 {{- if $existingDB }}{{ $dbPassword = index $existingDB.data "password" }}{{ else }}{{ $dbPassword = randAlphaNum 32 | b64enc }}{{ end }}
 {{- $dsn := printf "postgresql://%s:%s@%s.%s.svc.cluster.local:5432/%s?sslmode=disable" .Values.geo.postgres.username (b64dec $dbPassword) .Values.geo.postgres.serviceName $ns .Values.geo.postgres.databaseName -}}
+{{- $snapshotEndpoint := "" -}}
+{{- $snapshotBucket := "" -}}
+{{- $snapshotCredentials := "" -}}
+{{- if .Values.geo.snapshot.enabled }}
+{{- $snapshotEndpoint = required "geo.snapshot.endpoint is required when geo.snapshot.enabled" .Values.geo.snapshot.endpoint -}}
+{{- $snapshotBucket = required "geo.snapshot.bucket is required when geo.snapshot.enabled" .Values.geo.snapshot.bucket -}}
+{{- $snapshotCredentials = required "geo.snapshot.credentialsSecretName is required when geo.snapshot.enabled" .Values.geo.snapshot.credentialsSecretName -}}
+{{- end }}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -178,6 +186,14 @@ spec:
             - {name: GEO_DATABASE_URL_FILE, value: /var/run/appliance/geo/database-url}
             - {name: GEO_INTERNAL_TOKEN_FILE, value: /var/run/appliance/geo/token}
             - {name: GEO_LOG_PATH, value: /var/log/geo-data-api/application.log}
+            {{- if .Values.geo.snapshot.enabled }}
+            - {name: GEO_SNAPSHOT_STORAGE_ENDPOINT, value: {{ $snapshotEndpoint | quote }}}
+            - {name: GEO_SNAPSHOT_STORAGE_BUCKET, value: {{ $snapshotBucket | quote }}}
+            - {name: GEO_SNAPSHOT_STORAGE_REGION, value: {{ .Values.geo.snapshot.region | quote }}}
+            - {name: GEO_SNAPSHOT_STORAGE_PREFIX, value: {{ .Values.geo.snapshot.prefix | quote }}}
+            - {name: GEO_SNAPSHOT_STORAGE_ACCESS_KEY_FILE, value: /var/run/appliance/geo/snapshot/access-key}
+            - {name: GEO_SNAPSHOT_STORAGE_SECRET_KEY_FILE, value: /var/run/appliance/geo/snapshot/secret-key}
+            {{- end }}
           securityContext: {{- toYaml .Values.geo.api.containerSecurityContext | nindent 12 }}
           readinessProbe: {httpGet: {path: /health/ready, port: http}, periodSeconds: 10}
           livenessProbe: {httpGet: {path: /health/live, port: http}, periodSeconds: 20}
@@ -187,10 +203,18 @@ spec:
             - {name: geo-token, mountPath: /var/run/appliance/geo/token, subPath: token, readOnly: true}
             - {name: tmp, mountPath: /tmp}
             - {name: logs, mountPath: /var/log/geo-data-api}
+            {{- if .Values.geo.snapshot.enabled }}
+            - {name: geo-snapshot-access-key, mountPath: /var/run/appliance/geo/snapshot/access-key, subPath: accessKey, readOnly: true}
+            - {name: geo-snapshot-secret-key, mountPath: /var/run/appliance/geo/snapshot/secret-key, subPath: secretKey, readOnly: true}
+            {{- end }}
       volumes:
         - {name: geo-database, secret: {secretName: {{ .Values.geo.postgres.credentialsSecretName }}, defaultMode: 0440}}
         - {name: geo-token, secret: {secretName: {{ .Values.geo.internalAuthSecretName }}, defaultMode: 0440}}
         - {name: migrations, configMap: {name: geo-migrations, defaultMode: 0440}}
         - {name: tmp, emptyDir: {}}
         - {name: logs, hostPath: {path: /data/zon/logs/geo-data-api, type: Directory}}
+        {{- if .Values.geo.snapshot.enabled }}
+        - {name: geo-snapshot-access-key, secret: {secretName: {{ $snapshotCredentials }}, items: [{key: accessKey, path: accessKey}], defaultMode: 0440}}
+        - {name: geo-snapshot-secret-key, secret: {secretName: {{ $snapshotCredentials }}, items: [{key: secretKey, path: secretKey}], defaultMode: 0440}}
+        {{- end }}
 {{- end }}

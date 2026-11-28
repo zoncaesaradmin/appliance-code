@@ -3,6 +3,7 @@ module appliance-code/services/controlplane
 go 1.26.0
 
 require (
+	appliance-code/sdk/golang/geosnapshot v0.0.0-00010101000000-000000000000
 	appliance-code/sdk/golang/servicehealth v0.0.0-00010101000000-000000000000
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
@@ -14,6 +15,8 @@ require (
 )
 
 replace appliance-code/sdk/golang/servicehealth => ../../sdk/golang/servicehealth
+
+replace appliance-code/sdk/golang/geosnapshot => ../../sdk/golang/geosnapshot
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"appliance-code/sdk/golang/geosnapshot"
 )
 
 // PostgresStore uses the Zone Studio API view and save function. The compatible
@@ -44,6 +46,10 @@ func (s PostgresStore) Export(ctx context.Context) (json.RawMessage, error) {
 		return nil, fmt.Errorf("export zones: %w", err)
 	}
 	return json.RawMessage(result), nil
+}
+
+func (s PostgresStore) ReplaceZones(ctx context.Context, zones []geosnapshot.Zone) (int, error) {
+	return geosnapshot.PostgresLoader{DB: s.DB}.ReplaceZones(ctx, zones)
 }
 
 func (s PostgresStore) Save(ctx context.Context, request SaveRequest) (string, error) {
