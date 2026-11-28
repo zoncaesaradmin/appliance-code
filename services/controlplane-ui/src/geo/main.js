@@ -53,7 +53,7 @@ function showLocation(lat, lon) {
     locationMarker.getElement().setAttribute('title', 'Selected location');
   }
   locationMarker.setLngLat([lon, lat]).addTo(map);
-  map.flyTo({center:[lon, lat], zoom:14});
+  map.flyTo({center:[lon, lat], zoom:15});
 }
 map.on('load', () => {
   draw = new TerraDraw({adapter:new TerraDrawMapLibreGLAdapter({map}),modes:[new TerraDrawPolygonMode(),new TerraDrawSelectMode({flags:{polygon:{feature:{draggable:true,coordinates:{draggable:true,midpoints:true,deletable:true}}}}})]});
