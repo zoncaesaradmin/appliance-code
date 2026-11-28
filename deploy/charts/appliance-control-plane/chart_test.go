@@ -956,6 +956,36 @@ func TestBlobStorageBelongsToAceInfraRolloutOnly(t *testing.T) {
 	}
 }
 
+func TestGeoTokenIsPreparedForAceSystemBeforeGeoWorkload(t *testing.T) {
+	args := append(defaultRenderArgs(),
+		"--set", "geo.enabled=true",
+		"--set", "geo.postgres.image.digest=sha256:"+strings.Repeat("a", 64),
+		"--set", "rollout.aceInfra.enabled=false",
+		"--set", "rollout.aceSystem.enabled=true",
+		"--set", "rollout.aceApps.enabled=false",
+		"--set", "rollout.dnsSupport.enabled=false",
+	)
+	docs := renderChart(t, args...)
+	secret := findByKindAndName(docs, "Secret", "geo-internal-auth")
+	if secret == nil {
+		t.Fatal("ace-system rollout must create the Geo token Secret")
+	}
+	if namespace, _ := at(secret, "metadata", "namespace").(string); namespace != "appliance" {
+		t.Fatalf("Geo token Secret namespace = %q, want appliance", namespace)
+	}
+	dep := findByKindAndName(docs, "Deployment", controlPlaneDeploymentName)
+	if dep == nil {
+		t.Fatal("expected control-plane Deployment")
+	}
+	if !strings.Contains(fmt.Sprint(at(dep, "spec", "template", "spec", "containers")), "geo-internal-token") {
+		t.Fatal("ace-system control-plane must mount the Geo token")
+	}
+	config := findByKindAndName(docs, "ConfigMap", controlPlaneConfigMapName)
+	if config == nil || at(config, "data", "APPLIANCE_GEO_INTERNAL_TOKEN_FILE") != "/var/run/appliance/geo/token" {
+		t.Fatal("ace-system control-plane must receive the Geo token file path")
+	}
+}
+
 func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
 	docs := renderChart(t, append(defaultRenderArgs(),
 		"--set", "rollout.aceInfra.enabled=false",

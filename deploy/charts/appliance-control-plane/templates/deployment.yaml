@@ -121,7 +121,7 @@ spec:
               mountPath: /var/run/appliance/bootstrap-configuration
               readOnly: true
             {{- end }}
-            {{- if and .Values.geo.enabled (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") }}
+            {{- if and .Values.geo.enabled (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") }}
             - name: geo-internal-token
               mountPath: {{ .Values.geo.internalTokenMountPath | quote }}
               subPath: token
@@ -167,7 +167,7 @@ spec:
               - key: payload.json
                 path: payload.json
         {{- end }}
-        {{- if and .Values.geo.enabled (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") }}
+        {{- if and .Values.geo.enabled (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") }}
         - name: geo-internal-token
           secret:
             secretName: {{ .Values.geo.internalAuthSecretName }}

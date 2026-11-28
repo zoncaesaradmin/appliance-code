@@ -17,7 +17,9 @@ data:
   APPLIANCE_ARTIFACT_SERVER_BASE_URL: {{ .Values.config.artifactServerBaseURL | quote }}
   APPLIANCE_ARTIFACT_SERVER_ALLOW_FAKE: {{ .Values.config.artifactServerAllowFake | quote }}
   APPLIANCE_SERVICE_REGISTRY_JSON: {{ .Values.config.serviceRegistry | default dict | toJson | quote }}
-  APPLIANCE_GEO_INTERNAL_TOKEN_FILE: {{ if and .Values.geo.enabled (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") }}{{ .Values.geo.internalTokenMountPath | quote }}{{ else }}""{{ end }}
+  # The control plane starts in the ace-system rollout before Geo's own
+  # workload is applied. Its proxy still needs the shared token at startup.
+  APPLIANCE_GEO_INTERNAL_TOKEN_FILE: {{ if and .Values.geo.enabled (eq (include "appliance-control-plane.aceSystemEnabled" .) "true") }}{{ .Values.geo.internalTokenMountPath | quote }}{{ else }}""{{ end }}
   APPLIANCE_FILES_OBJECT_PREFIX: {{ .Values.files.objectPrefix | quote }}
   APPLIANCE_FILES_MAX_UPLOAD_BYTES: {{ printf "%s" .Values.files.maxUploadBytes | quote }}
   APPLIANCE_FILES_TRANSFER_TIMEOUT: {{ .Values.files.transferTimeout | quote }}
