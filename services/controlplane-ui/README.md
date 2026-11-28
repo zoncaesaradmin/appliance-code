@@ -24,7 +24,7 @@ The Go host serves:
 - `/app` and `/app/login` for the Zonited application workspace
 - `/geo` and `/geo/login` for the Geo-Zone employee workspace
 - immutable files under `/assets/`
-- `/manifest.webmanifest`, `/icon.svg`, and the static-shell service worker
+- `/manifest.webmanifest`, `/favicon-32.png`, `/favicon-16.png`, `/apple-touch-icon.png`, and the static-shell service worker
   used by the installable Zonited PWA. The worker never caches `/api/`, health,
   version, or authentication responses.
 - `/health/live`

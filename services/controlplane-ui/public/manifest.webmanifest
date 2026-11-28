@@ -9,6 +9,18 @@
   "theme_color": "#7F1D3D",
   "icons": [
     {
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/zonited-logo-square.png",
       "sizes": "1254x1254",
       "type": "image/png",
