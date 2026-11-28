@@ -13,9 +13,13 @@ metadata:
   name: {{ $ns }}
   labels:
     app.kubernetes.io/part-of: zon-appliance
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
+    # Geo exposes its application log through a hostPath so operators can
+    # inspect /data/zon/logs/geo-data-api. That documented host-visible
+    # storage interface requires the namespace-level PSA exception; the
+    # workloads themselves still run non-root with all capabilities dropped.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
 ---
 apiVersion: v1
 kind: Secret

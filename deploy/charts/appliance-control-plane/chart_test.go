@@ -984,6 +984,23 @@ func TestGeoTokenIsPreparedForAceSystemBeforeGeoWorkload(t *testing.T) {
 	if config == nil || at(config, "data", "APPLIANCE_GEO_INTERNAL_TOKEN_FILE") != "/var/run/appliance/geo/token" {
 		t.Fatal("ace-system control-plane must receive the Geo token file path")
 	}
+
+	appsDocs := renderChart(t, append(defaultRenderArgs(),
+		"--set", "geo.enabled=true",
+		"--set", "geo.postgres.image.digest=sha256:"+strings.Repeat("a", 64),
+		"--set", "rollout.aceInfra.enabled=false",
+		"--set", "rollout.aceSystem.enabled=false",
+		"--set", "rollout.aceApps.enabled=true",
+		"--set", "rollout.dnsSupport.enabled=false",
+	)...)
+	geoNamespace := findByKindAndName(appsDocs, "Namespace", "geo")
+	if geoNamespace == nil || at(geoNamespace, "metadata", "labels", "pod-security.kubernetes.io/enforce") != "privileged" {
+		t.Fatal("Geo namespace must declare the privileged PSA exception for its host-visible log mount")
+	}
+	geoDeployment := findByKindAndName(appsDocs, "Deployment", "geo-data-api")
+	if geoDeployment == nil || !strings.Contains(fmt.Sprint(at(geoDeployment, "spec", "template", "spec", "volumes")), "/data/zon/logs/geo-data-api") {
+		t.Fatal("Geo data API must retain its host-visible log mount")
+	}
 }
 
 func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
