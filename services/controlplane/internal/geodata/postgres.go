@@ -35,6 +35,17 @@ func (s PostgresStore) List(ctx context.Context) (json.RawMessage, error) {
 	return json.RawMessage(result), nil
 }
 
+func (s PostgresStore) Export(ctx context.Context) (json.RawMessage, error) {
+	if s.DB == nil {
+		return nil, errors.New("geo database is required")
+	}
+	var result []byte
+	if err := s.DB.QueryRowContext(ctx, `SELECT api.export_zones()`).Scan(&result); err != nil {
+		return nil, fmt.Errorf("export zones: %w", err)
+	}
+	return json.RawMessage(result), nil
+}
+
 func (s PostgresStore) Save(ctx context.Context, request SaveRequest) (string, error) {
 	if s.DB == nil {
 		return "", errors.New("geo database is required")

@@ -263,6 +263,18 @@ geo:
       readOnlyRootFilesystem: true
       capabilities:
         drop: ["ALL"]
+  # Optional operator-directed export target. When enabled, the Geo API writes
+  # immutable gzip GeoJSON snapshots and a current.json pointer to this
+  # S3-compatible bucket. The credentials Secret must already exist in the Geo
+  # namespace with accessKey and secretKey keys; no credentials are generated
+  # or logged by the chart.
+  snapshot:
+    enabled: false
+    endpoint: ""
+    bucket: ""
+    region: us-east-1
+    prefix: geo/zones
+    credentialsSecretName: ""
 
 files:
   # Logical object prefix for the files capability (/api/v1/files). Content

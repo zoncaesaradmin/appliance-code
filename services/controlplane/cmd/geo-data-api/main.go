@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"appliance-code/services/controlplane/internal/blobstore"
 	"appliance-code/services/controlplane/internal/geodata"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -61,12 +62,72 @@ func secretFile(env string) (string, error) {
 	return value, nil
 }
 
+type snapshotBlobStore struct{ client *blobstore.Client }
+
+var _ geodata.SnapshotObjectStore = snapshotBlobStore{}
+
+func (s snapshotBlobStore) Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) (geodata.SnapshotObject, error) {
+	object, err := s.client.Put(ctx, key, body, size, contentType)
+	if err != nil {
+		return geodata.SnapshotObject{}, err
+	}
+	return geodata.SnapshotObject{Key: object.Key, Size: object.Size}, nil
+}
+
+func snapshotStoreFromEnv() (geodata.SnapshotObjectStore, string, error) {
+	endpoint := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_ENDPOINT"))
+	bucket := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_BUCKET"))
+	region := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_REGION"))
+	prefix := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_PREFIX"))
+	accessKeyFile := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_ACCESS_KEY_FILE"))
+	secretKeyFile := strings.TrimSpace(os.Getenv("GEO_SNAPSHOT_STORAGE_SECRET_KEY_FILE"))
+	configured := endpoint != "" || bucket != "" || region != "" || prefix != "" || accessKeyFile != "" || secretKeyFile != ""
+	if !configured {
+		return nil, "", nil
+	}
+	if endpoint == "" || bucket == "" || accessKeyFile == "" || secretKeyFile == "" {
+		return nil, "", errors.New("geo snapshot storage requires endpoint, bucket, access key file, and secret key file")
+	}
+	accessKey, err := readSecretPath(accessKeyFile, "GEO_SNAPSHOT_STORAGE_ACCESS_KEY_FILE")
+	if err != nil {
+		return nil, "", err
+	}
+	secretKey, err := readSecretPath(secretKeyFile, "GEO_SNAPSHOT_STORAGE_SECRET_KEY_FILE")
+	if err != nil {
+		return nil, "", err
+	}
+	client, err := blobstore.New(endpoint, bucket, accessKey, secretKey, region)
+	if err != nil {
+		return nil, "", fmt.Errorf("configure geo snapshot storage: %w", err)
+	}
+	if prefix == "" {
+		prefix = "geo/zones"
+	}
+	return snapshotBlobStore{client: client}, prefix, nil
+}
+
+func readSecretPath(path, label string) (string, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", label, err)
+	}
+	value := strings.TrimSpace(string(content))
+	if value == "" {
+		return "", fmt.Errorf("%s is empty", label)
+	}
+	return value, nil
+}
+
 func run() error {
 	databaseURL, err := secretFile("GEO_DATABASE_URL_FILE")
 	if err != nil {
 		return err
 	}
 	token, err := secretFile("GEO_INTERNAL_TOKEN_FILE")
+	if err != nil {
+		return err
+	}
+	snapshotStore, snapshotPrefix, err := snapshotStoreFromEnv()
 	if err != nil {
 		return err
 	}
@@ -78,7 +139,7 @@ func run() error {
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(2)
 	db.SetConnMaxIdleTime(2 * time.Minute)
-	handler, err := geodata.NewHandler(geodata.PostgresStore{DB: db}, token)
+	handler, err := geodata.NewHandlerWithSnapshotStore(geodata.PostgresStore{DB: db}, token, snapshotStore, snapshotPrefix)
 	if err != nil {
 		return err
 	}
