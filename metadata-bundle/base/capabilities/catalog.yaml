@@ -155,11 +155,7 @@ capabilities:
     license:
       requiredEntitlement: zon.capabilities.geo-spatial-store
     artifacts:
-      # Runtime artifacts are added with the Geo-Zone service implementation.
-      # Keeping this capability in the signed catalog now establishes the
-      # dependency/entitlement seam without making the installer guess at
-      # unverified images.
-      required: []
+      required: [postgis-image]
   geo-data-api:
     displayName: Geo Data API
     requires: [base, application-auth, geo-spatial-store]

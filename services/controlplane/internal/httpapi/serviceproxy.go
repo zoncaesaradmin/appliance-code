@@ -105,6 +105,9 @@ func newServiceProxyHandler(logger logging.Logger, recorder *audit.Recorder, reg
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(target)
 			upstreamPath := route.UpstreamPath
+			if strings.Contains(upstreamPath, "{path...}") {
+				upstreamPath = strings.ReplaceAll(upstreamPath, "{path...}", pr.In.PathValue("path"))
+			}
 			if id := pr.In.PathValue("id"); id != "" {
 				upstreamPath = strings.ReplaceAll(upstreamPath, "{id}", url.PathEscape(id))
 			}

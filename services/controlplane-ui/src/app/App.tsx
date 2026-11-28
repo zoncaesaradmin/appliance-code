@@ -11,6 +11,8 @@ import {
   defaultLoginPath,
   isApplicationEntryPath,
   isApplicationPath,
+  isGeoEntryPath,
+  isGeoPath,
   loginDestination,
   workspaceForPath
 } from "../lib/workspace";
@@ -46,7 +48,7 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    document.title = isApplicationPath(location.pathname) || isApplicationEntryPath(location.pathname, shellState.profile)
+    document.title = isApplicationPath(location.pathname) || isApplicationEntryPath(location.pathname, shellState.profile) || isGeoEntryPath(location.pathname, shellState.profile) || isGeoPath(location.pathname)
       ? "Zonited"
       : "Zon Appliance";
   }, [location.pathname, shellState.profile]);
@@ -140,6 +142,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const pathname = location.pathname;
     const applicationPath = isApplicationPath(pathname) || isApplicationEntryPath(pathname, shellState.profile);
+    const geoPath = isGeoPath(pathname) || isGeoEntryPath(pathname, shellState.profile);
     const discoveryPath = pathname === "/app/discover" && new URLSearchParams(location.search).get("token") !== null;
     if (shellState.booting) {
       return;
@@ -160,7 +163,7 @@ export function App(): React.JSX.Element {
       navigate(defaultLoginPath(shellState.profile), true);
       return;
     }
-    if (shellState.initialized && !shellState.session && !applicationAuthenticated && !discoveryPath && pathname !== "/console/login" && pathname !== "/app/login") {
+    if (shellState.initialized && !shellState.session && !applicationAuthenticated && !discoveryPath && !geoPath && pathname !== "/console/login" && pathname !== "/app/login") {
       const next = loginDestination(pathname, location.search, shellState.profile);
       if (isApplicationPath(pathname)) {
         navigate(`/app/login?next=${encodeURIComponent(next)}`, true);
@@ -171,7 +174,7 @@ export function App(): React.JSX.Element {
     }
     if (
       shellState.session &&
-      (pathname === "/" || pathname === "/login" || pathname === "/console/login" || pathname === "/app/login" || pathname === "/setup")
+      (pathname === "/" || pathname === "/login" || pathname === "/console/login" || pathname === "/app/login" || pathname === "/geo/login" || pathname === "/setup")
     ) {
       navigate(loginDestination(pathname, location.search, shellState.profile), true);
       return;

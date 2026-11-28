@@ -27,6 +27,7 @@ KNOWN_ARTIFACTS = (
     "control-plane-image",
     "control-plane-chart",
     "ui-image",
+    "postgis-image",
     "blob-storage-image",
     "message-broker-image",
     "message-broker-chart",

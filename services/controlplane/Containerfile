@@ -31,6 +31,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
               -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \
               -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \
     -o /out/appliance-action-runtime ./cmd/appliance-action-runtime
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
+    -ldflags "-X appliance-code/services/controlplane/internal/version.Version=${VERSION} \
+              -X appliance-code/services/controlplane/internal/version.Commit=${COMMIT} \
+              -X appliance-code/services/controlplane/internal/version.BuildTime=${BUILD_TIME}" \
+    -o /out/geo-data-api ./cmd/geo-data-api
 
 # Final stage: small Alpine runtime with basic operator/debug ergonomics
 # while still staying lean. We keep the runtime to a static Go binary,
@@ -64,6 +69,7 @@ RUN set -eux; \
     adduser -S -D -H -u 10001 -G appliance appliance
 COPY --from=build /out/appliance-server /appliance-server
 COPY --from=build /out/appliance-action-runtime /appliance-action-runtime
+COPY --from=build /out/geo-data-api /geo-data-api
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 0755 /usr/local/bin/entrypoint.sh
 USER 10001:10001

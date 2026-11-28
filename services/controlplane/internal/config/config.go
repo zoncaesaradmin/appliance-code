@@ -50,6 +50,7 @@ type Config struct {
 	ArtifactServerBaseURL   string                   `json:"artifactServerBaseURL"`
 	ArtifactServerAllowFake bool                     `json:"artifactServerAllowFake"`
 	ServiceRegistry         serviceregistry.Registry `json:"serviceRegistry"`
+	GeoInternalTokenFile    string                   `json:"-"`
 	FilesObjectPrefix       string                   `json:"filesObjectPrefix"`
 	FilesTransferTimeout    time.Duration            `json:"filesTransferTimeout"`
 	FilesMaxUploadBytes     int64                    `json:"filesMaxUploadBytes"`
@@ -237,6 +238,7 @@ func applyEnv(cfg *Config, env map[string]string) error {
 	str("PUBLIC_ADDR", &cfg.PublicAddr)
 	str("INTERNAL_ADDR", &cfg.InternalAddr)
 	str("DATA_DIR", &cfg.DataDir)
+	str("GEO_INTERNAL_TOKEN_FILE", &cfg.GeoInternalTokenFile)
 	str("BOOTSTRAP_CONFIGURATION_PAYLOAD_PATH", &cfg.BootstrapConfigurationPayloadPath)
 	str("DATABASE_DRIVER", &cfg.Database.Driver)
 	str("DATABASE_DSN", &cfg.Database.DSN)

@@ -70,6 +70,10 @@ class ResolvePackArtifactsTest(unittest.TestCase):
         self.assertIn("coredns-image", arts)
         self.assertIn("appliance-dns-chart", arts)
 
+    def test_geo_stack_includes_postgis(self):
+        arts = self._resolve("foundation", "geo-stack")
+        self.assertIn("postgis-image", arts)
+
     def test_shell_exports(self):
         out = subprocess.check_output(
             [

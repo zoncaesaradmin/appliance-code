@@ -71,6 +71,25 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 		services.DB.Close()
 		return nil, fmt.Errorf("reconcile persisted configuration: %w", err)
 	}
+	proxyRegistrations := httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry)
+	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameGeoDataAPI) {
+		geoToken, tokenErr := readInternalTokenFile(cfg.GeoInternalTokenFile)
+		if tokenErr != nil {
+			services.DB.Close()
+			return nil, fmt.Errorf("configure geo data API proxy: %w", tokenErr)
+		}
+		found := false
+		for i := range proxyRegistrations {
+			if proxyRegistrations[i].Name == appliance.ModuleNameGeoDataAPI {
+				proxyRegistrations[i].InternalToken = geoToken
+				found = true
+			}
+		}
+		if !found {
+			services.DB.Close()
+			return nil, errors.New("configure geo data API proxy: geo module has no service registration")
+		}
+	}
 
 	startup := &httpapi.StartupState{}
 	startup.MarkStarted()
@@ -116,7 +135,7 @@ func New(cfg config.Config, logger, processLogger logging.Logger) (*App, error) 
 			Store: services.AuditStore, Ops: services.AuditOps, CursorKey: services.Keys.CursorHMACKey,
 		},
 		MCPHandler:      mcp.NewHandler(authDeps, cfg.CanonicalOrigin),
-		ProxiedServices: append(httpapi.RegistrationsFromRegistry(cfg.ServiceRegistry), httpapi.ServiceProxyRegistration{Name: "host-agent", Capability: appliance.CapabilityHost, BaseURL: "http://host-agent.ace-apps.svc.cluster.local:8080", InternalToken: actionruntimeauth.TokenFromPepper(services.Keys.APITokenPepper), Routes: []httpapi.ServiceProxyRoute{{Method: "POST", ExternalPath: "/api/v1/system-backups", UpstreamPath: "/internal/v1/system-backups", Permission: "system.operate"}, {Method: "GET", ExternalPath: "/api/v1/system-backups/{id}", UpstreamPath: "/internal/v1/system-backups/{id}", Permission: "system.read"}, {Method: "POST", ExternalPath: "/api/v1/system-backups/{id}/restore", UpstreamPath: "/internal/v1/system-backups/{id}/restore", Permission: "system.operate"}}}),
+		ProxiedServices: append(proxyRegistrations, httpapi.ServiceProxyRegistration{Name: "host-agent", Capability: appliance.CapabilityHost, BaseURL: "http://host-agent.ace-apps.svc.cluster.local:8080", InternalToken: actionruntimeauth.TokenFromPepper(services.Keys.APITokenPepper), Routes: []httpapi.ServiceProxyRoute{{Method: "POST", ExternalPath: "/api/v1/system-backups", UpstreamPath: "/internal/v1/system-backups", Permission: "system.operate"}, {Method: "GET", ExternalPath: "/api/v1/system-backups/{id}", UpstreamPath: "/internal/v1/system-backups/{id}", Permission: "system.read"}, {Method: "POST", ExternalPath: "/api/v1/system-backups/{id}/restore", UpstreamPath: "/internal/v1/system-backups/{id}/restore", Permission: "system.operate"}}}),
 		Audit:           services.Audit,
 	}
 	if appliance.ModuleEnabled(services.Modules, appliance.ModuleNameInferenceRuntime) {

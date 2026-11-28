@@ -1,0 +1,189 @@
+{{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.geo.enabled }}
+{{- $ns := .Values.geo.namespace -}}
+{{- $existingAuth := lookup "v1" "Secret" (include "appliance-control-plane.namespace" .) .Values.geo.internalAuthSecretName -}}
+{{- $authToken := "" -}}
+{{- if $existingAuth }}{{ $authToken = index $existingAuth.data "token" }}{{ else }}{{ $authToken = randAlphaNum 64 | b64enc }}{{ end }}
+{{- $existingDB := lookup "v1" "Secret" $ns .Values.geo.postgres.credentialsSecretName -}}
+{{- $dbPassword := "" -}}
+{{- if $existingDB }}{{ $dbPassword = index $existingDB.data "password" }}{{ else }}{{ $dbPassword = randAlphaNum 32 | b64enc }}{{ end }}
+{{- $dsn := printf "postgresql://%s:%s@%s.%s.svc.cluster.local:5432/%s?sslmode=disable" .Values.geo.postgres.username (b64dec $dbPassword) .Values.geo.postgres.serviceName $ns .Values.geo.postgres.databaseName -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: zon-appliance
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.geo.internalAuthSecretName }}
+  namespace: {{ include "appliance-control-plane.namespace" . }}
+type: Opaque
+data:
+  token: {{ $authToken }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.geo.internalAuthSecretName }}
+  namespace: {{ $ns }}
+type: Opaque
+data:
+  token: {{ $authToken }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.geo.postgres.credentialsSecretName }}
+  namespace: {{ $ns }}
+type: Opaque
+data:
+  username: {{ .Values.geo.postgres.username | b64enc }}
+  password: {{ $dbPassword }}
+  dsn: {{ $dsn | b64enc }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: geo-migrations
+  namespace: {{ $ns }}
+data:
+  migrations.sql: |
+{{ .Files.Get "files/geo-migrations.sql" | indent 4 }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: geo-postgres-data
+spec:
+  capacity: {storage: {{ .Values.geo.postgres.persistence.size | quote }}}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  hostPath: {path: {{ .Values.geo.postgres.persistence.hostPath | quote }}, type: DirectoryOrCreate}
+  claimRef: {namespace: {{ $ns }}, name: {{ .Values.geo.postgres.persistence.claimName }}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.geo.postgres.persistence.claimName }}
+  namespace: {{ $ns }}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: geo-postgres-data
+  resources: {requests: {storage: {{ .Values.geo.postgres.persistence.size | quote }}}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.geo.postgres.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  selector: {app.kubernetes.io/name: geo-postgres}
+  ports: [{name: postgres, port: 5432, targetPort: postgres}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: geo-postgres
+  namespace: {{ $ns }}
+spec:
+  serviceName: {{ .Values.geo.postgres.serviceName }}
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: geo-postgres}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: geo-postgres}}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgis
+          image: {{ .Values.geo.postgres.image.repository }}@{{ .Values.geo.postgres.image.digest }}
+          imagePullPolicy: {{ .Values.geo.postgres.image.pullPolicy }}
+          env:
+            - {name: POSTGRES_DB, value: {{ .Values.geo.postgres.databaseName | quote }}}
+            - {name: POSTGRES_USER, value: {{ .Values.geo.postgres.username | quote }}}
+            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: {{ .Values.geo.postgres.credentialsSecretName }}, key: password}}}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{name: postgres, containerPort: 5432}]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, capabilities: {drop: ["ALL"]}}
+          readinessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]}, periodSeconds: 10}
+          livenessProbe: {exec: {command: ["sh", "-ec", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]}, periodSeconds: 20}
+          resources: {{- toYaml .Values.geo.postgres.resources | nindent 12 }}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}, {name: tmp, mountPath: /tmp}]
+      volumes: [{name: data, persistentVolumeClaim: {claimName: {{ .Values.geo.postgres.persistence.claimName }}}}, {name: tmp, emptyDir: {}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.geo.api.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  selector: {app.kubernetes.io/name: geo-data-api}
+  ports: [{name: http, port: {{ .Values.geo.api.port }}, targetPort: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.geo.api.serviceName }}
+  namespace: {{ $ns }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app.kubernetes.io/name: geo-data-api}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: geo-data-api}}
+    spec:
+      automountServiceAccountToken: false
+      {{- include "appliance-control-plane.imagePullSecrets" . | nindent 6 }}
+      securityContext: {{- toYaml .Values.geo.api.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: migrate
+          image: {{ .Values.geo.postgres.image.repository }}@{{ .Values.geo.postgres.image.digest }}
+          imagePullPolicy: {{ .Values.geo.postgres.image.pullPolicy }}
+          command: ["sh", "-ec"]
+          args: ["until pg_isready -d \"$GEO_DATABASE_URL\"; do sleep 2; done; psql \"$GEO_DATABASE_URL\" -v ON_ERROR_STOP=1 -f /migrations/migrations.sql"]
+          env:
+            - name: GEO_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: {{ .Values.geo.postgres.credentialsSecretName }}, key: dsn}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts: [{name: migrations, mountPath: /migrations, readOnly: true}, {name: tmp, mountPath: /tmp}]
+      containers:
+        - name: geo-data-api
+          image: {{ include "appliance-control-plane.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/geo-data-api"]
+          ports: [{name: http, containerPort: {{ .Values.geo.api.port }}}]
+          env:
+            - {name: GEO_LISTEN_ADDR, value: ":{{ .Values.geo.api.port }}"}
+            - {name: GEO_DATABASE_URL_FILE, value: /var/run/appliance/geo/database-url}
+            - {name: GEO_INTERNAL_TOKEN_FILE, value: /var/run/appliance/geo/token}
+            - {name: GEO_LOG_PATH, value: /var/log/geo-data-api/application.log}
+          securityContext: {{- toYaml .Values.geo.api.containerSecurityContext | nindent 12 }}
+          readinessProbe: {httpGet: {path: /health/ready, port: http}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /health/live, port: http}, periodSeconds: 20}
+          resources: {{- toYaml .Values.geo.api.resources | nindent 12 }}
+          volumeMounts:
+            - {name: geo-database, mountPath: /var/run/appliance/geo/database-url, subPath: dsn, readOnly: true}
+            - {name: geo-token, mountPath: /var/run/appliance/geo/token, subPath: token, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            - {name: logs, mountPath: /var/log/geo-data-api}
+      volumes:
+        - {name: geo-database, secret: {secretName: {{ .Values.geo.postgres.credentialsSecretName }}, defaultMode: 0440}}
+        - {name: geo-token, secret: {secretName: {{ .Values.geo.internalAuthSecretName }}, defaultMode: 0440}}
+        - {name: migrations, configMap: {name: geo-migrations, defaultMode: 0440}}
+        - {name: tmp, emptyDir: {}}
+        - {name: logs, hostPath: {path: /data/zon/logs/geo-data-api, type: Directory}}
+{{- end }}
