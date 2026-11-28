@@ -1001,6 +1001,10 @@ func TestGeoTokenIsPreparedForAceSystemBeforeGeoWorkload(t *testing.T) {
 	if geoDeployment == nil || !strings.Contains(fmt.Sprint(at(geoDeployment, "spec", "template", "spec", "volumes")), "/data/zon/logs/geo-data-api") {
 		t.Fatal("Geo data API must retain its host-visible log mount")
 	}
+	geoPostgres := findByKindAndName(appsDocs, "StatefulSet", "geo-postgres")
+	if geoPostgres == nil || !strings.Contains(fmt.Sprint(at(geoPostgres, "spec", "template", "spec", "containers")), "ALTER ROLE geo PASSWORD") {
+		t.Fatal("Geo PostgreSQL must reconcile the persisted role password on startup")
+	}
 }
 
 func TestApplicationCoreRolloutOwnsDedicatedNamespace(t *testing.T) {
