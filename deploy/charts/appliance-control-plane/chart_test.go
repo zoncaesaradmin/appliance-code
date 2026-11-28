@@ -993,7 +993,7 @@ func TestGeoTokenIsPreparedForAceSystemBeforeGeoWorkload(t *testing.T) {
 		"--set", "rollout.aceApps.enabled=true",
 		"--set", "rollout.dnsSupport.enabled=false",
 	)...)
-	geoNamespace := findByKindAndName(appsDocs, "Namespace", "geo")
+	geoNamespace := findByKindAndName(appsDocs, "Namespace", "ace-app-geo")
 	if geoNamespace == nil || at(geoNamespace, "metadata", "labels", "pod-security.kubernetes.io/enforce") != "privileged" {
 		t.Fatal("Geo namespace must declare the privileged PSA exception for its host-visible log mount")
 	}

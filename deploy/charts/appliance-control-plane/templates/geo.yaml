@@ -1,5 +1,9 @@
 {{- if and (eq (include "appliance-control-plane.aceAppsEnabled" .) "true") .Values.geo.enabled }}
 {{- $ns := .Values.geo.namespace -}}
+{{- $legacyNamespace := lookup "v1" "Namespace" "" "geo" -}}
+{{- if and $legacyNamespace (ne $ns "geo") }}
+{{- fail "Geo namespace migration required: existing namespace geo must be migrated explicitly before using a different namespace" }}
+{{- end }}
 {{- $existingAuth := lookup "v1" "Secret" (include "appliance-control-plane.namespace" .) .Values.geo.internalAuthSecretName -}}
 {{- $authToken := "" -}}
 {{- if $existingAuth }}{{ $authToken = index $existingAuth.data "token" }}{{ else }}{{ $authToken = randAlphaNum 64 | b64enc }}{{ end }}

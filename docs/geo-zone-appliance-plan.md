@@ -21,6 +21,12 @@ the appliance's local username/password session API and `/geo` serves the
 MapLibre/Terra Draw editor. Geo data requests remain behind the control-plane
 `/api/v1/geo/*` proxy and are authorized with `geo.read` and `geo.write`.
 
+The Geo runtime workloads run in the Kubernetes namespace `ace-app-geo`, and
+the service endpoint is `geo-data-api.ace-app-geo.svc.cluster.local`. Existing
+installations that still use the former `geo` namespace require an explicit,
+data-preserving migration before upgrading; changing this value alone must not
+be used as an in-place storage migration.
+
 Runtime images, the PostGIS chart/migrations, the data API, and the offline
 basemap must still be added as signed release-input artifacts before the Geo
 profile is offered for a production install. Until then the editor is a

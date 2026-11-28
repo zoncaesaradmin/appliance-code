@@ -26,7 +26,7 @@ modules:
     requiredCapabilities: [geo-data-api]
     executionMode: cluster-service
     entitlementKey: geo-data-api
-    baseURL: http://geo-data-api.geo.svc.cluster.local:8080
+    baseURL: http://geo-data-api.ace-app-geo.svc.cluster.local:8080
     securityClass: restricted
     routes:
       - {method: GET, externalPath: "/api/v1/geo/{path...}", upstreamPath: "/api/v1/geo/{path...}", permission: geo.read}
