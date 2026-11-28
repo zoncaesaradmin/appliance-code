@@ -1002,7 +1002,11 @@ func TestGeoTokenIsPreparedForAceSystemBeforeGeoWorkload(t *testing.T) {
 		t.Fatal("Geo data API must retain its host-visible log mount")
 	}
 	geoPostgres := findByKindAndName(appsDocs, "StatefulSet", "geo-postgres")
-	if geoPostgres == nil || !strings.Contains(fmt.Sprint(at(geoPostgres, "spec", "template", "spec", "containers")), "ALTER ROLE geo PASSWORD") {
+	if geoPostgres == nil {
+		t.Fatal("Geo PostgreSQL StatefulSet is required")
+	}
+	geoPostgresContainers := fmt.Sprint(at(geoPostgres, "spec", "template", "spec", "containers"))
+	if !strings.Contains(geoPostgresContainers, "ALTER ROLE") || !strings.Contains(geoPostgresContainers, "$POSTGRES_USER") || !strings.Contains(geoPostgresContainers, "PASSWORD") {
 		t.Fatal("Geo PostgreSQL must reconcile the persisted role password on startup")
 	}
 }
