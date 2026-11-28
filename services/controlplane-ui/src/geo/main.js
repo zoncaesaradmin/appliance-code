@@ -59,15 +59,25 @@ map.on('load', () => {
   draw = new TerraDraw({adapter:new TerraDrawMapLibreGLAdapter({map}),modes:[new TerraDrawPolygonMode(),new TerraDrawSelectMode({flags:{polygon:{feature:{draggable:true,coordinates:{draggable:true,midpoints:true,deletable:true}}}}})]});
   draw.start(); draw.setMode('select');
   draw.on('finish', () => { draw.setMode('select'); $('#hint').textContent = 'Select the boundary to move its vertices.'; });
-  draw.on('change', () => { if (!loadingZone) setDirty(true); const points = polygon()?.geometry.coordinates[0]; if (points?.length) { $('#metrics').textContent = `${Math.max(points.length - 1, 0)} vertices · Save to calculate area`; $('#vertices').textContent = points.slice(0, -1).map((p, i) => `${i + 1}. ${p[1].toFixed(6)}, ${p[0].toFixed(6)}`).join('\n'); } else { $('#vertices').textContent = 'No vertices yet.'; } });
+  draw.on('change', () => { if (!loadingZone) setDirty(true); updateGeometryReadout(); });
 });
 map.on('error', (e) => { if (!map.loaded()) $('#status').textContent = 'The basemap could not load. Check the map provider and network.'; });
 function polygon() { return draw?.getSnapshot().find(f => f.geometry.type === 'Polygon' && f.properties.mode === 'polygon'); }
+function updateGeometryReadout() {
+  const points = polygon()?.geometry.coordinates[0];
+  if (points?.length) {
+    $('#metrics').textContent = `${Math.max(points.length - 1, 0)} vertices · Save to calculate area`;
+    $('#vertices').textContent = points.slice(0, -1).map((p, i) => `${i + 1}. ${p[1].toFixed(6)}, ${p[0].toFixed(6)}`).join('\n');
+  } else {
+    $('#metrics').textContent = 'Draw a polygon to begin.';
+    $('#vertices').textContent = 'No vertices yet.';
+  }
+}
 function status(text, error=false) { $('#status').textContent=text; $('#status').classList.toggle('error',error); }
 async function request(path, options = {}, retryAuth = true) { const auth = loadAuth(); const headers = new Headers(options.headers || {}); if (auth?.accessToken) headers.set('Authorization', `Bearer ${auth.accessToken}`); const response = await fetch('/api/v1/geo/' + path, {...options, headers}); if (response.status === 401 && retryAuth && auth?.refreshToken) { try { await client.refresh(); return request(path, options, false); } catch { /* fall through to the login redirect below */ } } if (response.status === 401) { clearAuth(); window.location.href = '/geo/login?next=' + encodeURIComponent(window.location.pathname); throw new Error('Authentication required.'); } if(!response.ok){let data;try{data=await response.json();}catch{data={};}throw new Error(data.message || `Request failed (${response.status})`);} return response.json(); }
 async function refresh(){try{zones=await request('zones?order=name.asc');render();}catch(e){status('Could not load zones: '+e.message,true);}}
 function render(){const term=$('#search').value.toLowerCase();const list=$('#zones');list.replaceChildren();const matches=zones.filter(z=>z.name.toLowerCase().includes(term));if(!matches.length){list.textContent='No matching microzones yet.';return;}for(const z of matches){const b=document.createElement('button');b.className='zone-item';const title=document.createElement('strong');title.textContent=z.name;const sub=document.createElement('small');sub.textContent=`${Math.round(z.area_sq_m).toLocaleString()} m² · revision ${z.revision}`;b.append(title,sub);b.addEventListener('click',()=>{if(canDiscard())openZone(z);});list.append(b);}}
-function openZone(z){if(!draw){status('Map is still loading.',true);return;}const geom=z.geometry.type==='MultiPolygon'&&z.geometry.coordinates.length===1?{type:'Polygon',coordinates:z.geometry.coordinates[0]}:z.geometry;if(geom.type!=='Polygon'){status('Editing multiple polygon parts is not yet supported.',true);return;}loadingZone=true;draw.clear();const result=draw.addFeatures([{type:'Feature',id:z.id,properties:{mode:'polygon'},geometry:geom}]);loadingZone=false;if(result.some(r=>r.valid===false)){status('This boundary cannot be opened in the editor.',true);return;}selected=z;$('#name').value=z.name;$('#description').value=z.description;$('#editor-title').textContent=z.name;setDirty(false);$('#metrics').textContent=`${Math.round(z.area_sq_m).toLocaleString()} m² · ${Math.round(z.perimeter_m).toLocaleString()} m perimeter`;const bounds=new maplibregl.LngLatBounds();for(const ring of geom.coordinates) for(const point of ring)bounds.extend(point);map.fitBounds(bounds,{padding:100,maxZoom:16});draw.setMode('select');status('Zone loaded. Select the boundary to edit.');}
+function openZone(z){if(!draw){status('Map is still loading.',true);return;}const geom=z.geometry.type==='MultiPolygon'&&z.geometry.coordinates.length===1?{type:'Polygon',coordinates:z.geometry.coordinates[0]}:z.geometry;if(geom.type!=='Polygon'){status('Editing multiple polygon parts is not yet supported.',true);return;}loadingZone=true;draw.clear();const result=draw.addFeatures([{type:'Feature',id:z.id,properties:{mode:'polygon'},geometry:geom}]);loadingZone=false;if(result.some(r=>r.valid===false)){status('This boundary cannot be opened in the editor.',true);return;}selected=z;$('#name').value=z.name;$('#description').value=z.description;$('#editor-title').textContent=z.name;setDirty(false);updateGeometryReadout();$('#metrics').textContent=`${Math.round(z.area_sq_m).toLocaleString()} m² · ${Math.round(z.perimeter_m).toLocaleString()} m perimeter`;const bounds=new maplibregl.LngLatBounds();for(const ring of geom.coordinates) for(const point of ring)bounds.extend(point);map.fitBounds(bounds,{padding:100,maxZoom:16});draw.setMode('select');status('Zone loaded. Select the boundary to edit.');}
 $('#navigate').addEventListener('submit', e => {
   e.preventDefault();
   ++locationRequest;
@@ -112,10 +122,10 @@ $('#current-location').addEventListener('click', () => {
     locationStatus(message, true);
   }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000});
 });
-$('#new').addEventListener('click',()=>{if(!draw||!canDiscard())return;loadingZone=true;draw.clear();loadingZone=false;selected=null;$('#save').reset();setDirty(false);$('#editor-title').textContent='New microzone';$('#metrics').textContent='Draw a polygon to begin.';status('');draw.setMode('polygon');});
+$('#new').addEventListener('click',()=>{if(!draw||!canDiscard())return;loadingZone=true;draw.clear();loadingZone=false;selected=null;$('#save').reset();setDirty(false);$('#editor-title').textContent='New microzone';updateGeometryReadout();status('');draw.setMode('polygon');});
 $('#draw').addEventListener('click',()=>{if(!draw)return;if(polygon()){status('Clear the current polygon before drawing a new one.',true);return;}draw.setMode('polygon');$('#hint').textContent='Click to add vertices. Close the polygon at its first point.';});
-$('#edit').addEventListener('click',()=>{if(draw)draw.setMode('select');});
-$('#clear').addEventListener('click',()=>{if(!draw||!canDiscard())return;draw.clear();setDirty(true);$('#metrics').textContent='Draw a polygon to begin.';});
+$('#edit').addEventListener('click',()=>{if(!draw)return;if(!polygon()){status('Draw a polygon before editing vertices.',true);return;}draw.setMode('select');$('#hint').textContent='Click the boundary to show vertices. Drag points to move them; drag midpoints to add points.';status('Click the boundary to edit its vertices.');});
+$('#clear').addEventListener('click',()=>{if(!draw||!canDiscard())return;draw.clear();setDirty(true);updateGeometryReadout();$('#hint').textContent='Boundary cleared. Draw a replacement, or choose New zone for another microzone.';status(selected?'Boundary cleared. Save to replace this zone.':'Boundary cleared. Draw a polygon to continue.');});
 $('#name').addEventListener('input',()=>setDirty(true));
 $('#description').addEventListener('input',()=>setDirty(true));
 $('#refresh').addEventListener('click',refresh);$('#search').addEventListener('input',render);
